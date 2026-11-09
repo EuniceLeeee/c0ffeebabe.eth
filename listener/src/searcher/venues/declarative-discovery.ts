@@ -5,7 +5,7 @@ import { hashCanonical, type CanonicalScalar } from "./canonical-value.js";
 import { explicitReverseBindingUnsupported } from "./adapter-family-plugin.js";
 import { compileAddressDiscovery } from "./address-discovery.js";
 import { createAddressSurfaceNomination, matchesOpaqueLabel } from "./address-surface-nomination.js";
-import { createTxEvidenceNomination } from "./tx-evidence-nomination.js";
+import { createTxEvidenceNomination, matchAllCalls } from "./tx-evidence-nomination.js";
 import { compileDeclarativeValues, validateDeclarativeValue } from "./declarative-values.js";
 import type { DeclarativeReadFlow, ReadFlowValues } from "./declarative-read-flow.js";
 import { compileDeclarativeNominationReadFlow } from "./declarative-nomination.js";
@@ -39,6 +39,7 @@ interface MappedPattern {
   readonly predicates?: readonly unknown[];
   /** A real log may nominate its transaction without carrying a complete candidate. */
   readonly nominationOnly?: boolean;
+  readonly emitter?: { readonly mode: "singleton-indexed-bytes32"; readonly address: string; readonly topicIndex: number; readonly fromBlock: number };
   /** One existing catalog match per bounded array element. No multi-result
    * central interface or synthetic observation is introduced. */
   readonly fanOut?: { readonly argument: number; readonly path?: readonly number[]; readonly maxItems: number };
@@ -72,6 +73,7 @@ export interface DeclarativeMappedDiscovery {
   /** Read-only enrichment of retained nomination data, never identity admission. */
   readonly nominationReadFlow?: DeclarativeReadFlow;
   readonly reverseBinding?: "address-surface";
+  readonly reverseBindingTraceFallback?: boolean;
   readonly recentCallNomination?: { readonly emitter: string; readonly topic: string; readonly when: unknown; readonly nominationKey: unknown; readonly candidateKey: unknown };
   readonly surface?: {
     readonly id: string;
@@ -136,7 +138,7 @@ function scalar(type: FieldType, value: unknown): string | bigint | boolean | nu
 function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappedDiscovery, readValues?: ReadFlowValues): DiscoverySemantics<C> {
   validateDeclarativeValue(raw);
   const d = JSON.parse(JSON.stringify(raw)) as DeclarativeMappedDiscovery;
-  shape(d, ["version", "sources", "candidateSources", "candidate", "calls", "events", "labels", "nomination"], ["surface", "nominationReadFlow", "txSeedNominations", "recentCallNomination", "reverseBinding"], "mapping");
+  shape(d, ["version", "sources", "candidateSources", "candidate", "calls", "events", "labels", "nomination"], ["surface", "nominationReadFlow", "txSeedNominations", "recentCallNomination", "reverseBinding", "reverseBindingTraceFallback"], "mapping");
   shape(d.candidate, ["kind", "addressField", "fields", "key"], ["optionalFields", "nullableFields", "instanceKey", "durableKey"], "candidate");
   if (typeof d.candidate.kind !== "string" || !d.candidate.kind || !["tx-evidence", "address-surface"].includes(d.nomination))
     throw new Error("invalid discovery candidate or nomination kind");
@@ -305,7 +307,13 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
     }) });
   });
   const events = d.events.flatMap<CompiledLog>((p: MappedPattern) => {
-    shape(p, ["id", "fields"], ["signature", "topic", "predicates", "nominationOnly", "fanOut"], "event pattern");
+    shape(p, ["id", "fields"], ["signature", "topic", "predicates", "nominationOnly", "fanOut", "emitter"], "event pattern");
+    if (p.emitter !== undefined) {
+      shape(p.emitter, ["mode", "address", "topicIndex", "fromBlock"], [], "event emitter");
+      if (p.emitter.mode !== "singleton-indexed-bytes32" || !Number.isSafeInteger(p.emitter.topicIndex) ||
+          p.emitter.topicIndex < 1 || p.emitter.topicIndex > 3 || !Number.isSafeInteger(p.emitter.fromBlock) || p.emitter.fromBlock < 0 || getAddress(p.emitter.address) === "0x" + "00".repeat(20))
+        throw new Error("invalid singleton event emitter");
+    }
     if (Object.hasOwn(p, "signature") === Object.hasOwn(p, "topic")) throw new Error("discovery event requires exactly one ABI or topic");
     if (p.nominationOnly !== undefined && typeof p.nominationOnly !== "boolean") throw new Error("invalid nomination-only pattern");
     if (p.topic !== undefined) {
@@ -317,7 +325,7 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
         if (p.predicates !== undefined) throw new Error("nomination-only patterns cannot assert candidate predicates");
       } else { validateMap(p.fields, "log", []); validatePredicates(p.predicates); }
       const topic = p.topic.toLowerCase();
-      return expand({ declaration: p, pattern: { id: p.id, topic: topic as `0x${string}`, signature: `topic:${topic}` },
+      return expand({ declaration: p, pattern: { id: p.id, topic: topic as `0x${string}`, signature: `topic:${topic}`, ...(p.emitter ? {emitter:p.emitter} : {}) },
         decode: (o: Extract<UnifiedObservation, { kind: "log" }>) => {
           if (!Array.isArray(o.topics) || o.topics.length < 1 || o.topics.length > 4 ||
               o.topics.some(value => !/^0x[0-9a-fA-F]{64}$/.test(value)) || o.topics[0]!.toLowerCase() !== topic ||
@@ -327,11 +335,13 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
         } });
     }
     const event = EventFragment.from(p.signature!), abi = new Interface([event]);
+    if (p.emitter && event.inputs.filter(i => i.indexed)[p.emitter.topicIndex - 1]?.type !== "bytes32")
+      throw new Error("event emitter must select an indexed bytes32");
     if (event.anonymous) throw new Error("anonymous discovery events are unsupported");
     const itemType = fanOutType(p, event.inputs);
     if (p.nominationOnly) { shape(p.fields, [], [], "nomination-only fields"); if (p.predicates !== undefined || p.fanOut !== undefined) throw new Error("nomination-only patterns cannot assert candidate predicates or fan out"); }
     else { validateMap(p.fields, "log", event.inputs, itemType); validatePredicates(p.predicates, itemType !== undefined); }
-    return expand({ declaration: p, pattern: { id: p.id, topic: event.topicHash as `0x${string}`, signature: event.format("sighash") },
+    return expand({ declaration: p, pattern: { id: p.id, topic: event.topicHash as `0x${string}`, signature: event.format("sighash"), ...(p.emitter ? {emitter:p.emitter} : {}) },
       decode: cachedDecode(p, (o: Extract<UnifiedObservation, { kind: "log" }>) => {
         const args = abi.decodeEventLog(event, o.data, [...o.topics]);
         const encoded = abi.encodeEventLog(event, args);
@@ -452,6 +462,9 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
   if (d.recentCallNomination) shape(d.recentCallNomination, ["emitter","topic","when","nominationKey","candidateKey"], [], "recent call nomination");
   if (d.reverseBinding !== undefined && (d.reverseBinding !== "address-surface" || d.nomination !== "address-surface" || !d.surface))
     throw new Error("reverse binding requires a declared address-surface nomination");
+  if (d.reverseBindingTraceFallback !== undefined && (typeof d.reverseBindingTraceFallback !== "boolean" ||
+      d.reverseBinding !== "address-surface" || !d.candidate.instanceKey))
+    throw new Error("trace fallback requires reverse binding and an instance key");
   const reverseLabels = new Set(d.labels.map(label => label.toLowerCase()));
   const surfaceId = d.surface?.id;
   const recent = d.recentCallNomination && withRecentCallNomination({
@@ -484,19 +497,52 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
             outcomes.push({ status: "unsupported" as const, reason: "foreign nomination label" });
             continue;
           }
+          const emitters = events.flatMap(e => e.declaration.emitter ? [e.declaration.emitter.address.toLowerCase()] : []);
+          if (emitters.length && !emitters.includes(nomination.address.toLowerCase())) {
+            outcomes.push({status: "unsupported" as const, reason: "foreign event emitter"}); continue;
+          }
           const observations = await baseNomination.nominate({ nominations: [nomination], source, provider });
-          const observation = observations[0];
-          outcomes.push(observations.length === 1 && observation && surfaceId &&
-            decodeCandidate({ observation, matchedPatternId: surfaceId })
-            ? { status: "verified" as const, observation }
-            : { status: "failed" as const, reason: "source-bound surface could not be verified" });
+          let observation = observations.length === 1 ? observations[0] : undefined;
+          if (!observation || !surfaceId || !decodeCandidate({ observation, matchedPatternId: surfaceId })) {
+            observation = undefined;
+            const tx = nomination.evidence?.transactionHash;
+            if (d.reverseBindingTraceFallback && provider.traceTransaction && typeof tx === "string" && /^0x[0-9a-fA-F]{64}$/.test(tx)) {
+              try {
+                const opaque = nomination.opaque as Record<string, unknown>;
+                const key = encodeKey({...opaque, [d.candidate.addressField]: nomination.address}, d.candidate.instanceKey!);
+                const trace = await provider.traceTransaction(tx);
+                for (const frame of matchAllCalls(callPatterns, trace)) {
+                  if (frame.target.toLowerCase() !== nomination.address.toLowerCase()) continue;
+                  const call = {kind: "call" as const, source, target: frame.target, data: frame.data,
+                    ...(frame.sender ? {sender:frame.sender} : {}), transactionHash:tx.toLowerCase()};
+                  const matches = calls.some(entry => {
+                    const decoded = decodeCandidate({observation:call,matchedPatternId:entry.pattern.id});
+                    return decoded !== null && encodeKey(decoded,d.candidate.instanceKey!) === key;
+                  });
+                  if (matches) { observation = call; break; }
+                }
+              } catch { /* Exact evidence unavailable: keep this nomination unresolved. */ }
+            }
+          }
+          outcomes.push(observation ? {status: "verified" as const, observation}
+            : {status: "failed" as const, reason: "source-bound surface and exact transaction could not be verified"});
         }
         return Object.freeze(outcomes);
       },
     } : explicitReverseBindingUnsupported("no reverse-binding registry declared (explicit unsupported)"),
     decodeCandidate,
     ...(d.candidate.instanceKey === undefined ? {} : {
-      instanceNominationKey: (value: unknown) => encodeKey(value, d.candidate.instanceKey!),
+      instanceNominationKey(value: unknown) {
+        // Retained Ready nominations use the shared address envelope. It can
+        // supply only the declared address field for grouping; this does not
+        // decode a candidate or grant identity/behavior proof.
+        if (value && typeof value === "object" && !Array.isArray(value)) {
+          const row = value as Record<string, unknown>;
+          if (row[d.candidate.addressField] === undefined && row.address !== undefined)
+            value = { ...row, [d.candidate.addressField]: row.address };
+        }
+        return encodeKey(value, d.candidate.instanceKey!);
+      },
     }),
     candidateKey(value) {
       if (value.candidateKind !== d.candidate.kind) throw new Error("discovery candidate kind mismatch");

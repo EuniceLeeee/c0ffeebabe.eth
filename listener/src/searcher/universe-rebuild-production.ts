@@ -3601,7 +3601,9 @@ export function createRebuildWiring(input?: {
           const pattern = discovery.logPatterns?.find(
             (item) => item.id === match.patternId,
           );
-          if (pattern?.emitter?.mode !== "singleton-indexed-bytes32") {
+          if (pattern?.emitter?.mode !== "singleton-indexed-bytes32" ||
+              log.address.toLowerCase() !== pattern.emitter.address.toLowerCase() ||
+              (log.blockNumber ?? 0) < pattern.emitter.fromBlock) {
             continue;
           }
           const poolId = log.topics[pattern.emitter.topicIndex]?.toLowerCase();

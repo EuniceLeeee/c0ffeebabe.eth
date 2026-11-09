@@ -192,13 +192,15 @@
           "id": "univ4-manager-swap-log",
           "signature": "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
           "fields": {},
-          "nominationOnly": true
+          "nominationOnly": true,
+          "emitter": {"mode": "singleton-indexed-bytes32", "address": "0x000000000004444c5dc75cB358380D2e3dE08A90", "topicIndex": 1, "fromBlock": 0}
         },
         {
           "id": "univ4-manager-modify-liquidity",
           "signature": "event ModifyLiquidity(bytes32 indexed id,address indexed sender,int24 tickLower,int24 tickUpper,int256 liquidityDelta,bytes32 salt)",
           "fields": {},
-          "nominationOnly": true
+          "nominationOnly": true,
+          "emitter": {"mode": "singleton-indexed-bytes32", "address": "0x000000000004444c5dc75cB358380D2e3dE08A90", "topicIndex": 1, "fromBlock": 0}
         }
       ],
       "labels": [
@@ -206,6 +208,8 @@
         "univ4-standard"
       ],
       "nomination": "address-surface",
+      "reverseBinding": "address-surface",
+      "reverseBindingTraceFallback": true,
       "txSeedNominations": false,
       "surface": {
         "id": "univ4-pool-surface",

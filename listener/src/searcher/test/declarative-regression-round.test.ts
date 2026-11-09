@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { buildFamilyRegressionPlan, sameRegressionInputs, summarizeFamilyRerun, classifyAcceptanceEvidence, type RegressionPlan } from "./family-json-regression.js";
 import sample from "./fixtures/protocol-json/cases/wsteth--wrap-original-input.json";
 import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
+import { registerAcceptanceSample } from "./protocol-json-sample-registration.js";
 
 // The normal shared suite also checks every installed JSON entry automatically.
 // This is explicitly definition-level evidence; historical facts use the batch entry.
@@ -50,6 +51,7 @@ test("a framework pass never promotes missing, partial, failed or unexecuted fam
 test("case aggregation normalizes inputs and separates missing coverage from a real failure", () => {
   const normalized = parseProtocolJsonAcceptanceCase(sample);
   const evidence = { format: "protocol-json-acceptance-v1", sample: normalized, drained: true, errors: [], result: "pass",
+    registration: registerAcceptanceSample(normalized, fileURLToPath(new URL("./fixtures/protocol-json/cases/wsteth--wrap-original-input.json", import.meta.url))),
     samples: [{ result: "pass", executions: [{ result: "pass" }] }] };
   assert.equal(classifyAcceptanceEvidence(evidence, sample, 0), "pass");
   assert.equal(classifyAcceptanceEvidence({ ...evidence, result: "incomplete-or-failed" }, sample, 1), "incomplete");

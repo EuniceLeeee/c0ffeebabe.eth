@@ -9,6 +9,7 @@ import { spawnSync } from "node:child_process";
 import { syncDeclarativeProductionEntries } from "../build-declarative-production.js";
 import { loadFamilyJsonSamples } from "./protocol-json-samples.js";
 import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
+import { registerAcceptanceSample } from "./protocol-json-sample-registration.js";
 
 const defaultRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
@@ -74,6 +75,12 @@ export type CaseResult = { id: string; status: "not-run" | "running" | "pass" | 
 export function classifyAcceptanceEvidence(facts: any, rawSample: unknown, exitCode: number | null): CaseResult["status"] {
   assert.equal(facts.format, "protocol-json-acceptance-v1");
   assert.deepEqual(facts.sample, parseProtocolJsonAcceptanceCase(rawSample), "runner evidence must bind the normalized sample input");
+  // A successful child process is insufficient: aggregation must preserve the
+  // same registered sample/index pins that the runner checked around execution.
+  try {
+    assert(facts.registration && typeof facts.registration.path === "string");
+    assert.deepEqual(facts.registration, registerAcceptanceSample(facts.sample, facts.registration.path));
+  } catch { return "failed"; }
   if (facts.drained !== true || !Array.isArray(facts.samples) || facts.samples.length === 0 ||
       !Array.isArray(facts.errors) || facts.errors.length > 0 ||
       facts.samples.some((row: any) => row.error || row.result === "failed" || !Array.isArray(row.executions) ||
@@ -81,6 +88,20 @@ export function classifyAcceptanceEvidence(facts: any, rawSample: unknown, exitC
   if (exitCode === 0 && facts.result === "pass" && facts.samples.every((row: any) => row.result === "pass" && row.executions.length > 0)) return "pass";
   if (exitCode === 1 && facts.result === "incomplete-or-failed" && facts.samples.every((row: any) => ["pass", "partial"].includes(row.result))) return "incomplete";
   return "failed";
+}
+export function verifyRegressionCaseEvidence(plan: RegressionPlan, rows: any[], root: string, directory: string): boolean {
+  try {
+    const samples = plan.families.flatMap(family => family.cases);
+    assert(Array.isArray(rows) && rows.length === samples.length && new Set(rows.map(row => row.id)).size === rows.length);
+    for (const sample of samples) {
+      const row = rows.find(row => row.id === sample.id);
+      assert(row?.status === "pass" && typeof row.evidence === "string" && /^\d{4,}\.json$/.test(row.evidence));
+      const file = resolve(directory, row.evidence), bytes = readFileSync(file);
+      assert.equal(row.evidenceSha256, digest(bytes));
+      assert.equal(classifyAcceptanceEvidence(JSON.parse(bytes.toString()), json(resolve(root, sample.file)), row.process?.code), "pass");
+    }
+    return true;
+  } catch { return false; }
 }
 export function summarizeFamilyRerun(family: RegressionFamily, rows: CaseResult[], offlinePassed: boolean) {
   const selected = family.cases.map(sample => rows.find(row => row.id === sample.id));
@@ -107,9 +128,7 @@ export async function familyJsonRegressionMain(argv = process.argv.slice(2)) {
     assert(!run && args.size === 1, "report checking does not run tests");
     const report = json(resolve(args.get("--check-report")!));
     const current = sameRegressionInputs(plan, report.plan);
-    const evidenceIntact = (report.cases ?? []).every((row: any) => row.status !== "pass" ||
-      typeof row.evidence === "string" && /^\d{4,}\.json$/.test(row.evidence) &&
-      row.evidenceSha256 === digest(readFileSync(resolve(args.get("--check-report")!, "..", row.evidence))));
+    const evidenceIntact = verifyRegressionCaseEvidence(plan, report.cases, root, resolve(args.get("--check-report")!, ".."));
     const allPassed = current && evidenceIntact && report.finished === true && report.sourceStable === true && report.offline?.status === "pass" &&
       plan.families.every(family => report.definitions?.[family.familyId]?.status === "pass") &&
       plan.families.every(family => summarizeFamilyRerun(family, report.cases ?? [], true).result === "supplied-cases-pass");

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { registerAcceptanceSample, assertRegisteredAcceptanceSample } from './protocol-json-sample-registration.js';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -15,6 +16,7 @@ for (const k of ['--case', '--definition', '--rpc-file', '--out'])
     assert(args.has(k), k + ' required');
 const sample = JSON.parse(readFileSync(resolve(args.get('--case')!), 'utf8'));
 assert.equal(sample.format, 'node-rpc-family-component-case-v1');
+const registration = registerAcceptanceSample(sample, resolve(args.get('--case')!));
 const definitionFile = resolve(args.get('--definition')!), definitionBytes = readFileSync(definitionFile);
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url)).replace(/\/$/, '');
 const { compileDeclarativeSwap } = await import(`${ROOT}/src/searcher/venues/declarative-swap.ts`);
@@ -126,7 +128,8 @@ try {
     assert.equal(standalone.kind, 'success');
     console.log('standalone-N+1', standalone.kind, standalone.targetBlock, standalone.gasUsed.toString());
     assert.equal(createHash('sha256').update(readFileSync(definitionFile)).digest('hex'), createHash('sha256').update(definitionBytes).digest('hex'));
-    writeFileSync(resolve(args.get('--out')!), J({ format: 'node-rpc-family-component-v1', sample, definitionSha256: createHash('sha256').update(definitionBytes).digest('hex'), source: SOURCE, executorCodeHash: keccak256(code), quote: q, quoteWallMs, executions, standalone, signing: false, broadcast: false, ready: 'not-run', performance: 'not-accepted', runtimeBuiltBeforeExact: true }));
+    assertRegisteredAcceptanceSample(sample, registration);
+    writeFileSync(resolve(args.get('--out')!), J({ registration, format: 'node-rpc-family-component-v1', sample, definitionSha256: createHash('sha256').update(definitionBytes).digest('hex'), source: SOURCE, executorCodeHash: keccak256(code), quote: q, quoteWallMs, executions, standalone, signing: false, broadcast: false, ready: 'not-run', performance: 'not-accepted', runtimeBuiltBeforeExact: true }));
 }
 finally {
     await sim.closeAndDrain();

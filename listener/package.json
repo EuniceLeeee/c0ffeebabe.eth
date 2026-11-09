@@ -489,7 +489,9 @@
     "check:swap-json-samples": "node --import tsx src/searcher/test/swap-json-samples.ts",
     "prepare:family-json": "node --import tsx src/searcher/test/family-json-ready.ts",
     "searcher:node-rpc-simulation": "node --import tsx src/searcher/test/node-rpc-simulation.ts",
-    "searcher:node-rpc-family-case": "node --import tsx src/searcher/test/node-rpc-family-case.ts"
+    "searcher:node-rpc-family-case": "node --import tsx src/searcher/test/node-rpc-family-case.ts",
+    "test:bigquery-json": "node --import tsx --test ../scripts/ready-family-activation.test.mjs ../scripts/bigquery-ready.test.mjs ../scripts/ready-discovery-query.test.mjs ../scripts/ready-discovery-udf-build.test.mjs ../scripts/ready-discovery-udf-parity.test.mjs",
+    "check:bigquery-json-cloud": "node ../scripts/ready-discovery-udf-smoke.mjs"
   },
   "dependencies": {
     "ethers": "^6.13.0"

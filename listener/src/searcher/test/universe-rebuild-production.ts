@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
+import { NodeStrictClient } from "../simulator/node-strict-client.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -47,7 +48,7 @@ import type { CallerRef } from "../venues/adapter-request-program.js";
 import { familyId } from "../venues/adapter-family-identifiers.js";
 import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
 import { executeAdapterWork } from "../adapter-work-intent.js";
-import { RevmSimClient, RevmFatalError, type RevmFatalReason } from "../revm-sim-client.js";
+import { RevmSimClient, RevmFatalError, type RevmFatalReason, type StrictSimulateRequest, type DaemonResponse } from "../revm-sim-client.js";
 import { ETHERTOKEN_NATIVE_INTERFACE, ETHERTOKEN_NATIVE_PROBE_ACTOR } from
   "../venues/protocols/ethertoken-native-redeem-family/shared.js";
 import { WSTETH_INTERFACE } from
@@ -94,8 +95,8 @@ class TestSealedReadonlyMap<Key, Value> implements ReadonlyMap<Key, Value> {
 function log(overrides: Partial<RebuildScanObservation>): RebuildScanObservation {
   return Object.freeze({
     address: "0x" + "11".repeat(20),
-    topics: Object.freeze([SWAP_TOPIC, "0x" + "22".repeat(32)]),
-    data: "0x",
+    topics: Object.freeze([SWAP_TOPIC, ethers.zeroPadValue("0x" + "22".repeat(20), 32), ethers.zeroPadValue("0x" + "33".repeat(20), 32)]),
+    data: ethers.AbiCoder.defaultAbiCoder().encode(["uint256", "uint256", "uint256", "uint256"], [1n, 0n, 0n, 1n]),
     transactionHash: "0x" + "33".repeat(32),
     blockNumber: 25_750_000,
     blockHash: "0x" + "44".repeat(32),
@@ -231,7 +232,7 @@ async function assertRebuildFatalFencing(outer = false, identityFromEnv = false)
   const origin = "0x" + "44".repeat(20);
   const executor = "0x" + "33".repeat(20);
   let stopped = false, callbacks = 0, heldReceipt = false;
-  let client: RevmSimClient | undefined;
+  let client: NodeStrictClient | undefined;
   let releaseReceipt: (() => void) | undefined;
   let finishSim: ((error: Error) => void) | undefined;
   let releaseMemo: (() => void) | undefined, holdMemoRead = false;
@@ -301,8 +302,8 @@ async function assertRebuildFatalFencing(outer = false, identityFromEnv = false)
     for (const [key, value] of Object.entries(replacements)) replace(ethers.JsonRpcProvider.prototype, key, value);
     replace(console, "error", (line: unknown) => { diagnosticLines.push(String(line)); });
     replace(RevmSimClient.prototype, "spawnDaemon", () => { assert.fail("daemon spawn forbidden"); });
-    replace(RevmSimClient.prototype, "strictSimulate", function (
-      this: RevmSimClient, request: Parameters<RevmSimClient["strictSimulate"]>[0],
+    replace(NodeStrictClient.prototype, "strictSimulate", function (
+      this: NodeStrictClient, request: Parameters<NodeStrictClient["strictSimulate"]>[0],
     ) {
       assert.equal(request.from, ETHERTOKEN_NATIVE_PROBE_ACTOR.toLowerCase(),
         "binding an origin must not replace the Family's verified inner caller");
@@ -312,7 +313,6 @@ async function assertRebuildFatalFencing(outer = false, identityFromEnv = false)
       client = this;
       return new Promise<never>((_, reject) => { finishSim = reject; });
     });
-    replace(RevmSimClient.prototype, "closeAndDrain", async () => {});
     const options = { rpcUrl: "http://127.0.0.1:1",
       ...(identityFromEnv ? {} : { executionIdentity: { executor, transactionOrigin: origin } }),
       onSimulationFatal() { stopped = true; callbacks++; },
@@ -350,8 +350,8 @@ async function assertRebuildFatalFencing(outer = false, identityFromEnv = false)
     }
     assert(client && heldReceipt, "fixture must reach concurrent simulation and held receipt");
     const reason: RevmFatalReason = { kind: "rpc-throttle", category: "http429", httpStatus: 429 };
-    const notify = Reflect.get(client, "onFatal") as (reason: RevmFatalReason) => void;
-    notify(reason);
+    finishSim!(new RevmFatalError(reason));
+    for (let i = 0; i < 50 && !callbacks; i++) await Promise.resolve();
     assert.equal(callbacks, 1);
     const originLogs = diagnosticLines.filter(line => line.startsWith("[revm-fault] "))
       .map(line => JSON.parse(line.slice("[revm-fault] ".length))).filter(r => r.stage === "rebuild-candidate");
@@ -361,7 +361,7 @@ async function assertRebuildFatalFencing(outer = false, identityFromEnv = false)
     releaseReceipt!(); releaseMemo?.(); finishSim!(new RevmFatalError(reason));
     const results = await Promise.all([pa, pb]);
     assert(results.every(result => result instanceof RevmFatalError));
-    assert.deepEqual(afterFatal, [], "a held receipt cannot dispatch trace after daemon 429");
+    assert.deepEqual(afterFatal, [], "a held receipt cannot dispatch trace after node 429");
     await assert.rejects(wiring.attestFamilyInstanceOnce({ candidate: candidate(a, "03"), cutoff: SOURCE }), RevmFatalError);
     await assert.rejects(wiring.assertCanonicalHead!(SOURCE), RevmFatalError);
     if (outerWiring) {
@@ -405,6 +405,9 @@ function assertRebuildExecutionIdentityConfiguration(): void {
     }
     delete process.env.SEARCHER_REVM_SIM_BIN;
     delete process.env.BOTVM_OWNER;
+    assert.throws(() => createProbeWiring({ rpcUrl: "http://127.0.0.1:1" }), /BOTVM_OWNER/,
+      "node simulation with an executor still requires an origin without a legacy daemon path");
+    delete process.env.BOTVM_ADDRESS;
     assert.doesNotThrow(() => createProbeWiring({ rpcUrl: "http://127.0.0.1:1" }),
       "read-only wiring without a simulation backend still does not require an origin");
   } finally {
@@ -424,7 +427,7 @@ async function assertRebuildQueuedPhysicalFencing(): Promise<void> {
   const physical: { provider: ethers.JsonRpcProvider; method: string; afterFatal: boolean }[] = [];
   const queued: Promise<unknown>[] = [];
   let stopped = false, callbacks = 0, spawnAttempts = 0;
-  let client: RevmSimClient | undefined, finishSim: ((error: Error) => void) | undefined;
+  let client: NodeStrictClient | undefined, finishSim: ((error: Error) => void) | undefined;
   let attestation: Promise<unknown> | undefined;
   const restorers: (() => void)[] = [];
   function replace(target: object, key: string, value: unknown): void {
@@ -491,11 +494,10 @@ async function assertRebuildQueuedPhysicalFencing(): Promise<void> {
     replace(RevmSimClient.prototype, "spawnDaemon", () => {
       spawnAttempts++; assert.fail("daemon spawn forbidden");
     });
-    replace(RevmSimClient.prototype, "strictSimulate", function (this: RevmSimClient) {
+    replace(NodeStrictClient.prototype, "strictSimulate", function (this: NodeStrictClient) {
       client = this;
       return new Promise<never>((_, reject) => { finishSim = reject; });
     });
-    replace(RevmSimClient.prototype, "closeAndDrain", async () => {});
     const wiring = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1",
       executionIdentity: { executor: "0x" + "33".repeat(20), transactionOrigin: origin },
       onSimulationFatal() { stopped = true; callbacks++; },
@@ -533,10 +535,9 @@ async function assertRebuildQueuedPhysicalFencing(): Promise<void> {
     for (let i = 0; i < 10; i++) await Promise.resolve();
     assert.equal(physical.length, beforeQueue, "both providers are queued, not yet physically sent");
     const reason: RevmFatalReason = { kind: "rpc-throttle", category: "http429", httpStatus: 429 };
-    const notify = Reflect.get(client, "onFatal") as (reason: RevmFatalReason) => void;
-    notify(reason);
-    assert.equal(callbacks, 1, "sibling simulation fatal reaches the shared owner synchronously");
     finishSim!(new RevmFatalError(reason));
+    for (let i = 0; i < 50 && !callbacks; i++) await Promise.resolve();
+    assert.equal(callbacks, 1, "node simulation rejection reaches the shared fatal owner before queued dispatch");
     const results = await Promise.all(queued);
     await new Promise<void>(resolve => setImmediate(resolve));
     for (const provider of [outer, probe]) {
@@ -597,7 +598,7 @@ async function main(): Promise<void> {
     fullLogIdentityKey(a),
     "log:25750000:0x" + "44".repeat(32) + ":0x" + "33".repeat(32) +
       ":0:0x" + "11".repeat(20) + ":" +
-      SWAP_TOPIC + ",0x" + "22".repeat(32),
+      [SWAP_TOPIC, ethers.zeroPadValue("0x" + "22".repeat(20), 32), ethers.zeroPadValue("0x" + "33".repeat(20), 32)].join(","),
     "full log identity includes every topic",
   );
   assert.notEqual(
@@ -1386,6 +1387,37 @@ async function main(): Promise<void> {
   let fundingBalance = 1_000_000n;
   const memoProofHash = "0x" + "b2".repeat(32);
   let memoProofHashReads = 0;
+  // The fixture includes current PSM getters and a node-transport receipt.
+  // Production identity validates every debit/credit; these synthetic receipts
+  // prove wiring only, not historical chain execution.
+  const psmPocket = "0x" + "bc".repeat(20);
+  const oldNodeSimulate = NodeStrictClient.prototype.strictSimulate;
+  let psmProofs = 0;
+  let corruptPsmDelta = false;
+  NodeStrictClient.prototype.strictSimulate = async function (req: StrictSimulateRequest): Promise<DaemonResponse> {
+    assert.equal(req.to.toLowerCase(), ADDR.SKY_PSM_LITE.toLowerCase());
+    assert.equal(req.blockNumber, SOURCE.number);
+    assert.equal(req.sourcePin?.blockHash, SOURCE.hash);
+    const call = PSM_INTERFACE.parseTransaction({ data: req.data })!;
+    assert(["sellGem", "buyGem"].includes(call.name));
+    const sell = call.name === "sellGem", gem = BigInt(call.args[1]), dai = gem * 10n ** 12n;
+    assert([10n ** 6n, 10n ** 7n].includes(gem));
+    assert.equal(req.from.toLowerCase(), "0x" + "33".repeat(20));
+    assert.equal(req.transactionOrigin?.toLowerCase(), traceSender);
+    assert.equal(String(call.args[0]).toLowerCase(), "0x" + "00".repeat(19) + "01");
+    const deltas = sell ? [-gem, gem, dai, -dai] : [-dai, dai, gem, -gem];
+    if (corruptPsmDelta) deltas[2] -= 1n;
+    assert.equal(req.observeTokenBalances?.length, 4);
+    assert.equal(req.preCalls?.length, 1);
+    psmProofs++;
+    const output = PSM_INTERFACE.encodeFunctionResult(call.name, []);
+    return { ok: true, success: true, output, gasUsed: "21000", latencyMs: 1,
+      sourceAttestation: { kind: "node-attested", chainId: 1, blockNumber: SOURCE.number,
+        blockHash: SOURCE.hash, parentHash: ethers.ZeroHash, stateRoot: ethers.ZeroHash },
+      strict: { outcome: { kind: "Success", phase: "main", output }, executionGasUsed: "21000",
+        tokenDeltas: req.observeTokenBalances!.map((pair, i) => ({ ...pair, delta: String(deltas[i]) })),
+        nativeDeltas: [], totalSupplyDeltas: [], logs: [] } };
+  };
   const stubServer = http.createServer((request, response) => {
     let body = "";
     request.on("data", (chunk: Buffer) => { body += chunk.toString("utf8"); });
@@ -1489,6 +1521,10 @@ async function main(): Promise<void> {
                   [ADDR.DAI],
                 ));
               }
+              if (selector === PSM_INTERFACE.getFunction("pocket")!.selector)
+                return respond(PSM_INTERFACE.encodeFunctionResult("pocket", [psmPocket]));
+              if (selector === PSM_INTERFACE.getFunction("to18ConversionFactor")!.selector)
+                return respond(PSM_INTERFACE.encodeFunctionResult("to18ConversionFactor", [10n ** 12n]));
               if (selector === PSM_INTERFACE.getFunction("tin")!.selector) {
                 return respond(PSM_INTERFACE.encodeFunctionResult("tin", [0n]));
               }
@@ -1640,7 +1676,9 @@ async function main(): Promise<void> {
   try {
     const wired = createRebuildWiring({
       rpcUrl: "http://127.0.0.1:" + stubPort,
+      executionIdentity: { executor: "0x" + "33".repeat(20), transactionOrigin: traceSender },
     });
+    const opaqueWiring = createRebuildWiring({ rpcUrl: "http://127.0.0.1:" + stubPort, familyIds: ["univ4"] });
     const noKnownCandidates = Object.freeze([]) as readonly unknown[];
     const fundingToken = ethers.getAddress("0x" + "f1".repeat(20));
     const fundingCandidate = candidatesFromLog(Object.freeze({
@@ -1681,8 +1719,10 @@ async function main(): Promise<void> {
     // authority (code + implementation) is still checked per candidate, but
     // the shared canonical block hash must be read only once for this fixed
     // cutoff, including across calls outside ethers' short request cache.
-    const memoCandidateA = candidateFromLog(a);
-    const memoCandidateB = candidateFromLog(b);
+    // This regression tests immutable-code memo caching. UniV2 now declares
+    // mutable identity rechecks, so a bare immutable memo is not valid there.
+    const memoCandidateA = { familyId: "protocol:ethertoken-native-redeem", adapter: "ethertoken-native-redeem", address: a.address };
+    const memoCandidateB = { ...memoCandidateA, address: b.address };
     const memoCandidateKeyA = rebuildFamilyCandidateKey(memoCandidateA);
     const memoCandidateKeyB = rebuildFamilyCandidateKey(memoCandidateB);
     const crossRunMemo = (
@@ -1737,7 +1777,7 @@ async function main(): Promise<void> {
       blockHash: SOURCE.hash,
       logIndex: 0,
     });
-    const reverseBound = await wired.reverseBindOpaqueCandidates!({
+    const reverseBound = await opaqueWiring.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: SOURCE,
       knownCandidates: noKnownCandidates,
@@ -1752,19 +1792,19 @@ async function main(): Promise<void> {
     assert.equal(boundCandidate.poolId, poolId.toLowerCase());
     assert.equal(boundCandidate.address, v4Manager);
     assert.equal(
-      (boundCandidate.poolKey as Readonly<Record<string, unknown>>).currency0,
+      boundCandidate.currency0,
       currency0.toLowerCase(),
     );
     assert.equal(
-      (boundCandidate.poolKey as Readonly<Record<string, unknown>>).fee,
+      Number(boundCandidate.fee),
       fee,
     );
     assert.equal(
       (boundCandidate.pluginCandidateKey as string),
-      manager + "\u001f" + poolId.toLowerCase(),
+      JSON.stringify([manager, poolId.toLowerCase()]),
     );
     const positionManagerReadsBeforeMemoReuse = positionManagerReads;
-    const reusedReverseBinding = await wired.reverseBindOpaqueCandidates!({
+    const reusedReverseBinding = await opaqueWiring.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: SOURCE,
       knownCandidates: Object.freeze([boundCandidate]),
@@ -1780,7 +1820,7 @@ async function main(): Promise<void> {
       "a reusable reverse-bound candidate performs no repeated reverse lookup",
     );
     // Duplicate swap logs of one pool collapse to a single candidate.
-    const repeated = await wired.reverseBindOpaqueCandidates!({
+    const repeated = await opaqueWiring.reverseBindOpaqueCandidates!({
       observations: Object.freeze([
         v4SwapLog,
         Object.freeze({ ...v4SwapLog, logIndex: 1 }),
@@ -1812,7 +1852,7 @@ async function main(): Promise<void> {
       blockHash: SOURCE.hash,
       logIndex: 0,
     });
-    const twoPools = await wired.reverseBindOpaqueCandidates!({
+    const twoPools = await opaqueWiring.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog, v4SwapLog2]),
       cutoff: twoPoolSource,
       knownCandidates: noKnownCandidates,
@@ -1855,7 +1895,7 @@ async function main(): Promise<void> {
       hash: "0x" + "b1".repeat(32),
       generation: 1,
     });
-    const traced = await wired.reverseBindOpaqueCandidates!({
+    const traced = await opaqueWiring.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: fallbackSource,
       knownCandidates: noKnownCandidates,
@@ -1870,12 +1910,11 @@ async function main(): Promise<void> {
     assert.equal(tracedCandidate.familyId, "univ4");
     assert.equal(tracedCandidate.poolId, poolId.toLowerCase());
     assert.equal(
-      (tracedCandidate.poolKey as Readonly<Record<string, unknown>>)
-        .currency0,
+      tracedCandidate.currency0,
       currency0.toLowerCase(),
     );
     assert.equal(
-      (tracedCandidate.poolKey as Readonly<Record<string, unknown>>).fee,
+      Number(tracedCandidate.fee),
       fee,
     );
     assert.equal(traceReads, 2, "router-side pool uses its exact Family trace");
@@ -1884,6 +1923,22 @@ async function main(): Promise<void> {
       0,
       "reverse binding never performs a historical Initialize scan",
     );
+    for (const invalid of [
+      {...v4SwapLog, address: "0x" + "55".repeat(20)},
+      {...v4SwapLog, topics: v4SwapLog.topics.slice(0, 1)},
+      {...v4SwapLog, topics: [v4SwapLog.topics[0]!, "0xbad"]},
+    ]) {
+      assert.equal((await opaqueWiring.reverseBindOpaqueCandidates!({
+        observations: [invalid], cutoff: fallbackSource, knownCandidates: noKnownCandidates,
+      })).length, 0, "foreign emitter or malformed instance ID is not an opaque nomination");
+    }
+    const wrongPool = await opaqueWiring.reverseBindOpaqueCandidates!({
+      observations: [{...v4SwapLog, topics: [v4SwapLog.topics[0]!, "0x" + "f7".repeat(32), ...v4SwapLog.topics.slice(2)]}],
+      cutoff: fallbackSource, knownCandidates: noKnownCandidates,
+    });
+    assert.equal(wrongPool.length, 1);
+    assert.equal(opaqueWiring.preAttestationRetryable?.(wrongPool[0])?.stage, "nomination",
+      "a valid trace for another pool cannot bind this pool ID");
     // Neither cheap chain truth nor exact trace resolves: the nomination is
     // durable retryable (fail-closed, never a guessed identity), so it cannot
     // block an otherwise complete Ready generation.
@@ -1893,7 +1948,7 @@ async function main(): Promise<void> {
       hash: "0x" + "c1".repeat(32),
       generation: 1,
     });
-    const unresolved = await wired.reverseBindOpaqueCandidates!({
+    const unresolved = await opaqueWiring.reverseBindOpaqueCandidates!({
       observations: Object.freeze([v4SwapLog]),
       cutoff: missingSource,
       knownCandidates: noKnownCandidates,
@@ -1903,16 +1958,16 @@ async function main(): Promise<void> {
       Readonly<Record<string, unknown>>;
     assert.equal(unresolvedCandidate.poolId, poolId.toLowerCase());
     assert.equal(
-      wired.preAttestationRetryable?.(unresolvedCandidate)?.stage,
+      opaqueWiring.preAttestationRetryable?.(unresolvedCandidate)?.stage,
       "nomination",
     );
     assert.equal(
-      wired.preAttestationRetryable?.(unresolvedCandidate)?.reasonCode,
-      "poolkey-unresolved",
+      opaqueWiring.preAttestationRetryable?.(unresolvedCandidate)?.reasonCode,
+      "source-bound surface and exact transaction could not be verified",
     );
     assert.equal(historicalLogReads, 0, "unresolved identity does not deep-scan");
     // A log that matches no declared reverse-binding pattern is untouched.
-    const unrelated = await wired.reverseBindOpaqueCandidates!({
+    const unrelated = await opaqueWiring.reverseBindOpaqueCandidates!({
       observations: Object.freeze([
         log({ address: manager, logIndex: 0 }),
         log({ address: "0x" + "55".repeat(20), logIndex: 1 }),
@@ -1929,6 +1984,17 @@ async function main(): Promise<void> {
     traceAvailable = true;
     const callScanDir = await mkdtemp(join(tmpdir(), "rebuild-call-scan-"));
     try {
+      const psmCandidate = candidatesFromCall(psmCall)[0]!;
+      const readonlyWiring = createRebuildWiring({ rpcUrl: "http://127.0.0.1:" + stubPort, familyIds: ["protocol:psm"] });
+      assert.notEqual((await readonlyWiring.attestFamilyInstanceOnce({candidate: psmCandidate, cutoff: SOURCE})).status,
+        "verified", "getter-only evidence cannot grant PSM identity");
+      assert.equal(psmProofs, 0);
+      corruptPsmDelta = true;
+      assert.notEqual((await wired.attestFamilyInstanceOnce({candidate: psmCandidate, cutoff: SOURCE})).status,
+        "verified", "one raw unit missing from the active proof cannot grant PSM identity");
+      assert.equal(psmProofs, 4);
+      corruptPsmDelta = false;
+      psmProofs = 0;
       const callStore = new UniverseRebuildCheckpointStore({
         path: join(callScanDir, "checkpoint.json"),
       });
@@ -1954,10 +2020,11 @@ async function main(): Promise<void> {
       assert.equal(graph.format, "strict-rebuild-graph-v1");
       assert.deepEqual(
         graph.edges.map((edge) => edge.adapterId).sort(),
-        ["psm", "wsteth-unwrap", "wsteth-wrap"],
+        ["psm", "psm", "wsteth-unwrap", "wsteth-wrap"],
         "Family-declared calls must publish verified PSM and wstETH Graph legs",
       );
       assert.equal(callReady.candidateAccounting.verified, 2);
+      assert.equal(psmProofs, 4, "both sizes and both PSM directions require active proof");
       assert.equal(
         callReady.candidateAccounting.total,
         2,
@@ -1998,7 +2065,7 @@ async function main(): Promise<void> {
         (rollingReady.graphSnapshot as { readonly edges: readonly {
           readonly adapterId?: string;
         }[] }).edges.map((edge) => edge.adapterId).sort(),
-        ["psm", "wsteth-unwrap", "wsteth-wrap"],
+        ["psm", "psm", "wsteth-unwrap", "wsteth-wrap"],
         "rolling and explicit ranges must use the same activity scanner",
       );
       assert.equal(
@@ -2082,6 +2149,7 @@ async function main(): Promise<void> {
       await rm(callScanDir, { recursive: true, force: true });
     }
   } finally {
+    NodeStrictClient.prototype.strictSimulate = oldNodeSimulate;
     // The JSON-RPC client keeps connections alive; force them closed so the
     // server can actually stop.
     stubServer.closeAllConnections();

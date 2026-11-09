@@ -17,9 +17,20 @@ import { familyId, lineageId } from "../venues/adapter-family-identifiers.js";
 import { bindFamilyOwnedAction } from "../venues/family-owned-action.js";
 import { FAMILY_CAPABILITY_NAMES, FamilyCapabilityCatalog, capabilityManifestHash } from "../venues/family-capability-catalog.js";
 import { hashCanonical } from "../venues/canonical-value.js";
-import { acceptanceConstructionGuard, directQuoteReceiptProgram, selectAcceptanceRoute, runProtocolJsonAcceptance } from "./protocol-json-acceptance.js";
+import { acceptanceConstructionGuard, directQuoteReceiptProgram, selectAcceptanceRoute, runProtocolJsonAcceptance as runAcceptance } from "./protocol-json-acceptance.js";
+import { registerAcceptanceSample } from "./protocol-json-sample-registration.js";
 import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
 import { inspectRuntime } from "./runtime-program-testkit.js";
+
+async function runProtocolJsonAcceptance(sample: any, context: any, report: any) {
+  const directory = mkdtempSync(join(tmpdir(), "registered-runner-fixture-"));
+  try {
+    const path = join(directory, "case.json");
+    writeFileSync(path, JSON.stringify(sample));
+    const parsed = parseProtocolJsonAcceptanceCase(sample);
+    return await runAcceptance(parsed, context, report, undefined, registerAcceptanceSample(parsed, path, directory));
+  } finally { rmSync(directory, {recursive: true, force: true}); }
+}
 
 const address = (value: number) => toBeHex(value, 20);
 const executor = address(101), owner = address(102), tokenIn = address(103), tokenOut = address(104), target = address(105);
@@ -160,9 +171,9 @@ test("CLI saves structured early failures with restrictive permissions and never
   try {
     const failed = fixture.run(...fixture.missing); assert.equal(failed.status, 1, failed.stderr);
     const first = readFileSync(fixture.out, "utf8"), report = JSON.parse(first);
-    assert.equal(report.result, "failed"); assert.equal(report.failedStage, "inputs");
+    assert.equal(report.result, "failed"); assert.equal(report.failedStage, "sample-registration");
     assert.equal(report.signing, false); assert.equal(report.broadcast, false); assert.equal(report.drained, false);
-    assert(report.evidence && typeof report.evidence === "object"); assert(report.errors.length > 0);
+    assert.equal(report.registration, undefined); assert(report.errors.length > 0);
     assert.equal(statSync(fixture.out).mode & 0o777, 0o600);
     assert.doesNotMatch(first + failed.stdout + failed.stderr, /FORBIDDEN_TEST_NETWORK/);
     const second = fixture.run(...fixture.missing); assert.notEqual(second.status, 0);
