@@ -9,7 +9,8 @@ OPTIONS (library = [__LIBRARY_URIS__])
 AS r'''return DiscoveryKernel.compactTransactionJson(tx);''';
 
 WITH discovered AS (
-  SELECT discovery_records(TO_JSON_STRING(STRUCT(
+  SELECT tx_hash AS source_tx_hash, block_hash AS source_hash,
+    discovery_records(TO_JSON_STRING(STRUCT(
     tx_hash, block_number, block_hash, transaction_index,
     receipt_status, trace_rows_present, traces, logs
   ))) AS discovery_result
@@ -25,7 +26,8 @@ WITH discovered AS (
     JSON_QUERY(record, '$.snapshot') AS snapshot,
     JSON_VALUE(record, '$.tx') AS tx_hash,
     SAFE_CAST(JSON_VALUE(record, '$.logIndex') AS INT64) AS log_index,
-    JSON_VALUE(record, '$.signature') AS signature
+    JSON_VALUE(record, '$.signature') AS signature,
+    source_tx_hash, source_hash
   FROM discovered, UNNEST(JSON_QUERY_ARRAY(discovery_result)) AS record
 ), best_witnesses AS (
   SELECT * FROM records
@@ -34,4 +36,6 @@ WITH discovered AS (
     ORDER BY source_block DESC, evidence_score DESC, fingerprint ASC
   ) = 1
 )
-SELECT DISTINCT * FROM best_witnesses;
+-- DISCOVERY_RESULT
+SELECT DISTINCT kind, family, instance_key, source_block, evidence_score, fingerprint,
+  snapshot, tx_hash, log_index, signature FROM best_witnesses;

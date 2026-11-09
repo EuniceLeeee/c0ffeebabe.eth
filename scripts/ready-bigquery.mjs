@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { createOpaqueNominationCollector } from './ready-opaque-nominations.mjs';
+import { compileReadyDiscovery, readyDiscoveryJob, openReadyDiscoveryJob, decodeSqlDiscoveryRow } from './ready-bigquery-sql.mjs';
 import { enableReadyFamilies } from './ready-family-activation.mjs';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statfsSync, unlinkSync, realpathSync, renameSync } from 'node:fs';
@@ -56,6 +57,7 @@ export async function main(argv = process.argv.slice(2)) {
     'revm-sim-bin': { type: 'string' },
     'reuse-checkpoint': { type: 'string' },
     'no-reuse-checkpoint': { type: 'boolean' },
+    'sql-discovery-bucket': { type: 'string' }, 'sql-max-bytes': { type: 'string' },
   } });
   assert(args.out && args.out.startsWith('/'), '--out must be an absolute dedicated run directory');
   const out = resolve(args.out), tokenFile = out + '/bigquery-auth.json';
@@ -92,6 +94,11 @@ export async function main(argv = process.argv.slice(2)) {
   const reuse = selectCheckpointReuse(args, out, profile);
   const reuseCheckpoint = reuse.checkpoint;
   const ref = tableRef(args.table ?? '');
+  const bucket = args['sql-discovery-bucket'];
+  const maxBytes = Number(args['sql-max-bytes']);
+  assert(bucket === undefined ? args['sql-max-bytes'] === undefined :
+    /^[a-z0-9_.-]+$/.test(bucket) && Number.isSafeInteger(maxBytes) && maxBytes > 0,
+  'SQL discovery requires --sql-discovery-bucket and a positive --sql-max-bytes');
   const pageSize = Number(args['page-size']), concurrency = Number(args.concurrency);
   assert(Number.isInteger(pageSize) && pageSize > 0 && pageSize <= 10000, 'Invalid page size');
   assert(Number.isInteger(concurrency) && concurrency > 0 && concurrency <= 24, 'Invalid concurrency');
@@ -121,8 +128,12 @@ export async function main(argv = process.argv.slice(2)) {
   } }; visit(root + '/listener/src');
   const codeHash = digest(codeFiles);
   const readerHash = digest([readFileSync(new URL('./ready-bigquery.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./bigquery-table.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./ready-family-activation.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./ready-opaque-nominations.mjs', import.meta.url), 'utf8')]);
+  const sqlReaderHash = bucket === undefined ? null : digest(readFileSync(new URL('./ready-bigquery-sql.mjs', import.meta.url), 'utf8'));
+  const libraries = bucket === undefined ? [] : await compileReadyDiscovery(root, catalog, bucket);
+  const sqlJob = bucket === undefined ? null : readyDiscoveryJob({ ref, pin, location: meta.location, libraries, maxBytes, codeHash });
   const runIdentity = { input: pin, codeHash, readerHash, executionIdentity: identity, simulator: 'node-rpc', activations, plan: wiring.expectedSourcePlanFingerprints(),
-    profilePath: resolve(args.profile), checkpointReuse: reuse.enabled, reuseCheckpoint };
+    profilePath: resolve(args.profile), checkpointReuse: reuse.enabled, reuseCheckpoint,
+    ...(sqlJob ? { sqlJob, sqlReaderHash } : {}) };
   if (existsSync(out + '/run-identity.json')) assert.deepEqual(JSON.parse(readFileSync(out + '/run-identity.json', 'utf8')), runIdentity, 'Run code/config changed');
   else saveJson(out + '/run-identity.json', runIdentity);
   const byKey = new Map(), opaque = new Map();
@@ -136,7 +147,8 @@ export async function main(argv = process.argv.slice(2)) {
   // No protocol names, ABI/selectors or address allowlists live in this importer.
   const collectOpaque = createOpaqueNominationCollector(catalog);
   const segmentDir = out + '/pages'; mkdirSync(segmentDir, { recursive: true });
-  let state = { pages: 0, rows: 0, nextPageToken: null, inputComplete: false, counts: emptyCounts(), minBlock: null, maxBlock: null, maxHash: null, chainHash: digest(pin) };
+  const counts = sqlJob ? { sqlCandidates: 0, sqlOpaque: 0 } : emptyCounts();
+  let state = { pages: 0, rows: 0, nextPageToken: null, inputComplete: false, counts, minBlock: null, maxBlock: null, maxHash: null, chainHash: digest(pin) };
   for (const file of readdirSync(segmentDir).filter(file => /^\d{8}\.json$/.test(file)).sort()) {
     const segment = JSON.parse(readFileSync(segmentDir + '/' + file, 'utf8'));
     assert.equal(segment.previousHash, state.chainHash, 'Checkpoint chain mismatch');
@@ -146,33 +158,67 @@ export async function main(argv = process.argv.slice(2)) {
     for (const [key, log] of segment.opaque) opaque.set(key, log);
     state = { ...segment.state, chainHash: segmentHash };
   }
+  let readSqlPage;
   while (!state.inputComplete && state.pages < maxPages) {
     const disk = statfsSync(out); assert(Number(disk.bavail) * Number(disk.bsize) >= 2 * 1024 ** 3, 'Disk reserve below 2 GiB');
     const pageUrl = new URL(url + '/data'); pageUrl.searchParams.set('maxResults', String(pageSize));
     if (state.nextPageToken) pageUrl.searchParams.set('pageToken', state.nextPageToken);
-    const page = await api(pageUrl);
-    assert.equal(page.totalRows, pin.rows, 'Input row count changed');
+    if (sqlJob && !readSqlPage) {
+      status({ phase: 'sql-discovery', jobId: sqlJob.jobId, sqlResultRows: state.sqlResultRows ?? 0, pages: state.pages });
+      readSqlPage = await openReadyDiscoveryJob(api, ref, sqlJob, libraries);
+    }
+    const page = readSqlPage ? await readSqlPage(pageSize, state.nextPageToken) : await api(pageUrl);
+    if (!readSqlPage) assert.equal(page.totalRows, pin.rows, 'Input row count changed');
     const rows = page.rows ?? [];
     assert(rows.length || !page.pageToken, 'Empty non-terminal BigQuery page');
-    const observations = [];
+    const observations = [], sqlCandidates = [], sqlOpaque = [];
+    let sourceRows = state.rows;
     for (const row of rows) {
+      if (readSqlPage) {
+        const decoded = decodeSqlDiscoveryRow(page.schema.fields, row, wiring, rebuildFamilyInstanceDedupeKey, collectOpaque);
+        if (decoded.coverage) {
+          assert.equal(sourceRows, 0, 'Duplicate SQL source coverage');
+          assert.equal(decoded.coverage.rows, pin.rows, 'SQL discovery input row count changed');
+          const { minBlock, maxBlock, maxHash } = decoded.coverage;
+          Object.assign(state, { minBlock, maxBlock, maxHash });
+          sourceRows = Number(decoded.coverage.rows);
+        } else {
+          assert(sourceRows > 0, 'SQL witnesses arrived before source coverage');
+          if (decoded.candidate) {
+            sqlCandidates.push({ kind: 'startup-candidate', candidate: decoded.candidate });
+            state.counts.sqlCandidates++;
+          } else {
+            sqlOpaque.push(decoded.opaque);
+            state.counts.sqlOpaque++;
+          }
+        }
+        continue;
+      }
       const tx = decodeRow(meta.schema.fields, row), block = Number(tx.block_number);
       for (const observation of observationsFromTx(tx, state.counts)) observations.push(observation);
+      sourceRows++;
       state.minBlock = state.minBlock === null ? block : Math.min(state.minBlock, block);
       if (state.maxBlock === null || block > state.maxBlock) { state.maxBlock = block; state.maxHash = tx.block_hash; }
       else if (block === state.maxBlock) assert.equal(tx.block_hash.toLowerCase(), state.maxHash.toLowerCase(), 'Conflicting maximum block hash');
     }
     const changed = new Set();
-    for (const candidate of wiring.dedupeFamilyCandidates(observations)) changed.add(mergeCandidate(candidate));
+    for (const candidate of wiring.dedupeFamilyCandidates(readSqlPage ? sqlCandidates : observations)) changed.add(mergeCandidate(candidate));
     const opaqueChanges = new Map();
-    for (const log of observations) {
-      for (const { key } of collectOpaque(log)) {
-        if (!opaque.has(key) || opaque.get(key).blockNumber < log.blockNumber) {
-          opaque.set(key, log); opaqueChanges.set(key, log);
-        }
+    const retain = ({ key, log }) => {
+      if (!opaque.has(key) || opaque.get(key).blockNumber < log.blockNumber) {
+        opaque.set(key, log); opaqueChanges.set(key, log);
       }
+    };
+    if (readSqlPage) sqlOpaque.forEach(retain);
+    else for (const log of observations) collectOpaque(log).forEach(retain);
+    const next = { ...state, pages: state.pages + 1, rows: sourceRows, nextPageToken: page.pageToken ?? null, inputComplete: !page.pageToken };
+    if (readSqlPage) {
+      const total = Number(page.totalRows);
+      assert(Number.isSafeInteger(total) && total >= 1, 'Missing SQL result row count');
+      next.sqlResultRows = (state.sqlResultRows ?? 0) + rows.length;
+      assert(next.sqlResultRows <= total, 'SQL discovery result exceeded its row count');
+      if (next.inputComplete) assert.equal(next.sqlResultRows, total, 'Incomplete SQL discovery result');
     }
-    const next = { ...state, pages: state.pages + 1, rows: state.rows + rows.length, nextPageToken: page.pageToken ?? null, inputComplete: !page.pageToken };
     delete next.chainHash;
     assert(next.rows <= Number(pin.rows), 'Read beyond pinned row count');
     if (next.inputComplete) assert.equal(next.rows, Number(pin.rows), 'Incomplete terminal page');
@@ -183,7 +229,7 @@ export async function main(argv = process.argv.slice(2)) {
     status({ phase: 'reading', ...state, nextPageToken: undefined, candidates: byKey.size, opaqueInstances: opaque.size, rssMiB: Math.round(process.memoryUsage().rss / 1024 ** 2) });
     if (state.pages % 100 === 0 || state.inputComplete) assert.deepEqual(sourcePin(await api(url)), pin, 'Input table mutated');
   }
-  if (!state.inputComplete) { status({ phase: 'sample-complete', rows: state.rows, pages: state.pages, candidates: byKey.size, opaqueInstances: opaque.size }); return; }
+  if (!state.inputComplete) { status({ phase: 'sample-complete', rows: state.rows, ...(sqlJob ? { sqlResultRows: state.sqlResultRows ?? 0 } : {}), pages: state.pages, candidates: byKey.size, opaqueInstances: opaque.size }); return; }
   assert(state.maxBlock !== null, 'Empty table cannot produce Ready');
   assert.deepEqual(sourcePin(await api(url)), pin, 'Input table mutated');
   unlinkSync(tokenFile);

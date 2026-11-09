@@ -63,16 +63,17 @@ export function emptyCounts() {
   return { transactions: 0, failedTransactions: 0, transactionsWithoutTraces: 0, missingAncestorCalls: 0, rolledBackCalls: 0, logs: 0, calls: 0 };
 }
 export function makeApi(tokenFile, fetchImpl = fetch, sleep = ms => new Promise(resolve => setTimeout(resolve, ms))) {
-  return async function get(url) {
+  return async function request(url, { bytes = false, allowStatus, ...options } = {}) {
     for (let attempt = 0; attempt < 7; attempt++) {
       const credential = JSON.parse(readFileSync(tokenFile, 'utf8'));
       assert(credential.expiresAt > Date.now(), 'BigQuery access token expired; resume after credential refresh');
       let response;
-      try { response = await fetchImpl(url, { headers: { Authorization: 'Bearer ' + credential.token }, signal: AbortSignal.timeout(60000) }); }
+      try { response = await fetchImpl(url, { ...options, headers: { ...options.headers, Authorization: 'Bearer ' + credential.token }, signal: AbortSignal.timeout(60000) }); }
       catch { if (attempt === 6) throw Error('BigQuery transport failed after bounded retries'); await sleep(Math.min(30000, 1000 * 2 ** attempt)); continue; }
-      if (response.ok) return await response.json();
+      if (response.ok) return bytes ? Buffer.from(await response.arrayBuffer()) : await response.json();
       const status = response.status;
       await response.body?.cancel();
+      if (status === allowStatus) return null;
       if (![429, 500, 502, 503, 504].includes(status) || attempt === 6) throw Error('BigQuery request failed: HTTP ' + status);
       await sleep(Math.min(30000, 1000 * 2 ** attempt));
     }

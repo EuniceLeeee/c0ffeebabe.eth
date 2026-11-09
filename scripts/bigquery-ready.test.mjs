@@ -303,3 +303,47 @@ test('publication failure after strict recovers without re-reading or re-running
     assert.equal(JSON.parse(readFileSync(f.root + '/profile.json.latest-ready.json')).checkpoint, f.out + '/checkpoint.json');
   } finally { globalThis.fetch = oldFetch; rmSync(f.root, { recursive: true }); }
 });
+
+test('SQL discovery uses the common UDF and keeps source coverage separate from compact witnesses', async () => {
+  const { readyDiscoveryJob, openReadyDiscoveryJob, decodeSqlDiscoveryRow } = await import('./ready-bigquery-sql.mjs');
+  const ref = tableRef('project1.Ready.original-pools');
+  const uri = 'gs://test-bucket/mev-discovery-json-check/' + 'a'.repeat(64) + '/kernel.js';
+  const spec = readyDiscoveryJob({ ref, pin: { rows: '2' }, location: 'US', libraries: [{uri}], maxBytes: 1000000, codeHash: 'code' });
+  assert.match(spec.query.query, /CREATE TEMP FUNCTION discovery_records\(tx STRING\)/);
+  assert.match(spec.query.query, /DiscoveryKernel\.compactTransactionJson\(tx\)/);
+  assert.match(spec.query.query, /FROM `project1.Ready.original-pools`/);
+  assert.match(spec.query.query, /DENSE_RANK/);
+  assert.match(spec.query.query, /FROM \(SELECT DISTINCT \* FROM best_witnesses\)/);
+  assert.match(spec.query.query, /CAST\(COUNT\(\*\) AS STRING\)/);
+  assert.equal(spec.query.maximumBytesBilled, '1000000');
+  const calls = [];
+  const api = async url => {
+    calls.push(String(url));
+    if (String(url).includes('/jobs/')) return {
+      jobReference: { jobId: spec.jobId }, configuration: { query: spec.query },
+    };
+    return { jobComplete: true, totalRows: '2', rows: [] };
+  };
+  const read = await openReadyDiscoveryJob(api, ref, spec, []);
+  await read(1000, 'continued');
+  assert.equal(calls.length, 2, 'reuse an existing query instead of reuploading or submitting again');
+  assert.match(calls[1], /pageToken=continued/);
+  const fields = ['row_kind', 'body'].map(name => ({ name, type: 'STRING' }));
+  const row = (kind, body) => ({ f: [kind, JSON.stringify(body)].map(v => ({v})) });
+  const wiring = { decodeCandidateSnapshot: candidate => candidate };
+  const key = candidate => candidate.address;
+  const collect = log => [{ family: 'opaque-family', key: 'opaque-key', log }];
+  const witness = { address: 'candidate-key', transactionHash: hash, blockNumber: 123, blockHash };
+  const candidate = { kind: 'candidate', family: 'family', key: 'candidate-key', tx: hash, block: 123,
+    sourceTx: hash, sourceHash: blockHash, snapshot: { ...witness, familyId: 'family' } };
+  const opaque = { ...candidate, kind: 'opaque', family: 'opaque-family', key: 'opaque-key', snapshot: witness };
+  const decode = (kind, body) => decodeSqlDiscoveryRow(fields, row(kind, body), wiring, key, collect);
+  assert.deepEqual(decode('witness', candidate), { candidate: candidate.snapshot });
+  assert.deepEqual(decode('witness', opaque), { opaque: {key:'opaque-key', log:witness} });
+  const head = { number: 123, blockHash };
+  assert.deepEqual(decode('source', { sourceRows: '2', minBlock: 122, firstHead: head, lastHead: head }),
+    { coverage: { rows: '2', minBlock: 122, maxBlock: 123, maxHash: blockHash } });
+  assert.throws(() => decode('witness', {...candidate, key:'wrong'}), /candidate key differs/);
+  assert.throws(() => decode('witness', {...opaque, key:'wrong'}), /active catalog/);
+  assert.throws(() => decode('source', { sourceRows: '2', minBlock: 122, firstHead: head, lastHead: {...head, blockHash: hash} }), /Conflicting maximum block hash/);
+});
