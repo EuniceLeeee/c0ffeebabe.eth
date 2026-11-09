@@ -347,3 +347,41 @@ test('SQL discovery uses the common UDF and keeps source coverage separate from 
   assert.throws(() => decode('witness', {...opaque, key:'wrong'}), /active catalog/);
   assert.throws(() => decode('source', { sourceRows: '2', minBlock: 122, firstHead: head, lastHead: {...head, blockHash: hash} }), /Conflicting maximum block hash/);
 });
+
+test('day and block windows select the same raw schema and preserve transaction evidence', async () => {
+  const { parseReadyWindow, renderRawRefresh, renderRawWindow, renderEthereumInputs } = await import('./ready-bigquery-window.mjs');
+  assert.deepEqual(parseReadyWindow({'from-day':'2026-10-15','to-day':'2026-10-15'}), {fromDay:'2026-10-15',toDay:'2026-10-15'});
+  assert.throws(() => parseReadyWindow({'from-day':'2026-02-30','to-day':'2026-03-01'}), /calendar/);
+  assert.throws(() => parseReadyWindow({'from-day':'2026-10-15','from-block':'1','to-block':'2'}), /Choose days or blocks/);
+  const window = {...parseReadyWindow({'from-block':'10','to-block':'11'}),firstTime:'2026-10-15T00:00:00.000000Z',lastTime:'2026-10-15T00:00:12.000000Z',transactions:'3'};
+  const ref = tableRef('project1.Ready.raw_tx_incremental');
+  const raw = renderEthereumInputs(window);
+  assert.match(raw, /crypto_ethereum\.logs/);
+  assert.match(raw, /crypto_ethereum\.traces/);
+  assert.match(raw, /crypto_ethereum\.transactions/);
+  assert.match(renderRawWindow(ref,window), /block_number BETWEEN 10 AND 11/);
+  const sql = renderRawRefresh(ref,window,tableRef('project1._tmp.result'));
+  assert.match(sql, /MERGE `project1.Ready.raw_tx_incremental`/);
+  assert.match(sql, /WHEN NOT MATCHED THEN/);
+  assert.match(sql, /COUNT\(DISTINCT LOWER\(tx_hash\)\) = 3/);
+  assert(!sql.includes('CREATE TABLE'));
+  assert(!sql.includes('WHEN MATCHED'));
+});
+
+test('live Family flags disable missing entries and reject unavailable enabled entries', async () => {
+  const { applyReadyLiveFamilyFlags } = await import('./ready-family-activation.mjs');
+  const f = fixture();
+  try {
+    const dir = f.root + '/listener/src/searcher/venues/production-families';
+    for (const name of ['ON','OFF','UNLISTED']) {
+      writeFileSync(dir + '/' + name + '.production.ts',
+        'export const activation = defineFamilyActivation({enabled:true,envKey:"SEARCHER_FAMILY_' + name + '_ENABLED"});');
+    }
+    const env = { SEARCHER_FAMILY_UNLISTED_ENABLED:'1' };
+    const flags = {SEARCHER_FAMILY_ON_ENABLED:'1', SEARCHER_FAMILY_OFF_ENABLED:'0', SEARCHER_FAMILY_ABSENT_ENABLED:'0'};
+    assert.deepEqual(applyReadyLiveFamilyFlags(f.root, flags, env), ['SEARCHER_FAMILY_ON_ENABLED']);
+    assert.equal(env.SEARCHER_FAMILY_OFF_ENABLED, '0');
+    assert.equal(env.SEARCHER_FAMILY_UNLISTED_ENABLED, '0');
+    assert.throws(() => applyReadyLiveFamilyFlags(f.root, {...flags, SEARCHER_FAMILY_ABSENT_ENABLED:'1'}, env), /missing from the current checkout/);
+  } finally { rmSync(f.root, { recursive:true, force:true }); }
+});

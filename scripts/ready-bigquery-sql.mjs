@@ -7,17 +7,19 @@ import { decodeRow, digest } from './bigquery-table.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
-export function renderReadyDiscoverySql(ref, libraries) {
+export function renderReadyDiscoverySql(ref, libraries, sourceQuery) {
   const table = [ref.projectId, ref.datasetId, ref.tableId].join('.');
   assert(/^[a-z][a-z0-9-]+\.[A-Za-z_]\w*\.[A-Za-z0-9_-]+$/.test(table));
   assert(libraries.length && libraries.every(uri => /^gs:\/\/[a-z0-9_.-]+\/mev-discovery-json-check\/[a-f0-9]{64}\/[a-z0-9-]+\.js$/.test(uri)));
   const template = readFileSync(new URL('./ready-discovery-udf.sql', import.meta.url), 'utf8');
   const [discovery, result] = template.split('-- DISCOVERY_RESULT');
   assert(result, 'Missing discovery query projection');
-  const source = '`' + table + '`';
-  return discovery
+  const source = sourceQuery === undefined ? '`' + table + '`' : 'source_transactions';
+  const prefix = sourceQuery === undefined ? discovery : discovery.replace('WITH discovered AS (',
+    'WITH source_transactions AS (\n' + sourceQuery + '\n), discovered AS (');
+  return prefix
     .replace('__LIBRARY_URIS__', libraries.map(uri => JSON.stringify(uri)).join(', '))
-    .replace('__SOURCE_TABLE__', table)
+    .replace('`__SOURCE_TABLE__`', source)
     + `, source_coverage AS (
   SELECT CAST(COUNT(*) AS STRING) AS sourceRows,
     MIN(block_number) AS minBlock,
@@ -43,13 +45,13 @@ export async function compileReadyDiscovery(root, catalog, bucket) {
   const temporary = mkdtempSync(join(tmpdir(), 'ready-discovery-'));
   try {
     const out = join(temporary, 'kernel');
+    const expected = catalog.listAll().map(family => family.plugin.manifest.familyId).sort();
     const report = await buildDiscoveryUdf({
       catalog: join(root, 'listener/src/searcher/generated/family-capability-shadow.generated.json'),
       sourceRoot: join(root, 'listener'),
       reader: join(root, 'scripts/bigquery-table.mjs'),
-      out,
+      out, familyIds: expected,
     });
-    const expected = catalog.listAll().map(family => family.plugin.manifest.familyId).sort();
     assert.deepEqual([...report.familyIds].sort(), expected, 'Regenerate the capability catalog for this checkout before SQL discovery');
     return report.resources.map(resource => {
       const bytes = readFileSync(join(out, resource.file));
@@ -62,11 +64,11 @@ export async function compileReadyDiscovery(root, catalog, bucket) {
   }
 }
 
-export function readyDiscoveryJob({ ref, pin, location, libraries, maxBytes, codeHash }) {
+export function readyDiscoveryJob({ ref, pin, location, libraries, maxBytes, codeHash, sourceQuery }) {
   assert(typeof location === 'string' && /^[A-Za-z0-9-]+$/.test(location), 'Missing BigQuery table location');
   assert(Number.isSafeInteger(maxBytes) && maxBytes > 0, '--sql-max-bytes must be a positive integer');
   const query = {
-    query: renderReadyDiscoverySql(ref, libraries.map(library => library.uri)),
+    query: renderReadyDiscoverySql(ref, libraries.map(library => library.uri), sourceQuery),
     useLegacySql: false, useQueryCache: false, maximumBytesBilled: String(maxBytes),
   };
   const jobId = 'mev_ready_discovery_' + digest({ pin, location, query, codeHash }).slice(0, 32);

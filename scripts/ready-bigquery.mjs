@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import { createOpaqueNominationCollector } from './ready-opaque-nominations.mjs';
 import { compileReadyDiscovery, readyDiscoveryJob, openReadyDiscoveryJob, decodeSqlDiscoveryRow } from './ready-bigquery-sql.mjs';
-import { enableReadyFamilies } from './ready-family-activation.mjs';
+import { parseReadyWindow, resolveReadyWindow, renderEthereumInputs, refreshReadyRawTable, renderRawWindow, runWindowQuery } from './ready-bigquery-window.mjs';
+import { applyReadyLiveFamilyFlags, enableReadyFamilies } from './ready-family-activation.mjs';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statfsSync, unlinkSync, realpathSync, renameSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -57,6 +58,10 @@ export async function main(argv = process.argv.slice(2)) {
     'revm-sim-bin': { type: 'string' },
     'reuse-checkpoint': { type: 'string' },
     'no-reuse-checkpoint': { type: 'boolean' },
+    'from-day': { type: 'string' }, 'to-day': { type: 'string' },
+    'from-block': { type: 'string' }, 'to-block': { type: 'string' },
+    'live-config': { type: 'string' }, 'incremental-table': { type: 'string' },
+    'raw-only': { type: 'boolean' }, 'candidates-only': { type: 'boolean' },
     'sql-discovery-bucket': { type: 'string' }, 'sql-max-bytes': { type: 'string' },
   } });
   assert(args.out && args.out.startsWith('/'), '--out must be an absolute dedicated run directory');
@@ -66,7 +71,7 @@ export async function main(argv = process.argv.slice(2)) {
     let token = ''; for await (const chunk of process.stdin) token += chunk;
     token = token.trim(); assert(/^[A-Za-z0-9._~-]{30,8192}$/.test(token), 'Invalid access token');
     const phase = existsSync(out + '/status.json') ? JSON.parse(readFileSync(out + '/status.json', 'utf8')).phase : null;
-    if (phase === 'ready') { console.log('BigQuery credential no longer needed'); return; }
+    if (['ready', 'candidates', 'raw-complete'].includes(phase)) { console.log('BigQuery credential no longer needed'); return; }
     saveJson(tokenFile, { token, expiresAt: Date.now() + 3300000 });
     console.log('Temporary BigQuery credential refreshed'); return;
   }
@@ -74,8 +79,9 @@ export async function main(argv = process.argv.slice(2)) {
     const status = existsSync(out + '/status.json') ? JSON.parse(readFileSync(out + '/status.json', 'utf8')) : { phase: 'not-started' };
     console.log(JSON.stringify({ phase: status.phase, rows: status.rows ?? 0, pages: status.pages ?? 0 })); return;
   }
-  if (existsSync(out + '/status.json') && JSON.parse(readFileSync(out + '/status.json', 'utf8')).phase === 'ready') {
-    console.log('This Ready run is complete; no additional round started'); return;
+  if (existsSync(out + '/status.json') &&
+      ['ready', 'candidates', 'raw-complete'].includes(JSON.parse(readFileSync(out + '/status.json', 'utf8')).phase)) {
+    console.log('This BigQuery run is complete; no additional round started'); return;
   }
   // Strict already finished if its result was saved, even if publishing the
   // latest-reference/status failed. Recover that bookkeeping without re-running.
@@ -90,23 +96,57 @@ export async function main(argv = process.argv.slice(2)) {
     console.log('Completed Ready publication recovered; no additional strict run started'); return;
   }
   const root = resolve(args.root ?? dirname(import.meta.dirname));
-  const profile = JSON.parse(readFileSync(args.profile, 'utf8'));
-  const reuse = selectCheckpointReuse(args, out, profile);
-  const reuseCheckpoint = reuse.checkpoint;
-  const ref = tableRef(args.table ?? '');
+  const history = tableRef(args.table ?? '');
+  let ref = history;
+  const selection = parseReadyWindow(args);
+  assert(!args['raw-only'] || selection && !args['candidates-only'], 'Raw export requires a window and cannot run candidate discovery');
+  assert(!args['incremental-table'] || selection, 'An incremental table requires a window');
   const bucket = args['sql-discovery-bucket'];
   const maxBytes = Number(args['sql-max-bytes']);
-  assert(bucket === undefined ? args['sql-max-bytes'] === undefined :
-    /^[a-z0-9_.-]+$/.test(bucket) && Number.isSafeInteger(maxBytes) && maxBytes > 0,
-  'SQL discovery requires --sql-discovery-bucket and a positive --sql-max-bytes');
+  if (selection || bucket !== undefined) assert(Number.isSafeInteger(maxBytes) && maxBytes > 0, 'BigQuery windows require a positive --sql-max-bytes');
+  else assert(args['sql-max-bytes'] === undefined, '--sql-max-bytes requires SQL mode');
+  if (bucket !== undefined) assert(/^[a-z0-9_.-]+$/.test(bucket), 'Invalid BigQuery discovery bucket');
+  if (selection && !args['raw-only']) assert(bucket && args['live-config'], 'Candidate windows require --sql-discovery-bucket and --live-config');
   const pageSize = Number(args['page-size']), concurrency = Number(args.concurrency);
   assert(Number.isInteger(pageSize) && pageSize > 0 && pageSize <= 10000, 'Invalid page size');
   assert(Number.isInteger(concurrency) && concurrency > 0 && concurrency <= 24, 'Invalid concurrency');
   const maxPages = args['max-pages'] === undefined ? Infinity : Number(args['max-pages']);
   assert(maxPages === Infinity || Number.isInteger(maxPages) && maxPages > 0, 'Invalid max-pages');
   const status = value => { saveJson(out + '/status.json', { ...value, updatedAt: new Date().toISOString() }); console.log(JSON.stringify(value)); };
-  const api = makeApi(tokenFile), url = tableUrl(ref);
-  const meta = await api(url), pin = sourcePin(meta);
+  const profile = args['raw-only'] ? null : JSON.parse(readFileSync(args.profile, 'utf8'));
+  const reuse = args['raw-only'] || args['candidates-only'] ? { enabled: false, checkpoint: null } : selectCheckpointReuse(args, out, profile);
+  const reuseCheckpoint = reuse.checkpoint;
+  const api = makeApi(tokenFile);
+  const historicalMeta = await api(tableUrl(history));
+  const window = selection ? await resolveReadyWindow(api, history, historicalMeta.location, maxBytes, selection) : null;
+  let sourceQuery = window ? renderEthereumInputs(window) : undefined;
+  if (args['incremental-table']) {
+    ref = tableRef(args['incremental-table']);
+    const refreshPath = out + '/incremental-refresh.json';
+    if (args.resume && existsSync(refreshPath)) {
+      const previous = JSON.parse(readFileSync(refreshPath, 'utf8'));
+      assert.deepEqual(previous.table, ref, 'Incremental table changed during resume');
+      assert.deepEqual(previous.window, window, 'Incremental window changed during resume');
+    } else {
+      const update = await refreshReadyRawTable(api, history, ref, historicalMeta.location, maxBytes, window);
+      saveJson(refreshPath, { ...update, window });
+    }
+    sourceQuery = renderRawWindow(ref, window);
+  }
+  if (args['raw-only']) {
+    const sql = 'SELECT * FROM (\n' + sourceQuery + '\n) ORDER BY block_number, transaction_index, tx_hash';
+    const result = await runWindowQuery(api, ref, historicalMeta.location, maxBytes, sql, pageSize, 'ready_raw');
+    assert.equal(result.page.totalRows, window.transactions, 'Raw input does not cover the canonical transaction count');
+    saveJson(out + '/raw-preview.json', { window, jobId: result.jobId, totalRows: result.page.totalRows,
+      fields: result.page.schema.fields, rows: result.page.rows, moreResults: Boolean(result.page.pageToken) });
+    status({ phase: 'raw-complete', jobId: result.jobId, rows: Number(window.transactions), window });
+    unlinkSync(tokenFile);
+    return;
+  }
+  const url = tableUrl(ref);
+  const meta = ref === history ? historicalMeta : await api(url);
+  const pin = sourcePin(meta);
+  const inputRows = window?.transactions ?? pin.rows;
   const pinPath = out + '/input-pin.json';
   if (existsSync(pinPath)) { assert(args.resume, 'Existing run requires --resume'); assert.deepEqual(JSON.parse(readFileSync(pinPath, 'utf8')), pin, 'Input table changed'); }
   else saveJson(pinPath, pin);
@@ -116,7 +156,8 @@ export async function main(argv = process.argv.slice(2)) {
   Object.assign(process.env, { SEARCHER_DRY_RUN: '1', SEARCHER_BLOCKSCAN_SUBMIT: '0', SEARCHER_TEST_DISABLE_DOTENV: '1',
     MAINNET_RPC_URL: endpoint, SEARCHER_LIVE_RPC_URL: endpoint,
     BOTVM_ADDRESS: profile.executor, BOTVM_OWNER: profile.wallet, SEARCHER_REBUILD_REVM_TIMEOUT_MS: '60000' });
-  const activations = enableReadyFamilies(root);
+  const activations = args['live-config'] === undefined ? enableReadyFamilies(root) :
+    applyReadyLiveFamilyFlags(root, JSON.parse(readFileSync(args['live-config'], 'utf8')));
   const { createRebuildWiring, rebuildFamilyInstanceDedupeKey } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-production.ts'));
   const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog } = await import(pathToFileURL(root + '/listener/src/searcher/venues/production-family-composition.ts'));
   const identity = { executor: profile.executor, transactionOrigin: profile.wallet };
@@ -130,10 +171,12 @@ export async function main(argv = process.argv.slice(2)) {
   const readerHash = digest([readFileSync(new URL('./ready-bigquery.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./bigquery-table.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./ready-family-activation.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./ready-opaque-nominations.mjs', import.meta.url), 'utf8')]);
   const sqlReaderHash = bucket === undefined ? null : digest(readFileSync(new URL('./ready-bigquery-sql.mjs', import.meta.url), 'utf8'));
   const libraries = bucket === undefined ? [] : await compileReadyDiscovery(root, catalog, bucket);
-  const sqlJob = bucket === undefined ? null : readyDiscoveryJob({ ref, pin, location: meta.location, libraries, maxBytes, codeHash });
+  const sqlJob = bucket === undefined ? null : readyDiscoveryJob({ ref, pin, location: meta.location, libraries, maxBytes, codeHash, sourceQuery });
   const runIdentity = { input: pin, codeHash, readerHash, executionIdentity: identity, simulator: 'node-rpc', activations, plan: wiring.expectedSourcePlanFingerprints(),
     profilePath: resolve(args.profile), checkpointReuse: reuse.enabled, reuseCheckpoint,
-    ...(sqlJob ? { sqlJob, sqlReaderHash } : {}) };
+    ...(sqlJob ? { sqlJob, sqlReaderHash } : {}),
+    ...(window ? { window, windowReaderHash: digest(readFileSync(new URL('./ready-bigquery-window.mjs', import.meta.url), 'utf8')) } : {}),
+    ...(args['candidates-only'] ? { candidatesOnly: true } : {}) };
   if (existsSync(out + '/run-identity.json')) assert.deepEqual(JSON.parse(readFileSync(out + '/run-identity.json', 'utf8')), runIdentity, 'Run code/config changed');
   else saveJson(out + '/run-identity.json', runIdentity);
   const byKey = new Map(), opaque = new Map();
@@ -178,7 +221,11 @@ export async function main(argv = process.argv.slice(2)) {
         const decoded = decodeSqlDiscoveryRow(page.schema.fields, row, wiring, rebuildFamilyInstanceDedupeKey, collectOpaque);
         if (decoded.coverage) {
           assert.equal(sourceRows, 0, 'Duplicate SQL source coverage');
-          assert.equal(decoded.coverage.rows, pin.rows, 'SQL discovery input row count changed');
+          assert.equal(decoded.coverage.rows, inputRows, 'SQL discovery input row count changed');
+          if (window) {
+            assert(decoded.coverage.minBlock >= window.fromBlock && decoded.coverage.maxBlock <= window.toBlock, 'SQL discovery escaped its block range');
+            if (decoded.coverage.maxBlock === window.toBlock) assert.equal(decoded.coverage.maxHash.toLowerCase(), window.headHash);
+          }
           const { minBlock, maxBlock, maxHash } = decoded.coverage;
           Object.assign(state, { minBlock, maxBlock, maxHash });
           sourceRows = Number(decoded.coverage.rows);
@@ -220,8 +267,8 @@ export async function main(argv = process.argv.slice(2)) {
       if (next.inputComplete) assert.equal(next.sqlResultRows, total, 'Incomplete SQL discovery result');
     }
     delete next.chainHash;
-    assert(next.rows <= Number(pin.rows), 'Read beyond pinned row count');
-    if (next.inputComplete) assert.equal(next.rows, Number(pin.rows), 'Incomplete terminal page');
+    assert(next.rows <= Number(inputRows), 'Read beyond pinned row count');
+    if (next.inputComplete) assert.equal(next.rows, Number(inputRows), 'Incomplete terminal page');
     const segment = { previousHash: state.chainHash, pageContentHash: digest(page), state: next,
       candidates: [...changed].map(key => wiring.encodeCandidateSnapshot(byKey.get(key))), opaque: [...opaqueChanges] };
     const segmentHash = digest(segment); saveJson(segmentDir + '/' + String(next.pages).padStart(8, '0') + '.json', { ...segment, segmentHash });
@@ -232,10 +279,20 @@ export async function main(argv = process.argv.slice(2)) {
   if (!state.inputComplete) { status({ phase: 'sample-complete', rows: state.rows, ...(sqlJob ? { sqlResultRows: state.sqlResultRows ?? 0 } : {}), pages: state.pages, candidates: byKey.size, opaqueInstances: opaque.size }); return; }
   assert(state.maxBlock !== null, 'Empty table cannot produce Ready');
   assert.deepEqual(sourcePin(await api(url)), pin, 'Input table mutated');
+  if (args['candidates-only']) {
+    const familyIds = catalog.listAll().map(family => family.plugin.manifest.familyId).sort();
+    saveJson(out + '/nominations.json', { window, familyIds, jobId: sqlJob?.jobId ?? null,
+      candidates: [...byKey.values()].map(candidate => wiring.encodeCandidateSnapshot(candidate)),
+      opaque: [...opaque.entries()] });
+    status({ phase: 'candidates', jobId: sqlJob?.jobId ?? null, rows: state.rows, familyIds,
+      candidates: byKey.size, opaqueInstances: opaque.size });
+    unlinkSync(tokenFile);
+    return;
+  }
   unlinkSync(tokenFile);
   status({ phase: 'strict', rows: state.rows, pages: state.pages, candidates: byKey.size, opaqueInstances: opaque.size, cutoff: state.maxBlock });
-  const cutoff = await wiring.freezeCanonicalHead(state.maxBlock);
-  assert.equal(cutoff.hash.toLowerCase(), state.maxHash.toLowerCase(), 'Input maximum block is not canonical');
+  const cutoff = await wiring.freezeCanonicalHead(window?.toBlock ?? state.maxBlock);
+  assert.equal(cutoff.hash.toLowerCase(), window?.headHash ?? state.maxHash.toLowerCase(), 'Input maximum block is not canonical');
   const reverse = await wiring.reverseBindOpaqueCandidates({ observations: [...opaque.values()], cutoff, knownCandidates: [...byKey.values()] });
   for (const candidate of reverse) mergeCandidate(candidate);
   const candidates = [...byKey.values()]; opaque.clear(); byKey.clear();

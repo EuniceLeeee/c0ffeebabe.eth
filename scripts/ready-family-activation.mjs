@@ -28,11 +28,33 @@ export function activationKeys(source, file = 'entry.ts') {
   assert(new Set(keys).size === keys.length, 'Duplicate activation key');
   return keys;
 }
-export function enableReadyFamilies(root, env = process.env) {
+function readyFamilyKeys(root) {
   const dir = join(root, 'listener/src/searcher/venues/production-families');
   const keys = readdirSync(dir).filter(file => file.endsWith('.production.ts')).sort()
     .flatMap(file => activationKeys(readFileSync(join(dir, file), 'utf8'), file));
   assert(new Set(keys).size === keys.length, 'Duplicate production activation key');
+  return keys;
+}
+
+export function enableReadyFamilies(root, env = process.env) {
+  const keys = readyFamilyKeys(root);
   for (const key of keys) env[key] = '1';
   return keys;
+}
+
+export function applyReadyLiveFamilyFlags(root, config, env = process.env) {
+  const keys = readyFamilyKeys(root);
+  const allowed = new Set(keys);
+  const active = [];
+  for (const [key, value] of Object.entries(config)) {
+    if (!/^SEARCHER_FAMILY_[A-Z0-9_]+_ENABLED$/.test(key)) continue;
+    assert(value === '0' || value === '1', 'Invalid live Family flag: ' + key);
+    if (value === '1') {
+      assert(allowed.has(key), 'Enabled live Family is missing from the current checkout: ' + key);
+      active.push(key);
+    }
+  }
+  assert(active.length, 'Live config has no enabled Families');
+  for (const key of keys) env[key] = config[key] ?? '0';
+  return active.sort();
 }

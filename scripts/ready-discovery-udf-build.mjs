@@ -148,6 +148,12 @@ export async function buildDiscoveryUdf(options) {
   for(const name of ['catalog','sourceRoot','reader','out']) assert(isAbsolute(options[name]),name+' must be absolute');
   assert(!existsSync(options.out),'Output directory must be new; frozen evidence is not overwritten');
   const inventory=scanDiscoveryPackages(options.catalog,options.sourceRoot), extracts=[];
+  if (options.familyIds !== undefined) {
+    const selected = new Set(options.familyIds);
+    assert(selected.size && selected.size === options.familyIds.length, 'Invalid discovery Family scope');
+    inventory.roots = inventory.roots.filter(root => selected.has(root.familyId));
+    assert.equal(inventory.roots.length, selected.size, 'Enabled Family is missing from the discovery package');
+  }
   const src=join(inventory.sourceRoot,'src/searcher');
   const prod=sourceExtractor(join(src,'universe-rebuild-production.ts'),extracts);
   const checkpoint=sourceExtractor(join(src,'universe-rebuild-checkpoint.ts'),extracts);
@@ -258,7 +264,7 @@ export function compileDeclarative${suffix}(raw,children=[]){return createDeclar
   assert(kernel.length<=1048576,'Discovery code exceeds BigQuery library limit');
   const inputs=Object.keys(result.metafile.inputs).map(path=>({path,sha256:sha(readFileSync(path))}));
   const report={version:1,builderSha256:sha(readFileSync(new URL(import.meta.url))),...inventory,readerPath:options.reader,readerSha256:sha(readFileSync(options.reader)),
-    familyCount:inventory.roots.length,familyIds:inventory.roots.map(root=>root.familyId),scope:'all discovered package roots; no production activation changed',
+    familyCount:inventory.roots.length,familyIds:inventory.roots.map(root=>root.familyId),scope:options.familyIds ? 'active production discovery roots' : 'all discovered package roots; no production activation changed',
     kernelBytes:kernel.length,kernelSha256:sha(kernel),resources:[...resourceFiles,{file:"kernel.js",sha256:sha(kernel),bytes:kernel.length}],extracts,inputs,
     interfaces:{compactTransactionJson:'JSON tx -> JSON array of decorated candidate/opaque records',transactionJson:'JSON tx -> JSON {counts, observations, records}'},
     safety:{strictStarted:false,liveStarted:false,productionFilterEnabled:false}};
