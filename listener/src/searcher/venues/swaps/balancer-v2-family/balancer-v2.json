@@ -1,0 +1,4810 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "balancer-v2"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": false,
+      "envKey": "SEARCHER_FAMILY_BALANCER_V2_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "balancer-v2",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "balancer-v2-vault-swap"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "balancer-v2:vault-registered-exact-in"
+    ],
+    "poolAdapterIds": [
+      "balancer-v2"
+    ],
+    "edgeAdapterIds": [
+      "balancer-v2-vault-swap"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "balancer-v2-pool",
+        "addressField": "pool",
+        "fields": {
+          "poolId": "bytes32",
+          "pool": "address",
+          "specialization": "uint",
+          "hintedTokenIn": "address",
+          "hintedTokenOut": "address"
+        },
+        "optionalFields": [
+          "hintedTokenIn",
+          "hintedTokenOut"
+        ],
+        "nullableFields": [
+          "hintedTokenIn",
+          "hintedTokenOut"
+        ],
+        "key": [
+          "pool"
+        ],
+        "instanceKey": [
+          "pool"
+        ]
+      },
+      "calls": [],
+      "events": [
+        {
+          "id": "balancer-v2-vault-swap",
+          "signature": "event Swap(bytes32 indexed poolId,address indexed tokenIn,address indexed tokenOut,uint256 amountIn,uint256 amountOut)",
+          "fields": {
+            "poolId": {
+              "from": "argument",
+              "index": 0
+            },
+            "pool": {
+              "from": "expression",
+              "value": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$args",
+                          0
+                        ]
+                      },
+                      0,
+                      20
+                    ]
+                  }
+                ]
+              }
+            },
+            "specialization": {
+              "from": "expression",
+              "value": {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "bytes",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$args",
+                          0
+                        ]
+                      },
+                      20,
+                      2
+                    ]
+                  }
+                ]
+              }
+            },
+            "hintedTokenIn": {
+              "from": "argument",
+              "index": 1
+            },
+            "hintedTokenOut": {
+              "from": "argument",
+              "index": 2
+            }
+          },
+          "predicates": [
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            0,
+                            20
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        20,
+                        2
+                      ]
+                    }
+                  ]
+                },
+                2
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            2
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    3
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "at",
+                  "args": [
+                    "$args",
+                    4
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$observation.address"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$constants.vault"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "labels": [
+        "balancer-v2"
+      ],
+      "nomination": "tx-evidence",
+      "txSeedNominations": true,
+      "surface": {
+        "id": "balancer-v2-vault-membership",
+        "fingerprint": "balancer-v2-vault-registered-v1",
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          },
+          "poolId": {
+            "from": "opaque",
+            "path": "poolId"
+          },
+          "specialization": {
+            "from": "expression",
+            "value": {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$observation.opaque",
+                        "poolId"
+                      ]
+                    },
+                    20,
+                    2
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "predicates": [
+          {
+            "op": "ne",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  "$candidate.pool"
+                ]
+              },
+              "$constants.zero"
+            ]
+          },
+          {
+            "op": "ne",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  "$candidate.poolId"
+                ]
+              },
+              "$constants.zero"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": "$identity.facts.poolId",
+    "definition": {
+      "version": 1,
+      "identity": {
+        "select": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                "$candidate.candidateKind",
+                "balancer-v2-pool"
+              ]
+            },
+            "error": "balancer-v2 wrong candidate kind"
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$candidate.pool",
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$candidate.poolId",
+                        0,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "balancer-v2 candidate pool/id mismatch"
+          },
+          {
+            "return": "membership",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                "$evidence.poolId",
+                "$candidate.poolId"
+              ]
+            },
+            "error": "balancer-v2 foreign identity evidence"
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$evidence.pool",
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$candidate.poolId",
+                        0,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "balancer-v2 foreign identity evidence"
+          },
+          {
+            "return": "done",
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence.rejection"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "complete"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "decimals",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "membership"
+              ]
+            }
+          },
+          {
+            "return": "done"
+          }
+        ],
+        "stages": {
+          "membership": {
+            "requirements": {
+              "transports": [
+                "eth-call",
+                "get-code"
+              ]
+            },
+            "optionalFailures": [
+              "pool-code",
+              "vault-code",
+              "pool-vault",
+              "pool-id",
+              "membership",
+              "tokens"
+            ],
+            "requests": [
+              {
+                "id": "pool-code",
+                "kind": "get-code",
+                "address": "$candidate.pool"
+              },
+              {
+                "id": "vault-code",
+                "kind": "get-code",
+                "address": "$constants.vault"
+              },
+              {
+                "id": "pool-vault",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "getVault",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "pool-id",
+                "kind": "eth-call",
+                "to": "$candidate.pool",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "getPoolId",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "membership",
+                "kind": "eth-call",
+                "to": "$constants.vault",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "getPool",
+                    [
+                      "$candidate.poolId"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "tokens",
+                "kind": "eth-call",
+                "to": "$constants.vault",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "getPoolTokens",
+                    [
+                      "$candidate.poolId"
+                    ]
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 missing/extra results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                "$row.id"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 duplicate results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 unexpected results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "every",
+                  "args": [
+                    "$results",
+                    "r",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$r",
+                        "ok"
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 unresolved identity read"
+              },
+              {
+                "let": "pool",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pool"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "ne",
+                  "args": [
+                    "$pool",
+                    "$constants.zero"
+                  ]
+                },
+                "error": "balancer-v2 zero address"
+              },
+              {
+                "let": "poolCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "pool-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "let": "vaultCode",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "vault-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "ne",
+                  "args": [
+                    "$vaultCode",
+                    "0x"
+                  ]
+                },
+                "error": "balancer-v2 infrastructure unavailable"
+              },
+              {
+                "let": "proof",
+                "value": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "source": "$source",
+                      "reads": {
+                        "op": "map",
+                        "args": [
+                          "$results",
+                          "r",
+                          {
+                            "id": "$r.id",
+                            "completion": "$r.completion",
+                            "data": "$r.data"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "specialization",
+                "value": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$candidate.poolId",
+                        20,
+                        2
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "baseBinding",
+                "value": {
+                  "vault": "$constants.vault",
+                  "specialization": "$specialization",
+                  "poolCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      "$poolCode"
+                    ]
+                  },
+                  "vaultCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      "$vaultCode"
+                    ]
+                  },
+                  "tokens": [],
+                  "decimals": []
+                }
+              },
+              {
+                "return": {
+                  "phase": "membership",
+                  "pool": "$pool",
+                  "poolId": "$candidate.poolId",
+                  "specialization": "$specialization",
+                  "source": "$source",
+                  "binding": "$baseBinding",
+                  "proofHashes": [
+                    "$proof"
+                  ],
+                  "requestIds": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "r",
+                      "$r.id"
+                    ]
+                  },
+                  "rejection": "no-pool-code"
+                },
+                "when": {
+                  "op": "eq",
+                  "args": [
+                    "$poolCode",
+                    "0x"
+                  ]
+                }
+              },
+              {
+                "let": "member",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "vault",
+                    "getPool",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "membership"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "memberOk",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$member",
+                            0
+                          ]
+                        },
+                        "$pool"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$member",
+                            1
+                          ]
+                        },
+                        "$specialization"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "membership",
+                  "pool": "$pool",
+                  "poolId": "$candidate.poolId",
+                  "specialization": "$specialization",
+                  "source": "$source",
+                  "binding": "$baseBinding",
+                  "proofHashes": [
+                    "$proof"
+                  ],
+                  "requestIds": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "r",
+                      "$r.id"
+                    ]
+                  },
+                  "rejection": "no-vault-membership"
+                },
+                "when": {
+                  "op": "not",
+                  "args": [
+                    "$memberOk"
+                  ]
+                }
+              },
+              {
+                "let": "poolVault",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "pool",
+                    "getVault",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pool-vault"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "poolIdSelf",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "pool",
+                    "getPoolId",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pool-id"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "bindingOk",
+                "value": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$poolVault",
+                        "$constants.vault"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "lower",
+                          "args": [
+                            "$poolIdSelf"
+                          ]
+                        },
+                        "$candidate.poolId"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "phase": "membership",
+                  "pool": "$pool",
+                  "poolId": "$candidate.poolId",
+                  "specialization": "$specialization",
+                  "source": "$source",
+                  "binding": "$baseBinding",
+                  "proofHashes": [
+                    "$proof"
+                  ],
+                  "requestIds": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "r",
+                      "$r.id"
+                    ]
+                  },
+                  "rejection": "foreign-pool-binding"
+                },
+                "when": {
+                  "op": "not",
+                  "args": [
+                    "$bindingOk"
+                  ]
+                }
+              },
+              {
+                "let": "info",
+                "value": {
+                  "op": "decodeAll",
+                  "args": [
+                    "vault",
+                    "getPoolTokens",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "tokens"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "tokensRaw",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$info",
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "balancesRaw",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$info",
+                    1
+                  ]
+                }
+              },
+              {
+                "let": "lastChangeBlock",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    "$info",
+                    2
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "gte",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$tokensRaw"
+                      ]
+                    },
+                    2
+                  ]
+                },
+                "error": "balancer-v2 invalid pool tokens"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$balancesRaw"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$tokensRaw"
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 invalid pool tokens"
+              },
+              {
+                "let": "tokens",
+                "value": {
+                  "op": "map",
+                  "args": [
+                    "$tokensRaw",
+                    "t",
+                    {
+                      "op": "address",
+                      "args": [
+                        "$t"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$tokens",
+                                "t",
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    "$t"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$tokens"
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 invalid pool tokens"
+              },
+              {
+                "assert": {
+                  "op": "every",
+                  "args": [
+                    "$tokens",
+                    "t",
+                    {
+                      "op": "ne",
+                      "args": [
+                        {
+                          "op": "lower",
+                          "args": [
+                            "$t"
+                          ]
+                        },
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 zero address"
+              },
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    "$lastChangeBlock",
+                    "$source.number"
+                  ]
+                },
+                "error": "balancer-v2 future token state"
+              },
+              {
+                "assert": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            "$candidate.hintedTokenIn"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "some",
+                      "args": [
+                        "$tokens",
+                        "t",
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$t",
+                            "$candidate.hintedTokenIn"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 observed token is not registered"
+              },
+              {
+                "assert": {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            "$candidate.hintedTokenOut"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "some",
+                      "args": [
+                        "$tokens",
+                        "t",
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$t",
+                            "$candidate.hintedTokenOut"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 observed token is not registered"
+              },
+              {
+                "assert": {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$specialization",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "2"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "length",
+                              "args": [
+                                "$tokens"
+                              ]
+                            },
+                            2
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "invalid-two-token-specialization"
+              },
+              {
+                "return": {
+                  "phase": "membership",
+                  "pool": "$pool",
+                  "poolId": "$candidate.poolId",
+                  "specialization": "$specialization",
+                  "source": "$source",
+                  "binding": {
+                    "op": "merge",
+                    "args": [
+                      "$baseBinding",
+                      {
+                        "tokens": "$tokens"
+                      }
+                    ]
+                  },
+                  "proofHashes": [
+                    "$proof"
+                  ],
+                  "requestIds": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "r",
+                      "$r.id"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "decimals": {
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "requests": {
+              "op": "map",
+              "args": [
+                "$evidence.binding.tokens",
+                "token",
+                {
+                  "id": {
+                    "op": "join",
+                    "args": [
+                      [
+                        "decimals",
+                        "$index"
+                      ],
+                      ":"
+                    ]
+                  },
+                  "kind": "eth-call",
+                  "to": "$token",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "decimals",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ]
+            },
+            "decode": [
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 missing/extra results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                "$row.id"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 duplicate results"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 unexpected results"
+              },
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$source.number",
+                    "$evidence.source.number"
+                  ]
+                },
+                "error": "balancer-v2 foreign source"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$source.hash",
+                    "$evidence.source.hash"
+                  ]
+                },
+                "error": "balancer-v2 foreign source"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$source.generation",
+                    "$evidence.source.generation"
+                  ]
+                },
+                "error": "balancer-v2 foreign source"
+              },
+              {
+                "let": "decimals",
+                "value": {
+                  "op": "map",
+                  "args": [
+                    "$requests",
+                    "r",
+                    {
+                      "op": "number",
+                      "args": [
+                        {
+                          "op": "word",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "$r.id"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$decimals"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$evidence.binding.tokens"
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 unsupported token scale"
+              },
+              {
+                "assert": {
+                  "op": "every",
+                  "args": [
+                    "$decimals",
+                    "d",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gte",
+                          "args": [
+                            "$d",
+                            0
+                          ]
+                        },
+                        {
+                          "op": "lte",
+                          "args": [
+                            "$d",
+                            36
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "balancer-v2 unsupported token scale"
+              },
+              {
+                "let": "proof",
+                "value": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "source": "$source",
+                      "reads": {
+                        "op": "map",
+                        "args": [
+                          "$results",
+                          "r",
+                          {
+                            "id": "$r.id",
+                            "completion": "$r.completion",
+                            "data": "$r.data"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "phase": "complete",
+                      "source": "$source",
+                      "requestIds": {
+                        "op": "map",
+                        "args": [
+                          "$requests",
+                          "r",
+                          "$r.id"
+                        ]
+                      },
+                      "proofHashes": {
+                        "op": "concat",
+                        "args": [
+                          "$evidence.proofHashes",
+                          [
+                            "$proof"
+                          ]
+                        ]
+                      },
+                      "binding": {
+                        "op": "merge",
+                        "args": [
+                          "$evidence.binding",
+                          {
+                            "decimals": "$decimals"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          "done": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.poolId",
+                    "$candidate.poolId"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.pool",
+                    "$candidate.pool"
+                  ]
+                }
+              ]
+            },
+            "error": "balancer-v2 foreign identity"
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "$evidence.rejection",
+              "evidenceRequestIds": "$evidence.requestIds"
+            },
+            "when": {
+              "op": "defined",
+              "args": [
+                "$evidence.rejection"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "complete"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": "$evidence.pool",
+                "facts": {
+                  "pool": "$evidence.pool",
+                  "poolId": "$evidence.poolId",
+                  "binding": "$evidence.binding",
+                  "proofSource": "$evidence.source"
+                },
+                "provenance": [
+                  {
+                    "kind": "source-pinned-vault-pool-registration",
+                    "subject": "$constants.vault",
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "poolId": "$evidence.poolId",
+                          "source": "$evidence.source",
+                          "proofs": "$evidence.proofHashes"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": "$identity.facts.poolId",
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": "$identity.facts.poolId",
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            },
+            {
+              "kind": "quote-completion",
+              "mode": "return-data"
+            }
+          ]
+        },
+        "$identity.facts"
+      ]
+    },
+    "bindingProjection": {
+      "pool": "$descriptor.pool",
+      "poolId": "$descriptor.poolId",
+      "binding": {
+        "vault": "$descriptor.binding.vault",
+        "specialization": "$descriptor.binding.specialization",
+        "poolCodeHash": "$descriptor.binding.poolCodeHash",
+        "vaultCodeHash": "$descriptor.binding.vaultCodeHash",
+        "tokens": "$descriptor.binding.tokens",
+        "decimals": "$descriptor.binding.decimals"
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pool",
+    "bindingKey": {
+      "op": "join",
+      "args": [
+        [
+          "$descriptor.familyId",
+          "$descriptor.poolId"
+        ],
+        ":"
+      ]
+    },
+    "directions": {
+      "op": "flatMap",
+      "args": [
+        {
+          "op": "map",
+          "args": [
+            "$descriptor.binding.tokens",
+            "token",
+            {
+              "token": "$token",
+              "position": "$index"
+            }
+          ]
+        },
+        "left",
+        {
+          "op": "flatMap",
+          "args": [
+            {
+              "op": "map",
+              "args": [
+                "$descriptor.binding.tokens",
+                "token",
+                {
+                  "token": "$token",
+                  "position": "$index"
+                }
+              ]
+            },
+            "right",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$left.position",
+                    "$right.position"
+                  ]
+                },
+                [],
+                [
+                  {
+                    "id": {
+                      "op": "join",
+                      "args": [
+                        [
+                          "$left.position",
+                          "$right.position"
+                        ],
+                        ":"
+                      ]
+                    },
+                    "enabled": true,
+                    "tokenIn": "$left.token",
+                    "tokenOut": "$right.token",
+                    "adapterId": "balancer-v2-vault-swap",
+                    "taxonomy": {
+                      "slotKind": "swap"
+                    },
+                    "fields": {
+                      "i": "$left.position",
+                      "j": "$right.position"
+                    }
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "$descriptor.familyId",
+          "$descriptor.poolId",
+          "$route.direction"
+        ],
+        ":"
+      ]
+    },
+    "graphVenue": {
+      "kind": "vault-pool-id",
+      "vault": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+      "poolId": "$descriptor.poolId"
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ],
+    "descriptorChecks": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.familyId",
+            "balancer-v2"
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.lineageId",
+            "balancer-v2:vault-registered-exact-in"
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$descriptor.binding.vault",
+            "$constants.vault"
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$descriptor.pool",
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$descriptor.poolId",
+                    0,
+                    20
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.binding.specialization",
+            {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$descriptor.poolId",
+                    20,
+                    2
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "lte",
+          "args": [
+            "$descriptor.binding.specialization",
+            2
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "gte",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$descriptor.binding.tokens"
+              ]
+            },
+            2
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$descriptor.binding.decimals"
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$descriptor.binding.tokens"
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$descriptor.binding.specialization",
+                    2
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.binding.tokens"
+                      ]
+                    },
+                    2
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            "$descriptor.binding.decimals",
+            "d",
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "gte",
+                  "args": [
+                    "$d",
+                    0
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    "$d",
+                    36
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                {
+                  "op": "unique",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        "$descriptor.binding.tokens",
+                        "t",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$t"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$descriptor.binding.tokens"
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
+    "compatibility": {
+      "op": "merge",
+      "args": [
+        {
+          "pool": "$descriptor.pool",
+          "poolId": "$descriptor.poolId",
+          "binding": {
+            "vault": "$descriptor.binding.vault",
+            "specialization": "$descriptor.binding.specialization",
+            "poolCodeHash": "$descriptor.binding.poolCodeHash",
+            "vaultCodeHash": "$descriptor.binding.vaultCodeHash",
+            "tokens": "$descriptor.binding.tokens",
+            "decimals": "$descriptor.binding.decimals"
+          }
+        },
+        {
+          "routeKeys": {
+            "op": "map",
+            "args": [
+              "$routes",
+              "r",
+              "$r.routeKey"
+            ]
+          }
+        }
+      ]
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "finalize": "$draft",
+    "sampleAmount": "$snapshot.amountIn",
+    "exactCompatibility": {
+      "poolId": "$route.poolId",
+      "routeKey": "$route.routeKey",
+      "binding": "$route.bindingRef.fingerprint",
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "mutationKinds": [
+      "log",
+      "call"
+    ],
+    "stateKey": "$route.routeKey"
+  },
+  "standard": {
+    "id": "vault-registered-pool",
+    "lineageId": "balancer-v2:vault-registered-exact-in",
+    "identityKind": "registry-member",
+    "abi": {
+      "vault": [
+        "function getPool(bytes32) view returns(address,uint8)",
+        "function getPoolTokens(bytes32) view returns(address[],uint256[],uint256)",
+        "function queryBatchSwap(uint8,(bytes32,uint256,uint256,uint256,bytes)[],address[],(address,bool,address,bool)) view returns(bytes32[])",
+        "event Swap(bytes32 indexed poolId,address indexed tokenIn,address indexed tokenOut,uint256 amountIn,uint256 amountOut)"
+      ],
+      "pool": [
+        "function getVault() view returns(address)",
+        "function getPoolId() view returns(bytes32)"
+      ],
+      "token": [
+        "function decimals() view returns(uint8)"
+      ]
+    },
+    "constants": {
+      "vault": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+      "zero": "0x0000000000000000000000000000000000000000",
+      "maxInput": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
+      "maxUint": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "swapTopic": "0x2170c741c41531aec20e7c107c24eecfdd15e69c9bb0a8dd37b1840b9e0b207b"
+    },
+    "expressions": {},
+    "match": true,
+    "context": {},
+    "boundState": {
+      "pool": "$descriptor.pool",
+      "poolId": "$descriptor.poolId",
+      "tokens": "$descriptor.binding.tokens",
+      "decimals": "$descriptor.binding.decimals"
+    },
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": {
+        "op": "concat",
+        "args": [
+          [
+            "$constants.vault",
+            "$descriptor.pool"
+          ],
+          "$descriptor.binding.tokens"
+        ]
+      },
+      "mutationAddresses": [
+        "$constants.vault",
+        "$descriptor.pool"
+      ],
+      "mutationPredicate": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              "$observation.kind",
+              "log"
+            ]
+          },
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$observation.address"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$constants.vault"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$observation.topics",
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "$constants.swapTopic"
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$observation.topics",
+                          1
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$descriptor.poolId"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "or",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$observation.target"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$constants.vault"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$observation.target"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$descriptor.pool"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "finalizeChecks": [
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$descriptor.routes"
+                ]
+              },
+              1
+            ]
+          },
+          "error": "balancer-v2 pricing requires one direction"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$descriptor.routes",
+                      0
+                    ]
+                  },
+                  "instanceKey"
+                ]
+              },
+              "$descriptor.instanceKey"
+            ]
+          },
+          "error": "balancer-v2 pricing route binding mismatch"
+        },
+        {
+          "assert": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$descriptor.routes",
+                      0
+                    ]
+                  },
+                  "routeKey"
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor.routes",
+                      0
+                    ]
+                  },
+                  "routeKey"
+                ]
+              }
+            ]
+          },
+          "error": "balancer-v2 pricing route binding mismatch"
+        }
+      ]
+    },
+    "exact": {
+      "methodId": "balancer-v2-vault-exact-in",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ],
+        "caller": "executor"
+      },
+      "protectedAddresses": [
+        "$descriptor.pool",
+        "$constants.vault"
+      ],
+      "checks": [
+        {
+          "condition": {
+            "op": "and",
+            "args": [
+              {
+                "op": "gte",
+                "args": [
+                  "$amountIn",
+                  0
+                ]
+              },
+              {
+                "op": "lte",
+                "args": [
+                  "$amountIn",
+                  "$constants.maxInput"
+                ]
+              }
+            ]
+          },
+          "error": "balancer-v2 input outside uint256 range"
+        },
+        {
+          "condition": {
+            "op": "ne",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$executor"
+                    ]
+                  }
+                ]
+              },
+              "$constants.zero"
+            ]
+          },
+          "error": "balancer-v2 zero executor"
+        }
+      ],
+      "outputChecks": [
+        {
+          "condition": {
+            "op": "and",
+            "args": [
+              {
+                "op": "gte",
+                "args": [
+                  "$amountOut",
+                  1
+                ]
+              },
+              {
+                "op": "lte",
+                "args": [
+                  "$amountOut",
+                  "$constants.maxInput"
+                ]
+              }
+            ]
+          },
+          "error": "balancer-v2 invalid quote deltas"
+        }
+      ],
+      "evidence": {
+        "kind": "balancer-v2-vault-exact-in",
+        "source": "$source",
+        "binding": "$route.bindingRef.fingerprint",
+        "routeKey": "$route.routeKey",
+        "executor": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$executor"
+              ]
+            }
+          ]
+        },
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut"
+      }
+    },
+    "readPrograms": {},
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$descriptor.pool",
+        "$constants.vault"
+      ],
+      "requireCanonicalSource": true,
+      "rejectRuntimeEvidence": true,
+      "steps": [
+        {
+          "id": "guard",
+          "math": {
+            "model": "swapAmountGuard",
+            "inputs": {
+              "amount": {
+                "runtime": "amountIn"
+              }
+            },
+            "outputs": {
+              "high": "balancerV2HighBit"
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "balancerV2HighBit"
+                },
+                "operator": "eq",
+                "right": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "swap",
+          "call": {
+            "target": "$constants.vault",
+            "signature": "function swap((bytes32,uint8,address,address,uint256,bytes),(address,bool,address,bool),uint256,uint256) payable returns(uint256)",
+            "args": [
+              [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "poolId"
+                  ]
+                },
+                0,
+                "$route.tokenIn",
+                "$route.tokenOut",
+                {
+                  "runtime": "amountIn"
+                },
+                "0x"
+              ],
+              [
+                "$executor",
+                false,
+                "$recipient",
+                false
+              ],
+              "$minAmountOut",
+              "$constants.maxUint"
+            ],
+            "save": {
+              "swapOut": 0
+            }
+          },
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$constants.vault",
+            "mode": "exact-clear",
+            "verifyAllowance": true
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "swapOut"
+          },
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-native"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenIn",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        }
+      ]
+    },
+    "modules": {
+      "executionMath": {
+        "version": 1,
+        "entries": {
+          "swapAmountGuard": {
+            "model": "balancer-v2-swap-amount-guard",
+            "version": 1
+          }
+        }
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "balancer-v2-vault-swap",
+        "lineage": "custom-swap:balancer-v2",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function swap((bytes32,uint8,address,address,uint256,bytes),(address,bool,address,bool),uint256,uint256) payable returns(uint256)"
+        }
+      ]
+    }
+  ],
+  "modules": {
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-tokens",
+              "kind": "eth-call",
+              "to": "$constants.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "vault",
+                  "getPoolTokens",
+                  [
+                    "$descriptor.poolId"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      "$results"
+                    ]
+                  },
+                  1
+                ]
+              },
+              "error": "balancer-v2 missing/extra results"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$results",
+                          0
+                        ]
+                      },
+                      "id"
+                    ]
+                  },
+                  "current-tokens"
+                ]
+              },
+              "error": "balancer-v2 unexpected results"
+            },
+            {
+              "let": "source",
+              "value": {
+                "op": "source",
+                "args": [
+                  "$results"
+                ]
+              }
+            },
+            {
+              "let": "info",
+              "value": {
+                "op": "decodeAll",
+                "args": [
+                  "vault",
+                  "getPoolTokens",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-tokens"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "tokens",
+              "value": {
+                "op": "map",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$info",
+                      0
+                    ]
+                  },
+                  "t",
+                  {
+                    "op": "address",
+                    "args": [
+                      "$t"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "balances",
+              "value": {
+                "op": "at",
+                "args": [
+                  "$info",
+                  1
+                ]
+              }
+            },
+            {
+              "let": "lastChangeBlock",
+              "value": {
+                "op": "at",
+                "args": [
+                  "$info",
+                  2
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "lte",
+                "args": [
+                  "$lastChangeBlock",
+                  "$source.number"
+                ]
+              },
+              "error": "balancer-v2 current token state is in the future"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      "$balances"
+                    ]
+                  },
+                  {
+                    "op": "length",
+                    "args": [
+                      "$tokens"
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 invalid pool tokens"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      "$tokens"
+                    ]
+                  },
+                  {
+                    "op": "length",
+                    "args": [
+                      "$descriptor.binding.tokens"
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 current token binding changed"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      {
+                        "op": "unique",
+                        "args": [
+                          {
+                            "op": "map",
+                            "args": [
+                              "$tokens",
+                              "t",
+                              {
+                                "op": "lower",
+                                "args": [
+                                  {
+                                    "op": "address",
+                                    "args": [
+                                      "$t"
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "length",
+                    "args": [
+                      "$tokens"
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 current token binding changed"
+            },
+            {
+              "assert": {
+                "op": "every",
+                "args": [
+                  "$tokens",
+                  "t",
+                  {
+                    "op": "some",
+                    "args": [
+                      "$descriptor.binding.tokens",
+                      "d",
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$t",
+                          "$d"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 current token binding changed"
+            },
+            {
+              "let": "route",
+              "value": {
+                "op": "at",
+                "args": [
+                  "$routes",
+                  0
+                ]
+              }
+            },
+            {
+              "let": "balanceIn",
+              "value": {
+                "op": "at",
+                "args": [
+                  "$balances",
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "i"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "balanceOut",
+              "value": {
+                "op": "at",
+                "args": [
+                  "$balances",
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "j"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$balanceIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$balanceOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 no current liquidity"
+            },
+            {
+              "let": "unit",
+              "value": {
+                "op": "pow",
+                "args": [
+                  10,
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor.binding.decimals",
+                      {
+                        "op": "get",
+                        "args": [
+                          "$route",
+                          "i"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "liquidity",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "gte",
+                    "args": [
+                      "$balanceIn",
+                      100
+                    ]
+                  },
+                  {
+                    "op": "div",
+                    "args": [
+                      "$balanceIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "100"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "div",
+                    "args": [
+                      "$balanceIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "4"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "first",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "lt",
+                    "args": [
+                      "$liquidity",
+                      "$unit"
+                    ]
+                  },
+                  "$liquidity",
+                  "$unit"
+                ]
+              }
+            },
+            {
+              "let": "exponents",
+              "value": {
+                "op": "filter",
+                "args": [
+                  [
+                    0,
+                    3,
+                    6,
+                    9,
+                    12,
+                    15,
+                    18,
+                    21,
+                    24,
+                    27,
+                    30,
+                    33,
+                    36,
+                    39,
+                    42
+                  ],
+                  "e",
+                  {
+                    "op": "lte",
+                    "args": [
+                      "$e",
+                      {
+                        "op": "add",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$descriptor.binding.decimals",
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$route",
+                                  "i"
+                                ]
+                              }
+                            ]
+                          },
+                          6
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "powers",
+              "value": {
+                "op": "map",
+                "args": [
+                  "$exponents",
+                  "e",
+                  {
+                    "op": "pow",
+                    "args": [
+                      10,
+                      "$e"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "amounts",
+              "value": {
+                "op": "unique",
+                "args": [
+                  {
+                    "op": "filter",
+                    "args": [
+                      {
+                        "op": "concat",
+                        "args": [
+                          [
+                            "$first"
+                          ],
+                          "$powers"
+                        ]
+                      },
+                      "a",
+                      {
+                        "op": "and",
+                        "args": [
+                          {
+                            "op": "gt",
+                            "args": [
+                              "$a",
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "0"
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "op": "lte",
+                            "args": [
+                              "$a",
+                              "$constants.maxInput"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "source": "$source",
+                "poolId": "$descriptor.poolId",
+                "tokenIn": {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "tokenIn"
+                  ]
+                },
+                "tokenOut": {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "tokenOut"
+                  ]
+                },
+                "balanceIn": "$balanceIn",
+                "balanceOut": "$balanceOut",
+                "amounts": "$amounts"
+              }
+            }
+          ]
+        },
+        {
+          "id": "probe",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": {
+            "op": "map",
+            "args": [
+              "$steps.state.amounts",
+              "amount",
+              {
+                "id": {
+                  "op": "join",
+                  "args": [
+                    [
+                      "current-quote",
+                      "$index"
+                    ],
+                    ":"
+                  ]
+                },
+                "kind": "eth-call",
+                "to": "$constants.vault",
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "vault",
+                    "queryBatchSwap",
+                    [
+                      0,
+                      [
+                        [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$steps.state",
+                              "poolId"
+                            ]
+                          },
+                          0,
+                          1,
+                          "$amount",
+                          "0x"
+                        ]
+                      ],
+                      [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$steps.state",
+                            "tokenIn"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            "$steps.state",
+                            "tokenOut"
+                          ]
+                        }
+                      ],
+                      [
+                        "$constants.zero",
+                        false,
+                        "$constants.zero",
+                        false
+                      ]
+                    ]
+                  ]
+                },
+                "completion": "return-data",
+                "required": false
+              }
+            ]
+          },
+          "decode": [
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      "$results"
+                    ]
+                  },
+                  {
+                    "op": "length",
+                    "args": [
+                      "$requests"
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 missing/extra results"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      {
+                        "op": "unique",
+                        "args": [
+                          {
+                            "op": "map",
+                            "args": [
+                              "$results",
+                              "r",
+                              "$r.id"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "length",
+                    "args": [
+                      "$results"
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 duplicate results"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "hash",
+                    "args": [
+                      {
+                        "op": "sortId",
+                        "args": [
+                          {
+                            "op": "map",
+                            "args": [
+                              "$results",
+                              "r",
+                              {
+                                "id": "$r.id"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "hash",
+                    "args": [
+                      {
+                        "op": "sortId",
+                        "args": [
+                          {
+                            "op": "map",
+                            "args": [
+                              "$requests",
+                              "r",
+                              {
+                                "id": "$r.id"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 unexpected results"
+            },
+            {
+              "let": "source",
+              "value": {
+                "op": "source",
+                "args": [
+                  "$results"
+                ]
+              }
+            },
+            {
+              "let": "rows",
+              "value": {
+                "op": "map",
+                "args": [
+                  "$steps.state.amounts",
+                  "amount",
+                  {
+                    "amountIn": "$amount",
+                    "id": {
+                      "op": "join",
+                      "args": [
+                        [
+                          "current-quote",
+                          "$index"
+                        ],
+                        ":"
+                      ]
+                    },
+                    "valid": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "result",
+                              "args": [
+                                {
+                                  "op": "join",
+                                  "args": [
+                                    [
+                                      "current-quote",
+                                      "$index"
+                                    ],
+                                    ":"
+                                  ]
+                                }
+                              ]
+                            },
+                            "ok"
+                          ]
+                        },
+                        {
+                          "op": "or",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "result",
+                                          "args": [
+                                            {
+                                              "op": "join",
+                                              "args": [
+                                                [
+                                                  "current-quote",
+                                                  "$index"
+                                                ],
+                                                ":"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "ok"
+                                      ]
+                                    },
+                                    {
+                                      "op": "word",
+                                      "args": [
+                                        {
+                                          "op": "at",
+                                          "args": [
+                                            {
+                                              "op": "decodeCanonical",
+                                              "args": [
+                                                "vault",
+                                                "queryBatchSwap",
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    {
+                                                      "op": "result",
+                                                      "args": [
+                                                        {
+                                                          "op": "join",
+                                                          "args": [
+                                                            [
+                                                              "current-quote",
+                                                              "$index"
+                                                            ],
+                                                            ":"
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    "data"
+                                                  ]
+                                                },
+                                                0
+                                              ]
+                                            },
+                                            1
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "uint",
+                                      "args": [
+                                        "0"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "0"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "and",
+                              "args": [
+                                {
+                                  "op": "gte",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "result",
+                                              "args": [
+                                                {
+                                                  "op": "join",
+                                                  "args": [
+                                                    [
+                                                      "current-quote",
+                                                      "$index"
+                                                    ],
+                                                    ":"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            "ok"
+                                          ]
+                                        },
+                                        {
+                                          "op": "word",
+                                          "args": [
+                                            {
+                                              "op": "at",
+                                              "args": [
+                                                {
+                                                  "op": "decodeCanonical",
+                                                  "args": [
+                                                    "vault",
+                                                    "queryBatchSwap",
+                                                    {
+                                                      "op": "get",
+                                                      "args": [
+                                                        {
+                                                          "op": "result",
+                                                          "args": [
+                                                            {
+                                                              "op": "join",
+                                                              "args": [
+                                                                [
+                                                                  "current-quote",
+                                                                  "$index"
+                                                                ],
+                                                                ":"
+                                                              ]
+                                                            }
+                                                          ]
+                                                        },
+                                                        "data"
+                                                      ]
+                                                    },
+                                                    0
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "uint",
+                                          "args": [
+                                            "0"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "add",
+                                      "args": [
+                                        {
+                                          "op": "pow",
+                                          "args": [
+                                            2,
+                                            255
+                                          ]
+                                        },
+                                        {
+                                          "op": "uint",
+                                          "args": [
+                                            "1"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "lte",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "result",
+                                              "args": [
+                                                {
+                                                  "op": "join",
+                                                  "args": [
+                                                    [
+                                                      "current-quote",
+                                                      "$index"
+                                                    ],
+                                                    ":"
+                                                  ]
+                                                }
+                                              ]
+                                            },
+                                            "ok"
+                                          ]
+                                        },
+                                        {
+                                          "op": "word",
+                                          "args": [
+                                            {
+                                              "op": "at",
+                                              "args": [
+                                                {
+                                                  "op": "decodeCanonical",
+                                                  "args": [
+                                                    "vault",
+                                                    "queryBatchSwap",
+                                                    {
+                                                      "op": "get",
+                                                      "args": [
+                                                        {
+                                                          "op": "result",
+                                                          "args": [
+                                                            {
+                                                              "op": "join",
+                                                              "args": [
+                                                                [
+                                                                  "current-quote",
+                                                                  "$index"
+                                                                ],
+                                                                ":"
+                                                              ]
+                                                            }
+                                                          ]
+                                                        },
+                                                        "data"
+                                                      ]
+                                                    },
+                                                    0
+                                                  ]
+                                                },
+                                                1
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "op": "uint",
+                                          "args": [
+                                            "0"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "sub",
+                                      "args": [
+                                        {
+                                          "op": "pow",
+                                          "args": [
+                                            2,
+                                            256
+                                          ]
+                                        },
+                                        {
+                                          "op": "uint",
+                                          "args": [
+                                            "1"
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        true
+                      ]
+                    },
+                    "amountOut": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "result",
+                                  "args": [
+                                    {
+                                      "op": "join",
+                                      "args": [
+                                        [
+                                          "current-quote",
+                                          "$index"
+                                        ],
+                                        ":"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "ok"
+                              ]
+                            },
+                            {
+                              "op": "gte",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "result",
+                                          "args": [
+                                            {
+                                              "op": "join",
+                                              "args": [
+                                                [
+                                                  "current-quote",
+                                                  "$index"
+                                                ],
+                                                ":"
+                                              ]
+                                            }
+                                          ]
+                                        },
+                                        "ok"
+                                      ]
+                                    },
+                                    {
+                                      "op": "word",
+                                      "args": [
+                                        {
+                                          "op": "at",
+                                          "args": [
+                                            {
+                                              "op": "decodeCanonical",
+                                              "args": [
+                                                "vault",
+                                                "queryBatchSwap",
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    {
+                                                      "op": "result",
+                                                      "args": [
+                                                        {
+                                                          "op": "join",
+                                                          "args": [
+                                                            [
+                                                              "current-quote",
+                                                              "$index"
+                                                            ],
+                                                            ":"
+                                                          ]
+                                                        }
+                                                      ]
+                                                    },
+                                                    "data"
+                                                  ]
+                                                },
+                                                0
+                                              ]
+                                            },
+                                            1
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "op": "uint",
+                                      "args": [
+                                        "0"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "pow",
+                                  "args": [
+                                    2,
+                                    255
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "sub",
+                          "args": [
+                            {
+                              "op": "pow",
+                              "args": [
+                                2,
+                                256
+                              ]
+                            },
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "result",
+                                      "args": [
+                                        {
+                                          "op": "join",
+                                          "args": [
+                                            [
+                                              "current-quote",
+                                              "$index"
+                                            ],
+                                            ":"
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "ok"
+                                  ]
+                                },
+                                {
+                                  "op": "word",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "vault",
+                                            "queryBatchSwap",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "result",
+                                                  "args": [
+                                                    {
+                                                      "op": "join",
+                                                      "args": [
+                                                        [
+                                                          "current-quote",
+                                                          "$index"
+                                                        ],
+                                                        ":"
+                                                      ]
+                                                    }
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        1
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "0"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "every",
+                "args": [
+                  "$rows",
+                  "r",
+                  "$r.valid"
+                ]
+              },
+              "error": "balancer-v2 invalid quote deltas"
+            },
+            {
+              "let": "first",
+              "value": {
+                "op": "at",
+                "args": [
+                  {
+                    "op": "filter",
+                    "args": [
+                      "$rows",
+                      "r",
+                      {
+                        "op": "gt",
+                        "args": [
+                          "$r.amountOut",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "defined",
+                "args": [
+                  "$first"
+                ]
+              },
+              "error": "balancer-v2 current quote unresolved"
+            },
+            {
+              "assert": {
+                "op": "lte",
+                "args": [
+                  "$first.amountOut",
+                  "$steps.state.balanceOut"
+                ]
+              },
+              "error": "balancer-v2 output exceeds registered balance"
+            },
+            {
+              "return": {
+                "source": "$source",
+                "poolId": "$steps.state.poolId",
+                "tokenIn": "$steps.state.tokenIn",
+                "tokenOut": "$steps.state.tokenOut",
+                "balanceIn": "$steps.state.balanceIn",
+                "balanceOut": "$steps.state.balanceOut",
+                "amountIn": "$first.amountIn",
+                "amountOut": "$first.amountOut",
+                "quotes": {
+                  "op": "objectFromEntries",
+                  "args": [
+                    [
+                      [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$routes",
+                                0
+                              ]
+                            },
+                            "routeKey"
+                          ]
+                        },
+                        {
+                          "amountIn": "$first.amountIn",
+                          "amountOut": "$first.amountOut"
+                        }
+                      ]
+                    ]
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.probe"
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "chainQuote": {
+        "version": 2,
+        "step": "query",
+        "requestId": "exact-in",
+        "signature": "function queryBatchSwap(uint8,(bytes32,uint256,uint256,uint256,bytes)[],address[],(address,bool,address,bool)) view returns(bytes32[])",
+        "amountPath": [
+          1,
+          0,
+          3
+        ],
+        "outputPath": [
+          0,
+          1
+        ],
+        "outputWord": {
+          "offset": 0,
+          "width": 256,
+          "signed": true,
+          "negate": true
+        },
+        "requestBinding": {
+          "target": "$constants.vault",
+          "caller": {
+            "kind": "executor"
+          }
+        }
+      },
+      "steps": [
+        {
+          "id": "query",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ],
+            "caller": "executor"
+          },
+          "requests": [
+            {
+              "id": "exact-in",
+              "kind": "eth-call",
+              "to": "$constants.vault",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "vault",
+                  "queryBatchSwap",
+                  [
+                    0,
+                    [
+                      [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$descriptor",
+                            "poolId"
+                          ]
+                        },
+                        0,
+                        1,
+                        "$amountIn",
+                        "0x"
+                      ]
+                    ],
+                    [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$route",
+                          "tokenIn"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          "$route",
+                          "tokenOut"
+                        ]
+                      }
+                    ],
+                    [
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$executor"
+                            ]
+                          }
+                        ]
+                      },
+                      false,
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$executor"
+                            ]
+                          }
+                        ]
+                      },
+                      false
+                    ]
+                  ]
+                ]
+              },
+              "completion": "return-data",
+              "caller": {
+                "kind": "executor"
+              }
+            }
+          ],
+          "decode": [
+            {
+              "let": "data",
+              "value": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "returned",
+                    "args": [
+                      "exact-in"
+                    ]
+                  },
+                  "data"
+                ]
+              }
+            },
+            {
+              "let": "deltas",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "vault",
+                  "queryBatchSwap",
+                  "$data",
+                  0
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "length",
+                    "args": [
+                      "$deltas"
+                    ]
+                  },
+                  2
+                ]
+              },
+              "error": "balancer-v2 invalid quote deltas"
+            },
+            {
+              "assert": {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "word",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$deltas",
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  "$amountIn"
+                ]
+              },
+              "error": "balancer-v2 invalid quote deltas"
+            },
+            {
+              "let": "outputWord",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$deltas",
+                      1
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "gte",
+                "args": [
+                  "$outputWord",
+                  {
+                    "op": "pow",
+                    "args": [
+                      2,
+                      255
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 invalid quote deltas"
+            },
+            {
+              "let": "amountOut",
+              "value": {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "pow",
+                    "args": [
+                      2,
+                      256
+                    ]
+                  },
+                  "$outputWord"
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gte",
+                    "args": [
+                      "$amountOut",
+                      1
+                    ]
+                  },
+                  {
+                    "op": "lte",
+                    "args": [
+                      "$amountOut",
+                      "$constants.maxInput"
+                    ]
+                  }
+                ]
+              },
+              "error": "balancer-v2 invalid quote deltas"
+            },
+            {
+              "return": "$amountOut"
+            }
+          ]
+        }
+      ],
+      "result": "$steps.query"
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [
+        {
+          "assert": {
+            "op": "gt",
+            "args": [
+              "$snapshot.amountIn",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "balancer-v2 invalid snapshot"
+        },
+        {
+          "assert": {
+            "op": "gt",
+            "args": [
+              "$snapshot.amountOut",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "balancer-v2 invalid snapshot"
+        },
+        {
+          "assert": {
+            "op": "gt",
+            "args": [
+              "$snapshot.balanceIn",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "balancer-v2 invalid snapshot"
+        },
+        {
+          "assert": {
+            "op": "gt",
+            "args": [
+              "$snapshot.balanceOut",
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "error": "balancer-v2 invalid snapshot"
+        }
+      ],
+      "rows": {
+        "op": "map",
+        "args": [
+          "$routes",
+          "route",
+          {
+            "routeKey": "$route.routeKey",
+            "kind": "external-swap",
+            "numerator": "$snapshot.amountOut",
+            "denominator": "$snapshot.amountIn",
+            "depth": {
+              "op": "min",
+              "args": [
+                "$snapshot.balanceIn",
+                "$snapshot.balanceOut"
+              ]
+            },
+            "reserveA": "$snapshot.balanceIn",
+            "reserveB": "$snapshot.balanceOut",
+            "feeBps": {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "liveStateProjection": {
+      "version": 1,
+      "result": {
+        "kind": "balancer-v2-vault-exact-in",
+        "pool": "$descriptor.pool",
+        "poolId": "$descriptor.poolId",
+        "i": {
+          "op": "get",
+          "args": [
+            {
+              "op": "at",
+              "args": [
+                "$routes",
+                0
+              ]
+            },
+            "i"
+          ]
+        },
+        "j": {
+          "op": "get",
+          "args": [
+            {
+              "op": "at",
+              "args": [
+                "$routes",
+                0
+              ]
+            },
+            "j"
+          ]
+        },
+        "source": "$snapshot.source",
+        "amountIn": "$snapshot.amountIn",
+        "amountOut": "$snapshot.amountOut",
+        "balanceIn": "$snapshot.balanceIn",
+        "balanceOut": "$snapshot.balanceOut"
+      }
+    }
+  },
+  "swap": {
+    "version": 1,
+    "events": [
+      {
+        "id": "balancer-v2-vault-swap",
+        "signature": "event Swap(bytes32 indexed poolId,address indexed tokenIn,address indexed tokenOut,uint256 amountIn,uint256 amountOut)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$args.poolId",
+                        0,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "poolId": {
+            "op": "lower",
+            "args": [
+              "$args.poolId"
+            ]
+          },
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      {
+                        "op": "bytes",
+                        "args": [
+                          "$args.poolId",
+                          0,
+                          20
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "tokenIn": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$args.tokenIn"
+                ]
+              }
+            ]
+          },
+          "tokenOut": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$args.tokenOut"
+                ]
+              }
+            ]
+          },
+          "amountIn": "$args.amountIn",
+          "amountOut": "$args.amountOut"
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$log.address",
+                "$constants.vault"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$args.tokenIn"
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$args.tokenOut"
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$args.tokenIn",
+                    "$args.tokenOut"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.amountOut",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "bytes",
+                              "args": [
+                                "$args.poolId",
+                                0,
+                                20
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$args.poolId",
+                        20,
+                        2
+                      ]
+                    }
+                  ]
+                },
+                2
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$edge.target",
+                "$pool"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$edge.tokenIn",
+                "$payload.tokenIn"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$edge.tokenOut",
+                "$payload.tokenOut"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$payload.poolId"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$edge.instanceKey"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": "$edge.target",
+          "poolId": "$payload.poolId",
+          "tokenIn": "$payload.tokenIn",
+          "tokenOut": "$payload.tokenOut",
+          "amountIn": "$payload.amountIn",
+          "amountOut": "$payload.amountOut",
+          "matchedAdapterId": "$edge.adapterId"
+        },
+        "requireReadyBinding": true
+      }
+    ],
+    "canonicalIntakeTargets": [
+      "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+    ],
+    "victimSupport": "detect-only",
+    "poolMaterialization": {
+      "patternIds": [
+        "balancer-v2-vault-swap"
+      ],
+      "result": {
+        "poolId": {
+          "op": "lower",
+          "args": [
+            "$args.poolId"
+          ]
+        },
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$args.poolId",
+                        0,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "localApply": {},
+    "overlay": {},
+    "replay": {}
+  }
+}

@@ -4,6 +4,7 @@ import { univ4RuntimeMathModels } from "./swaps/univ4-family/math.js";
 import { ekuboSwapReturnRuntimeMathModel } from "./swaps/ekubo-family/declarative-math.js";
 import { psmRuntimeTermsMathModel } from "./psm-math.js";
 import { badgerSettWithdrawRuntimeMathModel } from "./badger-sett-withdraw-math.js";
+import { balancerV2SwapAmountGuard } from "./swaps/balancer-v2-family/declarative-math.js";
 
 // Protocol migration registers statically imported arithmetic-only models.
 // JSON carries names/versions and bindings, never formulas or handler paths.
@@ -15,5 +16,6 @@ const models: readonly RuntimeMathModel[] = [
   ekuboSwapReturnRuntimeMathModel,
   psmRuntimeTermsMathModel,
   badgerSettWithdrawRuntimeMathModel,
+  balancerV2SwapAmountGuard,
 ];
 export const declarativeRuntimeMathRegistry = createDeclarativeRuntimeMathRegistry(models);

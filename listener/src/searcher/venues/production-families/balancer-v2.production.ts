@@ -1,15 +1,11 @@
-import { defineSwapFamily } from "../adapter-family-plugin.js";
+// Generated from Family JSON by build-declarative-production.ts. Do not edit.
+// Definition: src/searcher/venues/swaps/balancer-v2-family/balancer-v2.json
+// Regenerate with: npm run family-capability-manifest:generate
 import { defineFamilyActivation } from "./activation.js";
-import { manifest } from "../swaps/balancer-v2-family/manifest.js";
-import { discovery } from "../swaps/balancer-v2-family/discovery.js";
-import { identity } from "../swaps/balancer-v2-family/identity.js";
-import { instance } from "../swaps/balancer-v2-family/instance.js";
-import { routes } from "../swaps/balancer-v2-family/routes.js";
-import { pricing } from "../swaps/balancer-v2-family/pricing.js";
-import { exact } from "../swaps/balancer-v2-family/exact.js";
-import { execution } from "../swaps/balancer-v2-family/execution.js";
-import { action } from "../swaps/balancer-v2-family/action.js";
-import { capture } from "../swaps/balancer-v2-family/capture.js";
-import { swap } from "../swaps/balancer-v2-family/swap.js";
-export const plugin = defineSwapFamily({ manifest, discovery, identity, instance, routes, pricing, exact, execution, capture, swap, actionAdapters: [action] });
-export const activation = defineFamilyActivation({ enabled: false, envKey: "SEARCHER_FAMILY_BALANCER_V2_ENABLED" });
+import { defineSwapFamily } from "../adapter-family-plugin.js";
+import { compileDeclarativeSwap } from "../declarative-swap.js";
+import definition from "../swaps/balancer-v2-family/balancer-v2.json";
+
+export const activation = defineFamilyActivation({"enabled":false,"envKey":"SEARCHER_FAMILY_BALANCER_V2_ENABLED"});
+
+export const plugin = defineSwapFamily(compileDeclarativeSwap(definition, []));
