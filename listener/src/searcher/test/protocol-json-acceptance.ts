@@ -1,6 +1,7 @@
 // One opt-in, data-driven Swap/Protocol acceptance entry. No Family-specific codec,
 // math, discovery, scheduler, executor deployment, signing or submission here.
 import assert from "node:assert/strict";
+import { registerAcceptanceSample, assertRegisteredAcceptanceSample, type SampleRegistration } from "./protocol-json-sample-registration.js";
 import { createHash } from "node:crypto";
 import { openSync, closeSync, readFileSync, writeSync, ftruncateSync, fsyncSync } from "node:fs";
 import { resolve } from "node:path";
@@ -89,8 +90,10 @@ export function selectAcceptanceRoute<T extends { readonly routeKey: string; rea
 }
 
 export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCase, context: ProtocolJsonAcceptanceContext,
-  report: Record<string, any>, checkpoint: () => void = () => {}) {
+  report: Record<string, any>, checkpoint: () => void = () => {}, registration?: SampleRegistration) {
   sample = parseProtocolJsonAcceptanceCase(sample);
+  assertRegisteredAcceptanceSample(sample, registration);
+  report.registration = registration;
   const { family, instance, source, executor, runtime, catalog, control } = context;
   assert(instance.routes.length > 0, "acceptance requires actual admitted directions");
   assert.equal(source.number, sample.source.number);
@@ -109,7 +112,7 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
   };
   report.implementation = await inspectAcceptanceEntry(family);
   report.source = source; report.evidence = context.evidence; report.samples = [];
-  report.scope = "Current-source Ready rehydration and fresh same-state local EVM single-leg execution";
+  report.scope = "Current-source Ready rehydration and fresh same-state node RPC at the same state single-leg execution";
   report.notClaimed = ["original transaction pre-call parity", "new natural valuation", "opportunity replay", "performance", "all variants"];
   report.runtimeConstruction = guard.counts;
   const covered = new Set<string>(), successful = new Set<string>();
@@ -257,6 +260,7 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
         unverified: row.unverifiedSettlement ?? row.requiredSettlement })),
     admittedRoutes: instance.routes.length, sampledRoutes: covered.size, executedRoutes: successful.size,
     unsampledRoutes: instance.routes.filter(route => !covered.has(route.routeKey)).map(route => ({ routeKey: route.routeKey, tokenIn: route.tokenIn, tokenOut: route.tokenOut })) };
+  assertRegisteredAcceptanceSample(sample, registration);
   report.result = report.samples.every((row: any) => row.result === "pass" && row.executions.length > 0) &&
     successful.size === instance.routes.length && guard.counts.forbiddenDuringRuntimeBuild === 0 ? "pass" : "incomplete-or-failed";
   report.referenceSettlementCoverage = sample.trials.every(trial => trial.requiredSettlement !== undefined)
@@ -290,10 +294,14 @@ export async function protocolJsonAcceptanceMain(argv = process.argv.slice(2)) {
   let context: ProtocolJsonAcceptanceContext | undefined;
   try {
     checkpoint();
+    report.failedStage = "sample-registration";
+    const registration = registerAcceptanceSample(sample, resolve(args.get("--case")!));
+    report.registration = registration;
+    delete report.failedStage;
     context = await openProtocolJsonAcceptanceContext({ ...sample, readyPath: resolve(args.get("--ready")!),
       rpcFile: resolve(args.get("--rpc-file")!), allowExecutorCodeOverride: args.get("--executor-code-mode") === "counterfactual", inputPaths: [resolve(args.get("--case")!),
         fileURLToPath(import.meta.url), fileURLToPath(new URL("./protocol-json-acceptance-facts.ts", import.meta.url))] });
-    await runProtocolJsonAcceptance(sample, context, report, checkpoint);
+    await runProtocolJsonAcceptance(sample, context, report, checkpoint, registration);
   } catch (error) {
     report.result = "failed"; report.errors.push(String(error instanceof Error ? error.message : error).replace(/https?:\/\/[^\s"<>]+/g, "[REDACTED_URL]"));
     if (error instanceof ProtocolJsonAcceptanceContextError) { report.failedStage = error.stage; report.evidence = error.evidence; }

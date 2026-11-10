@@ -27,6 +27,10 @@ export interface CurvePlainBinding {
   readonly quoteAbi: CurveIndexAbi;
   readonly coinAbi: CurveIndexAbi;
   readonly balanceAbi: CurveIndexAbi;
+  /** Registry-direct variants carry the MetaRegistry address; the
+   * registry-independent clone variant carries the delegated implementation
+   * address, whose runtime class is pinned by code hash in identity provenance.
+   * `handlers` stays empty for the clone surface. */
   readonly registry: string;
   readonly handlers: readonly string[];
   readonly codeHash: string;

@@ -241,6 +241,8 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
     readonly inputFingerprint: string;
     readonly candidateKeys?: ReadonlySet<string>;
     readonly retainedFamilyIds?: ReadonlySet<string>;
+    /** Retry prior rejections and retryables in scope, keeping normal verified memo checks. */
+    readonly retryNegativeOutcomes?: boolean;
     /** Fresh proof context. Only outcomes sealed by this exact review may resume. */
     readonly revalidateParentProofs?: boolean;
   };
@@ -974,6 +976,7 @@ export async function rebuildUniverse(
       }
       const recheck: unknown[] = [], strictPrevious: unknown[] = [], remaining: unknown[] = [];
       if (survivors && review.revalidateParentProofs) throw new Error("cannot retain parent outcomes under a new proof context");
+      if (survivors && review.retryNegativeOutcomes) throw new Error("cannot retain entire Family outcomes while retrying negative outcomes");
       let retained = 0, alreadyHandled = 0;
       if (survivors) {
         for (const id of survivors) {
@@ -1036,9 +1039,46 @@ export async function rebuildUniverse(
       }
       await runPhase(recheck, "review", remaining);
       if (strictPrevious.length) await runPhase(strictPrevious, "strict");
+      // Scope edits can reuse negative outcomes for unchanged nominations. A
+      // different cutoff, rule or proof context still gets a fresh attempt.
+      const unchangedPartitions = new Map<string, ReadyFamilyPartition>();
+      if (!survivors && !review.revalidateParentProofs && !review.retryNegativeOutcomes && input.candidateFamilyId &&
+          input.familyDefinitionHash && input.familyDiscoveryDefinitionHash &&
+          canonicalJson(parent.cutoff) === canonicalJson(cutoff)) {
+        for (const [id, partition] of Object.entries(parent.familyPartitions!)) {
+          if (partition.enabled && input.isFamilyEnabled?.(id) !== false &&
+              partition.familyDefinitionHash === input.familyDefinitionHash(id) &&
+              partition.discoveryDefinitionHash === input.familyDiscoveryDefinitionHash(id)) {
+            unchangedPartitions.set(id, partition);
+          }
+        }
+      }
+      let retainedNegative = 0;
+      const pending = unchangedPartitions.size === 0 ? remaining : remaining.filter(candidate => {
+        const key = input.familyCandidateKey(candidate);
+        if (run.outcomesByCandidateKey[key] !== undefined) return true;
+        const partition = unchangedPartitions.get(input.candidateFamilyId!(candidate));
+        if (!partition) return true;
+        const row = partition.outcomesByCandidateKey[key];
+        if (!row || row.status === "verified" ||
+            canonicalJson(partition.candidatesByKey[key]) !== canonicalJson(run.candidatesByKey[key])) return true;
+        if (row.status === "terminal-rejected") {
+          if (row.cutoff.number !== cutoff.number || row.cutoff.hash !== cutoff.hash) return true;
+          if (row.reasonCode === "duplicate-instance") {
+            const winner = row.requestFingerprint.slice("duplicate-instance:".length);
+            const memo = attestationCheckpoint.verifiedMemos[winner];
+            if (!row.requestFingerprint.startsWith("duplicate-instance:") || !memo ||
+                seenInstanceKeys.get(memo.familyInstanceKey) !== winner) return true;
+          } else if (row.familyDefinitionHash !== partition.familyDefinitionHash) return true;
+        }
+        writer.record(row);
+        recordAttestationProgress(row.status);
+        retainedNegative++;
+        return false;
+      });
       log("Ready review: prior/current proofs checked=" + (recheck.length + strictPrevious.length) +
-        " completed=" + completedPending + " remaining=" + remaining.length);
-      await runPhase(remaining, "strict");
+        " completed=" + completedPending + " retainedNegative=" + retainedNegative + " remaining=" + pending.length);
+      await runPhase(pending, "strict");
       log("Ready review results " + JSON.stringify({ ...reviewedCounts, terminalRejected: attestationCounts["terminal-rejected"],
         retryable: attestationCounts.retryable }));
     } else {

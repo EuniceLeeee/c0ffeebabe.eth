@@ -15,6 +15,14 @@ try {
     const owner = JSON.parse(await readFile(checkpoint + ".maintenance.lock", "utf8"));
     assert.equal(owner.pid, process.pid);
     await assert.rejects(withReadyMaintenanceLease(checkpoint, async () => assert.fail("duplicate writer entered")), { code: "EEXIST" });
+    const scope = ["--checkpoint", checkpoint, "--archive", directory];
+    await assert.rejects(runReadyFamilyMaintenance(["update", "--force-update", ...scope]), { code: "EEXIST" });
+    await assert.rejects(runReadyFamilyMaintenance(["build", ...scope, "--force-update"]), /requires update mode/);
+    await assert.rejects(runReadyFamilyMaintenance(["update", ...scope, "--force-update", "--force-update"]), /invalid Ready maintenance option/);
+    await assert.rejects(runReadyFamilyMaintenance(["update", ...scope, "--candidates", "--force-update"]), /invalid Ready maintenance option/);
+    await assert.rejects(runReadyFamilyMaintenance(["update", ...scope, "--force-update", "--expect-update", "family-set"]), /cannot be combined/);
+    await assert.rejects(runReadyFamilyMaintenance(["update", ...scope, "--force-update",
+      "--revalidate-proofs", "0x" + "a".repeat(64)]), /cannot be combined/);
   });
   await assert.rejects(stat(checkpoint + ".maintenance.lock"), { code: "ENOENT" });
   await assert.rejects(withReadyMaintenanceLease(checkpoint, async () => { throw new Error("fixture failure"); }), /fixture failure/);

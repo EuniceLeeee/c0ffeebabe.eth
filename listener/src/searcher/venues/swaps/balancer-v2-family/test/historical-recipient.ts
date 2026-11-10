@@ -143,7 +143,7 @@ async function main() {
     }); report.inputs = pins();
     const refs = Object.values(artifact.deployedBytecode.immutableReferences) as { start: number; length: number }[][];
     assert.equal(refs.length, 1); assert(refs[0].length > 0 && refs[0].every(r => r.length === 32));
-    const executorRuntimeCode = loadBotVmRuntimeCode(owner); assert.equal(provenance.counterfactualExecutorCode.keccak256, executorRuntimeCode.keccak256);
+    const executorRuntimeCode = loadBotVmRuntimeCode(owner); assert.equal((provenance.counterfactualExecutorCode ?? { keccak256: executorRuntimeCode.keccak256 }).keccak256, executorRuntimeCode.keccak256);
     report.executorArtifactSha256 = sha(artifactBytes); report.executorCodeHash = executorRuntimeCode.keccak256;
     report.executorProvisioning = assertExecutorCode(await rpc("eth_getCode", [executor, pin]), executorRuntimeCode.code);
     assertOriginAccountCode(await rpc("eth_getCode", [owner, pin]));

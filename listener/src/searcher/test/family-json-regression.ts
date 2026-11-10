@@ -3,12 +3,14 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, renameSync, openSync, closeSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
+import { selectFamilyActivation } from "../../../scripts/test-family-activation-report.mjs";
 import { syncDeclarativeProductionEntries } from "../build-declarative-production.js";
 import { loadFamilyJsonSamples } from "./protocol-json-samples.js";
 import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
+import { registerAcceptanceSample } from "./protocol-json-sample-registration.js";
 
 const defaultRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
@@ -74,6 +76,12 @@ export type CaseResult = { id: string; status: "not-run" | "running" | "pass" | 
 export function classifyAcceptanceEvidence(facts: any, rawSample: unknown, exitCode: number | null): CaseResult["status"] {
   assert.equal(facts.format, "protocol-json-acceptance-v1");
   assert.deepEqual(facts.sample, parseProtocolJsonAcceptanceCase(rawSample), "runner evidence must bind the normalized sample input");
+  // A successful child process is insufficient: aggregation must preserve the
+  // same registered sample/index pins that the runner checked around execution.
+  try {
+    assert(facts.registration && typeof facts.registration.path === "string");
+    assert.deepEqual(facts.registration, registerAcceptanceSample(facts.sample, facts.registration.path));
+  } catch { return "failed"; }
   if (facts.drained !== true || !Array.isArray(facts.samples) || facts.samples.length === 0 ||
       !Array.isArray(facts.errors) || facts.errors.length > 0 ||
       facts.samples.some((row: any) => row.error || row.result === "failed" || !Array.isArray(row.executions) ||
@@ -81,6 +89,20 @@ export function classifyAcceptanceEvidence(facts: any, rawSample: unknown, exitC
   if (exitCode === 0 && facts.result === "pass" && facts.samples.every((row: any) => row.result === "pass" && row.executions.length > 0)) return "pass";
   if (exitCode === 1 && facts.result === "incomplete-or-failed" && facts.samples.every((row: any) => ["pass", "partial"].includes(row.result))) return "incomplete";
   return "failed";
+}
+export function verifyRegressionCaseEvidence(plan: RegressionPlan, rows: any[], root: string, directory: string): boolean {
+  try {
+    const samples = plan.families.flatMap(family => family.cases);
+    assert(Array.isArray(rows) && rows.length === samples.length && new Set(rows.map(row => row.id)).size === rows.length);
+    for (const sample of samples) {
+      const row = rows.find(row => row.id === sample.id);
+      assert(row?.status === "pass" && typeof row.evidence === "string" && /^\d{4,}\.json$/.test(row.evidence));
+      const file = resolve(directory, row.evidence), bytes = readFileSync(file);
+      assert.equal(row.evidenceSha256, digest(bytes));
+      assert.equal(classifyAcceptanceEvidence(JSON.parse(bytes.toString()), json(resolve(root, sample.file)), row.process?.code), "pass");
+    }
+    return true;
+  } catch { return false; }
 }
 export function summarizeFamilyRerun(family: RegressionFamily, rows: CaseResult[], offlinePassed: boolean) {
   const selected = family.cases.map(sample => rows.find(row => row.id === sample.id));
@@ -94,41 +116,82 @@ export function summarizeFamilyRerun(family: RegressionFamily, rows: CaseResult[
   };
 }
 
+export function selectRegressionFamilies(plan: RegressionPlan, ids: readonly string[]): RegressionPlan {
+  const requested = new Set(ids);
+  const families = plan.families.filter(family => requested.has(family.familyId));
+  assert(ids.length > 0 && requested.size === ids.length && families.length === ids.length,
+    "unknown, duplicate or empty Family regression scope");
+  return { ...plan, families };
+}
+
+function readOfflineFamilyResults(path: string, plan: RegressionPlan, code: number) {
+  const bytes = readFileSync(path);
+  const events = bytes.toString("utf8").trimEnd().split("\n").map(line => JSON.parse(line));
+  const result = selectFamilyActivation(events, plan.families.map(family => family.familyId), code);
+  return { ...result, sha256: digest(bytes) };
+}
+
+/** Recheck current inputs and each Family's actual case files independently. */
+export function readFamilyRegressionVerdicts(reportPath: string, current: RegressionPlan, root = defaultRoot) {
+  const path = resolve(reportPath), report = json(path), directory = dirname(path);
+  assert(report?.format === "family-json-regression-round-v1" && report.finished === true &&
+    report.sourceStable === true && Array.isArray(report.plan?.families), "Family regression report did not finish on stable inputs");
+  const scope = selectRegressionFamilies(current, report.plan.families.map((family: RegressionFamily) => family.familyId));
+  assert(sameRegressionInputs(scope, report.plan), "Family regression inputs changed");
+  const offline = readOfflineFamilyResults(resolve(directory, "offline-tests.jsonl"), current, report.offline?.code);
+  assert.equal(offline.sha256, report.offline?.evidenceSha256, "offline Family test evidence changed");
+  const ids = scope.families.flatMap(family => family.cases.map(sample => sample.id));
+  assert(Array.isArray(report.cases) && report.cases.length === ids.length &&
+    new Set(report.cases.map((row: CaseResult) => row.id)).size === ids.length &&
+    ids.every(id => report.cases.some((row: CaseResult) => row.id === id)), "Family regression case set differs");
+  return scope.families.map(family => {
+    const verdict = offline.families.find(row => row.id === family.familyId);
+    const offlinePassed = offline.sharedFailures.length === 0 && verdict?.definition === true &&
+      verdict.failed === 0 && verdict.incomplete === 0 && report.definitions?.[family.familyId]?.status === "pass";
+    const samples = new Set(family.cases.map(sample => sample.id));
+    const rows = report.cases.filter((row: CaseResult) => samples.has(row.id));
+    const result = summarizeFamilyRerun(family, rows, offlinePassed);
+    if (result.result === "supplied-cases-pass" &&
+        !verifyRegressionCaseEvidence(selectRegressionFamilies(current, [family.familyId]), rows, root, directory)) {
+      return { ...result, result: "failed", evidenceError: "Family case evidence did not verify" };
+    }
+    return result;
+  });
+}
+
 export async function familyJsonRegressionMain(argv = process.argv.slice(2)) {
   const args = new Map<string, string>(); let run = false;
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i]!;
     if (key === "--run" && !run) { run = true; continue; }
-    assert(["--out", "--bindings", "--check-report"].includes(key) && !args.has(key) && argv[i + 1], "invalid regression arguments");
+    assert(["--out", "--bindings", "--family", "--check-report"].includes(key) && !args.has(key) && argv[i + 1], "invalid regression arguments");
     args.set(key, argv[++i]!);
   }
-  const root = defaultRoot, plan = await buildFamilyRegressionPlan(root);
+  const root = defaultRoot, installed = await buildFamilyRegressionPlan(root);
   if (args.has("--check-report")) {
     assert(!run && args.size === 1, "report checking does not run tests");
-    const report = json(resolve(args.get("--check-report")!));
-    const current = sameRegressionInputs(plan, report.plan);
-    const evidenceIntact = (report.cases ?? []).every((row: any) => row.status !== "pass" ||
-      typeof row.evidence === "string" && /^\d{4,}\.json$/.test(row.evidence) &&
-      row.evidenceSha256 === digest(readFileSync(resolve(args.get("--check-report")!, "..", row.evidence))));
-    const allPassed = current && evidenceIntact && report.finished === true && report.sourceStable === true && report.offline?.status === "pass" &&
-      plan.families.every(family => report.definitions?.[family.familyId]?.status === "pass") &&
-      plan.families.every(family => summarizeFamilyRerun(family, report.cases ?? [], true).result === "supplied-cases-pass");
-    console.log(JSON.stringify({ current, allPassed, families: plan.families.length,
-      claim: "Does not certify all variants or performance" }));
+    const families = readFamilyRegressionVerdicts(args.get("--check-report")!, installed, root);
+    const allPassed = families.every(row => row.result === "supplied-cases-pass");
+    console.log(JSON.stringify({ current: true, allPassed, families, claim: "Does not certify all variants or performance" }));
     if (!allPassed) process.exitCode = 1;
     return;
   }
+  const requested = args.get("--family");
+  const plan = requested ? selectRegressionFamilies(installed, [requested]) : installed;
   assert(args.has("--out"), "--out new-directory is required");
   const out = resolve(args.get("--out")!); mkdirSync(out); // Exclusive: failed attempts stay intact.
   const bindings = args.has("--bindings") ? json(resolve(args.get("--bindings")!)) : { version: 1, cases: {} };
   assert.equal(bindings.version, 1); assert(bindings.cases && typeof bindings.cases === "object" && !Array.isArray(bindings.cases));
   const samples = plan.families.flatMap(family => family.cases);
-  assert(Object.keys(bindings.cases).every(id => samples.some(sample => sample.id === id)), "binding for unknown/stale case");
+  const installedCaseIds = new Set(installed.families.flatMap(family => family.cases.map(sample => sample.id)));
+  assert(Object.keys(bindings.cases).every(id => installedCaseIds.has(id)), "binding for unknown/stale case");
   const report: any = { format: "family-json-regression-round-v1", started: new Date().toISOString(), plan,
     offline: { status: "not-run" }, definitions: {}, cases: samples.map(sample => ({ id: sample.id, status: "not-run" })), finished: false };
   const checkpoint = () => {
     report.families = plan.families.map(family => ({ ...summarizeFamilyRerun(family, report.cases,
-      report.offline.status === "pass" && report.definitions[family.familyId]?.status === "pass"),
+      report.offline.status === "pass" && report.definitions[family.familyId]?.status === "pass" &&
+        report.offline.families?.some((row: { id: string; definition: boolean; failed: number; incomplete: number }) =>
+          row.id === family.familyId && row.definition && row.failed === 0 && row.incomplete === 0)),
       ...(["not-run", "running"].includes(report.offline.status) ? { result: "not-run" } : {}),
     }));
     writeFileSync(resolve(out, "report.tmp"), JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
@@ -143,8 +206,17 @@ export async function familyJsonRegressionMain(argv = process.argv.slice(2)) {
     } finally { closeSync(fd); }
   };
   report.offline = { status: "running" }; checkpoint();
-  const unit = execute(["scripts/test-protocol-json.mjs"], resolve(out, "offline.log"));
-  report.offline = { ...unit, status: unit.code === 0 ? "pass" : "failed" }; checkpoint();
+  const offlinePath = resolve(out, "offline-tests.jsonl");
+  const unit = execute(["scripts/test-protocol-json.mjs", "--activation-report", offlinePath], resolve(out, "offline.log"));
+  try {
+    assert(unit.code !== null, "shared test process did not finish");
+    const result = readOfflineFamilyResults(offlinePath, installed, unit.code);
+    report.offline = { ...unit, status: result.sharedFailures.length === 0 ? "pass" : "failed",
+      evidenceSha256: result.sha256, families: result.families, sharedFailures: result.sharedFailures };
+  } catch (error) {
+    report.offline = { ...unit, status: "failed", reason: safe(error) };
+  }
+  checkpoint();
   for (const family of plan.families) {
     try {
       const { plugin } = await import(pathToFileURL(resolve(root, family.entry)).href);
@@ -155,12 +227,13 @@ export async function familyJsonRegressionMain(argv = process.argv.slice(2)) {
   }
   for (const [index, sample] of samples.entries()) {
     const row = report.cases[index], binding = bindings.cases[sample.id];
-    if (!binding) { row.reason = "missing case-specific Ready/RPC-file/revm binding"; checkpoint(); continue; }
-    assert(Object.keys(binding).sort().join(",") === "ready,revmBin,rpcFile" && Object.values(binding).every(value => typeof value === "string" && value.length > 0), "invalid execution binding");
+    if (!binding) { row.reason = "missing case-specific Ready/RPC-file binding"; checkpoint(); continue; }
+    assert(binding.ready && binding.rpcFile && Object.keys(binding).every(key => ["ready", "rpcFile", "revmBin"].includes(key)) &&
+      Object.values(binding).every(value => typeof value === "string" && value.length > 0), "invalid execution binding");
     row.status = "running"; checkpoint();
     const name = String(index).padStart(4, "0"), evidence = resolve(out, `${name}.json`);
     const result = execute(["--import", "tsx", "src/searcher/test/protocol-json-acceptance.ts", "--case", resolve(root, sample.file),
-      "--ready", resolve(binding.ready), "--rpc-file", resolve(binding.rpcFile), "--revm-bin", resolve(binding.revmBin), "--out", evidence], resolve(out, `${name}.log`));
+      "--ready", resolve(binding.ready), "--rpc-file", resolve(binding.rpcFile), "--out", evidence], resolve(out, `${name}.log`));
     row.process = result; row.evidence = relative(out, evidence);
     try {
       const facts = json(evidence);
@@ -170,7 +243,7 @@ export async function familyJsonRegressionMain(argv = process.argv.slice(2)) {
     } catch (error) { row.status = "failed"; row.reason = safe(error); }
     checkpoint();
   }
-  report.sourceStable = sameRegressionInputs(plan, await buildFamilyRegressionPlan(root));
+  report.sourceStable = sameRegressionInputs(installed, await buildFamilyRegressionPlan(root));
   report.finished = true; report.ended = new Date().toISOString(); checkpoint();
   console.log(JSON.stringify({ report: resolve(out, "report.json"), sourceStable: report.sourceStable,
     results: report.families.map((row: any) => ({ familyId: row.familyId, result: row.result })) }));

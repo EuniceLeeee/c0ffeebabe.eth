@@ -16,7 +16,7 @@ import type { DeclarativeMathFunctions, createDeclarativeMathRegistry } from "./
 import { normalizeDeclarativeVariant, normalizeDeclarativeChecks, normalizeDeclarativeFieldModel } from "./declarative-variant.js";
 import { validateDeclarativeTypeMetadata } from "./declarative-types.js";
 import { compileSignedBlockEvidence } from "./declarative-runtime-evidence.js";
-import { compileDeclarativeDiscovery } from "./declarative-discovery.js";
+import { assembleDeclarativeDiscovery } from "./declarative-family-discovery.js";
 import { compileDeclarativeIdentity } from "./declarative-identity.js";
 import { expandConversionDefinition } from "./declarative-definition.js";
 import { compileDeclarativeValues, validateDeclarativeValue, validateDeclarativeStatements } from "./declarative-values.js";
@@ -347,8 +347,7 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
         { math: modules.get<BoundRuntimeMath>("executionMath") });
     });
   }
-  const baseDiscovery = compileDeclarativeDiscovery<Candidate>(document.discovery.definition, primary.values);
-  const discovery = signed ? { ...baseDiscovery, ...signed.discovery } : baseDiscovery;
+  const discovery = assembleDeclarativeDiscovery<Candidate>(document.discovery.definition, primary.values, signed?.discovery);
   const identity: IdentitySemantics<Candidate, Identity> = {
     memoReuse: document.identity.memoReuse,
     identityKey: identity => evalRoot(document.identity.key, { identity }),

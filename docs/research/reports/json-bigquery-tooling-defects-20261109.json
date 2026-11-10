@@ -1,0 +1,120 @@
+{
+  "cases": [
+    {
+      "learning_case_id": "json-bigquery-20261109-activation",
+      "status": "applied",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "source_not_seen",
+      "gap_detail": "tooling_defect; query/acceptance evidence boundary, not an opportunity replay claim",
+      "evidence": {
+        "design": "docs/research/design/json-bigquery-discovery-wiring-20261109.md",
+        "review": "Independent read-only reviewer confirmed defects; final negative cases addressed",
+        "remoteJob": "mev_json_discovery_86ab2cf2385f99d5ccde10d6",
+        "scope": "discovery and acceptance tool correctness only"
+      },
+      "tooling_defect": {
+        "tool": "scripts/ready-bigquery.mjs",
+        "issue": "TS regex omitted quoted JSON-generated envKey declarations",
+        "evidence": "Identifier and quoted activation fixtures now produce identical enablement; production Catalog is imported afterward",
+        "codify_target": "scripts/ready-family-activation.mjs + activation and launcher tests",
+        "codify_commit": "b2b21b6fdb11ce1c7e4c2dc69aa5fec76de27a98",
+        "status": "codified"
+      },
+      "created_at": "2026-11-09T09:36:41.137552+00:00",
+      "updated_at": "2026-11-09T09:36:41.137552+00:00"
+    },
+    {
+      "learning_case_id": "json-bigquery-20261109-compiler",
+      "status": "applied",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "source_not_seen",
+      "gap_detail": "tooling_defect; query/acceptance evidence boundary, not an opportunity replay claim",
+      "evidence": {
+        "design": "docs/research/design/json-bigquery-discovery-wiring-20261109.md",
+        "review": "Independent read-only reviewer confirmed defects; final negative cases addressed",
+        "remoteJob": "mev_json_discovery_86ab2cf2385f99d5ccde10d6",
+        "scope": "discovery and acceptance tool correctness only"
+      },
+      "tooling_defect": {
+        "tool": "scripts/ready-discovery-udf-build.mjs",
+        "issue": "A declarative compiler function was treated as an instantiated discovery; one merged resource also exceeded BigQuery limits",
+        "evidence": "49 committed roots;471 inputs production parity; real BigQuery11 saved TX rows39candidates4opaque; prior1MiB failure retained",
+        "codify_target": "Bind root and ordered children; reuse common discovery; split pinned JSON resources; shared opaque retention and regression",
+        "codify_commit": "b2b21b6fdb11ce1c7e4c2dc69aa5fec76de27a98",
+        "status": "codified"
+      },
+      "created_at": "2026-11-09T09:36:41.137552+00:00",
+      "updated_at": "2026-11-09T09:36:41.137552+00:00"
+    },
+    {
+      "learning_case_id": "json-bigquery-20261109-ready-fixture",
+      "status": "applied",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "source_not_seen",
+      "gap_detail": "tooling_defect; query/acceptance evidence boundary, not an opportunity replay claim",
+      "evidence": {
+        "design": "docs/research/design/json-bigquery-discovery-wiring-20261109.md",
+        "review": "Independent read-only reviewer confirmed defects; final negative cases addressed",
+        "remoteJob": "mev_json_discovery_86ab2cf2385f99d5ccde10d6",
+        "scope": "discovery and acceptance tool correctness only"
+      },
+      "tooling_defect": {
+        "tool": "listener/src/searcher/test/universe-rebuild-production.ts",
+        "issue": "Fatal isolation fixture mocked the retired simulation transport, and retained V4/PSM fixtures predated current JSON and behavioral identity contracts",
+        "evidence": "Production Ready harness now reaches actual Node transport fatal owner; no queued provider dispatch after fatal; V4 negativeinstance tests; PSM getters-only and missing1rawunit rejected",
+        "codify_target": "Current node boundary fixture and public declarative emitter/retained instance compatibility",
+        "codify_commit": "b2b21b6fdb11ce1c7e4c2dc69aa5fec76de27a98",
+        "status": "codified"
+      },
+      "created_at": "2026-11-09T09:36:41.137552+00:00",
+      "updated_at": "2026-11-09T09:36:41.137552+00:00"
+    },
+    {
+      "learning_case_id": "json-bigquery-20261109-sample-registration",
+      "status": "applied",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "source_not_seen",
+      "gap_detail": "tooling_defect; query/acceptance evidence boundary, not an opportunity replay claim",
+      "evidence": {
+        "design": "docs/research/design/json-bigquery-discovery-wiring-20261109.md",
+        "review": "Independent read-only reviewer confirmed defects; final negative cases addressed",
+        "remoteJob": "mev_json_discovery_86ab2cf2385f99d5ccde10d6",
+        "scope": "discovery and acceptance tool correctness only"
+      },
+      "tooling_defect": {
+        "tool": "listener/src/searcher/test/protocol-json-acceptance.ts",
+        "issue": "Runner/batch/report paths could claim success without binding an indexed case or stored fixture",
+        "evidence": "29 focused assertions pass, including unregistered/mutated fixtures, stale index pins, forged proof and hash-consistent reports missing registration",
+        "codify_target": "Shared registration helper; runner start/end and batch/report fact rechecks",
+        "codify_commit": "b2b21b6fdb11ce1c7e4c2dc69aa5fec76de27a98",
+        "status": "codified"
+      },
+      "created_at": "2026-11-09T09:36:41.137552+00:00",
+      "updated_at": "2026-11-09T09:36:41.137552+00:00"
+    }
+  ]
+}

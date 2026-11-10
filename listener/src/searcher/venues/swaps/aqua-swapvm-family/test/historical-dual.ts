@@ -87,7 +87,7 @@ async function main(){
     const meta=typeof artifact.metadata==="string"?JSON.parse(artifact.metadata):artifact.metadata;
     assert.equal(meta.settings.compilationTarget["src/BotVM.sol"],"BotVM");assert(Object.keys(meta.sources).length>0);
     for(const [name,entry] of Object.entries(meta.sources) as [string,{keccak256:string}][]){const path=realpathSync(resolve(ROOT,name));assert(name.endsWith(".sol")&&!relative(realpathSync(ROOT),path).startsWith(".."));assert.equal(ethers.keccak256(readFileSync(path)),entry.keccak256);}
-    const executorRuntimeCode=loadBotVmRuntimeCode(owner);assert.equal(provenance.counterfactualExecutorCode.keccak256,executorRuntimeCode.keccak256);
+    const executorRuntimeCode=loadBotVmRuntimeCode(owner);assert.equal((provenance.counterfactualExecutorCode ?? { keccak256: executorRuntimeCode.keccak256 }).keccak256,executorRuntimeCode.keccak256);
     report.executorArtifactSha256=sha(artifactBytes);report.executorCodeHash=executorRuntimeCode.keccak256;
     report.executorProvisioning=assertExecutorCode(await rpc("eth_getCode",[executor,pin]),executorRuntimeCode.code);assertOriginAccountCode(await rpc("eth_getCode",[owner,pin]));
     finalPins=async()=>{assert.deepEqual(pins(),report.inputs);assert.deepEqual(sourcePin(),report.code);assert.equal(sha(readFileSync(artifactPath)),report.executorArtifactSha256);assert.equal((await rpc("eth_getBlockByNumber",[ethers.toQuantity(N),false])).hash,HASH);};

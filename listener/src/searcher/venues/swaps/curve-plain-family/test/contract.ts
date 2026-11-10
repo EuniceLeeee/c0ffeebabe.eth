@@ -11,6 +11,9 @@ import { LOG_ID, SURFACE, SURFACE_ID, SWAP_TOPIC, UINT_LOG_ID, UINT_SWAP_TOPIC, 
 import { PROBE_RECEIVER } from "../identity.js";
 import { ADDR } from "../../../../../shared/constants/addresses.js";
 import { erc20ProbeCalls } from "./identity-probe.js";
+import { CLONE_IMPLEMENTATION_CLASS_HASH, CLONE_POOL, cloneImplementation, cloneRuntime } from "../clone.js";
+import { CURVE_PLAIN_CLONE_LINEAGE } from "../manifest.js";
+import { MAX_EXECUTION_ROUNDING_RAW_UNITS } from "../../../../../shared/executor/amount-rounding.js";
 import { reverseBindCurvePlain } from "../nomination.js";
 import { actionId } from "../routes.js";
 import type { CaptureNominationProvider } from "../../../adapter-family-plugin.js";
@@ -546,6 +549,249 @@ console.log("PASS reverse nomination membership and rejection"); tests++;
   assert.equal(empty.status, "no-match");
   console.log("PASS strict receipt coin binding without legacy indices; canonical logs and fail-closed negatives"); tests++;
 }
+
+// ── Registry-independent Curve factory clone (noteUSD) ─────────────────────
+// The proxy runtime/implementation code and source-block state below were read
+// from chain at block 26244837 and are committed as fixtures. All simulation
+// answers are synthetic contract fixtures, not evidenced execution.
+const CLONE = JSON.parse(readFileSync(new URL("./fixtures/noteusd-clone.json", import.meta.url), "utf8")) as {
+  block: number; blockHash: string; pool: string; proxyRuntime: string; proxyCodeHash: string;
+  implementation: string; implementationCode: string; implementationCodeHash: string;
+  coins: [string, string]; decimals: [number, number];
+  amplification: string; fee: string; balances: [string, string]; totalSupply: string;
+};
+const CLONE_SOURCE: CanonicalSource = { number: CLONE.block, hash: CLONE.blockHash, generation: CLONE.block };
+const CLONE_BALANCES = CLONE.balances.map(value => BigInt(value)) as [bigint, bigint];
+type CloneFixtureOptions = {
+  readonly runtime?: string;
+  readonly implementationCode?: string;
+  readonly coins?: readonly string[];
+  readonly totalSupply?: bigint;
+  readonly lpReturns?: boolean;
+  readonly thirdCoin?: string | null;
+  readonly executionReverts?: boolean;
+  readonly mutateExecution?: (result: Extract<AdapterRequestResult, { ok: true }>) => Extract<AdapterRequestResult, { ok: true }>;
+};
+function cloneReturned(id: string, data: string): Extract<AdapterRequestResult, { ok: true }> {
+  return { id, ok: true, data, source: CLONE_SOURCE, provenance: { kind: "fixture", fingerprint: "curve-plain-clone-contract-v1" }, completion: "returned" };
+}
+function cloneRevert(id: string): AdapterRequestResult {
+  return { ...cloneReturned(id, "0x"), completion: "reverted-as-declared" };
+}
+function cloneFixture(options: CloneFixtureOptions = {}) {
+  const runtime = options.runtime ?? CLONE.proxyRuntime;
+  const implementationCode = options.implementationCode ?? CLONE.implementationCode;
+  const coins = options.coins ?? CLONE.coins;
+  const balances = CLONE_BALANCES;
+  const dy = (i: number, j: number, dx: bigint) =>
+    // Nonlinear fixture quote with fee/rounding; never a cached unit-price multiplier.
+    dx * balances[j] * 9996n / ((balances[i] + dx) * 10000n);
+  const quote = (i: number, j: number, dx: bigint) => ({ i, j, amountIn: dx, amountOut: dy(i, j, dx) });
+  const answer = (request: AdapterRequest): AdapterRequestResult => {
+    if (request.kind === "get-code") {
+      return cloneReturned(request.id, lower(request.address) === lower(CLONE.pool) ? runtime : implementationCode);
+    }
+    if (request.id === "probe-executor") {
+      assert.equal(request.kind, "effect-delta-simulation");
+      assert.equal(request.call.executionMode, "impersonated-call-frame");
+      assert.equal(lower(request.call.to), lower(ADDR.WETH));
+      return { ...cloneReturned(request.id, word(0n)), effects: {
+        tokenDeltas: [{ token: ADDR.WETH, account: EXECUTOR, delta: 0n }],
+        nativeDeltas: [{ account: EXECUTOR, delta: 0n }] } };
+    }
+    if (request.kind === "effect-delta-simulation") {
+      assert(request.id.startsWith("clone-execution:"));
+      const [i, j] = request.id.slice("clone-execution:".length).split(":").map(Number);
+      const expected = quote(i, j, probeAmount(CLONE.decimals[i], balances[i]));
+      assert.equal(request.required, false);
+      assert.equal(request.call.executionMode, "impersonated-call-frame");
+      assert.equal(lower(request.call.to), lower(CLONE.pool));
+      assert.equal(request.preCalls?.length, 1);
+      const approve = ERC20.decodeFunctionData("approve", request.preCalls![0]!.data);
+      assert.equal(lower(String(approve[0])), lower(CLONE.pool));
+      assert.equal(approve[1], MAX_UINT, "shared production approval ceiling");
+      assert.equal(lower(request.preCalls![0]!.to), lower(coins[i]));
+      const args = EXECUTION.exchange.decodeFunctionData("exchange", request.call.data);
+      assert.equal(Number(args[0]), i); assert.equal(Number(args[1]), j);
+      assert.equal(args[2], expected.amountIn);
+      assert.equal(args[3], expected.amountOut, "minimum is exactly the source-pinned quote");
+      assert.equal(request.overrideIntent.tokenBalances?.[0]?.token.toLowerCase(), coins[i].toLowerCase());
+      assert.equal(request.overrideIntent.tokenBalances?.[0]?.amount, expected.amountIn);
+      assert.equal(request.observeTokenBalances?.length, 4);
+      if (options.executionReverts) return cloneRevert(request.id);
+      const result = { ...cloneReturned(request.id, word(expected.amountOut)), effects: { tokenDeltas: [
+        { token: coins[i], account: EXECUTOR, delta: -expected.amountIn },
+        { token: coins[i], account: CLONE.pool, delta: expected.amountIn },
+        { token: coins[j], account: EXECUTOR, delta: expected.amountOut },
+        { token: coins[j], account: CLONE.pool, delta: -expected.amountOut },
+      ] } };
+      return options.mutateExecution === undefined ? result : options.mutateExecution(result);
+    }
+    assert.equal(request.kind, "eth-call");
+    if (lower(request.to) !== lower(CLONE.pool)) {
+      assert.equal(request.data, ERC20.encodeFunctionData("decimals"));
+      return cloneReturned(request.id, word(18n));
+    }
+    const parsed = CLONE_POOL.parseTransaction({ data: request.data }) ?? POOL.parseTransaction({ data: request.data });
+    assert(parsed);
+    switch (parsed.name) {
+      case "coins": {
+        const index = Number(parsed.args[0]);
+        if (index === 2) {
+          return options.thirdCoin === undefined || options.thirdCoin === null
+            ? cloneRevert(request.id) : cloneReturned(request.id, CLONE_POOL.encodeFunctionResult("coins", [options.thirdCoin]));
+        }
+        return cloneReturned(request.id, CLONE_POOL.encodeFunctionResult("coins", [coins[index]]));
+      }
+      case "balances": return cloneReturned(request.id, word(balances[Number(parsed.args[0])]));
+      case "A": return cloneReturned(request.id, word(BigInt(CLONE.amplification)));
+      case "fee": return cloneReturned(request.id, word(BigInt(CLONE.fee)));
+      case "totalSupply": return cloneReturned(request.id, word(options.totalSupply ?? BigInt(CLONE.totalSupply)));
+      case "lp_token":
+      case "base_pool":
+        return options.lpReturns === true
+          ? cloneReturned(request.id, word(BigInt(CLONE.pool)))
+          : cloneRevert(request.id);
+      case "get_dy": {
+        const [i, j, dx] = [Number(parsed.args[0]), Number(parsed.args[1]), BigInt(parsed.args[2])];
+        return cloneReturned(request.id, word(dy(i, j, dx)));
+      }
+      default: throw new Error(`unexpected clone fixture call ${parsed.name}`);
+    }
+  };
+  return { answer, dy, quote, balances };
+}
+function cloneVariant() { return plugin.identity.variants[2]; }
+function cloneOutcome(f: ReturnType<typeof cloneFixture>, observed = candidate(CLONE.pool),
+  executionRoundingRawUnits = MAX_EXECUTION_ROUNDING_RAW_UNITS) {
+  const variant = cloneVariant();
+  let evidence: unknown;
+  for (let step = 0; step <= 4; step++) {
+    const input = { candidate: observed, step, executionRoundingRawUnits,
+      ...(evidence === undefined ? {} : { evidence }) };
+    const decision = variant.decide(input);
+    if (decision.status !== "continue") return decision;
+    assert(step < 4, "clone identity fits the five-step budget");
+    const { requests } = declareRequestProgram({
+      requirements: () => variant.requirements(input),
+      buildRequests: () => variant.buildRequests(input),
+      decode: results => results,
+    }, undefined);
+    assert(requests.length > 0);
+    evidence = variant.decode({ step: input, results: requests.map(f.answer) });
+  }
+  throw new Error("clone identity did not terminate");
+}
+function verifiedClone(f: ReturnType<typeof cloneFixture>, observed = candidate(CLONE.pool),
+  tolerance = MAX_EXECUTION_ROUNDING_RAW_UNITS): CurvePlainIdentity {
+  const decision = cloneOutcome(f, observed, tolerance);
+  assert.equal(decision.status, "verified", decision.status);
+  if (decision.status !== "verified") throw new Error("clone identity not verified");
+  return decision.identity;
+}
+function rejectedClone(f: ReturnType<typeof cloneFixture>, reasonCode: string, observed = candidate(CLONE.pool)) {
+  const decision = cloneOutcome(f, observed);
+  assert.equal(decision.status, "chain-proven-rejected", decision.status);
+  if (decision.status !== "chain-proven-rejected") throw new Error("clone identity not rejected");
+  assert.equal(decision.reasonCode, reasonCode);
+  assert(decision.evidenceRequestIds.length > 0);
+}
+
+check("registry-independent clone admission at N pins the observed implementation class and reuses the only binding shape", () => {
+  assert.equal(ethers.keccak256(CLONE.implementationCode), CLONE_IMPLEMENTATION_CLASS_HASH);
+  assert.equal(CLONE.implementationCodeHash, CLONE_IMPLEMENTATION_CLASS_HASH);
+  assert.equal((CLONE.proxyRuntime.length - 2) / 2, 51);
+  assert.equal(cloneImplementation(CLONE.proxyRuntime)?.implementation.toLowerCase(), CLONE.implementation.toLowerCase());
+  assert.equal(cloneImplementation(CLONE.proxyRuntime)?.codeHash, CLONE.proxyCodeHash);
+  assert.equal(cloneRuntime(CLONE.implementation), CLONE.proxyRuntime);
+  for (const malformed of ["0x6000", CLONE.proxyRuntime.slice(0, -2), `${CLONE.proxyRuntime}00`,
+    CLONE.proxyRuntime.replace("366000", "363d3d"), CLONE.proxyRuntime.replace("5af4602c", "5af43d82"),
+    `0x${"00".repeat(51)}`]) {
+    assert.equal(cloneImplementation(malformed), null);
+  }
+  // A different proxy address with the same pinned class is admitted: the proof
+  // is a code-hash class, never a pool/implementation address allowlist.
+  const sameClass = cloneFixture({ runtime: cloneRuntime(EXECUTOR) });
+  assert.equal(verifiedClone(sameClass).facts.binding.registry.toLowerCase(), EXECUTOR.toLowerCase());
+
+  const f = cloneFixture(), verified = verifiedClone(f);
+  assert.equal(verified.lineageId, CURVE_PLAIN_CLONE_LINEAGE);
+  assert.equal(lower(verified.facts.pool), lower(CLONE.pool));
+  const binding = verified.facts.binding;
+  assert.deepEqual(Object.keys(binding).sort(), Object.keys(identity(ANCHORS[0]).facts.binding).sort(), "same binding shape");
+  assert.equal(binding.quoteAbi, "int128");
+  assert.equal(binding.coinAbi, "uint256");
+  assert.equal(binding.balanceAbi, "uint256");
+  assert.equal(binding.registry.toLowerCase(), CLONE.implementation.toLowerCase());
+  assert.deepEqual(binding.handlers, []);
+  assert.equal(binding.codeHash, CLONE.proxyCodeHash);
+  assert.deepEqual(binding.coins.map(lower), CLONE.coins.map(lower));
+  assert.deepEqual(binding.decimals, [18, 18]);
+  assert.deepEqual(verified.facts.directions.map(d => [d.i, d.j, d.executionMode]),
+    [[0, 1, "exchange"], [1, 0, "exchange"]]);
+  const d = descriptor(verified), routes = plugin.routes.project({ descriptor: d });
+  assert.equal(routes.length, 2);
+  const route = routes[0];
+  assert.equal(plugin.routes.projectGraph({ descriptor: d, route }).routeActionAdapterId, "curve-exchange-plain");
+  const amountIn = 10n ** 18n, amountOut = f.dy(route.i, route.j, amountIn);
+  const exactEvidence = { kind: "curve-plain-get-dy" as const, quoteAbi: "int128" as const,
+    source: CLONE_SOURCE, binding: route.bindingRef.fingerprint, routeKey: route.routeKey, amountIn, amountOut };
+  const base = { descriptor: d, route, amountIn, source: CLONE_SOURCE, executor: EXECUTOR, runtimeEvidence: [] };
+  const fragment = plugin.execution.buildFragment({ ...base, quotedAmountOut: amountOut,
+    minAmountOut: amountOut - 1n, exactEvidence });
+  assert.equal(fragment.requirements[0]!.kind, "approve");
+  assert.equal(fragment.nodes[0]!.adapterId, "curve-exchange-plain");
+  assert.equal(fragment.nodes[0]!.target, CLONE.pool);
+  const leg = plugin.execution.buildRuntimeLeg!({ ...base, transactionOrigin: EXECUTOR });
+  assert(leg && /^0x01(?:[a-fA-F0-9]{2})+$/.test(leg.program));
+  const draft = plugin.pricing.compileDraft({ descriptor: d, routes: [route], stateKey: plugin.pricing.stateKey(route) });
+  const pd = plugin.pricing.finalizePricingDescriptor({ draft, sharedBindings: [] });
+  const current = { descriptor: pd, routes: [route], source: CLONE_SOURCE };
+  const initial = plugin.pricing.current.buildRequests(current);
+  const initialResults = initial.map(f.answer);
+  const dependent = plugin.pricing.current.buildDependentProgram!({ current, completedRound: 0, initialResults, priorEvidence: [] })!;
+  const snapshot = plugin.pricing.current.decodeSnapshot({ descriptor: pd, initialResults,
+    dependentEvidence: [dependent.decode(dependent.requests.map(f.answer))] });
+  assert.equal(snapshot.amountOut, f.dy(route.i, route.j, snapshot.amountIn));
+});
+check("clone admission rejects non-proxy runtimes, unpinned implementation classes and foreign coin domains", () => {
+  rejectedClone(cloneFixture({ runtime: "0x6000" }), "clone-runtime-unrecognized");
+  rejectedClone(cloneFixture({ runtime: `0x${"00".repeat(51)}` }), "clone-runtime-unrecognized");
+  rejectedClone(cloneFixture({ implementationCode: "0x6000" }), "clone-impl-class-unpinned");
+  rejectedClone(cloneFixture({ coins: [CLONE.coins[0], CLONE.coins[0]] }), "clone-coin-domain-mismatch");
+  rejectedClone(cloneFixture({ coins: [CLONE.coins[0], "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"] }), "clone-coin-domain-mismatch");
+  rejectedClone(cloneFixture({ thirdCoin: EXECUTOR }), "clone-coin-domain-mismatch");
+  rejectedClone(cloneFixture({ lpReturns: true }), "clone-self-lp-mismatch");
+  rejectedClone(cloneFixture({ totalSupply: 0n }), "clone-self-lp-mismatch");
+});
+check("clone behavior proof asserts exact fee-inclusive payer debit, recipient receipt and quote", () => {
+  const f = cloneFixture(), verified = verifiedClone(f), d = descriptor(verified);
+  const route = plugin.routes.project({ descriptor: d })[0]!;
+  const amountIn = 10n ** 18n;
+  assert.equal(f.quote(route.i, route.j, amountIn).amountOut, f.dy(route.i, route.j, amountIn));
+  const retryable = cloneOutcome(cloneFixture({ executionReverts: true }));
+  assert.equal(retryable.status, "retryable");
+  if (retryable.status === "retryable") assert.equal(retryable.reasonCode, "clone-behavior-unproven");
+  // The quote's output token rounds by at most one raw unit; the shared ceiling
+  // accepts that and never widens beyond it.
+  verifiedClone(cloneFixture({ mutateExecution: r => ({ ...r, data: word(uint(r.data) + 1n) }) }));
+  for (const [name, mutate, pattern] of [
+    ["returned amount", (r: Extract<AdapterRequestResult, { ok: true }>) => ({ ...r, data: word(uint(r.data) + 2n) }), /return mismatch/],
+    ["recipient receipt", (r: Extract<AdapterRequestResult, { ok: true }>) => ({ ...r, effects: { tokenDeltas: r.effects!.tokenDeltas!.map((delta, index) => index === 2 ? { ...delta, delta: delta.delta + 2n } : delta) } }), /effect mismatch/],
+    ["payer debit", (r: Extract<AdapterRequestResult, { ok: true }>) => ({ ...r, effects: { tokenDeltas: r.effects!.tokenDeltas!.map((delta, index) => index === 0 ? { ...delta, delta: delta.delta + 1n } : delta) } }), /effect mismatch/],
+    ["pool receipt", (r: Extract<AdapterRequestResult, { ok: true }>) => ({ ...r, effects: { tokenDeltas: r.effects!.tokenDeltas!.map((delta, index) => index === 1 ? { ...delta, delta: delta.delta - 1n } : delta) } }), /effect mismatch/],
+    ["missing delta", (r: Extract<AdapterRequestResult, { ok: true }>) => ({ ...r, effects: { tokenDeltas: r.effects!.tokenDeltas!.slice(0, 3) } }), /effect scope/],
+  ] as const) {
+    assert.throws(() => verifiedClone(cloneFixture({ mutateExecution: mutate })), pattern, name);
+  }
+  // A zero-tolerance lane still rejects the documented one-unit rounding.
+  assert.throws(() => verifiedClone(cloneFixture({ mutateExecution: (r: Extract<AdapterRequestResult, { ok: true }>) =>
+    ({ ...r, data: word(uint(r.data) + 1n) }) }), candidate(CLONE.pool), 0n), /return mismatch/);
+  const hinted = { ...candidate(CLONE.pool), hintedI: 2, hintedJ: 0 };
+  const decision = cloneOutcome(f, hinted);
+  assert.equal(decision.status, "retryable");
+  if (decision.status === "retryable") assert.equal(decision.reasonCode, "observed-direction-not-executable");
+});
 
 const evidenceArg = process.argv.indexOf("--chain-evidence");
 if (evidenceArg >= 0) {

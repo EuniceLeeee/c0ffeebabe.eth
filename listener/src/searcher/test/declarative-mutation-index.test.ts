@@ -47,7 +47,7 @@ const log = (emitter: string, topics: string[]): UnifiedObservation => ({
   kind: "log", source, address: emitter, topics, data: "0x",
 });
 
-test("installed JSON mutation compiler looks up a shared manager's pool before evaluating predicates", () => {
+test("[family=univ4] installed JSON mutation compiler looks up a shared manager's pool before evaluating predicates", () => {
   let reads = 0;
   const entries = Array.from({ length: 2048 }, (_, i) => {
     const poolId = hash(i + 1);

@@ -9,7 +9,7 @@ const source={number:26029368,hash:"0x9e1bb0fa8981ff45975e804044a1aea9334e683b5f
 const pair=new Interface(["function factory() view returns (address)","function token0() view returns (address)","function token1() view returns(address)"]);
 const values:Record<string,string>={factory:"0x5c69bee701ef814a2b6a3edd4b1652cb9cc5aa6f",token0:"0x21da6b81b3c4420efbf0adb3ddd5fc0d1f1d1c3b",token1:"0x582d872a1b094fc48f5de31d3b73f2d9be47def1"};
 
-test("V2 reverse binding reads this pool on the selected block; missing reads and foreign owners are separate outcomes", async()=>{
+test("[family=univ2-standard] V2 reverse binding reads this pool on the selected block; missing reads and foreign owners are separate outcomes", async()=>{
   const reverse=plugin.discovery!.reverseBinding;
   assert.equal(reverse?.kind,"implementation");
   let reads=0;

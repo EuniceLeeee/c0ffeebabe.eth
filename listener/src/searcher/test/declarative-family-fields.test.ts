@@ -145,9 +145,9 @@ test("field fixtures are discovered automatically inside the frozen enabled-Fami
 for (const row of declarations.filter(row => row.document.format === undefined))
   test(`${row.name}: legacy-specific reference is not generic fields acceptance`, { skip: "Retained by its existing reference regression; no generic-format claim." }, () => {});
 
-for (const { name } of generic) {
+for (const { name, document } of generic) {
   const open = () => fixtureHarness(resolve(fixtureDirectory, name));
-  test(`${name}: production lifecycle publishes recorded instances, routes and prices`, async () => {
+  test(`[family=${document.familyId}] ${name}: production lifecycle publishes recorded instances, routes and prices`, async () => {
     const h = open(), f = h.fixture;
     const selected = f.domain === "swap" ? defineSwapFamily(h.family) : defineProtocolFamily(h.family);
     const entries = FAMILY_CAPABILITY_NAMES.map(capability => ({ familyId: selected.manifest.familyId, capability,
@@ -216,7 +216,7 @@ for (const { name } of generic) {
     assert(result.outcomes.some(outcome => outcome.stage === "identity" && outcome.status === "verified"));
     assert(reads.length > 0, "lifecycle must execute recorded transport through the central runtime");
   });
-  test(`${name}: declared discovery, source-bound identity and instance fields`, () => {
+  test(`[family=${document.familyId}] ${name}: declared discovery, source-bound identity and instance fields`, () => {
     const h = open(), f = h.fixture;
     assert(Array.isArray(f.discovery) && f.discovery.length > 0);
     for (const row of f.discovery) {
@@ -231,7 +231,7 @@ for (const { name } of generic) {
       else checks(h.identity(rejection.overrides).decision, rejection.checks, "identity rejection");
     }
   });
-  test(`${name}: all route and graph projections come from declaration data`, () => {
+  test(`[family=${document.familyId}] ${name}: all route and graph projections come from declaration data`, () => {
     const h = open(), covered = new Set<string>();
     for (const row of h.fixture.routes) {
       const route = selectRoute(h.routes, row.select); assert(!covered.has(route.routeKey)); covered.add(route.routeKey);
@@ -240,7 +240,7 @@ for (const { name } of generic) {
     }
     assert.equal(covered.size, h.routes.length, "unasserted projected route");
   });
-  test(`${name}: recorded current-price request rounds and projections`, () => {
+  test(`[family=${document.familyId}] ${name}: recorded current-price request rounds and projections`, () => {
     const h = open(), groups = new Map<string, any[]>();
     for (const route of h.routes) { const key = h.family.pricing.stateKey(route); groups.set(key, [...(groups.get(key) ?? []), route]); }
     assert.equal(h.fixture.pricing.length, groups.size, "all pricing state groups require expectations");
@@ -267,7 +267,7 @@ for (const { name } of generic) {
       assert.deepEqual(normalized(h.family.pricing.dependencies(current)), normalized(row.dependencies));
     }
   });
-  test(`${name}: specified amounts quote and construct quoted/runtime interfaces`, () => {
+  test(`[family=${document.familyId}] ${name}: specified amounts quote and construct quoted/runtime interfaces`, () => {
     const h = open(), covered = new Set<string>(), adapters = [...h.family.actionAdapters, ...PRODUCTION_INFRA_ACTION_ADAPTERS];
     const encode = (node: any): Uint8Array => {
       const adapter = adapters.find(adapter => adapter.id === node.adapterId); assert(adapter, `unowned action ${node.adapterId}`);

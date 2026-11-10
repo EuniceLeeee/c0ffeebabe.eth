@@ -91,3 +91,31 @@ test("optional durable address and evidence encoding preserves old verified evid
   assert.throws(() => make({ addresses: ["target"], evidence: ["actor"] }), /durable candidate key/);
   assert.throws(() => make({ addresses: ["target", "amount"], evidence: ["actor"] }), /durable candidate key/);
 });
+
+
+test("retained address envelopes group with current declared instances without granting candidate identity", () => {
+  const spec = definition(); (spec.candidate as any).instanceKey = ["target", "amount"];
+  const d = compileDeclarativeDiscovery(spec);
+  const retained = {address: target, amount: "7"};
+  assert.equal(d.instanceNominationKey!(retained),d.instanceNominationKey!({target,amount:7n}));
+  assert.notEqual(d.instanceNominationKey!({...retained,address:other}),d.instanceNominationKey!(retained));
+  assert.notEqual(d.instanceNominationKey!({...retained,amount:"8"}),d.instanceNominationKey!(retained));
+  assert.equal(d.instanceNominationKey!({...retained,target:other}),d.instanceNominationKey!({target:other,amount:7n}), "explicit declared address remains authoritative");
+  for (const value of [{address:"bad",amount:"7"},{address:target},{address:target,amount:-1n}])
+    assert.throws(()=>d.instanceNominationKey!(value));
+  assert.throws(()=>d.candidateKey(retained as any),/candidate kind/);
+});
+
+
+test("opaque emitter declarations reject malformed optional values and invalid topic positions", () => {
+  for (const emitter of [null, false, 0, {}, {mode:"singleton-indexed-bytes32",address:target,topicIndex:0,fromBlock:0},
+    {mode:"singleton-indexed-bytes32",address:target,topicIndex:1,fromBlock:-1}]) {
+    const spec:any=definition();
+    spec.events=[{id:"pool",signature:"Pool(bytes32 indexed poolId)",fields:{},nominationOnly:true,emitter}];
+    assert.throws(()=>compileDeclarativeDiscovery(spec));
+  }
+  const spec:any=definition();
+  spec.events=[{id:"pool",signature:"Pool(bytes32 indexed poolId)",fields:{},nominationOnly:true,
+    emitter:{mode:"singleton-indexed-bytes32",address:target,topicIndex:1,fromBlock:0}}];
+  assert.equal(compileDeclarativeDiscovery(spec).logPatterns![0]!.emitter!.address,target);
+});

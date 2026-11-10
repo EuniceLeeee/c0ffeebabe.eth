@@ -14,6 +14,7 @@ export const ABI = new ethers.Interface([
   "function add_liquidity(uint256[2],uint256) returns(uint256)", "function remove_liquidity_one_coin(uint256,int128,uint256) returns(uint256)",
   "function calc_token_amount(uint256[2],bool) view returns(uint256)", "function calc_withdraw_one_coin(uint256,int128) view returns(uint256)",
   "function get_lp_token(address) view returns(address)", "function get_pool_from_lp_token(address) view returns(address)",
+  "function get_base_pool(address) view returns(address)",
   "function get_registry_handlers_from_pool(address) view returns(address[10])", "function get_coins(address) view returns(address[8])",
   "event AddLiquidity(address indexed provider,uint256[2] token_amounts,uint256[2] fees,uint256 invariant,uint256 token_supply)",
   "event RemoveLiquidityOne(address indexed provider,uint256 token_amount,uint256 coin_amount,uint256 token_supply)",

@@ -1599,6 +1599,80 @@ async function main(): Promise<void> {
         return { ...fixture, input };
       };
       {
+        const path = join(updateDir, "candidate-and-family-scope-update");
+        const scoped = (ids: string[], families: string[]) => {
+          const f = make(path, ids, () => families);
+          return { ...f, input: { ...f.input,
+            dedupeFamilyCandidates: (items, selected) => f.input.dedupeFamilyCandidates(items, selected).map(raw => {
+              const candidate = raw as { id: string };
+              return { ...candidate, familyId: owner(candidate.id) };
+            }),
+          } };
+        };
+        const base = scoped(["a", "b", "c", "r", "removed"], ["fixture:a", "fixture:b"]);
+        base.terminalKeys.add("c");
+        base.failKeys.add("r");
+        const parent = await rebuildUniverse({
+          ...base.input, familyDefinitionHash: definition,
+          attestFamilyInstanceOnce: async arg => {
+            const row = await base.input.attestFamilyInstanceOnce(arg);
+            return row.status === "terminal-rejected"
+              ? { ...row, binding: { ...row.binding, familyDefinitionHash: definition("fixture:b") } }
+              : row;
+          },
+        });
+        const ids = ["b", "c", "r", "b2", "d", "removed"];
+        const next = scoped(ids, ["fixture:b", "fixture:new"]);
+        const calls: string[] = [];
+        const update = { ...next.input, familyDefinitionHash: definition, attestationConcurrency: 1,
+          runId: "new-candidate-and-family-scope", previousReadyReview: {
+            inputFingerprint: "8".repeat(64),
+            candidateKeys: new Set(ids.filter(id => id !== "removed").map(id => "cand:" + id)),
+          },
+          attestFamilyInstanceOnce: async (arg: Parameters<typeof next.input.attestFamilyInstanceOnce>[0]) => {
+            calls.push((arg.candidate as { id: string }).id);
+            return next.input.attestFamilyInstanceOnce(arg);
+          },
+        };
+        const ready = await rebuildUniverse(update);
+        assert.deepEqual(calls.sort(), ["b2", "d"], "only added candidates attest");
+        const retained = ready.familyPartitions!["fixture:b"]!;
+        for (const id of ["cand:c", "cand:r"]) {
+          assert.deepEqual(retained.outcomesByCandidateKey[id],
+            parent.familyPartitions!["fixture:b"]!.outcomesByCandidateKey[id]);
+        }
+        assert.equal(retained.candidatesByKey["cand:removed"], undefined);
+        assert.equal(ready.familyPartitions!["fixture:a"], undefined);
+        assert.deepEqual(ready.activeInstanceKeys, ["inst:b", "inst:b2", "inst:d"]);
+        assert.equal(ready.candidateAccounting.retryable, 1);
+        assert.equal((await next.store.load())!.retryableAttemptsByCandidateKey?.["cand:r"]?.attemptCount, 1);
+
+        calls.length = 0;
+        const forced = { ...update, runId: "force-retry-negative", previousReadyReview: {
+          ...update.previousReadyReview, inputFingerprint: "6".repeat(64), retryNegativeOutcomes: true,
+        } };
+        // Keep the same results so the next update can separately exercise a rule change.
+        next.terminalKeys.add("c");
+        next.failKeys.add("r");
+        await assert.rejects(rebuildUniverse({ ...forced, attestFamilyInstanceOnce: async arg => {
+          if (calls.length) throw new Error("interrupted forced update");
+          return update.attestFamilyInstanceOnce(arg);
+        } }), /interrupted forced update/);
+        const forcedReady = await rebuildUniverse({ ...forced, resumeCompletedOutcomes: true });
+        assert.deepEqual(calls.sort(), ["c", "r"], "forced update retries each prior negative once across resume");
+        assert.deepEqual(forcedReady.activeInstanceKeys, ready.activeInstanceKeys, "verified proofs still reuse normally");
+        next.terminalKeys.clear();
+        next.failKeys.clear();
+
+        calls.length = 0;
+        const changed = await rebuildUniverse({ ...update, runId: "changed-family-rule",
+          familyDefinitionHash: id => definition(id === "fixture:b" ? "fixture:b:v2" : id),
+          previousReadyReview: { ...update.previousReadyReview, inputFingerprint: "7".repeat(64) },
+        });
+        assert.deepEqual(calls.sort(), ["c", "r"], "negative outcomes are retried when their Family rule changes");
+        assert.deepEqual(changed.activeInstanceKeys, ["inst:b", "inst:b2", "inst:c", "inst:d", "inst:r"]);
+      }
+      {
         const path = join(updateDir, "mixed-activation-resume");
         const oldIds = ["fixture:a", "fixture:b"];
         const old = make(path, ["a","b","c"], () => oldIds);

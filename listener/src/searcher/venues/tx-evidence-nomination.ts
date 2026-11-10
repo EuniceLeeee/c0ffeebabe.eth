@@ -212,7 +212,7 @@ export function matchCalls(
 
 /** The same call-pattern predicate as matchCalls, preserving trace order while
  * retaining all subjects. Used only by explicit all-observation declarations. */
-function matchAllCalls(
+export function matchAllCalls(
   patterns: readonly CallPattern[], raw: unknown,
 ): Array<{ readonly target: string; readonly sender: string | null; readonly data: string }> {
   const found: Array<{ target: string; sender: string | null; data: string }> = [];
