@@ -50,7 +50,8 @@ function selectCheckpointReuse(args, out, profile) {
 
 export async function main(argv = process.argv.slice(2)) {
   const { values: args } = parseArgs({ args: argv, options: {
-    table: { type: 'string' }, out: { type: 'string' }, root: { type: 'string' },
+    table: { type: 'string' }, project: { type: 'string' }, location: { type: 'string' },
+    out: { type: 'string' }, root: { type: 'string' },
     'profile': { type: 'string', default: '/opt/mev-cloud/manual-live/profile.json' },
     'token-stdin': { type: 'boolean' }, 'auth-status': { type: 'boolean' },
     'page-size': { type: 'string', default: '1000' }, 'max-pages': { type: 'string' },
@@ -96,11 +97,14 @@ export async function main(argv = process.argv.slice(2)) {
     console.log('Completed Ready publication recovered; no additional strict run started'); return;
   }
   const root = resolve(args.root ?? dirname(import.meta.dirname));
-  const history = tableRef(args.table ?? '');
-  let ref = history;
   const selection = parseReadyWindow(args);
+  const history = args.table === undefined ? null : tableRef(args.table);
+  assert(history ? args.project === undefined && args.location === undefined :
+    selection && typeof args.project === 'string' && /^[a-z][a-z0-9-]+$/.test(args.project),
+  'Use --table or --project with a public date/block window');
+  let ref = history ?? { projectId: args.project };
   assert(!args['raw-only'] || selection && !args['candidates-only'], 'Raw export requires a window and cannot run candidate discovery');
-  assert(!args['incremental-table'] || selection, 'An incremental table requires a window');
+  assert(!args['incremental-table'] || selection && history, 'An incremental table requires a window and saved historical table');
   const bucket = args['sql-discovery-bucket'];
   const maxBytes = Number(args['sql-max-bytes']);
   if (selection || bucket !== undefined) assert(Number.isSafeInteger(maxBytes) && maxBytes > 0, 'BigQuery windows require a positive --sql-max-bytes');
@@ -117,8 +121,10 @@ export async function main(argv = process.argv.slice(2)) {
   const reuse = args['raw-only'] || args['candidates-only'] ? { enabled: false, checkpoint: null } : selectCheckpointReuse(args, out, profile);
   const reuseCheckpoint = reuse.checkpoint;
   const api = makeApi(tokenFile);
-  const historicalMeta = await api(tableUrl(history));
-  const window = selection ? await resolveReadyWindow(api, history, historicalMeta.location, maxBytes, selection) : null;
+  const historicalMeta = history ? await api(tableUrl(history)) : null;
+  const location = historicalMeta?.location ?? args.location ?? 'US';
+  assert(/^[A-Za-z0-9-]+$/.test(location), 'Invalid BigQuery location');
+  const window = selection ? await resolveReadyWindow(api, ref, location, maxBytes, selection) : null;
   let sourceQuery = window ? renderEthereumInputs(window) : undefined;
   if (args['incremental-table']) {
     ref = tableRef(args['incremental-table']);
@@ -128,14 +134,14 @@ export async function main(argv = process.argv.slice(2)) {
       assert.deepEqual(previous.table, ref, 'Incremental table changed during resume');
       assert.deepEqual(previous.window, window, 'Incremental window changed during resume');
     } else {
-      const update = await refreshReadyRawTable(api, history, ref, historicalMeta.location, maxBytes, window);
+      const update = await refreshReadyRawTable(api, history, ref, location, maxBytes, window);
       saveJson(refreshPath, { ...update, window });
     }
     sourceQuery = renderRawWindow(ref, window);
   }
   if (args['raw-only']) {
     const sql = 'SELECT * FROM (\n' + sourceQuery + '\n) ORDER BY block_number, transaction_index, tx_hash';
-    const result = await runWindowQuery(api, ref, historicalMeta.location, maxBytes, sql, pageSize, 'ready_raw');
+    const result = await runWindowQuery(api, ref, location, maxBytes, sql, pageSize, 'ready_raw');
     assert.equal(result.page.totalRows, window.transactions, 'Raw input does not cover the canonical transaction count');
     saveJson(out + '/raw-preview.json', { window, jobId: result.jobId, totalRows: result.page.totalRows,
       fields: result.page.schema.fields, rows: result.page.rows, moreResults: Boolean(result.page.pageToken) });
@@ -143,10 +149,13 @@ export async function main(argv = process.argv.slice(2)) {
     unlinkSync(tokenFile);
     return;
   }
-  const url = tableUrl(ref);
-  const meta = ref === history ? historicalMeta : await api(url);
-  const pin = sourcePin(meta);
+  const url = history ? tableUrl(ref) : null;
+  const meta = ref === history ? historicalMeta : url ? await api(url) : null;
+  const pin = meta ? sourcePin(meta) : { projectId: ref.projectId, location, window };
   const inputRows = window?.transactions ?? pin.rows;
+  const checkInputPin = async () => {
+    if (url) assert.deepEqual(sourcePin(await api(url)), pin, 'Input table mutated');
+  };
   const pinPath = out + '/input-pin.json';
   if (existsSync(pinPath)) { assert(args.resume, 'Existing run requires --resume'); assert.deepEqual(JSON.parse(readFileSync(pinPath, 'utf8')), pin, 'Input table changed'); }
   else saveJson(pinPath, pin);
@@ -171,7 +180,7 @@ export async function main(argv = process.argv.slice(2)) {
   const readerHash = digest([readFileSync(new URL('./ready-bigquery.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./bigquery-table.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./ready-family-activation.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./ready-opaque-nominations.mjs', import.meta.url), 'utf8')]);
   const sqlReaderHash = bucket === undefined ? null : digest(readFileSync(new URL('./ready-bigquery-sql.mjs', import.meta.url), 'utf8'));
   const libraries = bucket === undefined ? [] : await compileReadyDiscovery(root, catalog, bucket);
-  const sqlJob = bucket === undefined ? null : readyDiscoveryJob({ ref, pin, location: meta.location, libraries, maxBytes, codeHash, sourceQuery });
+  const sqlJob = bucket === undefined ? null : readyDiscoveryJob({ ref, pin, location, libraries, maxBytes, codeHash, sourceQuery });
   const runIdentity = { input: pin, codeHash, readerHash, executionIdentity: identity, simulator: 'node-rpc', activations, plan: wiring.expectedSourcePlanFingerprints(),
     profilePath: resolve(args.profile), checkpointReuse: reuse.enabled, reuseCheckpoint,
     ...(sqlJob ? { sqlJob, sqlReaderHash } : {}),
@@ -179,6 +188,11 @@ export async function main(argv = process.argv.slice(2)) {
     ...(args['candidates-only'] ? { candidatesOnly: true } : {}) };
   if (existsSync(out + '/run-identity.json')) assert.deepEqual(JSON.parse(readFileSync(out + '/run-identity.json', 'utf8')), runIdentity, 'Run code/config changed');
   else saveJson(out + '/run-identity.json', runIdentity);
+  if (sqlJob) {
+    const path = out + '/candidate-query.sql', sql = sqlJob.query.query + '\n';
+    if (existsSync(path)) assert.equal(readFileSync(path, 'utf8'), sql, 'Saved candidate SQL changed');
+    else writeFileSync(path, sql, { flag: 'wx', mode: 0o600 });
+  }
   const byKey = new Map(), opaque = new Map();
   const mergeCandidate = candidate => {
     const key = rebuildFamilyInstanceDedupeKey(candidate), prior = byKey.get(key);
@@ -204,14 +218,19 @@ export async function main(argv = process.argv.slice(2)) {
   let readSqlPage;
   while (!state.inputComplete && state.pages < maxPages) {
     const disk = statfsSync(out); assert(Number(disk.bavail) * Number(disk.bsize) >= 2 * 1024 ** 3, 'Disk reserve below 2 GiB');
-    const pageUrl = new URL(url + '/data'); pageUrl.searchParams.set('maxResults', String(pageSize));
-    if (state.nextPageToken) pageUrl.searchParams.set('pageToken', state.nextPageToken);
     if (sqlJob && !readSqlPage) {
       status({ phase: 'sql-discovery', jobId: sqlJob.jobId, sqlResultRows: state.sqlResultRows ?? 0, pages: state.pages });
       readSqlPage = await openReadyDiscoveryJob(api, ref, sqlJob, libraries);
     }
-    const page = readSqlPage ? await readSqlPage(pageSize, state.nextPageToken) : await api(pageUrl);
-    if (!readSqlPage) assert.equal(page.totalRows, pin.rows, 'Input row count changed');
+    let page;
+    if (readSqlPage) page = await readSqlPage(pageSize, state.nextPageToken);
+    else {
+      assert(url, 'Saved table required for streamed reads');
+      const pageUrl = new URL(url + '/data'); pageUrl.searchParams.set('maxResults', String(pageSize));
+      if (state.nextPageToken) pageUrl.searchParams.set('pageToken', state.nextPageToken);
+      page = await api(pageUrl);
+      assert.equal(page.totalRows, pin.rows, 'Input row count changed');
+    }
     const rows = page.rows ?? [];
     assert(rows.length || !page.pageToken, 'Empty non-terminal BigQuery page');
     const observations = [], sqlCandidates = [], sqlOpaque = [];
@@ -274,11 +293,11 @@ export async function main(argv = process.argv.slice(2)) {
     const segmentHash = digest(segment); saveJson(segmentDir + '/' + String(next.pages).padStart(8, '0') + '.json', { ...segment, segmentHash });
     state = { ...next, chainHash: segmentHash };
     status({ phase: 'reading', ...state, nextPageToken: undefined, candidates: byKey.size, opaqueInstances: opaque.size, rssMiB: Math.round(process.memoryUsage().rss / 1024 ** 2) });
-    if (state.pages % 100 === 0 || state.inputComplete) assert.deepEqual(sourcePin(await api(url)), pin, 'Input table mutated');
+    if (state.pages % 100 === 0 || state.inputComplete) await checkInputPin();
   }
   if (!state.inputComplete) { status({ phase: 'sample-complete', rows: state.rows, ...(sqlJob ? { sqlResultRows: state.sqlResultRows ?? 0 } : {}), pages: state.pages, candidates: byKey.size, opaqueInstances: opaque.size }); return; }
   assert(state.maxBlock !== null, 'Empty table cannot produce Ready');
-  assert.deepEqual(sourcePin(await api(url)), pin, 'Input table mutated');
+  await checkInputPin();
   if (args['candidates-only']) {
     const familyIds = catalog.listAll().map(family => family.plugin.manifest.familyId).sort();
     saveJson(out + '/nominations.json', { window, familyIds, jobId: sqlJob?.jobId ?? null,

@@ -15,6 +15,21 @@ test('table names are explicit; URI and malformed source inputs fail closed', ()
   assert.deepEqual(tableRef('eth-token-480803.Ready.1008-1015'), { projectId: 'eth-token-480803', datasetId: 'Ready', tableId: '1008-1015' });
   for (const value of ['', 'coffee', 'https://example.com', 'project.dataset.table/other']) assert.throws(() => tableRef(value));
 });
+test('a public source window composes one candidate query without a saved raw table', async () => {
+  const { readyDiscoveryJob } = await import('./ready-bigquery-sql.mjs');
+  const ref = { projectId: 'project1' }, pin = { projectId: ref.projectId, location: 'US' };
+  const libraries = [{ uri: 'gs://bucket/mev-discovery-json-check/' + 'a'.repeat(64) + '/kernel.js' }];
+  const options = { ref, pin, location: 'US', libraries, maxBytes: 1000, codeHash: 'fixture' };
+  const sourceQuery = 'SELECT * FROM `bigquery-public-data.crypto_ethereum.transactions`';
+  const { query } = readyDiscoveryJob({ ...options, sourceQuery });
+  assert.match(query.query, /WITH source_transactions AS/);
+  assert.match(query.query, /FROM source_transactions/);
+  assert(!query.query.includes('__SOURCE_TABLE__') && !query.query.includes('project1..'));
+  assert.throws(() => readyDiscoveryJob(options), /assert/);
+  await assert.rejects(main(['--out', '/fixture', '--project', 'project1']), /public date\/block window/);
+  await assert.rejects(main(['--out', '/fixture', '--project', 'project1', '--from-day', '2026-10-10', '--to-day', '2026-11-09',
+    '--incremental-table', 'project1.Ready.delta']), /saved historical table/);
+});
 test('BigQuery nested/repeated decoding preserves integer precision and empty arrays', () => {
   const fields = [{ name: 'n', type: 'INTEGER' }, { name: 'traces', mode: 'REPEATED', type: 'RECORD', fields: [{ name: 'input', type: 'STRING' }, { name: 'ok', type: 'BOOLEAN' }] }, { name: 'logs', type: 'RECORD', mode: 'REPEATED', fields: [] }];
   assert.deepEqual(decodeRow(fields, { f: [{ v: '9007199254740993' }, { v: [{ v: { f: [{ v: '0x12345678' }, { v: 'true' }] } }] }, { v: [] }] }), { n: '9007199254740993', traces: [{ input: '0x12345678', ok: true }], logs: [] });

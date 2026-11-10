@@ -8,8 +8,9 @@ import { decodeRow, digest } from './bigquery-table.mjs';
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 export function renderReadyDiscoverySql(ref, libraries, sourceQuery) {
-  const table = [ref.projectId, ref.datasetId, ref.tableId].join('.');
-  assert(/^[a-z][a-z0-9-]+\.[A-Za-z_]\w*\.[A-Za-z0-9_-]+$/.test(table));
+  assert(/^[a-z][a-z0-9-]+$/.test(ref.projectId));
+  const table = sourceQuery === undefined ? [ref.projectId, ref.datasetId, ref.tableId].join('.') : null;
+  if (table !== null) assert(/^[a-z][a-z0-9-]+\.[A-Za-z_]\w*\.[A-Za-z0-9_-]+$/.test(table));
   assert(libraries.length && libraries.every(uri => /^gs:\/\/[a-z0-9_.-]+\/mev-discovery-json-check\/[a-f0-9]{64}\/[a-z0-9-]+\.js$/.test(uri)));
   const template = readFileSync(new URL('./ready-discovery-udf.sql', import.meta.url), 'utf8');
   const [discovery, result] = template.split('-- DISCOVERY_RESULT');
