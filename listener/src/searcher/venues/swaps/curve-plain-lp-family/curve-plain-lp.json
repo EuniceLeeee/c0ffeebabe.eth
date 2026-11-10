@@ -6,7 +6,7 @@
  "production": {
   "domain": "swap",
   "activation": {
-   "enabled": false,
+   "enabled": true,
    "envKey": "SEARCHER_FAMILY_CURVE_PLAIN_LP_ENABLED"
   }
  },

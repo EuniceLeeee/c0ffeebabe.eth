@@ -6,6 +6,6 @@ import { defineSwapFamily } from "../adapter-family-plugin.js";
 import { compileDeclarativeSwap } from "../declarative-swap.js";
 import definition from "../swaps/balancer-v2-family/balancer-v2.json";
 
-export const activation = defineFamilyActivation({"enabled":false,"envKey":"SEARCHER_FAMILY_BALANCER_V2_ENABLED"});
+export const activation = defineFamilyActivation({"enabled":true,"envKey":"SEARCHER_FAMILY_BALANCER_V2_ENABLED"});
 
 export const plugin = defineSwapFamily(compileDeclarativeSwap(definition, []));
