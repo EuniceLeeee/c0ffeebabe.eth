@@ -7,10 +7,10 @@ import sample from "./fixtures/adapter-families/angstrom-signed-tx85-call.json" 
 import { checkAngstromTwoWaySpot, checkAngstromPoolIsolation } from "./angstrom-price-fixture.js";
 import { checkDirectedProtocolPrices } from "./directed-protocol-price-fixture.js";
 
-test("the production spot reads price both directions on the observed pool", checkAngstromTwoWaySpot);
-test("two pools on the same manager refresh independently", checkAngstromPoolIsolation);
+test("[family=custom-swap:angstrom-v4] the production spot reads price both directions on the observed pool", checkAngstromTwoWaySpot);
+test("[family=custom-swap:angstrom-v4] two pools on the same manager refresh independently", checkAngstromPoolIsolation);
 
-test("pending intake declines stale, mixed-signature and unproved contract-validator bundles", async () => {
+test("[family=custom-swap:angstrom-v4] pending intake declines stale, mixed-signature and unproved contract-validator bundles", async () => {
   const abi = new Interface([definition.modules.signedBlockEvidence.call.signature]);
   const args = abi.decodeFunctionData("swap", sample.data).toArray(true);
   const n = BigInt(sample.source.number);
@@ -30,4 +30,4 @@ test("pending intake declines stale, mixed-signature and unproved contract-valid
   assert.deepEqual(await pending([[future, contractNode + "cd".repeat(103)]]), []);
 });
 
-test("Astra and Eigenpie keep the directed quotes of the published contracts", checkDirectedProtocolPrices);
+test("[family=protocol:astra-multitoken,protocol:eigenpie] Astra and Eigenpie keep the directed quotes of the published contracts", checkDirectedProtocolPrices);

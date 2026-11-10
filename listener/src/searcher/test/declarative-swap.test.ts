@@ -90,7 +90,7 @@ function harness(fixture: any, definition = load(new URL(fixture.definition, lis
 
 for (const fixture of fixtures) {
   const h = () => harness(fixture);
-  test(`${fixture.familyId}: fixture bytes bind provenance and three source-bound identity rounds`, () => {
+  test(`[family=${fixture.familyId}] ${fixture.familyId}: fixture bytes bind provenance and three source-bound identity rounds`, () => {
     for (const provenance of fixture.provenance) {
       const bytes = readFileSync(new URL(provenance.path, listenerRoot));
       assert.equal(createHash("sha256").update(bytes).digest("hex"), provenance.sha256);
@@ -118,7 +118,7 @@ for (const fixture of fixtures) {
     assert.throws(() => variant.buildRequests(next), /binding|continuation|candidate/);
   });
 
-  test(`${fixture.familyId}: discovery ABI roundtrip is nomination, malformed calls/logs cannot nominate`, () => {
+  test(`[family=${fixture.familyId}] ${fixture.familyId}: discovery ABI roundtrip is nomination, malformed calls/logs cannot nominate`, () => {
     const x = h(), descriptor = x.descriptor();
     for (const call of x.definition.discovery.definition.calls) {
       const abi = new Interface([call.signature]);
@@ -140,7 +140,7 @@ for (const fixture of fixtures) {
       assert.equal(x.family.discovery.decodeCandidate({ observation: { ...observation, ...changed }, matchedPatternId: event.id }), null);
   });
 
-  test(`${fixture.familyId}: all directed pairs retain one graph and binding identity`, () => {
+  test(`[family=${fixture.familyId}] ${fixture.familyId}: all directed pairs retain one graph and binding identity`, () => {
     const x = h(), base = x.descriptor();
     for (const count of [2, 3, 8]) {
       const descriptor = { ...base, tokens: Array.from({ length: count }, (_, i) => toBeHex(i + 101, 20)),
@@ -160,7 +160,7 @@ for (const fixture of fixtures) {
     }
   });
 
-  test(`${fixture.familyId}: pricing uses one recorded balance round and touch-only refresh`, () => {
+  test(`[family=${fixture.familyId}] ${fixture.familyId}: pricing uses one recorded balance round and touch-only refresh`, () => {
     const x = h(), p = x.prices();
     assert.deepEqual(p.staticRequests, []);
     assert.deepEqual(p.requests.map((request: any) => request.id), fixture.expected.pricing.requestIds);
@@ -189,7 +189,7 @@ for (const fixture of fixtures) {
     assert.equal(x.family.pricing.current.deriveMids({ ...p, snapshot: empty }).size, 0);
   });
 
-  test(`${fixture.familyId}: exact keeps original specified input, nonlinear pinned quotes and source provenance`, () => {
+  test(`[family=${fixture.familyId}] ${fixture.familyId}: exact keeps original specified input, nonlinear pinned quotes and source provenance`, () => {
     const x = h();
     for (const expected of fixture.expected.quotes) {
       if (expected.expected === "reject-zero-output") {
@@ -217,7 +217,7 @@ for (const fixture of fixtures) {
     assert.throws(() => x.quote(max, direction), /MAX_IN_RATIO/);
   });
 
-  test(`${fixture.familyId}: quoted and runtime bytecode preserve ABI input, debit, receipt, approvals and old inventory`, () => {
+  test(`[family=${fixture.familyId}] ${fixture.familyId}: quoted and runtime bytecode preserve ABI input, debit, receipt, approvals and old inventory`, () => {
     const x = h();
     for (const direction of new Set<string>(fixture.expected.quotes.map((row: any) => row.direction))) {
       const expected = fixture.expected.quotes.find((row: any) => row.direction === direction && row.expected === "quoted");
@@ -281,7 +281,7 @@ for (const fixture of fixtures) {
     }
   });
 
-  test(`${fixture.familyId}: quoted minimum remains positive and bounded by the proved quote`, () => {
+  test(`[family=${fixture.familyId}] ${fixture.familyId}: quoted minimum remains positive and bounded by the proved quote`, () => {
     const x = h();
     for (const expected of fixture.expected.quotes.filter((row: any) => row.expected === "quoted")) {
       const q = x.quote(BigInt(expected.amountIn), expected.direction);
@@ -291,7 +291,7 @@ for (const fixture of fixtures) {
     }
   });
 
-  test(`${fixture.familyId}: production amount-selector construction uses runtime only with zero Exact or quoted calls`, async () => {
+  test(`[family=${fixture.familyId}] ${fixture.familyId}: production amount-selector construction uses runtime only with zero Exact or quoted calls`, async () => {
     const x = h(), descriptor = x.descriptor();
     for (const route of x.family.routes.project({ descriptor })) {
       const input = { descriptor, route, executor: fixture.executor, source: fixture.source, runtimeEvidence: [] };
@@ -331,7 +331,7 @@ for (const fixture of fixtures) {
     }
   });
 
-  test(`${fixture.familyId}: strict receipt consumes genuine trigger once and rejects malformed/ambiguous ownership`, async () => {
+  test(`[family=${fixture.familyId}] ${fixture.familyId}: strict receipt consumes genuine trigger once and rejects malformed/ambiguous ownership`, async () => {
     const x = h(), descriptor = x.descriptor(), routes = x.family.routes.project({ descriptor });
     const event = x.definition.swap.events[0], abi = new Interface([event.signature]);
     const eventName = abi.fragments.find((fragment: any) => fragment.type === "event")!.format("sighash");
@@ -366,7 +366,7 @@ for (const fixture of fixtures) {
     assert.equal((await boundary.decodeReceiptImpacts({ ...context, graph: [graph[0]], edgesByTarget: new Map() })).status, "unresolved");
   });
 
-  test(`${fixture.familyId}: absent optional modules stay visible as empty and do not add state reads`, () => {
+  test(`[family=${fixture.familyId}] ${fixture.familyId}: absent optional modules stay visible as empty and do not add state reads`, () => {
     const x = h(), p = x.prices();
     const old: any = clone(x.definition);
     for (const [key, value] of Object.entries(old.modules)) if (Object.keys(value as object).length === 0) delete old.modules[key];
@@ -399,7 +399,10 @@ test("Swap/Protocol domain is explicit and cannot accidentally consume the other
 });
 
 test("shared raw-price projection rejects duplicate, missing, unavailable and non-integer route rows", () => {
-  const x = harness(fixtures[0]), descriptor = x.descriptor(), routes = x.family.routes.project({ descriptor });
+  const routes: any[] = [[1, 2], [2, 1]].map(([from, to]) => ({
+    routeKey: `fixture:${from}:${to}`, adapterId: "fixture", instanceKey: "fixture:pool",
+    target: toBeHex(3, 20), tokenIn: toBeHex(from!, 20), tokenOut: toBeHex(to!, 20), taxonomy: {},
+  }));
   const rows = routes.map((route: any) => ({ routeKey: route.routeKey, numerator: 1n, denominator: 2n, depth: 3n }));
   const project = (value: any, unavailable = new Map()) => projectDeclarativePrices({ domain: "swap", routes, unavailable, rows: value });
   assert.equal(project(rows).size, 2);

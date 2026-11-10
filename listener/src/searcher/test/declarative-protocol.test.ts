@@ -45,7 +45,7 @@ function fixture(runtime: Runtime, variant: "standard" | "custodian" | "infinifi
   return { descriptor, route, routes, family };
 }
 
-test("ordinary vault mutation triggers stay narrower than dependency proofs in both lookup APIs", () => {
+test("[family=protocol:erc4626] ordinary vault mutation triggers stay narrower than dependency proofs in both lookup APIs", () => {
   const runtime = makeRuntime(), { descriptor, routes, family } = fixture(runtime);
   const input = { descriptor, routes };
   const dependencies: string[] = family.pricing.dependencies(input);
@@ -59,7 +59,7 @@ test("ordinary vault mutation triggers stay narrower than dependency proofs in b
   assert.equal(family.pricing.refreshPolicyForInstance(input), "on-touch");
 });
 
-test("variant mutation triggers preserve required external addresses without promoting every proof dependency", () => {
+test("[family=protocol:erc4626] variant mutation triggers preserve required external addresses without promoting every proof dependency", () => {
   const runtime = makeRuntime(), { descriptor, routes, family } = fixture(runtime, "infinifi");
   const input = { descriptor, routes }, binding = descriptor.infinifi;
   const compiled = family.pricing.mutation.compile({ entries: [{ ...input, dependencies: family.pricing.dependencies(input) }] });
@@ -74,7 +74,7 @@ test("variant mutation triggers preserve required external addresses without pro
   assert.equal(family.pricing.refreshPolicyForInstance(input), "each-block");
 });
 
-test("Custodian rejects proxy admin as runtime owner, quoted owner and direct recipient", () => {
+test("[family=protocol:erc4626] Custodian rejects proxy admin as runtime owner, quoted owner and direct recipient", () => {
   const runtime = makeRuntime(), { descriptor, route, family } = fixture(runtime, "custodian");
   const admin = descriptor.custodian.proxyAdmin;
   const input = { descriptor, route, executor, source, runtimeEvidence: [] };
@@ -89,7 +89,7 @@ test("Custodian rejects proxy admin as runtime owner, quoted owner and direct re
     amountIn: 1n, quotedAmountOut: 1n, minAmountOut: 1n, exactEvidence }), /runtime invalid executor/);
 });
 
-test("Exact preserves variant actor preflight before requesting positive input quotes", () => {
+test("[family=protocol:erc4626] Exact preserves variant actor preflight before requesting positive input quotes", () => {
   const runtime = makeRuntime();
   for (const variant of ["custodian", "infinifi"] as const) {
     const { descriptor, route, family } = fixture(runtime, variant);
@@ -103,7 +103,7 @@ test("Exact preserves variant actor preflight before requesting positive input q
   }
 });
 
-test("runtime settlement capability follows JSON and unsupported callback requests remain rejected", () => {
+test("[family=protocol:erc4626] runtime settlement capability follows JSON and unsupported callback requests remain rejected", () => {
   for (const enabled of [false, true]) {
     const definition: any = clone(root);
     definition.standard.execution.settlement.directOutput = enabled;
