@@ -6,7 +6,7 @@
   "production": {
     "domain": "swap",
     "activation": {
-      "enabled": false,
+      "enabled": true,
       "envKey": "SEARCHER_FAMILY_PRECISION_POOL_ENABLED"
     }
   },

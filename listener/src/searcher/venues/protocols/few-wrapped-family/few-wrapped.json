@@ -6,7 +6,7 @@
   "production": {
     "domain": "protocol",
     "activation": {
-      "enabled": false,
+      "enabled": true,
       "envKey": "SEARCHER_FAMILY_FEW_WRAPPED_ENABLED"
     }
   },
