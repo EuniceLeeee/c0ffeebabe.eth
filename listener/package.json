@@ -485,6 +485,7 @@
     "searcher:curve-lp-historical-dual": "SEARCHER_FAMILY_CURVE_LP_ENABLED=1 node --import tsx src/searcher/venues/protocols/curve-lp-family/test/historical-dual.ts",
     "searcher:identity-flow": "node --import tsx --test src/searcher/test/identity-flow.ts",
     "test:family-json": "node scripts/test-protocol-json.mjs",
+    "regression:family-json": "node --import tsx src/searcher/test/family-json-regression.ts",
     "enable:family-json": "node --import tsx scripts/enable-tested-family-json.ts",
     "accept:family-json": "node --import tsx src/searcher/test/protocol-json-acceptance.ts",
     "check:swap-json-samples": "node --import tsx src/searcher/test/swap-json-samples.ts",
