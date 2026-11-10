@@ -1036,9 +1036,46 @@ export async function rebuildUniverse(
       }
       await runPhase(recheck, "review", remaining);
       if (strictPrevious.length) await runPhase(strictPrevious, "strict");
+      // Scope edits can reuse negative outcomes for unchanged nominations. A
+      // different cutoff, rule or proof context still gets a fresh attempt.
+      const unchangedPartitions = new Map<string, ReadyFamilyPartition>();
+      if (!survivors && !review.revalidateParentProofs && input.candidateFamilyId &&
+          input.familyDefinitionHash && input.familyDiscoveryDefinitionHash &&
+          canonicalJson(parent.cutoff) === canonicalJson(cutoff)) {
+        for (const [id, partition] of Object.entries(parent.familyPartitions!)) {
+          if (partition.enabled && input.isFamilyEnabled?.(id) !== false &&
+              partition.familyDefinitionHash === input.familyDefinitionHash(id) &&
+              partition.discoveryDefinitionHash === input.familyDiscoveryDefinitionHash(id)) {
+            unchangedPartitions.set(id, partition);
+          }
+        }
+      }
+      let retainedNegative = 0;
+      const pending = unchangedPartitions.size === 0 ? remaining : remaining.filter(candidate => {
+        const key = input.familyCandidateKey(candidate);
+        if (run.outcomesByCandidateKey[key] !== undefined) return true;
+        const partition = unchangedPartitions.get(input.candidateFamilyId!(candidate));
+        if (!partition) return true;
+        const row = partition.outcomesByCandidateKey[key];
+        if (!row || row.status === "verified" ||
+            canonicalJson(partition.candidatesByKey[key]) !== canonicalJson(run.candidatesByKey[key])) return true;
+        if (row.status === "terminal-rejected") {
+          if (row.cutoff.number !== cutoff.number || row.cutoff.hash !== cutoff.hash) return true;
+          if (row.reasonCode === "duplicate-instance") {
+            const winner = row.requestFingerprint.slice("duplicate-instance:".length);
+            const memo = attestationCheckpoint.verifiedMemos[winner];
+            if (!row.requestFingerprint.startsWith("duplicate-instance:") || !memo ||
+                seenInstanceKeys.get(memo.familyInstanceKey) !== winner) return true;
+          } else if (row.familyDefinitionHash !== partition.familyDefinitionHash) return true;
+        }
+        writer.record(row);
+        recordAttestationProgress(row.status);
+        retainedNegative++;
+        return false;
+      });
       log("Ready review: prior/current proofs checked=" + (recheck.length + strictPrevious.length) +
-        " completed=" + completedPending + " remaining=" + remaining.length);
-      await runPhase(remaining, "strict");
+        " completed=" + completedPending + " retainedNegative=" + retainedNegative + " remaining=" + pending.length);
+      await runPhase(pending, "strict");
       log("Ready review results " + JSON.stringify({ ...reviewedCounts, terminalRejected: attestationCounts["terminal-rejected"],
         retryable: attestationCounts.retryable }));
     } else {
