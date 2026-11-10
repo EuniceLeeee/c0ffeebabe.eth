@@ -110,7 +110,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (selection || bucket !== undefined) assert(Number.isSafeInteger(maxBytes) && maxBytes > 0, 'BigQuery windows require a positive --sql-max-bytes');
   else assert(args['sql-max-bytes'] === undefined, '--sql-max-bytes requires SQL mode');
   if (bucket !== undefined) assert(/^[a-z0-9_.-]+$/.test(bucket), 'Invalid BigQuery discovery bucket');
-  if (selection && !args['raw-only']) assert(bucket && args['live-config'], 'Candidate windows require --sql-discovery-bucket and --live-config');
+  if (selection && !args['raw-only']) assert(bucket, 'Candidate windows require --sql-discovery-bucket');
   const pageSize = Number(args['page-size']), concurrency = Number(args.concurrency);
   assert(Number.isInteger(pageSize) && pageSize > 0 && pageSize <= 10000, 'Invalid page size');
   assert(Number.isInteger(concurrency) && concurrency > 0 && concurrency <= 24, 'Invalid concurrency');
@@ -165,10 +165,17 @@ export async function main(argv = process.argv.slice(2)) {
   Object.assign(process.env, { SEARCHER_DRY_RUN: '1', SEARCHER_BLOCKSCAN_SUBMIT: '0', SEARCHER_TEST_DISABLE_DOTENV: '1',
     MAINNET_RPC_URL: endpoint, SEARCHER_LIVE_RPC_URL: endpoint,
     BOTVM_ADDRESS: profile.executor, BOTVM_OWNER: profile.wallet, SEARCHER_REBUILD_REVM_TIMEOUT_MS: '60000' });
-  const activations = args['live-config'] === undefined ? enableReadyFamilies(root) :
-    applyReadyLiveFamilyFlags(root, JSON.parse(readFileSync(args['live-config'], 'utf8')));
+  // Candidate jobs use the same resolved activations as live: entry defaults
+  // with any process environment overrides. A saved config is an explicit
+  // replay input. Keep the legacy whole-table Ready rebuild behavior.
+  const configuredActivations = args['live-config'] !== undefined
+    ? applyReadyLiveFamilyFlags(root, JSON.parse(readFileSync(args['live-config'], 'utf8')))
+    : selection || args['candidates-only'] ? null : enableReadyFamilies(root);
   const { createRebuildWiring, rebuildFamilyInstanceDedupeKey } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-production.ts'));
-  const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog } = await import(pathToFileURL(root + '/listener/src/searcher/venues/production-family-composition.ts'));
+  const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog,
+    PRODUCTION_STRICT_SHADOW_FAMILY_LOAD: load } = await import(pathToFileURL(root + '/listener/src/searcher/venues/production-family-composition.ts'));
+  const familyIds = catalog.listAll().map(family => family.plugin.manifest.familyId).sort();
+  const activations = configuredActivations ?? load.plugins.map(module => module.activation.envKey).filter(Boolean).sort();
   const identity = { executor: profile.executor, transactionOrigin: profile.wallet };
   const wiring = createRebuildWiring({ rpcUrl: endpoint, executionIdentity: identity });
   wiring.readyThrottle?.limitConcurrency(concurrency);
@@ -185,7 +192,8 @@ export async function main(argv = process.argv.slice(2)) {
     profilePath: resolve(args.profile), checkpointReuse: reuse.enabled, reuseCheckpoint,
     ...(sqlJob ? { sqlJob, sqlReaderHash } : {}),
     ...(window ? { window, windowReaderHash: digest(readFileSync(new URL('./ready-bigquery-window.mjs', import.meta.url), 'utf8')) } : {}),
-    ...(args['candidates-only'] ? { candidatesOnly: true } : {}) };
+    ...(args['candidates-only'] ? { candidatesOnly: true } : {}),
+    ...(configuredActivations === null ? { activationSource: 'production-entry', familyIds } : {}) };
   if (existsSync(out + '/run-identity.json')) assert.deepEqual(JSON.parse(readFileSync(out + '/run-identity.json', 'utf8')), runIdentity, 'Run code/config changed');
   else saveJson(out + '/run-identity.json', runIdentity);
   if (sqlJob) {
@@ -220,7 +228,7 @@ export async function main(argv = process.argv.slice(2)) {
     const disk = statfsSync(out); assert(Number(disk.bavail) * Number(disk.bsize) >= 2 * 1024 ** 3, 'Disk reserve below 2 GiB');
     if (sqlJob && !readSqlPage) {
       status({ phase: 'sql-discovery', jobId: sqlJob.jobId, sqlResultRows: state.sqlResultRows ?? 0, pages: state.pages });
-      readSqlPage = await openReadyDiscoveryJob(api, ref, sqlJob, libraries);
+      readSqlPage = await openReadyDiscoveryJob(api, ref, sqlJob, libraries, { waitForCompletion: true });
     }
     let page;
     if (readSqlPage) page = await readSqlPage(pageSize, state.nextPageToken);
@@ -299,7 +307,6 @@ export async function main(argv = process.argv.slice(2)) {
   assert(state.maxBlock !== null, 'Empty table cannot produce Ready');
   await checkInputPin();
   if (args['candidates-only']) {
-    const familyIds = catalog.listAll().map(family => family.plugin.manifest.familyId).sort();
     saveJson(out + '/nominations.json', { window, familyIds, jobId: sqlJob?.jobId ?? null,
       candidates: [...byKey.values()].map(candidate => wiring.encodeCandidateSnapshot(candidate)),
       opaque: [...opaque.entries()] });

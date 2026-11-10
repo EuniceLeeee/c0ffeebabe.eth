@@ -114,6 +114,45 @@ export class UniverseRebuildCheckpointStore {
   return { root, out, meta, fetcher, requests, argv };
 }
 
+test('the public date CLI starts without a saved table or a previous live config', async () => {
+  const f = fixture(), oldFetch = globalThis.fetch;
+  globalThis.fetch = async raw => {
+    const url = new URL(raw);
+    f.requests.push(url.pathname);
+    return new Response('fixture reached public job API', { status: 400 });
+  };
+  try {
+    await assert.rejects(main([...f.argv.slice(2), '--project', 'project1', '--from-day', '2026-10-10',
+      '--to-day', '2026-11-09', '--sql-discovery-bucket', 'bucket', '--sql-max-bytes', '1000', '--candidates-only']),
+    /BigQuery request failed: HTTP 400/);
+    assert.equal(f.requests.length, 1);
+    assert.match(f.requests[0], /\/projects\/project1\/jobs\/mev_ready_window_/);
+  } finally {
+    globalThis.fetch = oldFetch;
+    rmSync(f.root, { recursive: true });
+  }
+});
+
+test('a long discovery wait keeps polling one job instead of submitting again', async () => {
+  const { openReadyDiscoveryJob } = await import('./ready-bigquery-sql.mjs');
+  const ref = { projectId: 'project1' };
+  const spec = { jobId: 'fixture', location: 'US', query: { query: 'SELECT 1', maximumBytesBilled: '1000' } };
+  let pages = 0, metadata = 0;
+  const read = await openReadyDiscoveryJob(async (raw, options) => {
+    assert.equal(options?.method, undefined, 'existing job must never be submitted again');
+    const url = new URL(raw);
+    if (url.pathname.includes('/jobs/')) {
+      metadata++;
+      return { jobReference: { jobId: spec.jobId }, configuration: { query: spec.query } };
+    }
+    assert.match(url.pathname, /\/queries\/fixture$/);
+    return { jobComplete: ++pages === 8 };
+  }, ref, spec, [], { waitForCompletion: true });
+  assert.deepEqual(await read(10), { jobComplete: true });
+  assert.equal(metadata, 1);
+  assert.equal(pages, 8);
+});
+
 test('Ready uses node RPC even when a legacy simulator is inherited', async () => {
   const f = fixture(), oldFetch = globalThis.fetch, oldBin = process.env.SEARCHER_REVM_SIM_BIN;
   globalThis.fetch = f.fetcher;

@@ -76,7 +76,7 @@ export function readyDiscoveryJob({ ref, pin, location, libraries, maxBytes, cod
   return { jobId, location, query };
 }
 
-export async function openReadyDiscoveryJob(api, ref, spec, libraries) {
+export async function openReadyDiscoveryJob(api, ref, spec, libraries, { waitForCompletion = false } = {}) {
   const base = 'https://bigquery.googleapis.com/bigquery/v2/projects/' + ref.projectId;
   const suffix = '?location=' + spec.location;
   const url = base + '/jobs/' + spec.jobId + suffix;
@@ -108,7 +108,8 @@ export async function openReadyDiscoveryJob(api, ref, spec, libraries) {
     pageUrl.searchParams.set('maxResults', String(pageSize));
     pageUrl.searchParams.set('timeoutMs', '10000');
     if (pageToken) pageUrl.searchParams.set('pageToken', pageToken);
-    for (let attempt = 0; attempt < 6; attempt++) {
+    const deadline = Date.now() + 21 * 60_000; // BigQuery jobTimeoutMs is 20 minutes.
+    for (let attempt = 0; waitForCompletion ? Date.now() < deadline : attempt < 6; attempt++) {
       const page = await api(pageUrl);
       if (page.jobComplete) return page;
     }
