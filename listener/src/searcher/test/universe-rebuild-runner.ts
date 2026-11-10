@@ -1648,6 +1648,23 @@ async function main(): Promise<void> {
         assert.equal((await next.store.load())!.retryableAttemptsByCandidateKey?.["cand:r"]?.attemptCount, 1);
 
         calls.length = 0;
+        const forced = { ...update, runId: "force-retry-negative", previousReadyReview: {
+          ...update.previousReadyReview, inputFingerprint: "6".repeat(64), retryNegativeOutcomes: true,
+        } };
+        // Keep the same results so the next update can separately exercise a rule change.
+        next.terminalKeys.add("c");
+        next.failKeys.add("r");
+        await assert.rejects(rebuildUniverse({ ...forced, attestFamilyInstanceOnce: async arg => {
+          if (calls.length) throw new Error("interrupted forced update");
+          return update.attestFamilyInstanceOnce(arg);
+        } }), /interrupted forced update/);
+        const forcedReady = await rebuildUniverse({ ...forced, resumeCompletedOutcomes: true });
+        assert.deepEqual(calls.sort(), ["c", "r"], "forced update retries each prior negative once across resume");
+        assert.deepEqual(forcedReady.activeInstanceKeys, ready.activeInstanceKeys, "verified proofs still reuse normally");
+        next.terminalKeys.clear();
+        next.failKeys.clear();
+
+        calls.length = 0;
         const changed = await rebuildUniverse({ ...update, runId: "changed-family-rule",
           familyDefinitionHash: id => definition(id === "fixture:b" ? "fixture:b:v2" : id),
           previousReadyReview: { ...update.previousReadyReview, inputFingerprint: "7".repeat(64) },

@@ -14,7 +14,7 @@ import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 /** One authoritative checkpoint. Scratch supplements are never live inputs.
  * Configuration/credentials use the normal process environment; no signing.
  * build: --checkpoint PATH --archive DIR --from-block N --to-block N
- * update: --checkpoint PATH --archive DIR [--candidates FILE]
+ * update: --checkpoint PATH --archive DIR [--candidates FILE] [--force-update]
  * FILE is an exact array of durable Family candidate snapshots, including new
  * nominations as needed. Without it, use the previous pool plus current discovery.
  */
@@ -22,10 +22,16 @@ export async function runReadyFamilyMaintenance(argv: readonly string[]): Promis
   const mode = argv[0];
   if (mode !== "build" && mode !== "update") throw new Error("expected build or update");
   const options = new Map<string, string>();
-  for (let i = 1; i < argv.length; i += 2) {
-    const key = argv[i]!, value = argv[i + 1];
+  for (let i = 1; i < argv.length; i++) {
+    const key = argv[i]!;
+    if (key === "--force-update") {
+      if (options.has(key)) throw new Error("invalid Ready maintenance option");
+      options.set(key, "true");
+      continue;
+    }
+    const value = argv[++i];
     if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--candidates", "--expect-update", "--revalidate-proofs"].includes(key) ||
-      value === undefined || options.has(key)) throw new Error("invalid Ready maintenance option");
+      value === undefined || value === "--force-update" || options.has(key)) throw new Error("invalid Ready maintenance option");
     options.set(key, value);
   }
   if (options.has("--expect-update") && (mode !== "update" || options.get("--expect-update") !== "family-set")) {
@@ -34,6 +40,9 @@ export async function runReadyFamilyMaintenance(argv: readonly string[]): Promis
   const proofRuntimeHash = options.get("--revalidate-proofs");
   if (proofRuntimeHash !== undefined && (mode !== "update" || !/^0x[0-9a-f]{64}$/.test(proofRuntimeHash) || options.has("--expect-update"))) {
     throw new Error("--revalidate-proofs requires update and a lower-case executor runtime hash");
+  }
+  if (options.has("--force-update") && (mode !== "update" || options.has("--expect-update") || proofRuntimeHash !== undefined)) {
+    throw new Error("--force-update requires update mode and cannot be combined with --expect-update or --revalidate-proofs");
   }
   if (mode === "build" && options.has("--candidates")) throw new Error("--candidates applies to Ready updates");
   if (!options.has("--checkpoint") || !options.has("--archive")) throw new Error("checkpoint and archive paths required");
@@ -63,6 +72,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   const concurrency = Number(options.get("--concurrency") ?? 24);
   if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 1024) throw new Error("invalid attestation concurrency");
   const proofRuntimeHash = options.get("--revalidate-proofs");
+  const forceUpdate = options.has("--force-update");
   if (proofRuntimeHash && loadBotVmRuntimeCode(transactionOrigin).keccak256 !== proofRuntimeHash) {
     throw new Error("Ready proof runtime differs from the installed executor artifact");
   }
@@ -135,13 +145,13 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   const needed = enabledIds.filter(id => readyFamilyNeedsSupplement({ partition: partitions[id],
     discoveryDefinitionHash: wiring.familyDiscoveryDefinitionHash!(id), familyDefinitionHash: familyDefinitionHash(id),
     isVerifiedMemoCurrent: key => !!base.verifiedMemos[key] && wiring.isReadyMemoDefinitionCurrent!(base.verifiedMemos[key]!) }));
-  const activationOnly = !proofRuntimeHash && isFamilySetOnlyReadyUpdate(partitions, enabledIds, needed, candidateFile ? selected : undefined);
+  const activationOnly = !forceUpdate && !proofRuntimeHash && isFamilySetOnlyReadyUpdate(partitions, enabledIds, needed, candidateFile ? selected : undefined);
   if (options.has("--expect-update") && !activationOnly) {
     throw new Error("requested Family-set update also changes rules or retained candidates; full review not started");
   }
   // Finish an already sealed review under its original input fingerprint.
   // A fresh activation edit only scans and attests the supplementary Families.
-  log(JSON.stringify({ phase: "update-plan", activationOnly, retainedFamilies: enabledIds.filter(id => partitions[id]?.enabled).length,
+  log(JSON.stringify({ phase: "update-plan", activationOnly, forceUpdate, retainedFamilies: enabledIds.filter(id => partitions[id]?.enabled).length,
     newlyEnabled: enabledIds.filter(id => !partitions[id]?.enabled), throttle: wiring.readyThrottle?.snapshot() }));
   if (base.inProgressRun || !activationOnly) {
     const reviewedWiring = createRebuildWiring({ ...common, activityArchive: archive,
@@ -150,7 +160,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     const inputFingerprint = createHash("sha256").update(canonicalJson({ version: 1,
       parent: [base.readyGeneration!.generation, base.readyGeneration!.universeHash, base.readyGeneration!.catalogHash],
       range, source, definitions: enabledIds.map(id => [id, familyDefinitionHash(id)]),
-      ...(proofRuntimeHash && { proofRuntimeHash }), executionIdentity: common.executionIdentity, sourcePlans: reviewedWiring.expectedSourcePlanFingerprints(),
+      ...(proofRuntimeHash && { proofRuntimeHash }), ...(forceUpdate && { forceUpdate }), executionIdentity: common.executionIdentity, sourcePlans: reviewedWiring.expectedSourcePlanFingerprints(),
       selection: candidateFile ? createHash("sha256").update(candidateFile).digest("hex") : "previous-and-discovered",
     })).digest("hex");
     if (base.inProgressRun) {
@@ -159,6 +169,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     }
     const ready = await rebuildUniverse({ ...reviewedWiring, store, runId: "ready-review-" + inputFingerprint,
       previousReadyReview: { inputFingerprint, candidateKeys: keys, ...(proofRuntimeHash && { revalidateParentProofs: true }),
+        ...(forceUpdate && { retryNegativeOutcomes: true }),
         ...(activationOnly && { retainedFamilyIds: new Set(enabledIds.filter(id => partitions[id]?.enabled)) }) }, resumeCompletedOutcomes: !!base.inProgressRun,
       observationRange: range, attestationConcurrency: concurrency, log });
     resolveStrictReadyRuntime(ready);

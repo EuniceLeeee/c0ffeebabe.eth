@@ -241,6 +241,8 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
     readonly inputFingerprint: string;
     readonly candidateKeys?: ReadonlySet<string>;
     readonly retainedFamilyIds?: ReadonlySet<string>;
+    /** Retry prior rejections and retryables in scope, keeping normal verified memo checks. */
+    readonly retryNegativeOutcomes?: boolean;
     /** Fresh proof context. Only outcomes sealed by this exact review may resume. */
     readonly revalidateParentProofs?: boolean;
   };
@@ -974,6 +976,7 @@ export async function rebuildUniverse(
       }
       const recheck: unknown[] = [], strictPrevious: unknown[] = [], remaining: unknown[] = [];
       if (survivors && review.revalidateParentProofs) throw new Error("cannot retain parent outcomes under a new proof context");
+      if (survivors && review.retryNegativeOutcomes) throw new Error("cannot retain entire Family outcomes while retrying negative outcomes");
       let retained = 0, alreadyHandled = 0;
       if (survivors) {
         for (const id of survivors) {
@@ -1039,7 +1042,7 @@ export async function rebuildUniverse(
       // Scope edits can reuse negative outcomes for unchanged nominations. A
       // different cutoff, rule or proof context still gets a fresh attempt.
       const unchangedPartitions = new Map<string, ReadyFamilyPartition>();
-      if (!survivors && !review.revalidateParentProofs && input.candidateFamilyId &&
+      if (!survivors && !review.revalidateParentProofs && !review.retryNegativeOutcomes && input.candidateFamilyId &&
           input.familyDefinitionHash && input.familyDiscoveryDefinitionHash &&
           canonicalJson(parent.cutoff) === canonicalJson(cutoff)) {
         for (const [id, partition] of Object.entries(parent.familyPartitions!)) {
