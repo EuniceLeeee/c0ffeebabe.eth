@@ -283,7 +283,12 @@ export async function main(argv = process.argv.slice(2)) {
         opaque.set(key, log); opaqueChanges.set(key, log);
       }
     };
-    if (readSqlPage) sqlOpaque.forEach(retain);
+    if (readSqlPage) {
+      for (const { key, logs } of sqlOpaque) {
+        assert(!opaque.has(key), 'Duplicate SQL opaque pool');
+        opaque.set(key, logs); opaqueChanges.set(key, logs);
+      }
+    }
     else for (const log of observations) collectOpaque(log).forEach(retain);
     const next = { ...state, pages: state.pages + 1, rows: sourceRows, nextPageToken: page.pageToken ?? null, inputComplete: !page.pageToken };
     if (readSqlPage) {
@@ -309,7 +314,7 @@ export async function main(argv = process.argv.slice(2)) {
   if (args['candidates-only']) {
     saveJson(out + '/nominations.json', { window, familyIds, jobId: sqlJob?.jobId ?? null,
       candidates: [...byKey.values()].map(candidate => wiring.encodeCandidateSnapshot(candidate)),
-      opaque: [...opaque.entries()] });
+      ...(sqlJob ? { opaqueKeyVersion: 2 } : {}), opaque: [...opaque.entries()] });
     status({ phase: 'candidates', jobId: sqlJob?.jobId ?? null, rows: state.rows, familyIds,
       candidates: byKey.size, opaqueInstances: opaque.size });
     unlinkSync(tokenFile);
@@ -319,7 +324,7 @@ export async function main(argv = process.argv.slice(2)) {
   status({ phase: 'strict', rows: state.rows, pages: state.pages, candidates: byKey.size, opaqueInstances: opaque.size, cutoff: state.maxBlock });
   const cutoff = await wiring.freezeCanonicalHead(window?.toBlock ?? state.maxBlock);
   assert.equal(cutoff.hash.toLowerCase(), window?.headHash ?? state.maxHash.toLowerCase(), 'Input maximum block is not canonical');
-  const reverse = await wiring.reverseBindOpaqueCandidates({ observations: [...opaque.values()], cutoff, knownCandidates: [...byKey.values()] });
+  const reverse = await wiring.reverseBindOpaqueCandidates({ observations: sqlJob ? [...opaque.values()].flat() : [...opaque.values()], cutoff, knownCandidates: [...byKey.values()] });
   for (const candidate of reverse) mergeCandidate(candidate);
   const candidates = [...byKey.values()]; opaque.clear(); byKey.clear();
   const full = createRebuildWiring({ rpcUrl: endpoint, executionIdentity: identity, startupCandidates: candidates,

@@ -33,11 +33,8 @@ export function renderReadyDiscoverySql(ref, libraries, sourceQuery) {
 SELECT 'source' AS row_kind, TO_JSON_STRING(coverage) AS body
 FROM source_coverage AS coverage
 UNION ALL
-SELECT 'witness' AS row_kind, TO_JSON_STRING(STRUCT(
-  kind, family, instance_key AS key, source_block AS block, tx_hash AS tx,
-  source_tx_hash AS sourceTx, source_hash AS sourceHash, PARSE_JSON(snapshot) AS snapshot
-)) AS body
-FROM (SELECT DISTINCT * FROM best_witnesses)
+SELECT 'witness' AS row_kind, body
+FROM compact_witnesses
 ORDER BY row_kind, body;`;
 }
 
@@ -129,19 +126,29 @@ export function decodeSqlDiscoveryRow(fields, row, wiring, instanceKey, collectO
     return { coverage: { rows, minBlock, maxBlock: firstHead.number, maxHash: firstHead.blockHash } };
   }
   assert.equal(value.row_kind, 'witness');
+  if (record.kind === 'opaque-group') {
+    assert(Array.isArray(record.witnesses) && record.witnesses.length > 0, 'Empty SQL opaque group');
+    const logs = record.witnesses.map(item => {
+      const log = checkedWitness(item, item.snapshot);
+      assert(collectOpaque(log).some(({family, key}) => key === family + '|' + record.key),
+        'SQL opaque pool disagrees with the active catalog');
+      return log;
+    });
+    return { opaque: { key: record.key, logs } };
+  }
+  assert.equal(record.kind, 'candidate');
+  const witness = checkedWitness(record, wiring.decodeCandidateSnapshot(record.snapshot));
+  assert.equal(witness.familyId, record.family);
+  assert.equal(instanceKey(witness), record.key, 'SQL discovery candidate key differs');
+  return { candidate: witness };
+}
+
+function checkedWitness(record, witness) {
   assert(Number.isSafeInteger(record.block) && record.block > 0 &&
     /^0x[0-9a-f]{64}$/i.test(record.sourceHash) && /^0x[0-9a-f]{64}$/i.test(record.sourceTx), 'Invalid SQL discovery source');
   assert.equal(record.tx, record.sourceTx.toLowerCase(), 'SQL discovery transaction differs');
-  const witness = record.kind === 'candidate' ? wiring.decodeCandidateSnapshot(record.snapshot) : record.snapshot;
   assert.equal(witness.transactionHash.toLowerCase(), record.tx, 'SQL discovery witness transaction differs');
   assert.equal(witness.blockNumber, record.block, 'SQL discovery witness block differs');
   assert.equal(witness.blockHash.toLowerCase(), record.sourceHash.toLowerCase(), 'SQL discovery witness block hash differs');
-  if (record.kind === 'candidate') {
-    assert.equal(witness.familyId, record.family);
-    assert.equal(instanceKey(witness), record.key, 'SQL discovery candidate key differs');
-    return { candidate: witness };
-  }
-  assert.equal(record.kind, 'opaque');
-  assert(collectOpaque(witness).some(item => item.key === record.key && item.family === record.family), 'SQL opaque nomination disagrees with the active catalog');
-  return { opaque: { key: record.key, log: witness } };
+  return witness;
 }

@@ -366,8 +366,9 @@ test('SQL discovery uses the common UDF and keeps source coverage separate from 
   assert.match(spec.query.query, /CREATE TEMP FUNCTION discovery_records\(tx STRING\)/);
   assert.match(spec.query.query, /DiscoveryKernel\.compactTransactionJson\(tx\)/);
   assert.match(spec.query.query, /FROM `project1.Ready.original-pools`/);
-  assert.match(spec.query.query, /DENSE_RANK/);
-  assert.match(spec.query.query, /FROM \(SELECT DISTINCT \* FROM best_witnesses\)/);
+  assert.match(spec.query.query, /ROW_NUMBER\(\) OVER \(\s+PARTITION BY kind, family, instance_key/);
+  assert.match(spec.query.query, /SELECT DISTINCT SUBSTR\(instance_key, LENGTH\(family\) \+ 2\) AS physical_key/);
+  assert.match(spec.query.query, /FROM opaque_evidence\s+GROUP BY physical_key/);
   assert.match(spec.query.query, /CAST\(COUNT\(\*\) AS STRING\)/);
   assert.equal(spec.query.maximumBytesBilled, '1000000');
   const calls = [];
@@ -386,19 +387,23 @@ test('SQL discovery uses the common UDF and keeps source coverage separate from 
   const row = (kind, body) => ({ f: [kind, JSON.stringify(body)].map(v => ({v})) });
   const wiring = { decodeCandidateSnapshot: candidate => candidate };
   const key = candidate => candidate.address;
-  const collect = log => [{ family: 'opaque-family', key: 'opaque-key', log }];
+  const collect = log => ['opaque-family', 'sibling-family']
+    .map(family => ({ family, key: family + '|opaque-key', log }));
   const witness = { address: 'candidate-key', transactionHash: hash, blockNumber: 123, blockHash };
   const candidate = { kind: 'candidate', family: 'family', key: 'candidate-key', tx: hash, block: 123,
     sourceTx: hash, sourceHash: blockHash, snapshot: { ...witness, familyId: 'family' } };
-  const opaque = { ...candidate, kind: 'opaque', family: 'opaque-family', key: 'opaque-key', snapshot: witness };
+  const opaque = { kind: 'opaque-group', key: 'opaque-key',
+    witnesses: [{ ...candidate, snapshot: witness }, { ...candidate, block: 122, snapshot: { ...witness, blockNumber: 122 } }] };
   const decode = (kind, body) => decodeSqlDiscoveryRow(fields, row(kind, body), wiring, key, collect);
   assert.deepEqual(decode('witness', candidate), { candidate: candidate.snapshot });
-  assert.deepEqual(decode('witness', opaque), { opaque: {key:'opaque-key', log:witness} });
+  assert.deepEqual(decode('witness', opaque), { opaque: {key:'opaque-key', logs: [witness, { ...witness, blockNumber: 122 }] } });
   const head = { number: 123, blockHash };
   assert.deepEqual(decode('source', { sourceRows: '2', minBlock: 122, firstHead: head, lastHead: head }),
     { coverage: { rows: '2', minBlock: 122, maxBlock: 123, maxHash: blockHash } });
   assert.throws(() => decode('witness', {...candidate, key:'wrong'}), /candidate key differs/);
   assert.throws(() => decode('witness', {...opaque, key:'wrong'}), /active catalog/);
+  assert.throws(() => decode('witness', {...opaque, witnesses: []}), /Empty SQL opaque group/);
+  assert.throws(() => decode('witness', {...opaque, witnesses: [{...opaque.witnesses[0], block: 122}]}), /witness block differs/);
   assert.throws(() => decode('source', { sourceRows: '2', minBlock: 122, firstHead: head, lastHead: {...head, blockHash: hash} }), /Conflicting maximum block hash/);
 });
 
