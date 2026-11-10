@@ -1,29 +1,14 @@
+// Generated from Family JSON by build-declarative-production.ts. Do not edit.
+// Definition: src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json
+// Regenerate with: npm run family-capability-manifest:generate
 import { defineFamilyActivation } from "./activation.js";
 import { defineSwapFamily } from "../adapter-family-plugin.js";
-import { dodoV2Capture } from "../swaps/dodo-v2-family/capture.js";
-import { dodoV2FamilyOwnedAction } from "../swaps/dodo-v2-family/action.js";
-import { dodoV2Discovery } from "../swaps/dodo-v2-family/discovery.js";
-import { dodoV2Exact } from "../swaps/dodo-v2-family/exact.js";
-import { dodoV2Execution } from "../swaps/dodo-v2-family/execution.js";
-import { dodoV2Identity } from "../swaps/dodo-v2-family/identity.js";
-import { dodoV2Instance } from "../swaps/dodo-v2-family/instance.js";
-import { dodoV2FamilyManifest } from "../swaps/dodo-v2-family/manifest.js";
-import { dodoV2Pricing } from "../swaps/dodo-v2-family/pricing.js";
-import { dodoV2Routes } from "../swaps/dodo-v2-family/routes.js";
-import { dodoV2Swap } from "../swaps/dodo-v2-family/swap.js";
+import { compileDeclarativeSwap } from "../declarative-swap.js";
+import definition from "../swaps/dodo-v2-family/dodo-v2.json";
+import child0 from "../swaps/dodo-v2-family/registry-member-1.json";
+import child1 from "../swaps/dodo-v2-family/registry-member-2.json";
+import child2 from "../swaps/dodo-v2-family/registry-member-3.json";
 
-export const activation = defineFamilyActivation({ enabled: true, envKey: "SEARCHER_FAMILY_DODO_V2_ENABLED" });
+export const activation = defineFamilyActivation({"enabled":true,"envKey":"SEARCHER_FAMILY_DODO_V2_ENABLED"});
 
-export const plugin = defineSwapFamily({
-  manifest: dodoV2FamilyManifest,
-  capture: dodoV2Capture,
-  discovery: dodoV2Discovery,
-  identity: dodoV2Identity,
-  instance: dodoV2Instance,
-  routes: dodoV2Routes,
-  pricing: dodoV2Pricing,
-  exact: dodoV2Exact,
-  execution: dodoV2Execution,
-  swap: dodoV2Swap,
-  actionAdapters: [dodoV2FamilyOwnedAction],
-});
+export const plugin = defineSwapFamily(compileDeclarativeSwap(definition, [child0, child1, child2]));

@@ -11,6 +11,7 @@ import { runtimeExecutor, RUNTIME_ERC20 } from "../../runtime-execution.js";
 import { ABI, META, address, assertSource, call, code, decode, uint } from "./codec.js";
 import { FAMILY, GENERIC_LINEAGE } from "./manifest.js";
 import type { Binding, Candidate, Descriptor, Direction, Identity, Route, State } from "./types.js";
+import type { TricryptoNgBinding } from "./tricrypto-ng.js";
 
 export const STABLE_CALC = "0xca8d0747b5573d69653c3ac22242e6341c36e4b4";
 export const CURVE_V1_FACTORY = "0xfd6f33a0509ec67defc500755322abd9df1bd5b8";
@@ -55,6 +56,9 @@ export type GenericBinding = {
   readonly implementation: string;
   readonly implementationCodeHash: string;
   readonly forwarderBytes: 0 | 4096;
+  /** Set only by the Tricrypto-NG fixed-3 self-LP variant; it is part of the
+   * static binding fingerprint, never an additional quote pipeline. */
+  readonly tricryptoNg?: TricryptoNgBinding;
   readonly directions: readonly { readonly direction: Direction; readonly index: number; readonly receiverMode: ReceiverMode }[];
 }
 const opt = (r: AdapterRequest): AdapterRequest => r.kind === "eth-call"
@@ -332,6 +336,13 @@ function behaviorRequests(p: GenericProof): AdapterRequest[] {
 function proves(p: GenericProof, q: Quote, i: number, mode: ReceiverMode, results: readonly AdapterRequestResult[]): boolean {
   const d = p.binding!, actor = p.actor!, recipient = mode === "none" ? actor : GENERIC_RECEIVER,
     r = result(results, `g-behavior-${i}-${mode}`, p.source);
+  if (process.env.SEARCHER_DEBUG_CURVE === "1") {
+    console.warn("[curve-behavior]", `g-behavior-${i}-${mode}`, "completion=" + r.completion,
+      "quote=" + JSON.stringify({ direction: q.direction, index: q.index, amount: String(q.amount), output: String(q.output) }),
+      "revertData=" + String(r.data ?? "").slice(0, 200),
+      "effects=" + JSON.stringify({ tokenDeltas: r.effects?.tokenDeltas, nativeDeltas: r.effects?.nativeDeltas,
+        totalSupplyDeltas: r.effects?.totalSupplyDeltas }));
+  }
   if (hasCryptoClaim(d) && q.direction === "redeem") return decodeCryptoClaim(d, { ...q, tokenIn: d.lp, tokenOut: d.coins[q.index] }, q.amount, actor, p.feeWitness!, r, p.source, recipient) === q.output;
   if (r.completion !== "returned") return false;
   const tokenIn = q.direction === "mint" ? d.coins[q.index] : d.lp, tokenOut = q.direction === "mint" ? d.lp : d.coins[q.index];

@@ -16,9 +16,14 @@ import { FLUID_CREDIT_PROBE_ACTOR } from
 import { FLUID_CREDIT_PROBE_ACTOR_EVIDENCE_ID } from
   "./credit/fluid-family/identity.js";
 import {
-  DODO_V2_QUOTE_ACTOR,
-  DODO_V2_QUOTE_ACTOR_EVIDENCE_ID,
-} from "./swaps/dodo-v2-family/identity.js";
+  ARCANA_PROBE_ACTOR,
+  ARCANA_PROBE_ACTOR_EVIDENCE_ID,
+} from "./protocols/arcana-migration-family/shared.js";
+import {
+  MELLOW_QUEUE_PROBE_ACTOR,
+  MELLOW_QUEUE_PROBE_ACTOR_EVIDENCE_ID,
+} from "./protocols/mellow-queue-family/shared.js";
+import { DODO_V2_QUOTE_ACTOR, DODO_V2_QUOTE_ACTOR_EVIDENCE_ID } from "./swaps/dodo-v2-family/identity.js";
 
 /**
  * Central caller authority for every strict Family that declares
@@ -42,4 +47,6 @@ export const PRODUCTION_STRICT_VERIFIED_ACTORS: Readonly<
     ETHERTOKEN_NATIVE_PROBE_ACTOR,
   [FLUID_CREDIT_PROBE_ACTOR_EVIDENCE_ID]: FLUID_CREDIT_PROBE_ACTOR,
   [DODO_V2_QUOTE_ACTOR_EVIDENCE_ID]: DODO_V2_QUOTE_ACTOR,
+  [MELLOW_QUEUE_PROBE_ACTOR_EVIDENCE_ID]: MELLOW_QUEUE_PROBE_ACTOR,
+  [ARCANA_PROBE_ACTOR_EVIDENCE_ID]: ARCANA_PROBE_ACTOR,
 });

@@ -7,11 +7,12 @@ import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "../.
 import { hashCanonical } from "../../canonical-value.js";
 import { CURVE_METAREGISTRY, META, POOL, ERC20, GETTER_ABIS, INT_MODES, UINT_MODES, pullsInput, address, addressArray, assertSource,
   call, executionData, getterPool, getterReadId, hasReceiver, lower, probeAmount, quotePool, result, resultSource, returned, same, uint,
-  isNativeCoin, isNativeMode, routeToken } from "./codec.js";
+  isNativeCoin, isNativeMode, routeToken, MAX_UINT } from "./codec.js";
 import { nativeExecutionProbe, nativeRecipientProbe } from "./native.js";
 import { hasNativeStEthTransfer, nativeStEthRateRequests, projectNativeTransferQuote } from "./native-transfer-quote.js";
 import { executionInputMatches, executionOutputMatches } from "../../../../shared/executor/amount-rounding.js";
-import { CURVE_PLAIN_FAMILY_ID, CURVE_PLAIN_LINEAGE } from "./manifest.js";
+import { CLONE_IMPLEMENTATION_CLASS_HASH, CLONE_POOL, READ_FEE_DENOMINATOR, cloneCoinDomain, cloneImplementation } from "./clone.js";
+import { CURVE_PLAIN_CLONE_LINEAGE, CURVE_PLAIN_FAMILY_ID, CURVE_PLAIN_LINEAGE } from "./manifest.js";
 import type { CurveIndexAbi, CurvePlainBinding, CurvePlainCandidate, CurvePlainDirection, CurvePlainIdentity, CurvePlainMode, CurvePlainExecutionMode, CurvePlainRecipientMode } from "./types.js";
 
 // Only the receiver for an isolated behavior probe. Caller authority remains the
@@ -210,8 +211,291 @@ function identityVariant(quoteAbi: CurveIndexAbi): IdentitySemantics<CurvePlainC
     },
   };
 }
+
+// Registry-independent Curve factory clone admission. The wrapped pool is not a
+// MetaRegistry member: `get_registry_handlers_from_pool` reverts "no registry"
+// and `get_pool_from_lp_token` is zero. The implementation class is instead
+// pinned by code hash at the identity source block, and the direct-coin swap
+// surface is proved by an isolated exchange simulation. Nothing here trusts a
+// pool address list or a factory/registry answer.
+interface CloneQuote {
+  readonly i: number; readonly j: number;
+  readonly tokenIn: string; readonly tokenOut: string;
+  readonly amountIn: bigint; readonly amountOut: bigint;
+}
+interface CloneEvidence {
+  readonly phase: "runtime" | "class" | "quotes" | "execution";
+  readonly source: CanonicalSource;
+  readonly pool: string;
+  readonly binding: CurvePlainBinding;
+  readonly balances: readonly bigint[];
+  readonly amplification: bigint;
+  readonly fee: bigint;
+  readonly totalSupply: bigint;
+  readonly quotes: readonly CloneQuote[];
+  readonly directions: readonly CurvePlainDirection[];
+  readonly requestIds: readonly string[];
+  readonly executor?: string;
+  readonly rejection?: string;
+}
+function cloneRejectedEvidence(source: CanonicalSource, pool: string, registry: string,
+  codeHash: string, requestIds: readonly string[], rejection: string,
+  coins: readonly string[] = []): CloneEvidence {
+  return { phase: "runtime", source, pool,
+    binding: { quoteAbi: "int128", coinAbi: "uint256", balanceAbi: "uint256", registry,
+      handlers: [], codeHash, coins, decimals: [] },
+    balances: [], amplification: 0n, fee: 0n, totalSupply: 0n, quotes: [], directions: [],
+    requestIds, rejection };
+}
+function cloneScalar(results: readonly AdapterRequestResult[], id: string): bigint | null {
+  const read = result(results, id);
+  // Revert/empty is selector absence for this surface; transport failure already
+  // threw above and can never be collapsed into a chain-proven rejection.
+  return read.completion === "returned" && read.data !== "0x" ? uint(read.data) : null;
+}
+function decodeCloneRuntime(step: { readonly candidate: CurvePlainCandidate }, results: readonly AdapterRequestResult[]): CloneEvidence {
+  const source = resultSource(results), requestIds = results.map(item => item.id);
+  const pool = ethers.getAddress(step.candidate.pool);
+  const runtime = returned(results, "clone-pool-code").data;
+  const clone = ethers.isHexString(runtime) && runtime !== "0x" ? cloneImplementation(runtime) : null;
+  if (clone === null) {
+    return cloneRejectedEvidence(source, pool, ethers.ZeroAddress, ethers.ZeroHash, requestIds,
+      "clone-runtime-unrecognized");
+  }
+  const coins: string[] = [];
+  let rejection: string | undefined;
+  for (const index of [0, 1]) {
+    const read = result(results, `clone-coin:${index}`);
+    if (read.completion !== "returned" || read.data === "0x") { rejection = "clone-coin-domain-mismatch"; continue; }
+    coins.push(address(read.data));
+  }
+  if (rejection === undefined && !cloneCoinDomain(coins)) rejection = "clone-coin-domain-mismatch";
+  // Exactly two coins. The implementation uses a mapping-style uint256 coin
+  // getter, so index 2 must either revert or return the zero pad.
+  if (rejection === undefined) {
+    const third = result(results, "clone-coin:2");
+    if (third.completion === "returned" && (third.data === "0x" || address(third.data) !== ethers.ZeroAddress)) {
+      rejection = "clone-coin-domain-mismatch";
+    }
+  }
+  // Self-LP semantics: totalSupply lives on the pool itself and no separate
+  // lp_token/base_pool getter exists. A returning probe would prove otherwise.
+  for (const id of ["clone-lp-token", "clone-base-pool"]) {
+    if (result(results, id).completion !== "reverted-as-declared") rejection ??= "clone-self-lp-mismatch";
+  }
+  const totalSupply = cloneScalar(results, "clone-total-supply");
+  if (totalSupply === null || totalSupply === 0n) rejection ??= "clone-self-lp-mismatch";
+  const amplification = cloneScalar(results, "clone-amplification");
+  const fee = cloneScalar(results, "clone-fee");
+  const balances = [0, 1].map(index => cloneScalar(results, `clone-balance:${index}`));
+  if (amplification === null || fee === null || balances.some(balance => balance === null)) {
+    rejection ??= "clone-state-surface-invalid";
+  } else if (amplification === 0n || fee >= READ_FEE_DENOMINATOR) {
+    rejection ??= "clone-state-surface-invalid";
+  }
+  return { phase: "runtime", source, pool,
+    binding: { quoteAbi: "int128", coinAbi: "uint256", balanceAbi: "uint256",
+      registry: clone.implementation, handlers: [], codeHash: clone.codeHash, coins, decimals: [] },
+    balances: rejection === undefined && balances.every((balance): balance is bigint => balance !== null)
+      ? balances : [],
+    amplification: amplification ?? 0n, fee: fee ?? 0n, totalSupply: totalSupply ?? 0n,
+    quotes: [], directions: [], requestIds, ...(rejection === undefined ? {} : { rejection }) };
+}
+function cloneExecutionProbe(pool: string, quote: CloneQuote): AdapterRequest {
+  // Fee-inclusive expected output: the pool's own get_dy(i,j,dx) quote already
+  // deducts fee/1e10 from the invariant output. exchange() moves that nominal
+  // amount (its own -1 wei rounding), and the quote's token may round the
+  // recipient by one raw unit. The probe therefore approves the shared
+  // production ceiling (MAX_UINT, also immune to per-token approve rounding),
+  // carries the quote as min_dy and asserts the simulated payer debit exactly
+  // while bounding the output by the framework's fixed 1-raw-unit rounding.
+  return { id: `clone-execution:${quote.i}:${quote.j}`, kind: "effect-delta-simulation", required: false,
+    preCalls: [{ caller, to: quote.tokenIn,
+      data: ERC20.encodeFunctionData("approve", [pool, MAX_UINT]) }],
+    call: { caller, executionMode: "impersonated-call-frame", to: pool,
+      data: executionData("exchange", quote.i, quote.j, quote.amountIn, quote.amountOut, PROBE_RECEIVER) },
+    overrideIntent: { caller, tokenBalances: [{ token: quote.tokenIn, amount: quote.amountIn }] },
+    observeTokenBalances: [
+      { token: quote.tokenIn, account: caller }, { token: quote.tokenIn, account: pool },
+      { token: quote.tokenOut, account: caller }, { token: quote.tokenOut, account: pool },
+    ],
+    observe: ["return-data", "revert-data", "token-delta"] };
+}
+function assertCloneExchangeEffects(read: Extract<AdapterRequestResult, { ok: true }>,
+  quote: CloneQuote, pool: string, actor: string, toleranceRawUnits: bigint): void {
+  // Older implementations return no bytes; a returned word is the nominal dy
+  // and must stay within the framework's fixed 1-raw-unit rounding ceiling.
+  if (read.data !== "0x" && !executionOutputMatches(uint(read.data), quote.amountOut, toleranceRawUnits)) {
+    throw new Error("curve-plain clone exchange return mismatch");
+  }
+  const deltas = read.effects?.tokenDeltas;
+  if (!deltas || deltas.length !== 4) throw new Error("curve-plain clone exchange effect scope");
+  const exact = (token: string, account: string, delta: bigint) => {
+    const cells = deltas.filter(row => same(row.token, token) && same(row.account, account));
+    if (cells.length !== 1 || cells[0].delta !== delta) {
+      throw new Error("curve-plain clone exchange effect mismatch");
+    }
+  };
+  // Payer debit and pool input receipt are exact: the requested amount is never
+  // padded, borrowed from old inventory or reduced by a hidden transfer fee.
+  exact(quote.tokenIn, actor, -quote.amountIn);
+  exact(quote.tokenIn, pool, quote.amountIn);
+  const output = deltas.filter(row => same(row.token, quote.tokenOut) && same(row.account, actor));
+  const poolOutput = deltas.filter(row => same(row.token, quote.tokenOut) && same(row.account, pool));
+  if (output.length !== 1 || poolOutput.length !== 1 || output[0].delta <= 0n || poolOutput[0].delta >= 0n) {
+    throw new Error("curve-plain clone exchange effect mismatch");
+  }
+  const received = output[0].delta, sent = -poolOutput[0].delta;
+  if (!executionOutputMatches(received, quote.amountOut, toleranceRawUnits) ||
+      !executionOutputMatches(sent, quote.amountOut, toleranceRawUnits) ||
+      sent < received || sent - received > toleranceRawUnits) {
+    throw new Error("curve-plain clone exchange effect mismatch");
+  }
+}
+function cloneIdentityVariant(): IdentitySemantics<CurvePlainCandidate, CurvePlainIdentity>["variants"][number] {
+  return {
+    id: "registry-independent-clone-direct-coin", kind: "custom", lineageId: CURVE_PLAIN_CLONE_LINEAGE,
+    applies: candidate => candidate.candidateKind === "curve-plain-pool",
+    requirements({ evidence }) {
+      const prior = evidence as CloneEvidence | undefined;
+      if (prior?.phase === "quotes" && prior.quotes.length > 0) {
+        return { transports: ["effect-delta-simulation"], caller: "executor",
+          effects: ["return-data", "revert-data", "token-delta"] };
+      }
+      if (prior?.phase === "class") return { transports: ["eth-call"] };
+      if (prior?.phase === "runtime") {
+        // The executor authority probe is a simulation bound to the executor.
+        return { transports: ["eth-call", "get-code", "effect-delta-simulation"], caller: "executor",
+          effects: ["return-data", "revert-data", "token-delta", "native-delta"] };
+      }
+      return { transports: ["eth-call", "get-code"] };
+    },
+    buildRequests({ candidate, evidence }) {
+      const prior = evidence as CloneEvidence | undefined;
+      if (prior === undefined) {
+        const pool = candidate.pool;
+        return [
+          { id: "clone-pool-code", kind: "get-code", address: pool },
+          ...[0, 1, 2].map(index => call(`clone-coin:${index}`, pool,
+            CLONE_POOL.encodeFunctionData("coins", [index]))),
+          call("clone-amplification", pool, CLONE_POOL.encodeFunctionData("A")),
+          call("clone-fee", pool, CLONE_POOL.encodeFunctionData("fee")),
+          ...[0, 1].map(index => call(`clone-balance:${index}`, pool,
+            CLONE_POOL.encodeFunctionData("balances", [index]))),
+          call("clone-total-supply", pool, CLONE_POOL.encodeFunctionData("totalSupply")),
+          call("clone-lp-token", pool, CLONE_POOL.encodeFunctionData("lp_token")),
+          call("clone-base-pool", pool, CLONE_POOL.encodeFunctionData("base_pool")),
+        ];
+      }
+      if (prior.rejection !== undefined) return [];
+      if (prior.phase === "runtime") {
+        return [
+          { id: "clone-implementation-code", kind: "get-code", address: prior.binding.registry },
+          ...prior.binding.coins.map((coin, index) => call(`clone-decimals:${index}`, coin,
+            ERC20.encodeFunctionData("decimals"))),
+          executorRequest(),
+        ];
+      }
+      if (prior.phase === "class") {
+        return pairs(prior.binding.coins.length).flatMap(([i, j]) => {
+          const amount = probeAmount(prior.binding.decimals[i], prior.balances[i]);
+          return [amount, amount * 10n].map((dx, probe) => call(`clone-quote:${i}:${j}:${probe}`,
+            prior.pool, POOL.encodeFunctionData("get_dy", [i, j, dx])));
+        });
+      }
+      return prior.quotes.map(quote => cloneExecutionProbe(prior.pool, quote));
+    },
+    decode({ step, results }) {
+      const source = resultSource(results), requestIds = results.map(item => item.id);
+      const prior = step.evidence as CloneEvidence | undefined;
+      if (prior === undefined) return decodeCloneRuntime(step, results);
+      assertSource(source, prior.source);
+      if (prior.rejection !== undefined) return { ...prior, requestIds };
+      if (prior.phase === "runtime") {
+        const implementationCode = returned(results, "clone-implementation-code").data;
+        if (ethers.keccak256(implementationCode) !== CLONE_IMPLEMENTATION_CLASS_HASH) {
+          return { ...prior, phase: "class", requestIds, rejection: "clone-impl-class-unpinned" };
+        }
+        const decimals: number[] = [];
+        let rejection: string | undefined;
+        prior.binding.coins.forEach((_coin, index) => {
+          const read = result(results, `clone-decimals:${index}`);
+          if (read.completion !== "returned" || read.data === "0x") { rejection ??= "clone-coin-domain-mismatch"; return; }
+          const value = Number(uint(read.data));
+          if (!Number.isSafeInteger(value) || value < 0 || value > 36) rejection ??= "clone-coin-domain-mismatch";
+          decimals.push(value);
+        });
+        const executor = rejection === undefined ? probeExecutor(results, prior.pool) : undefined;
+        return { ...prior, phase: "class", binding: { ...prior.binding, decimals }, requestIds,
+          ...(executor === undefined ? {} : { executor }), ...(rejection === undefined ? {} : { rejection }) };
+      }
+      if (prior.phase === "class") {
+        const quotes: CloneQuote[] = [];
+        for (const [i, j] of pairs(prior.binding.coins.length)) {
+          const small = result(results, `clone-quote:${i}:${j}:0`);
+          const large = result(results, `clone-quote:${i}:${j}:1`);
+          if (small.completion !== "returned" || large.completion !== "returned" ||
+              small.data === "0x" || large.data === "0x") continue;
+          const amountOut = uint(small.data), largerOut = uint(large.data);
+          if (amountOut <= 0n || largerOut <= amountOut || largerOut >= prior.balances[j]) continue;
+          quotes.push({ i, j, tokenIn: routeToken(prior.binding.coins[i]),
+            tokenOut: routeToken(prior.binding.coins[j]),
+            amountIn: probeAmount(prior.binding.decimals[i], prior.balances[i]), amountOut });
+        }
+        return { ...prior, phase: "quotes", quotes, requestIds };
+      }
+      if (prior.phase !== "quotes" || prior.executor === undefined) {
+        throw new Error("curve-plain clone identity already completed");
+      }
+      const directions: CurvePlainDirection[] = [];
+      for (const quote of prior.quotes) {
+        const read = result(results, `clone-execution:${quote.i}:${quote.j}`);
+        // A deterministic revert is negative evidence for this direction. A
+        // returned result with different effects is an inconsistency, not an
+        // alternative mode: fail closed and never publish that direction.
+        if (read.completion !== "returned") continue;
+        assertCloneExchangeEffects(read, quote, prior.pool, prior.executor, step.executionRoundingRawUnits ?? 0n);
+        directions.push({ ...quote, executionMode: "exchange" });
+      }
+      return { ...prior, phase: "execution", directions, requestIds };
+    },
+    decide({ candidate, evidence }): IdentityDecision<CurvePlainIdentity> {
+      const prior = evidence as CloneEvidence | undefined;
+      if (prior === undefined) return { status: "continue" };
+      if (prior.rejection !== undefined) {
+        return { status: "chain-proven-rejected", reasonCode: prior.rejection, evidenceRequestIds: prior.requestIds };
+      }
+      if (prior.phase === "class" && prior.balances.some(balance => balance === 0n)) {
+        return { status: "retryable", reasonCode: "no-current-clone-liquidity" };
+      }
+      if (prior.phase === "quotes" && prior.quotes.length === 0) {
+        return { status: "retryable", reasonCode: "no-clone-positive-quote-pair" };
+      }
+      if (prior.phase !== "execution") return { status: "continue" };
+      if (prior.directions.length === 0) return { status: "retryable", reasonCode: "clone-behavior-unproven" };
+      if (candidate.hintedI !== null && !prior.directions.some(direction =>
+        direction.i === candidate.hintedI && direction.j === candidate.hintedJ)) {
+        return { status: "retryable", reasonCode: "observed-direction-not-executable" };
+      }
+      const facts = { pool: prior.pool, binding: { ...prior.binding }, directions: prior.directions };
+      return { status: "verified", identity: { familyId: CURVE_PLAIN_FAMILY_ID,
+        lineageId: CURVE_PLAIN_CLONE_LINEAGE, subject: prior.pool, facts,
+        provenance: [
+          { kind: "curve-clone-runtime-class", subject: prior.binding.registry,
+            evidenceHash: hashCanonical({ pool: prior.pool, proxyCodeHash: prior.binding.codeHash,
+              implementation: prior.binding.registry, implementationCodeHash: CLONE_IMPLEMENTATION_CLASS_HASH,
+              source: { ...prior.source } }) },
+          { kind: "curve-clone-direct-coin-and-execution-proof", subject: prior.pool,
+            evidenceHash: hashCanonical({ binding: { ...prior.binding,
+              coins: [...prior.binding.coins], decimals: [...prior.binding.decimals], handlers: [] },
+              directions: prior.directions.map(direction => ({ ...direction })),
+              quotes: prior.quotes.map(quote => ({ ...quote })), source: { ...prior.source } }) },
+        ] } };
+    },
+  };
+}
 export const curvePlainIdentity: IdentitySemantics<CurvePlainCandidate, CurvePlainIdentity> = {
-  variants: [identityVariant("int128"), identityVariant("uint256")],
+  variants: [identityVariant("int128"), identityVariant("uint256"), cloneIdentityVariant()],
   identityKey: identity => lower(identity.subject),
 };
 // Bind symbolic authority through a read-only observed call in the existing

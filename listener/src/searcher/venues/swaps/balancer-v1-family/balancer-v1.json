@@ -1,51 +1,116 @@
 {
   "version": 2,
-  "scope": {"family": "balancer-v1"},
-  "production": {"domain": "swap", "activation": {"enabled": true, "envKey": "SEARCHER_FAMILY_BALANCER_V1_ENABLED"}},
+  "scope": {
+    "family": "balancer-v1"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_BALANCER_V1_ENABLED"
+    }
+  },
   "manifest": {
     "familyId": "balancer-v1",
     "domain": "swap",
-    "ownedActionAdapterIds": ["balancer-v1-swap"],
+    "ownedActionAdapterIds": [
+      "balancer-v1-swap"
+    ],
     "requiredInfraActionAdapterIds": [],
-    "allowedTaxonomy": [{"slotKind": "swap"}],
-    "supportedLineages": ["balancer-v1:finalized-bpool"],
-    "poolAdapterIds": ["balancer-v1"],
-    "edgeAdapterIds": ["balancer-v1-swap"],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "balancer-v1:crpt-bpool",
+      "balancer-v1:finalized-bpool"
+    ],
+    "poolAdapterIds": [
+      "balancer-v1"
+    ],
+    "edgeAdapterIds": [
+      "balancer-v1-swap"
+    ],
     "requiresProtocolEdgesFlag": false
   },
   "discovery": {
     "definition": {
       "version": 2,
-      "sources": ["landed-log", "observed-call", "address-surface"],
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
       "candidateSources": [],
       "candidate": {
         "kind": "balancer-v1-pool",
         "addressField": "pool",
-        "fields": {"pool": "address"},
-        "key": ["pool"],
-        "instanceKey": ["pool"]
+        "fields": {
+          "pool": "address"
+        },
+        "key": [
+          "pool"
+        ],
+        "instanceKey": [
+          "pool"
+        ]
       },
       "calls": [
         {
           "id": "balancer-v1-swapExactAmountIn",
           "signature": "function swapExactAmountIn(address,uint256,address,uint256,uint256) returns(uint256,uint256)",
-          "fields": {"pool": {"from": "target"}},
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          },
           "predicates": [
             {
               "op": "ne",
-              "args": [{"op": "lower", "args": ["$candidate.pool"]}, "0x0000000000000000000000000000000000000000"]
-            },
-            {
-              "op": "ne",
               "args": [
-                {"op": "lower", "args": [{"op": "at", "args": ["$args", 0]}]},
+                {
+                  "op": "lower",
+                  "args": [
+                    "$candidate.pool"
+                  ]
+                },
                 "0x0000000000000000000000000000000000000000"
               ]
             },
             {
               "op": "ne",
               "args": [
-                {"op": "lower", "args": [{"op": "at", "args": ["$args", 2]}]},
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
+                },
                 "0x0000000000000000000000000000000000000000"
               ]
             },
@@ -54,7 +119,22 @@
               "args": [
                 {
                   "op": "sameAddress",
-                  "args": [{"op": "at", "args": ["$args", 0]}, {"op": "at", "args": ["$args", 2]}]
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -63,23 +143,57 @@
         {
           "id": "balancer-v1-swapExactAmountOut",
           "signature": "function swapExactAmountOut(address,uint256,address,uint256,uint256) returns(uint256,uint256)",
-          "fields": {"pool": {"from": "target"}},
+          "fields": {
+            "pool": {
+              "from": "target"
+            }
+          },
           "predicates": [
             {
               "op": "ne",
-              "args": [{"op": "lower", "args": ["$candidate.pool"]}, "0x0000000000000000000000000000000000000000"]
-            },
-            {
-              "op": "ne",
               "args": [
-                {"op": "lower", "args": [{"op": "at", "args": ["$args", 0]}]},
+                {
+                  "op": "lower",
+                  "args": [
+                    "$candidate.pool"
+                  ]
+                },
                 "0x0000000000000000000000000000000000000000"
               ]
             },
             {
               "op": "ne",
               "args": [
-                {"op": "lower", "args": [{"op": "at", "args": ["$args", 2]}]},
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
+                },
                 "0x0000000000000000000000000000000000000000"
               ]
             },
@@ -88,7 +202,22 @@
               "args": [
                 {
                   "op": "sameAddress",
-                  "args": [{"op": "at", "args": ["$args", 0]}, {"op": "at", "args": ["$args", 2]}]
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -99,23 +228,57 @@
         {
           "id": "balancer-v1-LOG_SWAP",
           "signature": "event LOG_SWAP(address indexed caller,address indexed tokenIn,address indexed tokenOut,uint256 tokenAmountIn,uint256 tokenAmountOut)",
-          "fields": {"pool": {"from": "emitter"}},
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            }
+          },
           "predicates": [
             {
               "op": "ne",
-              "args": [{"op": "lower", "args": ["$candidate.pool"]}, "0x0000000000000000000000000000000000000000"]
-            },
-            {
-              "op": "ne",
               "args": [
-                {"op": "lower", "args": [{"op": "at", "args": ["$args", 1]}]},
+                {
+                  "op": "lower",
+                  "args": [
+                    "$candidate.pool"
+                  ]
+                },
                 "0x0000000000000000000000000000000000000000"
               ]
             },
             {
               "op": "ne",
               "args": [
-                {"op": "lower", "args": [{"op": "at", "args": ["$args", 2]}]},
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    }
+                  ]
+                },
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
+                },
                 "0x0000000000000000000000000000000000000000"
               ]
             },
@@ -124,7 +287,22 @@
               "args": [
                 {
                   "op": "sameAddress",
-                  "args": [{"op": "at", "args": ["$args", 1]}, {"op": "at", "args": ["$args", 2]}]
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        1
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        2
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -135,33 +313,90 @@
       "surface": {
         "id": "balancer-v1-interface",
         "fingerprint": "balancer-v1-bpool-v1",
-        "fields": {"pool": {"from": "emitter"}},
+        "fields": {
+          "pool": {
+            "from": "emitter"
+          }
+        },
         "predicates": [
           {
             "op": "ne",
-            "args": [{"op": "lower", "args": ["$candidate.pool"]}, "0x0000000000000000000000000000000000000000"]
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  "$candidate.pool"
+                ]
+              },
+              "0x0000000000000000000000000000000000000000"
+            ]
           }
         ]
       },
-      "labels": ["balancer-v1", "balancer-v1-swap"]
+      "labels": [
+        "balancer-v1",
+        "balancer-v1-swap"
+      ]
     }
   },
   "identity": {
     "memoReuse": "recheck-identity",
-    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
     "definition": {
       "version": 1,
       "identity": {
         "select": [
           {
-            "assert": {"op": "eq", "args": ["$candidate.candidateKind", "balancer-v1-pool"]},
+            "assert": {
+              "op": "eq",
+              "args": [
+                "$candidate.candidateKind",
+                "balancer-v1-pool"
+              ]
+            },
             "error": "balancer-v1 wrong candidate kind"
           },
-          {"return": "member", "when": {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]}},
+          {
+            "return": "member",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
           {
             "assert": {
               "op": "eq",
-              "args": ["$evidence.binding.pool", {"op": "lower", "args": [{"op": "address", "args": ["$candidate.pool"]}]}]
+              "args": [
+                "$evidence.binding.pool",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pool"
+                      ]
+                    }
+                  ]
+                }
+              ]
             },
             "error": "balancer-v1 foreign identity continuation"
           },
@@ -170,26 +405,82 @@
             "when": {
               "op": "or",
               "args": [
-                {"op": "defined", "args": ["$evidence.rejection"]},
-                {"op": "defined", "args": ["$evidence.retry"]},
-                {"op": "eq", "args": ["$evidence.phase", "complete"]}
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence.rejection"
+                  ]
+                },
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence.retry"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.phase",
+                    "complete"
+                  ]
+                }
               ]
             }
           },
-          {"return": "config", "when": {"op": "eq", "args": ["$evidence.phase", "member"]}},
-          {"return": "weights", "when": {"op": "eq", "args": ["$evidence.phase", "config"]}}
+          {
+            "return": "config",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "member"
+              ]
+            }
+          },
+          {
+            "return": "weights",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "config"
+              ]
+            }
+          }
         ],
         "stages": {
           "member": {
-            "requirements": {"transports": ["eth-call", "get-code"]},
+            "requirements": {
+              "transports": [
+                "eth-call",
+                "get-code"
+              ]
+            },
             "requests": [
-              {"id": "pool-code", "kind": "get-code", "address": "$candidate.pool"},
-              {"id": "factory-code", "kind": "get-code", "address": "$constants.factory"},
+              {
+                "id": "pool-code",
+                "kind": "get-code",
+                "address": "$candidate.pool"
+              },
+              {
+                "id": "factory-code",
+                "kind": "get-code",
+                "address": "$constants.factory"
+              },
               {
                 "id": "registered",
                 "kind": "eth-call",
                 "to": "$constants.factory",
-                "data": {"op": "encode", "args": ["factory", "isBPool", ["$candidate.pool"]]},
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "factory",
+                    "isBPool",
+                    [
+                      "$candidate.pool"
+                    ]
+                  ]
+                },
                 "completion": "return-data"
               }
             ],
@@ -197,7 +488,20 @@
               {
                 "assert": {
                   "op": "eq",
-                  "args": [{"op": "length", "args": ["$results"]}, {"op": "length", "args": ["$requests"]}]
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
                 },
                 "error": "balancer-v1 missing/extra results"
               },
@@ -207,9 +511,28 @@
                   "args": [
                     {
                       "op": "length",
-                      "args": [{"op": "unique", "args": [{"op": "map", "args": ["$results", "row", "$row.id"]}]}]
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                "$row.id"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     },
-                    {"op": "length", "args": ["$results"]}
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
                   ]
                 },
                 "error": "balancer-v1 duplicate results"
@@ -220,22 +543,95 @@
                   "args": [
                     {
                       "op": "hash",
-                      "args": [{"op": "sortId", "args": [{"op": "map", "args": ["$results", "row", {"id": "$row.id"}]}]}]
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     },
                     {
                       "op": "hash",
-                      "args": [{"op": "sortId", "args": [{"op": "map", "args": ["$requests", "row", {"id": "$row.id"}]}]}]
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
                 },
                 "error": "balancer-v1 unexpected results"
               },
-              {"let": "source", "value": {"op": "source", "args": ["$results"]}},
-              {"let": "pool", "value": {"op": "lower", "args": [{"op": "address", "args": ["$candidate.pool"]}]}},
-              {"assert": {"op": "ne", "args": ["$pool", "$constants.zero"]}, "error": "balancer-v1 zero address"},
+              {
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "pool",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pool"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "ne",
+                  "args": [
+                    "$pool",
+                    "$constants.zero"
+                  ]
+                },
+                "error": "balancer-v1 zero address"
+              },
               {
                 "let": "poolCode",
-                "value": {"op": "get", "args": [{"op": "returned", "args": ["pool-code"]}, "data"]}
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "pool-code"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
               },
               {
                 "assert": {
@@ -243,7 +639,20 @@
                   "args": [
                     {
                       "op": "codeHash",
-                      "args": [{"op": "get", "args": [{"op": "returned", "args": ["factory-code"]}, "data"]}]
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "factory-code"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
                     },
                     "$constants.factoryCodeHash"
                   ]
@@ -254,7 +663,20 @@
                 "let": "registered",
                 "value": {
                   "op": "bool",
-                  "args": [{"op": "get", "args": [{"op": "returned", "args": ["registered"]}, "data"]}]
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "registered"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
                 }
               },
               {
@@ -263,11 +685,21 @@
                   "pool": "$pool",
                   "factory": "$constants.factory",
                   "model": "$constants.model",
-                  "poolCodeHash": {"op": "codeHash", "args": ["$poolCode"]},
+                  "poolCodeHash": {
+                    "op": "codeHash",
+                    "args": [
+                      "$poolCode"
+                    ]
+                  },
                   "factoryCodeHash": "$constants.factoryCodeHash",
                   "tokens": [],
                   "weights": [],
-                  "swapFee": {"op": "uint", "args": ["0"]}
+                  "swapFee": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
                 }
               },
               {
@@ -275,64 +707,136 @@
                   "phase": "member",
                   "source": "$source",
                   "binding": "$binding",
-                  "ids": {"op": "map", "args": ["$requests", "request", "$request.id"]},
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  },
                   "rejection": "no-pool-code"
                 },
-                "when": {"op": "eq", "args": ["$poolCode", "0x"]}
+                "when": {
+                  "op": "eq",
+                  "args": [
+                    "$poolCode",
+                    "0x"
+                  ]
+                }
               },
               {
                 "return": {
                   "phase": "member",
                   "source": "$source",
                   "binding": "$binding",
-                  "ids": {"op": "map", "args": ["$requests", "request", "$request.id"]},
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  },
                   "rejection": "not-created-by-bfactory"
                 },
-                "when": {"op": "not", "args": ["$registered"]}
+                "when": {
+                  "op": "not",
+                  "args": [
+                    "$registered"
+                  ]
+                }
               },
               {
                 "return": {
                   "phase": "member",
                   "source": "$source",
                   "binding": "$binding",
-                  "ids": {"op": "map", "args": ["$requests", "request", "$request.id"]},
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  },
                   "retry": "unsupported-bpool-code"
                 },
-                "when": {"op": "ne", "args": ["$binding.poolCodeHash", "$constants.poolCodeHash"]}
+                "when": {
+                  "op": "ne",
+                  "args": [
+                    "$binding.poolCodeHash",
+                    "$constants.poolCodeHash"
+                  ]
+                }
               },
               {
                 "return": {
                   "phase": "member",
                   "source": "$source",
                   "binding": "$binding",
-                  "ids": {"op": "map", "args": ["$requests", "request", "$request.id"]}
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  }
                 }
               }
             ]
           },
           "config": {
-            "requirements": {"transports": ["eth-call"]},
-            "optionalFailures": ["tokens"],
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
+            "optionalFailures": [
+              "tokens"
+            ],
             "requests": [
               {
                 "id": "finalized",
                 "kind": "eth-call",
                 "to": "$candidate.pool",
-                "data": {"op": "encode", "args": ["pool", "isFinalized", []]},
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "isFinalized",
+                    []
+                  ]
+                },
                 "completion": "return-data"
               },
               {
                 "id": "public",
                 "kind": "eth-call",
                 "to": "$candidate.pool",
-                "data": {"op": "encode", "args": ["pool", "isPublicSwap", []]},
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "isPublicSwap",
+                    []
+                  ]
+                },
                 "completion": "return-data"
               },
               {
                 "id": "tokens",
                 "kind": "eth-call",
                 "to": "$candidate.pool",
-                "data": {"op": "encode", "args": ["pool", "getFinalTokens", []]},
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "getFinalTokens",
+                    []
+                  ]
+                },
                 "completion": "return-data",
                 "required": false
               },
@@ -340,7 +844,14 @@
                 "id": "fee",
                 "kind": "eth-call",
                 "to": "$candidate.pool",
-                "data": {"op": "encode", "args": ["pool", "getSwapFee", []]},
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "getSwapFee",
+                    []
+                  ]
+                },
                 "completion": "return-data"
               }
             ],
@@ -348,7 +859,20 @@
               {
                 "assert": {
                   "op": "eq",
-                  "args": [{"op": "length", "args": ["$results"]}, {"op": "length", "args": ["$requests"]}]
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
                 },
                 "error": "balancer-v1 missing/extra results"
               },
@@ -358,9 +882,28 @@
                   "args": [
                     {
                       "op": "length",
-                      "args": [{"op": "unique", "args": [{"op": "map", "args": ["$results", "row", "$row.id"]}]}]
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                "$row.id"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     },
-                    {"op": "length", "args": ["$results"]}
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
                   ]
                 },
                 "error": "balancer-v1 duplicate results"
@@ -371,31 +914,114 @@
                   "args": [
                     {
                       "op": "hash",
-                      "args": [{"op": "sortId", "args": [{"op": "map", "args": ["$results", "row", {"id": "$row.id"}]}]}]
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     },
                     {
                       "op": "hash",
-                      "args": [{"op": "sortId", "args": [{"op": "map", "args": ["$requests", "row", {"id": "$row.id"}]}]}]
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
                 },
                 "error": "balancer-v1 unexpected results"
               },
-              {"let": "source", "value": {"op": "source", "args": ["$results"]}},
-              {"let": "pool", "value": {"op": "lower", "args": [{"op": "address", "args": ["$candidate.pool"]}]}},
-              {"assert": {"op": "ne", "args": ["$pool", "$constants.zero"]}, "error": "balancer-v1 zero address"},
               {
-                "assert": {"op": "eq", "args": ["$evidence.binding.pool", "$pool"]},
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "pool",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pool"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "ne",
+                  "args": [
+                    "$pool",
+                    "$constants.zero"
+                  ]
+                },
+                "error": "balancer-v1 zero address"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.binding.pool",
+                    "$pool"
+                  ]
+                },
                 "error": "balancer-v1 foreign identity continuation"
               },
-              {"evaluate": {"op": "assertSource", "args": ["$source", "$evidence.source"]}},
+              {
+                "evaluate": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                }
+              },
               {
                 "return": {
                   "op": "merge",
                   "args": [
                     "$evidence",
                     {
-                      "ids": {"op": "map", "args": ["$requests", "request", "$request.id"]},
+                      "ids": {
+                        "op": "map",
+                        "args": [
+                          "$requests",
+                          "request",
+                          "$request.id"
+                        ]
+                      },
                       "retry": "bpool-not-finalized-public"
                     }
                   ]
@@ -408,11 +1034,37 @@
                       "args": [
                         {
                           "op": "bool",
-                          "args": [{"op": "get", "args": [{"op": "returned", "args": ["finalized"]}, "data"]}]
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "finalized"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            }
+                          ]
                         },
                         {
                           "op": "bool",
-                          "args": [{"op": "get", "args": [{"op": "returned", "args": ["public"]}, "data"]}]
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "public"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            }
+                          ]
                         }
                       ]
                     }
@@ -429,18 +1081,55 @@
                       "args": [
                         "pool",
                         "getFinalTokens",
-                        {"op": "get", "args": [{"op": "returned", "args": ["tokens"]}, "data"]},
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "tokens"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
                         0
                       ]
                     },
                     "token",
-                    {"op": "lower", "args": [{"op": "address", "args": ["$token"]}]}
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$token"
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 }
               },
               {
                 "let": "swapFee",
-                "value": {"op": "word", "args": [{"op": "get", "args": [{"op": "returned", "args": ["fee"]}, "data"]}]}
+                "value": {
+                  "op": "word",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "fee"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
               },
               {
                 "assert": {
@@ -449,13 +1138,50 @@
                     {
                       "op": "and",
                       "args": [
-                        {"op": "gte", "args": [{"op": "length", "args": ["$tokens"]}, 2]},
-                        {"op": "lte", "args": [{"op": "length", "args": ["$tokens"]}, 8]},
+                        {
+                          "op": "gte",
+                          "args": [
+                            {
+                              "op": "length",
+                              "args": [
+                                "$tokens"
+                              ]
+                            },
+                            2
+                          ]
+                        },
+                        {
+                          "op": "lte",
+                          "args": [
+                            {
+                              "op": "length",
+                              "args": [
+                                "$tokens"
+                              ]
+                            },
+                            8
+                          ]
+                        },
                         {
                           "op": "eq",
                           "args": [
-                            {"op": "length", "args": [{"op": "unique", "args": ["$tokens"]}]},
-                            {"op": "length", "args": ["$tokens"]}
+                            {
+                              "op": "length",
+                              "args": [
+                                {
+                                  "op": "unique",
+                                  "args": [
+                                    "$tokens"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "length",
+                              "args": [
+                                "$tokens"
+                              ]
+                            }
                           ]
                         },
                         {
@@ -466,17 +1192,57 @@
                             {
                               "op": "and",
                               "args": [
-                                {"op": "ne", "args": ["$token", "$constants.zero"]},
-                                {"op": "ne", "args": ["$token", "$pool"]},
-                                {"op": "ne", "args": ["$token", "$constants.factory"]}
+                                {
+                                  "op": "ne",
+                                  "args": [
+                                    "$token",
+                                    "$constants.zero"
+                                  ]
+                                },
+                                {
+                                  "op": "ne",
+                                  "args": [
+                                    "$token",
+                                    "$pool"
+                                  ]
+                                },
+                                {
+                                  "op": "ne",
+                                  "args": [
+                                    "$token",
+                                    "$constants.factory"
+                                  ]
+                                }
                               ]
                             }
                           ]
                         }
                       ]
                     },
-                    {"op": "gte", "args": ["$swapFee", {"op": "uint", "args": ["1000000000000"]}]},
-                    {"op": "lte", "args": ["$swapFee", {"op": "uint", "args": ["100000000000000000"]}]}
+                    {
+                      "op": "gte",
+                      "args": [
+                        "$swapFee",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "1000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lte",
+                      "args": [
+                        "$swapFee",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "100000000000000000"
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 },
                 "error": "balancer-v1 invalid finalized configuration"
@@ -488,8 +1254,24 @@
                     "$evidence",
                     {
                       "phase": "config",
-                      "ids": {"op": "map", "args": ["$requests", "request", "$request.id"]},
-                      "binding": {"op": "merge", "args": ["$evidence.binding", {"tokens": "$tokens", "swapFee": "$swapFee"}]}
+                      "ids": {
+                        "op": "map",
+                        "args": [
+                          "$requests",
+                          "request",
+                          "$request.id"
+                        ]
+                      },
+                      "binding": {
+                        "op": "merge",
+                        "args": [
+                          "$evidence.binding",
+                          {
+                            "tokens": "$tokens",
+                            "swapFee": "$swapFee"
+                          }
+                        ]
+                      }
                     }
                   ]
                 }
@@ -497,17 +1279,39 @@
             ]
           },
           "weights": {
-            "requirements": {"transports": ["eth-call"]},
+            "requirements": {
+              "transports": [
+                "eth-call"
+              ]
+            },
             "requests": {
               "op": "map",
               "args": [
                 "$evidence.binding.tokens",
                 "token",
                 {
-                  "id": {"op": "join", "args": [["weight", "$index"], ":"]},
+                  "id": {
+                    "op": "join",
+                    "args": [
+                      [
+                        "weight",
+                        "$index"
+                      ],
+                      ":"
+                    ]
+                  },
                   "kind": "eth-call",
                   "to": "$candidate.pool",
-                  "data": {"op": "encode", "args": ["pool", "getDenormalizedWeight", ["$token"]]},
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "pool",
+                      "getDenormalizedWeight",
+                      [
+                        "$token"
+                      ]
+                    ]
+                  },
                   "completion": "return-data"
                 }
               ]
@@ -516,7 +1320,20 @@
               {
                 "assert": {
                   "op": "eq",
-                  "args": [{"op": "length", "args": ["$results"]}, {"op": "length", "args": ["$requests"]}]
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$requests"
+                      ]
+                    }
+                  ]
                 },
                 "error": "balancer-v1 missing/extra results"
               },
@@ -526,9 +1343,28 @@
                   "args": [
                     {
                       "op": "length",
-                      "args": [{"op": "unique", "args": [{"op": "map", "args": ["$results", "row", "$row.id"]}]}]
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                "$row.id"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     },
-                    {"op": "length", "args": ["$results"]}
+                    {
+                      "op": "length",
+                      "args": [
+                        "$results"
+                      ]
+                    }
                   ]
                 },
                 "error": "balancer-v1 duplicate results"
@@ -539,24 +1375,100 @@
                   "args": [
                     {
                       "op": "hash",
-                      "args": [{"op": "sortId", "args": [{"op": "map", "args": ["$results", "row", {"id": "$row.id"}]}]}]
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$results",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     },
                     {
                       "op": "hash",
-                      "args": [{"op": "sortId", "args": [{"op": "map", "args": ["$requests", "row", {"id": "$row.id"}]}]}]
+                      "args": [
+                        {
+                          "op": "sortId",
+                          "args": [
+                            {
+                              "op": "map",
+                              "args": [
+                                "$requests",
+                                "row",
+                                {
+                                  "id": "$row.id"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
                     }
                   ]
                 },
                 "error": "balancer-v1 unexpected results"
               },
-              {"let": "source", "value": {"op": "source", "args": ["$results"]}},
-              {"let": "pool", "value": {"op": "lower", "args": [{"op": "address", "args": ["$candidate.pool"]}]}},
-              {"assert": {"op": "ne", "args": ["$pool", "$constants.zero"]}, "error": "balancer-v1 zero address"},
               {
-                "assert": {"op": "eq", "args": ["$evidence.binding.pool", "$pool"]},
+                "let": "source",
+                "value": {
+                  "op": "source",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              },
+              {
+                "let": "pool",
+                "value": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pool"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "ne",
+                  "args": [
+                    "$pool",
+                    "$constants.zero"
+                  ]
+                },
+                "error": "balancer-v1 zero address"
+              },
+              {
+                "assert": {
+                  "op": "eq",
+                  "args": [
+                    "$evidence.binding.pool",
+                    "$pool"
+                  ]
+                },
                 "error": "balancer-v1 foreign identity continuation"
               },
-              {"evaluate": {"op": "assertSource", "args": ["$source", "$evidence.source"]}},
+              {
+                "evaluate": {
+                  "op": "assertSource",
+                  "args": [
+                    "$source",
+                    "$evidence.source"
+                  ]
+                }
+              },
               {
                 "let": "weights",
                 "value": {
@@ -570,7 +1482,21 @@
                         {
                           "op": "get",
                           "args": [
-                            {"op": "returned", "args": [{"op": "join", "args": [["weight", "$index"], ":"]}]},
+                            {
+                              "op": "returned",
+                              "args": [
+                                {
+                                  "op": "join",
+                                  "args": [
+                                    [
+                                      "weight",
+                                      "$index"
+                                    ],
+                                    ":"
+                                  ]
+                                }
+                              ]
+                            },
                             "data"
                           ]
                         }
@@ -591,8 +1517,30 @@
                         {
                           "op": "and",
                           "args": [
-                            {"op": "gte", "args": ["$weight", {"op": "uint", "args": ["1000000000000000000"]}]},
-                            {"op": "lte", "args": ["$weight", {"op": "uint", "args": ["50000000000000000000"]}]}
+                            {
+                              "op": "gte",
+                              "args": [
+                                "$weight",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "1000000000000000000"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "lte",
+                              "args": [
+                                "$weight",
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "50000000000000000000"
+                                  ]
+                                }
+                              ]
+                            }
                           ]
                         }
                       ]
@@ -600,8 +1548,19 @@
                     {
                       "op": "lte",
                       "args": [
-                        {"op": "model", "args": ["sumWeights", "$weights"]},
-                        {"op": "uint", "args": ["50000000000000000000"]}
+                        {
+                          "op": "model",
+                          "args": [
+                            "sumWeights",
+                            "$weights"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "50000000000000000000"
+                          ]
+                        }
                       ]
                     }
                   ]
@@ -615,26 +1574,79 @@
                     "$evidence",
                     {
                       "phase": "complete",
-                      "ids": {"op": "map", "args": ["$requests", "request", "$request.id"]},
-                      "binding": {"op": "merge", "args": ["$evidence.binding", {"weights": "$weights"}]}
+                      "ids": {
+                        "op": "map",
+                        "args": [
+                          "$requests",
+                          "request",
+                          "$request.id"
+                        ]
+                      },
+                      "binding": {
+                        "op": "merge",
+                        "args": [
+                          "$evidence.binding",
+                          {
+                            "weights": "$weights"
+                          }
+                        ]
+                      }
                     }
                   ]
                 }
               }
             ]
           },
-          "done": {"requirements": {"transports": []}, "requests": [], "decode": [{"return": "$evidence"}]}
+          "done": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "return": "$evidence"
+              }
+            ]
+          }
         },
         "decide": [
           {
-            "return": {"status": "continue"},
-            "when": {"op": "not", "args": [{"op": "defined", "args": ["$evidence"]}]}
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
           },
           {
-            "return": {"status": "invalid-program", "reasonCode": "foreign-balancer-v1-candidate"},
+            "return": {
+              "status": "invalid-program",
+              "reasonCode": "foreign-balancer-v1-candidate"
+            },
             "when": {
               "op": "ne",
-              "args": ["$evidence.binding.pool", {"op": "lower", "args": [{"op": "address", "args": ["$candidate.pool"]}]}]
+              "args": [
+                "$evidence.binding.pool",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$candidate.pool"
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           },
           {
@@ -643,13 +1655,37 @@
               "reasonCode": "$evidence.rejection",
               "evidenceRequestIds": "$evidence.ids"
             },
-            "when": {"op": "defined", "args": ["$evidence.rejection"]}
+            "when": {
+              "op": "defined",
+              "args": [
+                "$evidence.rejection"
+              ]
+            }
           },
           {
-            "return": {"status": "retryable", "reasonCode": "$evidence.retry"},
-            "when": {"op": "defined", "args": ["$evidence.retry"]}
+            "return": {
+              "status": "retryable",
+              "reasonCode": "$evidence.retry"
+            },
+            "when": {
+              "op": "defined",
+              "args": [
+                "$evidence.retry"
+              ]
+            }
           },
-          {"return": {"status": "continue"}, "when": {"op": "ne", "args": ["$evidence.phase", "complete"]}},
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$evidence.phase",
+                "complete"
+              ]
+            }
+          },
           {
             "return": {
               "status": "verified",
@@ -662,29 +1698,68 @@
                   {
                     "kind": "bfactory-create-only-registration-and-finalized-code",
                     "subject": "$constants.factory",
-                    "evidenceHash": {"op": "hash", "args": [{"binding": "$evidence.binding", "source": "$evidence.source"}]}
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "binding": "$evidence.binding",
+                          "source": "$evidence.source"
+                        }
+                      ]
+                    }
                   }
                 ]
               }
             }
           }
         ],
-        "applies": {"op": "eq", "args": ["$candidate.candidateKind", "balancer-v1-pool"]}
+        "applies": {
+          "op": "eq",
+          "args": [
+            "$candidate.candidateKind",
+            "balancer-v1-pool"
+          ]
+        }
       },
       "programs": {}
     }
   },
   "instance": {
-    "key": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
     "draft": {
       "op": "merge",
       "args": [
         {
           "familyId": "$identity.familyId",
           "lineageId": "$identity.lineageId",
-          "instanceKey": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.subject"
+                ]
+              }
+            ]
+          },
           "provenance": "$identity.provenance",
-          "runtimeRequirements": [{"kind": "source-state", "freshness": "pinned-block"}]
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            }
+          ]
         },
         "$identity.facts"
       ]
@@ -706,27 +1781,68 @@
     "directions": {
       "op": "flatMap",
       "args": [
-        {"op": "map", "args": ["$descriptor.tokens", "token", {"token": "$token", "position": "$index"}]},
+        {
+          "op": "map",
+          "args": [
+            "$descriptor.tokens",
+            "token",
+            {
+              "token": "$token",
+              "position": "$index"
+            }
+          ]
+        },
         "left",
         {
           "op": "flatMap",
           "args": [
-            {"op": "map", "args": ["$descriptor.tokens", "token", {"token": "$token", "position": "$index"}]},
+            {
+              "op": "map",
+              "args": [
+                "$descriptor.tokens",
+                "token",
+                {
+                  "token": "$token",
+                  "position": "$index"
+                }
+              ]
+            },
             "right",
             {
               "op": "if",
               "args": [
-                {"op": "eq", "args": ["$left.position", "$right.position"]},
+                {
+                  "op": "eq",
+                  "args": [
+                    "$left.position",
+                    "$right.position"
+                  ]
+                },
                 [],
                 [
                   {
-                    "id": {"op": "join", "args": [["$left.position", "$right.position"], ":"]},
+                    "id": {
+                      "op": "join",
+                      "args": [
+                        [
+                          "$left.position",
+                          "$right.position"
+                        ],
+                        ":"
+                      ]
+                    },
                     "enabled": true,
                     "tokenIn": "$left.token",
                     "tokenOut": "$right.token",
                     "adapterId": "balancer-v1-swap",
-                    "taxonomy": {"slotKind": "swap"},
-                    "fields": {"pool": "$descriptor.pool", "i": "$left.position", "j": "$right.position"}
+                    "taxonomy": {
+                      "slotKind": "swap"
+                    },
+                    "fields": {
+                      "pool": "$descriptor.pool",
+                      "i": "$left.position",
+                      "j": "$right.position"
+                    }
                   }
                 ]
               ]
@@ -735,41 +1851,244 @@
         }
       ]
     },
-    "key": {"op": "join", "args": [["balancer-v1", "$descriptor.pool", "$route.i", "$route.j"], ":"]},
-    "graphVenue": {"kind": "address-pool", "pool": "$descriptor.pool"},
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "balancer-v1",
+          "$descriptor.pool",
+          "$route.i",
+          "$route.j"
+        ],
+        ":"
+      ]
+    },
+    "graphVenue": {
+      "kind": "address-pool",
+      "pool": "$descriptor.pool"
+    },
     "effects": [
-      {"kind": "token-delta", "token": "$route.tokenIn", "account": "executor", "direction": "decrease"},
-      {"kind": "token-delta", "token": "$route.tokenOut", "account": "executor", "direction": "increase"}
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
     ],
     "descriptorChecks": [
       {
         "assert": {
           "op": "and",
           "args": [
-            {"op": "eq", "args": ["$descriptor.familyId", "balancer-v1"]},
-            {"op": "eq", "args": ["$descriptor.lineageId", "balancer-v1:finalized-bpool"]},
-            {"op": "eq", "args": ["$descriptor.factory", "$constants.factory"]},
-            {"op": "eq", "args": ["$descriptor.model", "$constants.model"]},
-            {"op": "eq", "args": ["$descriptor.poolCodeHash", "$constants.poolCodeHash"]},
-            {"op": "eq", "args": ["$descriptor.factoryCodeHash", "$constants.factoryCodeHash"]},
-            {"op": "eq", "args": ["$descriptor.instanceKey", "$descriptor.pool"]},
             {
               "op": "eq",
-              "args": [{"op": "lower", "args": [{"op": "address", "args": ["$descriptor.pool"]}]}, "$descriptor.pool"]
+              "args": [
+                "$descriptor.familyId",
+                "balancer-v1"
+              ]
             },
-            {"op": "ne", "args": ["$descriptor.pool", "$constants.zero"]},
-            {"op": "ne", "args": ["$descriptor.pool", "$constants.factory"]},
-            {"op": "gte", "args": [{"op": "length", "args": ["$descriptor.tokens"]}, 2]},
-            {"op": "lte", "args": [{"op": "length", "args": ["$descriptor.tokens"]}, 8]},
             {
-              "op": "eq",
-              "args": [{"op": "length", "args": ["$descriptor.weights"]}, {"op": "length", "args": ["$descriptor.tokens"]}]
+              "op": "or",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.lineageId",
+                        "balancer-v1:finalized-bpool"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.factory",
+                        "$constants.factory"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.model",
+                        "$constants.model"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.poolCodeHash",
+                        "$constants.poolCodeHash"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.factoryCodeHash",
+                        "$constants.factoryCodeHash"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.lineageId",
+                        "balancer-v1:crpt-bpool"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.factory",
+                        "$constants.crptFactory"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.model",
+                        "$constants.crptModel"
+                      ]
+                    },
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$descriptor.poolCodeHash",
+                            "$constants.crptPoolCodeHash"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$descriptor.poolCodeHash",
+                            "$constants.crptAltPoolCodeHash"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.factoryCodeHash",
+                        "$constants.crptFactoryCodeHash"
+                      ]
+                    }
+                  ]
+                }
+              ]
             },
             {
               "op": "eq",
               "args": [
-                {"op": "length", "args": [{"op": "unique", "args": ["$descriptor.tokens"]}]},
-                {"op": "length", "args": ["$descriptor.tokens"]}
+                "$descriptor.instanceKey",
+                "$descriptor.pool"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$descriptor.pool"
+                      ]
+                    }
+                  ]
+                },
+                "$descriptor.pool"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.pool",
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$descriptor.pool",
+                "$constants.factory"
+              ]
+            },
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.tokens"
+                  ]
+                },
+                2
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.tokens"
+                  ]
+                },
+                8
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.weights"
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.tokens"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    {
+                      "op": "unique",
+                      "args": [
+                        "$descriptor.tokens"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.tokens"
+                  ]
+                }
               ]
             },
             {
@@ -782,11 +2101,42 @@
                   "args": [
                     {
                       "op": "eq",
-                      "args": [{"op": "lower", "args": [{"op": "address", "args": ["$token"]}]}, "$token"]
+                      "args": [
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$token"
+                              ]
+                            }
+                          ]
+                        },
+                        "$token"
+                      ]
                     },
-                    {"op": "ne", "args": ["$token", "$constants.zero"]},
-                    {"op": "ne", "args": ["$token", "$descriptor.pool"]},
-                    {"op": "ne", "args": ["$token", "$constants.factory"]}
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$token",
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$token",
+                        "$descriptor.pool"
+                      ]
+                    },
+                    {
+                      "op": "ne",
+                      "args": [
+                        "$token",
+                        "$constants.factory"
+                      ]
+                    }
                   ]
                 }
               ]
@@ -799,8 +2149,30 @@
                 {
                   "op": "and",
                   "args": [
-                    {"op": "gte", "args": ["$weight", {"op": "uint", "args": ["1000000000000000000"]}]},
-                    {"op": "lte", "args": ["$weight", {"op": "uint", "args": ["50000000000000000000"]}]}
+                    {
+                      "op": "gte",
+                      "args": [
+                        "$weight",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "1000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lte",
+                      "args": [
+                        "$weight",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "50000000000000000000"
+                          ]
+                        }
+                      ]
+                    }
                   ]
                 }
               ]
@@ -808,12 +2180,45 @@
             {
               "op": "lte",
               "args": [
-                {"op": "model", "args": ["sumWeights", "$descriptor.weights"]},
-                {"op": "uint", "args": ["50000000000000000000"]}
+                {
+                  "op": "model",
+                  "args": [
+                    "sumWeights",
+                    "$descriptor.weights"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "50000000000000000000"
+                  ]
+                }
               ]
             },
-            {"op": "gte", "args": ["$descriptor.swapFee", {"op": "uint", "args": ["1000000000000"]}]},
-            {"op": "lte", "args": ["$descriptor.swapFee", {"op": "uint", "args": ["100000000000000000"]}]}
+            {
+              "op": "gte",
+              "args": [
+                "$descriptor.swapFee",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$descriptor.swapFee",
+                {
+                  "op": "uint",
+                  "args": [
+                    "100000000000000000"
+                  ]
+                }
+              ]
+            }
           ]
         },
         "error": "balancer-v1 incompatible descriptor"
@@ -821,7 +2226,15 @@
     ]
   },
   "pricing": {
-    "draft": {"op": "merge", "args": ["$descriptor", {"routes": "$routes"}]},
+    "draft": {
+      "op": "merge",
+      "args": [
+        "$descriptor",
+        {
+          "routes": "$routes"
+        }
+      ]
+    },
     "compatibility": {
       "pool": "$descriptor.pool",
       "factory": "$descriptor.factory",
@@ -832,15 +2245,44 @@
       "weights": "$descriptor.weights",
       "swapFee": "$descriptor.swapFee"
     },
-    "static": {"requirements": {"transports": []}, "dependencies": [], "requests": [], "decode": [{"return": {}}]},
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
     "finalize": "$draft",
-    "sampleAmount": {"op": "uint", "args": ["1"]},
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1"
+      ]
+    },
     "exactCompatibility": {
       "binding": "$route.bindingRef.fingerprint",
       "routeKey": "$route.routeKey",
-      "executor": {"op": "lower", "args": [{"op": "address", "args": ["$executor"]}]}
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
     },
-    "mutationKinds": ["log", "call"]
+    "mutationKinds": [
+      "log",
+      "call"
+    ]
   },
   "swap": {
     "version": 1,
@@ -849,10 +2291,40 @@
         "id": "balancer-v1-LOG_SWAP",
         "signature": "event LOG_SWAP(address indexed caller,address indexed tokenIn,address indexed tokenOut,uint256 tokenAmountIn,uint256 tokenAmountOut)",
         "classification": "swap",
-        "pool": {"op": "lower", "args": [{"op": "address", "args": ["$log.address"]}]},
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
         "payload": {
-          "tokenIn": {"op": "lower", "args": [{"op": "address", "args": ["$args.tokenIn"]}]},
-          "tokenOut": {"op": "lower", "args": [{"op": "address", "args": ["$args.tokenOut"]}]},
+          "tokenIn": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$args.tokenIn"
+                ]
+              }
+            ]
+          },
+          "tokenOut": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$args.tokenOut"
+                ]
+              }
+            ]
+          },
           "amountIn": "$args.tokenAmountIn",
           "amountOut": "$args.tokenAmountOut"
         },
@@ -862,29 +2334,87 @@
             {
               "op": "ne",
               "args": [
-                {"op": "lower", "args": [{"op": "address", "args": ["$args.tokenIn"]}]},
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$args.tokenIn"
+                      ]
+                    }
+                  ]
+                },
                 "0x0000000000000000000000000000000000000000"
               ]
             },
             {
               "op": "ne",
               "args": [
-                {"op": "lower", "args": [{"op": "address", "args": ["$args.tokenOut"]}]},
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$args.tokenOut"
+                      ]
+                    }
+                  ]
+                },
                 "0x0000000000000000000000000000000000000000"
               ]
             },
-            {"op": "not", "args": [{"op": "sameAddress", "args": ["$args.tokenIn", "$args.tokenOut"]}]}
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$args.tokenIn",
+                    "$args.tokenOut"
+                  ]
+                }
+              ]
+            }
           ]
         },
         "match": {
           "op": "and",
           "args": [
-            {"op": "sameAddress", "args": ["$edge.target", "$pool"]},
-            {"op": "sameAddress", "args": ["$edge.tokenIn", "$payload.tokenIn"]},
-            {"op": "sameAddress", "args": ["$edge.tokenOut", "$payload.tokenOut"]}
+            {
+              "op": "sameAddress",
+              "args": [
+                "$edge.target",
+                "$pool"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$edge.tokenIn",
+                "$payload.tokenIn"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$edge.tokenOut",
+                "$payload.tokenOut"
+              ]
+            }
           ]
         },
-        "impact": {"op": "merge", "args": [{"pool": "$edge.target", "matchedAdapterId": "$edge.adapterId"}, "$payload"]}
+        "impact": {
+          "op": "merge",
+          "args": [
+            {
+              "pool": "$edge.target",
+              "matchedAdapterId": "$edge.adapterId"
+            },
+            "$payload"
+          ]
+        }
       }
     ],
     "canonicalIntakeTargets": [],
@@ -911,7 +2441,9 @@
         "function swapExactAmountOut(address,uint256,address,uint256,uint256) returns(uint256,uint256)",
         "event LOG_SWAP(address indexed caller,address indexed tokenIn,address indexed tokenOut,uint256 tokenAmountIn,uint256 tokenAmountOut)"
       ],
-      "factory": ["function isBPool(address) view returns(bool)"]
+      "factory": [
+        "function isBPool(address) view returns(bool)"
+      ]
     },
     "constants": {
       "factory": "0x9424b1412450d0f8fc2255faf6046b98213b76bd",
@@ -920,7 +2452,12 @@
       "model": "balancer-v1-finalized-bpool-0.5.12",
       "zero": "0x0000000000000000000000000000000000000000",
       "bone": "1000000000000000000",
-      "max": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+      "max": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "crptFactory": "0x3bd9c0df645d22be0c34b5e7566fb316b4f3aac7",
+      "crptFactoryCodeHash": "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470",
+      "crptModel": "balancer-v1-crpt-bpool-fork-v1",
+      "crptPoolCodeHash": "0xe2ddec1f7e5b3fd553b0d319e71851975926df9d0c8fdf81f1c11685d3207eb1",
+      "crptAltPoolCodeHash": "0xcd47e18fd0989ae1a0688a206b1cd5c8f7e008b7e93dd716f8ca10883bdcfbcc"
     },
     "expressions": {},
     "programs": {
@@ -931,14 +2468,54 @@
             "args": [
               {
                 "op": "every",
-                "args": ["$steps.balances", "balance", {"op": "gt", "args": ["$balance", {"op": "uint", "args": ["0"]}]}]
+                "args": [
+                  "$steps.balances",
+                  "balance",
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$balance",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
               },
-              {"op": "gt", "args": ["$amountIn", {"op": "uint", "args": ["0"]}]},
+              {
+                "op": "gt",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
               {
                 "op": "lte",
                 "args": [
                   "$amountIn",
-                  {"op": "model", "args": ["maxInput", [{"op": "at", "args": ["$steps.balances", "$route.i"]}]]}
+                  {
+                    "op": "model",
+                    "args": [
+                      "maxInput",
+                      [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$steps.balances",
+                            "$route.i"
+                          ]
+                        }
+                      ]
+                    ]
+                  }
                 ]
               }
             ]
@@ -957,10 +2534,34 @@
                   "pool",
                   "calcOutGivenIn",
                   [
-                    {"op": "at", "args": ["$steps.balances", "$route.i"]},
-                    {"op": "at", "args": ["$descriptor.weights", "$route.i"]},
-                    {"op": "at", "args": ["$steps.balances", "$route.j"]},
-                    {"op": "at", "args": ["$descriptor.weights", "$route.j"]},
+                    {
+                      "op": "at",
+                      "args": [
+                        "$steps.balances",
+                        "$route.i"
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$descriptor.weights",
+                        "$route.i"
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$steps.balances",
+                        "$route.j"
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$descriptor.weights",
+                        "$route.j"
+                      ]
+                    },
                     "$amountIn",
                     "$descriptor.swapFee"
                   ]
@@ -972,7 +2573,13 @@
         }
       ]
     },
-    "match": {"op": "eq", "args": ["$descriptor.model", "$constants.model"]},
+    "match": {
+      "op": "eq",
+      "args": [
+        "$descriptor.model",
+        "$constants.model"
+      ]
+    },
     "context": {},
     "boundState": {
       "pool": "$descriptor.pool",
@@ -986,9 +2593,17 @@
     },
     "pricing": {
       "refreshPolicy": "on-touch",
-      "requirements": {"transports": ["eth-call"]},
-      "dependencies": ["$descriptor.pool"],
-      "mutationAddresses": ["$descriptor.pool"],
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.pool"
+      ],
+      "mutationAddresses": [
+        "$descriptor.pool"
+      ],
       "classifyUnavailable": {
         "op": "map",
         "args": [
@@ -1005,11 +2620,39 @@
                     "args": [
                       {
                         "op": "gt",
-                        "args": [{"op": "at", "args": ["$snapshot.balances", "$route.i"]}, {"op": "uint", "args": ["0"]}]
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$snapshot.balances",
+                              "$route.i"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
                       },
                       {
                         "op": "gt",
-                        "args": [{"op": "at", "args": ["$snapshot.balances", "$route.j"]}, {"op": "uint", "args": ["0"]}]
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$snapshot.balances",
+                              "$route.j"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
                       }
                     ]
                   }
@@ -1018,27 +2661,56 @@
             ]
           },
           "route",
-          ["$route.routeKey", "empty-recorded-balance"]
+          [
+            "$route.routeKey",
+            "empty-recorded-balance"
+          ]
         ]
       }
     },
     "exact": {
       "methodId": "balancer-v1-chain-exact-in",
-      "requirements": {"transports": ["eth-call"]},
-      "protectedAddresses": {"op": "concat", "args": [["$descriptor.pool", "$descriptor.factory"], "$descriptor.tokens"]},
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "protectedAddresses": {
+        "op": "concat",
+        "args": [
+          [
+            "$descriptor.pool",
+            "$descriptor.factory"
+          ],
+          "$descriptor.tokens"
+        ]
+      },
       "checks": [
         {
           "assert": {
             "op": "and",
             "args": [
-              {"op": "gte", "args": ["$amountIn", {"op": "uint", "args": ["0"]}]},
+              {
+                "op": "gte",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
               {
                 "op": "lte",
                 "args": [
                   "$amountIn",
                   {
                     "op": "uint",
-                    "args": ["115792089237316195423570985008687907853269984665640564039457584007913129639935"]
+                    "args": [
+                      "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                    ]
                   }
                 ]
               }
@@ -1052,14 +2724,47 @@
             "args": [
               {
                 "op": "ne",
-                "args": [{"op": "lower", "args": [{"op": "address", "args": ["$executor"]}]}, "$constants.zero"]
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$executor"
+                        ]
+                      }
+                    ]
+                  },
+                  "$constants.zero"
+                ]
               },
               {
                 "op": "every",
                 "args": [
-                  {"op": "concat", "args": [["$descriptor.pool", "$descriptor.factory"], "$descriptor.tokens"]},
+                  {
+                    "op": "concat",
+                    "args": [
+                      [
+                        "$descriptor.pool",
+                        "$descriptor.factory"
+                      ],
+                      "$descriptor.tokens"
+                    ]
+                  },
                   "protected",
-                  {"op": "not", "args": [{"op": "sameAddress", "args": ["$executor", "$protected"]}]}
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$executor",
+                          "$protected"
+                        ]
+                      }
+                    ]
+                  }
                 ]
               }
             ]
@@ -1070,7 +2775,17 @@
       "evidence": {
         "kind": "balancer-v1-chain-exact-in",
         "source": "$source",
-        "executor": {"op": "lower", "args": [{"op": "address", "args": ["$executor"]}]},
+        "executor": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$executor"
+              ]
+            }
+          ]
+        },
         "binding": "$route.bindingRef.fingerprint",
         "routeKey": "$route.routeKey",
         "amountIn": "$amountIn",
@@ -1080,33 +2795,69 @@
     "readPrograms": {},
     "execution": {
       "version": 1,
-      "settlement": {"directOutput": false},
-      "protectedAddresses": {"op": "concat", "args": [["$descriptor.pool", "$descriptor.factory"], "$descriptor.tokens"]},
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": {
+        "op": "concat",
+        "args": [
+          [
+            "$descriptor.pool",
+            "$descriptor.factory"
+          ],
+          "$descriptor.tokens"
+        ]
+      },
       "requireCanonicalSource": true,
       "rejectRuntimeEvidence": true,
-      "approval": {"token": "$route.tokenIn", "spender": "$descriptor.pool", "mode": "exact-clear", "verifyAllowance": true},
+      "approval": {
+        "token": "$route.tokenIn",
+        "spender": "$descriptor.pool",
+        "mode": "exact-clear",
+        "verifyAllowance": true
+      },
       "call": {
         "target": "$descriptor.pool",
         "signature": "function swapExactAmountIn(address,uint256,address,uint256,uint256) returns(uint256,uint256)",
         "args": [
           "$route.tokenIn",
-          {"runtime": "amountIn"},
+          {
+            "runtime": "amountIn"
+          },
           "$route.tokenOut",
           "$minAmountOut",
-          {"op": "uint", "args": ["115792089237316195423570985008687907853269984665640564039457584007913129639935"]}
+          {
+            "op": "uint",
+            "args": [
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+            ]
+          }
         ],
-        "save": {"output": 0}
+        "save": {
+          "output": 0
+        }
       },
       "effects": [
-        {"kind": "debit", "token": "$route.tokenIn", "account": "$executor", "equals": {"runtime": "amountIn"}},
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
         {
           "kind": "credit",
           "token": "$route.tokenOut",
           "account": "$recipient",
-          "equals": {"runtime": "output"},
+          "equals": {
+            "runtime": "output"
+          },
           "minimum": "$minAmountOut"
         },
-        {"kind": "unchanged-native"}
+        {
+          "kind": "unchanged-native"
+        }
       ]
     },
     "modules": {}
@@ -1115,10 +2866,22 @@
     "math": {
       "version": 1,
       "entries": {
-        "spotPrice": {"model": "balancer-v1:spot-price", "version": 1},
-        "maxInput": {"model": "balancer-v1:max-input", "version": 1},
-        "sumWeights": {"model": "balancer-v1:sum-weights", "version": 1},
-        "outputGuard": {"model": "balancer-v1:output-guard", "version": 1}
+        "spotPrice": {
+          "model": "balancer-v1:spot-price",
+          "version": 1
+        },
+        "maxInput": {
+          "model": "balancer-v1:max-input",
+          "version": 1
+        },
+        "sumWeights": {
+          "model": "balancer-v1:sum-weights",
+          "version": 1
+        },
+        "outputGuard": {
+          "model": "balancer-v1:output-guard",
+          "version": 1
+        }
       }
     },
     "pricingFlow": {
@@ -1126,17 +2889,39 @@
       "steps": [
         {
           "id": "balances",
-          "requirements": {"transports": ["eth-call"]},
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
           "requests": {
             "op": "map",
             "args": [
               "$descriptor.tokens",
               "token",
               {
-                "id": {"op": "join", "args": [["balance", "$index"], ":"]},
+                "id": {
+                  "op": "join",
+                  "args": [
+                    [
+                      "balance",
+                      "$index"
+                    ],
+                    ":"
+                  ]
+                },
                 "kind": "eth-call",
                 "to": "$descriptor.pool",
-                "data": {"op": "encode", "args": ["pool", "getBalance", ["$token"]]},
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "getBalance",
+                    [
+                      "$token"
+                    ]
+                  ]
+                },
                 "completion": "return-data"
               }
             ]
@@ -1151,7 +2936,24 @@
                 "args": [
                   {
                     "op": "get",
-                    "args": [{"op": "returned", "args": [{"op": "join", "args": [["balance", "$index"], ":"]}]}, "data"]
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          {
+                            "op": "join",
+                            "args": [
+                              [
+                                "balance",
+                                "$index"
+                              ],
+                              ":"
+                            ]
+                          }
+                        ]
+                      },
+                      "data"
+                    ]
                   }
                 ]
               }
@@ -1159,7 +2961,10 @@
           }
         }
       ],
-      "result": {"source": "$source", "balances": "$steps.balances"}
+      "result": {
+        "source": "$source",
+        "balances": "$steps.balances"
+      }
     },
     "quoteFlow": {
       "version": 1,
@@ -1168,23 +2973,49 @@
         "step": "quote",
         "requestId": "amount-out",
         "signature": "function calcOutGivenIn(uint256,uint256,uint256,uint256,uint256,uint256) pure returns(uint256)",
-        "amountPath": [4],
-        "outputPath": [0]
+        "amountPath": [
+          4
+        ],
+        "outputPath": [
+          0
+        ]
       },
       "steps": [
         {
           "id": "balances",
-          "requirements": {"transports": ["eth-call"]},
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
           "requests": {
             "op": "map",
             "args": [
               "$descriptor.tokens",
               "token",
               {
-                "id": {"op": "join", "args": [["balance", "$index"], ":"]},
+                "id": {
+                  "op": "join",
+                  "args": [
+                    [
+                      "balance",
+                      "$index"
+                    ],
+                    ":"
+                  ]
+                },
                 "kind": "eth-call",
                 "to": "$descriptor.pool",
-                "data": {"op": "encode", "args": ["pool", "getBalance", ["$token"]]},
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "pool",
+                    "getBalance",
+                    [
+                      "$token"
+                    ]
+                  ]
+                },
                 "completion": "return-data"
               }
             ]
@@ -1199,7 +3030,24 @@
                 "args": [
                   {
                     "op": "get",
-                    "args": [{"op": "returned", "args": [{"op": "join", "args": [["balance", "$index"], ":"]}]}, "data"]
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          {
+                            "op": "join",
+                            "args": [
+                              [
+                                "balance",
+                                "$index"
+                              ],
+                              ":"
+                            ]
+                          }
+                        ]
+                      },
+                      "data"
+                    ]
                   }
                 ]
               }
@@ -1208,12 +3056,38 @@
         },
         {
           "id": "quote",
-          "requirements": {"transports": ["eth-call"]},
-          "requests": {"op": "program", "args": ["quoteRequests", {}]},
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": {
+            "op": "program",
+            "args": [
+              "quoteRequests",
+              {}
+            ]
+          },
           "decode": [
             {
               "let": "amountOut",
-              "value": {"op": "word", "args": [{"op": "get", "args": [{"op": "returned", "args": ["amount-out"]}, "data"]}]}
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "amount-out"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
             },
             {
               "return": {
@@ -1221,10 +3095,34 @@
                 "args": [
                   "outputGuard",
                   [
-                    {"op": "at", "args": ["$steps.balances", "$route.i"]},
-                    {"op": "at", "args": ["$descriptor.weights", "$route.i"]},
-                    {"op": "at", "args": ["$steps.balances", "$route.j"]},
-                    {"op": "at", "args": ["$descriptor.weights", "$route.j"]},
+                    {
+                      "op": "at",
+                      "args": [
+                        "$steps.balances",
+                        "$route.i"
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$descriptor.weights",
+                        "$route.i"
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$steps.balances",
+                        "$route.j"
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$descriptor.weights",
+                        "$route.j"
+                      ]
+                    },
                     "$descriptor.swapFee",
                     "$amountIn",
                     "$amountOut"
@@ -1243,7 +3141,20 @@
         {
           "assert": {
             "op": "eq",
-            "args": [{"op": "length", "args": ["$snapshot.balances"]}, {"op": "length", "args": ["$descriptor.tokens"]}]
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$snapshot.balances"
+                ]
+              },
+              {
+                "op": "length",
+                "args": [
+                  "$descriptor.tokens"
+                ]
+              }
+            ]
           },
           "error": "balancer-v1 balance count mismatch"
         }
@@ -1261,11 +3172,39 @@
                 "args": [
                   {
                     "op": "gt",
-                    "args": [{"op": "at", "args": ["$snapshot.balances", "$route.i"]}, {"op": "uint", "args": ["0"]}]
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$snapshot.balances",
+                          "$route.i"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
                   },
                   {
                     "op": "gt",
-                    "args": [{"op": "at", "args": ["$snapshot.balances", "$route.j"]}, {"op": "uint", "args": ["0"]}]
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          "$snapshot.balances",
+                          "$route.j"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
                   }
                 ]
               }
@@ -1274,16 +3213,45 @@
           "route",
           {
             "routeKey": "$route.routeKey",
-            "numerator": {"op": "uint", "args": ["1000000000000000000"]},
+            "numerator": {
+              "op": "uint",
+              "args": [
+                "1000000000000000000"
+              ]
+            },
             "denominator": {
               "op": "model",
               "args": [
                 "spotPrice",
                 [
-                  {"op": "at", "args": ["$snapshot.balances", "$route.i"]},
-                  {"op": "at", "args": ["$descriptor.weights", "$route.i"]},
-                  {"op": "at", "args": ["$snapshot.balances", "$route.j"]},
-                  {"op": "at", "args": ["$descriptor.weights", "$route.j"]},
+                  {
+                    "op": "at",
+                    "args": [
+                      "$snapshot.balances",
+                      "$route.i"
+                    ]
+                  },
+                  {
+                    "op": "at",
+                    "args": [
+                      "$descriptor.weights",
+                      "$route.i"
+                    ]
+                  },
+                  {
+                    "op": "at",
+                    "args": [
+                      "$snapshot.balances",
+                      "$route.j"
+                    ]
+                  },
+                  {
+                    "op": "at",
+                    "args": [
+                      "$descriptor.weights",
+                      "$route.j"
+                    ]
+                  },
                   "$descriptor.swapFee"
                 ]
               ]
@@ -1291,19 +3259,50 @@
             "depth": {
               "op": "min",
               "args": [
-                {"op": "at", "args": ["$snapshot.balances", "$route.i"]},
-                {"op": "at", "args": ["$snapshot.balances", "$route.j"]}
+                {
+                  "op": "at",
+                  "args": [
+                    "$snapshot.balances",
+                    "$route.i"
+                  ]
+                },
+                {
+                  "op": "at",
+                  "args": [
+                    "$snapshot.balances",
+                    "$route.j"
+                  ]
+                }
               ]
             },
-            "reserveA": {"op": "at", "args": ["$snapshot.balances", "$route.i"]},
-            "reserveB": {"op": "at", "args": ["$snapshot.balances", "$route.j"]},
-            "feeBps": {"op": "uint", "args": ["0"]}
+            "reserveA": {
+              "op": "at",
+              "args": [
+                "$snapshot.balances",
+                "$route.i"
+              ]
+            },
+            "reserveB": {
+              "op": "at",
+              "args": [
+                "$snapshot.balances",
+                "$route.j"
+              ]
+            },
+            "feeBps": {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
           }
         ]
       }
     }
   },
-  "variantFiles": [],
+  "variantFiles": [
+    "./crpt-bpool.json"
+  ],
   "actionAdapters": [
     {
       "descriptor": {

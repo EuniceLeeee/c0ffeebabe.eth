@@ -11,6 +11,7 @@ import { mintQuote } from "./model.js";
 import { FAMILY, LINEAGE } from "./manifest.js";
 import type { Binding, Candidate, Direction, Identity, State } from "./types.js";
 import { ngIdentityVariant } from "./ng.js";
+import { tricryptoNgIdentityVariant } from "./tricrypto-ng.js";
 interface Proof { readonly phase: "root" | "behavior" | "complete" | "unavailable" | "rejected"; readonly rejectionIds?: readonly string[]; readonly source?: CanonicalSource;
   readonly root?: ReturnType<typeof surface>; readonly binding?: Binding; readonly state?: State; readonly behaviorHash?: string; readonly reason?: string }
 export function samples(p: Proof) { const d = p.binding!, s = p.state!;
@@ -88,5 +89,5 @@ export const identity = { memoReuse: "recheck-identity", identityKey: i => i.bin
         provenance: [{ kind: "registry-reverse-lp-minter-and-source-behavior", subject: p.binding.pool,
           evidenceHash: hashCanonical({ ...p.binding, source: { ...p.source }, behaviorHash: p.behaviorHash }) }] } };
     },
-  }, ngIdentityVariant, genericIdentityVariant, zapIdentityVariant],
+  }, ngIdentityVariant, tricryptoNgIdentityVariant, genericIdentityVariant, zapIdentityVariant],
 } satisfies IdentitySemantics<Candidate, Identity>;
