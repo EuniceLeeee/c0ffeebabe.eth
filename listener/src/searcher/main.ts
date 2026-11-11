@@ -1617,27 +1617,15 @@ export async function initializeReadyProducer({
     }
     await rebuildWiring.assertCanonicalHead(readyUniverse.cutoff);
   }
-  const selectedMemos = liveIds
-    ? sealedReadyMemos(rebuildEnvelope).filter(memo => liveIds.has(memo.familyId))
-    : undefined;
-  if (selectedMemos?.some(memo => !rebuildWiring.isReadyMemoDefinitionCurrent!(memo))) {
+  // The sealed catalog identifies the exact verified memo for each instance.
+  // Historical aliases in the checkpoint cache can share that instance key.
+  const sealedMemos = sealedReadyMemos(rebuildEnvelope);
+  const activeReadyMemos = liveIds
+    ? sealedMemos.filter(memo => liveIds.has(memo.familyId))
+    : sealedMemos;
+  if (liveIds && activeReadyMemos.some(memo => !rebuildWiring.isReadyMemoDefinitionCurrent!(memo))) {
     throw new Error("retained live Family proof changed; update Ready before resuming");
   }
-  const activeInstanceKeys = new Set(selectedMemos
-    ? selectedMemos.map(memo => memo.familyInstanceKey)
-    : readyUniverse.activeInstanceKeys);
-  // Historical checkpoints can contain more than one memo per instance.
-  // Current terminal outcomes revoke their candidate memo atomically, while
-  // this defensive dedupe keeps runtime rehydration one-instance-per-key
-  // during the one-time checkpoint transition.
-  const seenReadyInstances = new Set<string>();
-  const activeReadyMemos = (selectedMemos ?? Object.values(rebuildEnvelope.verifiedMemos))
-    .filter((memo) => activeInstanceKeys.has(memo.familyInstanceKey))
-    .filter((memo) => {
-      if (seenReadyInstances.has(memo.familyInstanceKey)) return false;
-      seenReadyInstances.add(memo.familyInstanceKey);
-      return true;
-    });
   assertReadyFamilyActivation(activeReadyMemos, rebuildWiring.isFamilyEnabled);
   const routeReadyMemos = activeReadyMemos.filter((memo) =>
     PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
@@ -1667,7 +1655,7 @@ export async function initializeReadyProducer({
   );
   if (
     readyInstances.length + fundingReadyEntries.length !==
-      activeInstanceKeys.size
+      activeReadyMemos.length
   ) {
     throw new Error(
       "strict startup readyGeneration lost an active memo/instance",
