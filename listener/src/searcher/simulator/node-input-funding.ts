@@ -7,6 +7,24 @@ const ERC20 = new Interface(["function balanceOf(address) view returns(uint256)"
 const UINT = 1n << 256n;
 const SENTINEL = 0x314159265358979323846264338327950288419716939937510n;
 const CACHE_LIMIT = 4096;
+// These keys depend only on the account, never on a token, source or observed
+// layout. Keep the expensive ABI/keccak derivation out of repeated discoveries.
+const candidateSlots = new Map<string, readonly string[]>();
+function slotsFor(account: string): readonly string[] {
+  let slots = candidateSlots.get(account);
+  if (!slots) {
+    slots = Object.freeze([...new Set(Array.from({ length: 32 }, (_, i) => [
+      keccak256(ABI.encode(["address", "uint256"], [account, i])),
+      keccak256(ABI.encode(["uint256", "address"], [i, account])),
+    ]).flat())]);
+    candidateSlots.set(account, slots);
+    if (candidateSlots.size > 256) candidateSlots.delete(candidateSlots.keys().next().value!);
+  }
+  return slots;
+}
+export type NodeFundingProof = { slot: string; balance: bigint };
+export type NodeFundingProofResolver = (key: string,
+  prove: (rpc: PinnedNodeRpc) => Promise<NodeFundingProof>) => Promise<NodeFundingProof>;
 export interface NodeFundingCache {
   /** Hints only. Every new source must re-prove an isolated write. */
   readonly slots: Map<string, string>;
@@ -23,10 +41,11 @@ function uint(data: unknown): bigint {
  * Existing input inventory is retained: initialization adds the requested input.
  */
 export class NodeInputFunding {
-  private readonly proofs = new Map<string, Promise<{ slot: string; balance: bigint }>>();
+  private readonly proofs = new Map<string, Promise<NodeFundingProof>>();
   constructor(private readonly rpc: PinnedNodeRpc, private readonly block: unknown,
     private readonly cache: NodeFundingCache = createNodeFundingCache(),
-    private readonly completed = new Map<string, { slot: string; balance: bigint }>()) {}
+    private readonly completed = new Map<string, NodeFundingProof>(),
+    private readonly resolveProof?: NodeFundingProofResolver) {}
 
   async prepare(deals: readonly { token: string; to: string; amount: string }[]) {
     const writes: Record<string, { stateDiff: Record<string, string> }> = {};
@@ -37,7 +56,10 @@ export class NodeInputFunding {
       const key = `${token}:${account}`;
       let proof = this.proofs.get(key);
       if (!proof) {
-        proof = this.completed.has(key) ? Promise.resolve(this.completed.get(key)!) : this.prove(token, account, key); this.proofs.set(key, proof);
+        proof = this.completed.has(key) ? Promise.resolve(this.completed.get(key)!)
+          : this.resolveProof ? this.resolveProof(key, rpc => this.prove(token, account, key, rpc))
+          : this.prove(token, account, key);
+        this.proofs.set(key, proof);
         void proof.catch(() => { if (this.proofs.get(key) === proof) this.proofs.delete(key); });
       }
       const { slot, balance } = await proof;
@@ -52,9 +74,9 @@ export class NodeInputFunding {
     return { overrides: writes as InputFundingOverrides, expected };
   }
 
-  private async prove(token: string, account: string, key: string) {
+  private async prove(token: string, account: string, key: string, rpc = this.rpc) {
     const call = { to: token, data: ERC20.encodeFunctionData("balanceOf", [account]), gas: "0x30d40" };
-    const read = async (stateDiff?: Record<string, string>) => uint(await this.rpc("eth_call",
+    const read = async (stateDiff?: Record<string, string>) => uint(await rpc("eth_call",
       stateDiff ? [call, this.block, { [token]: { stateDiff } }] : [call, this.block]));
     const balance = await read();
     const verify = async (slot: string) => {
@@ -68,10 +90,7 @@ export class NodeInputFunding {
     const hint = this.cache.slots.get(key);
     if (hint && await verify(hint)) return { slot: hint, balance };
     this.cache.slots.delete(key);
-    const slots = [...new Set(Array.from({ length: 32 }, (_, i) => [
-      keccak256(ABI.encode(["address", "uint256"], [account, i])),
-      keccak256(ABI.encode(["uint256", "address"], [i, account])),
-    ]).flat())];
+    const slots = slotsFor(account);
     // One bounded discovery request instead of 64 serial RPCs. This combined
     // probe is only a nomination: two isolated single-slot proofs follow it.
     const result = await read(Object.fromEntries(slots.map((slot, i) => [slot, toBeHex(SENTINEL + BigInt(i), 32)])));

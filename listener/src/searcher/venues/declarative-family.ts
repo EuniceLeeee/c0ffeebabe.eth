@@ -262,6 +262,7 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
     return rows;
   }
   const routeCache = new WeakMap<Descriptor, { routes: readonly Route[]; byKey: ReadonlyMap<string, Route> }>();
+  const projectedRouteHashes = new WeakMap<Route, string>();
   function deeplyFrozen(value: unknown, seen = new WeakSet<object>()): boolean {
     if (value === null || typeof value !== "object") return typeof value !== "function";
     if (seen.has(value)) return true;
@@ -306,7 +307,16 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
     const v = select(descriptor), env = environment(v, { descriptor, route });
     const projected = projectRoutes(descriptor);
     const expected = routeCache.get(descriptor)?.byKey.get(route.routeKey) ?? projected.find(candidate => candidate.routeKey === route.routeKey);
-    if (!expected || hashCanonical(expected) !== hashCanonical(route)) throw new Error("declarative route binding mismatch");
+    if (!expected) throw new Error("declarative route binding mismatch");
+    // Only our recursively frozen projection owns this cache. Canonical
+    // validation still runs on first invocation, at the original boundary;
+    // external route copies (including shallow-frozen ones) are hashed anew.
+    let expectedHash = projectedRouteHashes.get(expected);
+    if (expectedHash === undefined) {
+      expectedHash = hashCanonical(expected);
+      projectedRouteHashes.set(expected, expectedHash);
+    }
+    if (expected !== route && expectedHash !== hashCanonical(route)) throw new Error("declarative route binding mismatch");
     rootRun(document.routes.assertions, env);
     v.values.run(v.document.assertions ?? [], env);
   }
@@ -551,10 +561,10 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
           results.forEach(result => assertSource(result.source, source));
           const env = flowEnvironment(v, { ...input, source });
           guard(v, env, false, results);
-          const snapshot = v.pricingFlow.program.decode({ programInput: env,
-            initialResults: initialFlowResults(v.pricingFlow, env, results), dependentEvidence: input.dependentEvidence }) as ProtocolPricingSnapshot;
+          const completed = v.pricingFlow.complete(env, initialFlowResults(v.pricingFlow, env, results), input.dependentEvidence);
+          const snapshot = completed.decode() as ProtocolPricingSnapshot;
           data(snapshot, "pricing flow snapshot"); assertSource(snapshot.source, source);
-          const context = v.pricingFlow.completedEnvironment(env, initialFlowResults(v.pricingFlow, env, results), input.dependentEvidence);
+          const context = completed.environment();
           validateSnapshot(v, input.descriptor, snapshot, context);
           return frozen(snapshot);
         }
@@ -788,19 +798,18 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
             requireAvailableExtension(v, "trialState");
             if (!v.quoteFlow) assertSource(returnedResult(results, "exact-preview").source, input.source);
             const flowInput = flowEnvironment(v, input);
-            const output = v.quoteFlow ? v.quoteFlow.program.decode({ programInput: flowInput,
-              initialResults: initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence }) : program(v, "quote", env, "decode");
+            const completed = v.quoteFlow?.complete(flowInput, initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence);
+            const output = completed ? completed.decode() : program(v, "quote", env, "decode");
             if (v.document.exact.allowAmountRejection && output && typeof output === "object" &&
                 Object.hasOwn(output, "amountRejection")) {
               const rejected = output as { amountRejection: unknown };
-              const reads = v.quoteFlow!.observedResults(flowInput, initialFlowResults(v.quoteFlow!, flowInput, results), dependentEvidence);
+              const reads = completed!.observedResults();
               if (Object.keys(rejected).length !== 1 || typeof rejected.amountRejection !== "string" ||
                   !rejected.amountRejection.trim() || !reads.length || reads.some(result => !result.ok))
                 throw new Error("invalid or incomplete amount rejection evidence");
               throw new ExactAmountRejectedError(rejected.amountRejection);
             }
-            const transition = v.trialState?.isAvailable(input) ? v.trialState.fromReadFlow(input, output, v.quoteFlow!.observedResults(flowInput,
-              initialFlowResults(v.quoteFlow!, flowInput, results), dependentEvidence)) : undefined;
+            const transition = v.trialState?.isAvailable(input) ? v.trialState.fromReadFlow(input, output, completed!.observedResults()) : undefined;
             const amountOut = transition ? transition.amountOut : v.document.exact.amountOut === undefined ? output
               : v.values.evaluate(v.document.exact.amountOut, { ...env, quoteResult: output });
             if (typeof amountOut !== "bigint" || amountOut < 0n) throw new Error("exact quote returned invalid output");
@@ -808,19 +817,16 @@ export function createDeclarativeFamilyRuntime(raw: Data, children: readonly Dat
             let proofEnvironment: Data | undefined;
             if (v.quoteFlow && declaration && declaration.sourceKind !== "local-math") {
               verifyDeclarativeQuoteChain({ proof: declaration.chainQuote, sourceKind: declaration.sourceKind,
-                observation: proof => v.quoteFlow!.requestEvidence(flowInput,
-                  initialFlowResults(v.quoteFlow!, flowInput, results), dependentEvidence, proof.step, proof.requestId),
+                observation: proof => completed!.requestEvidence(proof.step, proof.requestId),
                 source: input.source, amountIn: input.amountIn, amountOut,
                 ...(v.quoteProofEvaluation ? { evaluate: v.values.evaluate,
-                  environment: proofEnvironment = v.quoteFlow.completedEnvironment(flowInput,
-                    initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence) } : {}),
+                  environment: proofEnvironment = completed!.environment() } : {}),
                 tokenIn: input.route.tokenIn, tokenOut: input.route.tokenOut, executor: input.executor });
             }
             const guardResult = guard(v, input, true, results);
             v.values.run(v.document.exact.outputChecks ?? [], { ...env, amountOut, guardResult });
             if (transition) return frozen(transition);
-            const context = proofEnvironment ?? (v.quoteFlow ? v.quoteFlow.completedEnvironment(flowInput,
-              initialFlowResults(v.quoteFlow, flowInput, results), dependentEvidence) : env);
+            const context = proofEnvironment ?? (completed ? completed.environment() : env);
             const fields = evidence({ ...context, ...input, quoteResult: output }, amountOut);
             if (amountOut === 0n && (typeof fields?.unavailableReason !== "string" || !fields.unavailableReason.trim()))
               throw new Error("zero exact output requires an unavailableReason");
