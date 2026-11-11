@@ -8,6 +8,7 @@ import {
   UniverseRebuildCheckpointStore,
   canonicalJson,
   durableVerifiedMemoFingerprint,
+  immutableReadyValue,
   type DurableVerifiedMemo,
   type LegacyDurableVerifiedMemo,
   type DurableSourceReceipt,
@@ -438,6 +439,14 @@ async function main(): Promise<void> {
       readChunkBytes: 7,
     });
     const loaded = await tinyChunkStore.load();
+    assert(loaded);
+    const mutable = { nested: { value: 1 }, checkpoint: loaded };
+    const snapshot = immutableReadyValue(mutable);
+    assert.equal(snapshot.checkpoint, loaded, "reuse a store-owned immutable checkpoint");
+    assert(Object.isFrozen(loaded.verifiedMemos));
+    assert(Object.values(loaded.verifiedMemos).every(Object.isFrozen));
+    mutable.nested.value = 2;
+    assert.equal(snapshot.nested.value, 1, "caller-owned data is still detached");
     assert.equal(loaded?.revision, merged.revision);
     assert.equal(loaded?.inProgressRun?.outcomesByCandidateKey["a"]?.status, "verified");
     // A killed append can leave one unterminated suffix. It is uncommitted,

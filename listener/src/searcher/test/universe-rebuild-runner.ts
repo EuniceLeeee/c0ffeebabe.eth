@@ -1790,6 +1790,23 @@ async function main(): Promise<void> {
       await rebuildUniverse(scopedInput);
       const deltaEnvelope = (await delta.store.load())!;
       assert.deepEqual(deltaEnvelope.readyGeneration!.familyUpdateScope, scopedInput.familyUpdateScope);
+      const oldMemo = sealFixtureMemo({
+        ...deltaEnvelope.verifiedMemos["cand:d"]!,
+        familyCandidateKey: "cand:out-of-window", candidateKey: "cand:out-of-window",
+        familyInstanceKey: "inst:out-of-window", instanceKey: "inst:out-of-window",
+      });
+      const parentWithOldMemo = reseal({ ...parent, verifiedMemos: {
+        ...parent.verifiedMemos, [oldMemo.familyCandidateKey]: oldMemo,
+      } });
+      const deltaForCurrentScope = reseal({ ...deltaEnvelope, readyGeneration: {
+        ...deltaEnvelope.readyGeneration!, familyUpdateScope: {
+          parentCheckpointFingerprint: parentWithOldMemo.checkpointFingerprint, familyIds: ["fixture:new"],
+        },
+      } });
+      const currentScope = prepareReadyFamilyUpdate(parentWithOldMemo, { enabledFamilyIds: enabled,
+        supplements: [{ familyIds: ["fixture:new"], checkpoint: deltaForCurrentScope }] });
+      assert.equal(currentScope.verifiedMemos[oldMemo.familyCandidateKey], undefined,
+        "a previously absent Family cannot inherit candidates outside the new discovery scope");
       const mutableDelta = structuredClone(deltaEnvelope);
       let mergeFences = 0;
       let originalGraph: { edges: unknown[] } | undefined;

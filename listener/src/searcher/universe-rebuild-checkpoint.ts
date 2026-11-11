@@ -518,16 +518,31 @@ export interface ReadyFamilyUpdateInput {
   }[];
 }
 
-/** Detach JSON-safe durable inputs before any asynchronous fence or lock wait. */
-export function immutableReadyValue<T>(value: T): T {
-  const copy = structuredClone(value);
-  const freeze = (item: unknown): void => {
-    if (item === null || typeof item !== "object" || Object.isFrozen(item)) return;
+// Disk-loaded checkpoints are owned by the store. Sharing a deeply frozen
+// envelope avoids cloning the entire Ready when only two partitions change.
+const immutableReadyRoots = new WeakSet<object>();
+
+function freezeOwnedReadyValue<T>(value: T): T {
+  function freeze(item: unknown): void {
+    if (item === null || typeof item !== "object" || immutableReadyRoots.has(item)) return;
     for (const child of Object.values(item)) freeze(child);
     Object.freeze(item);
-  };
-  freeze(copy);
-  return copy;
+  }
+  freeze(value);
+  if (value !== null && typeof value === "object") immutableReadyRoots.add(value);
+  return value;
+}
+
+/** Detach JSON-safe durable inputs before any asynchronous fence or lock wait. */
+export function immutableReadyValue<T>(value: T): T {
+  function detach(item: unknown): unknown {
+    if (item === null || typeof item !== "object" || immutableReadyRoots.has(item)) return item;
+    if (Array.isArray(item)) return item.map(detach);
+    const prototype = Object.getPrototypeOf(item);
+    if (prototype !== Object.prototype && prototype !== null) return structuredClone(item);
+    return Object.fromEntries(Object.entries(item).map(([key, child]) => [key, detach(child)]));
+  }
+  return freezeOwnedReadyValue(detach(value) as T);
 }
 
 export type ReadyFamilyMutation =
@@ -606,16 +621,29 @@ export function prepareReadyFamilyUpdate(base: StartupCheckpointEnvelope, input:
       throw new Error("Ready Family supplement parent lineage mismatch");
     }
     for (const id of ids) {
-      const requiredKeys = new Set([
-        ...Object.keys(partitions[id]?.candidatesByKey ?? {}),
-        ...Object.values(base.verifiedMemos).filter(memo => memo.familyId === id).map(memo => memo.familyCandidateKey),
-        ...Object.values(base.retryableAttemptsByCandidateKey).filter(entry => entry.familyId === id).map(entry => entry.familyCandidateKey),
-      ]);
-      if ([...requiredKeys].some(key => !Object.prototype.hasOwnProperty.call(delta.familyPartitions![id]!.candidatesByKey, key))) {
-        throw new Error("Ready Family supplement lost retained candidate; unresolved aliases require explicit reconciliation");
+      const previous = partitions[id];
+      const next = delta.familyPartitions[id]!;
+      const previousMemos = Object.values(base.verifiedMemos).filter(memo => memo.familyId === id);
+      if (previous === undefined) {
+        // An absent partition has no retained candidate scope. Historical
+        // cache entries outside the newly discovered scope cannot enlarge it.
+        for (const memo of previousMemos) {
+          if (!Object.prototype.hasOwnProperty.call(next.candidatesByKey, memo.familyCandidateKey)) {
+            delete verifiedMemos[memo.familyCandidateKey];
+          }
+        }
+      } else {
+        const requiredKeys = new Set([
+          ...Object.keys(previous.candidatesByKey),
+          ...previousMemos.map(memo => memo.familyCandidateKey),
+          ...Object.values(base.retryableAttemptsByCandidateKey).filter(entry => entry.familyId === id).map(entry => entry.familyCandidateKey),
+        ]);
+        if ([...requiredKeys].some(key => !Object.prototype.hasOwnProperty.call(next.candidatesByKey, key))) {
+          throw new Error("Ready Family supplement lost retained candidate; unresolved aliases require explicit reconciliation");
+        }
       }
       replaced.add(id);
-      partitions[id] = delta.familyPartitions[id]!;
+      partitions[id] = next;
       for (const [key, outcome] of Object.entries(partitions[id]!.outcomesByCandidateKey)) {
         if (outcome.status === "verified") {
           const memo = checkpoint.verifiedMemos[key]!;
@@ -1380,7 +1408,7 @@ export class UniverseRebuildCheckpointStore {
       parsed = null;
     }
     let envelope = parsed === null ? null : parseEnvelopeValue(parsed);
-    envelope = await this.#replayAttestationJournal(envelope);
+    envelope = freezeOwnedReadyValue(await this.#replayAttestationJournal(envelope));
     this.#cachedEnvelope = envelope;
     this.#cachedBaseSignature = baseSignature;
     this.#cachedJournalSignature = journalSignature;
