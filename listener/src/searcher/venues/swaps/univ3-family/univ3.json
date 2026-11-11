@@ -70,7 +70,13 @@
         ],
         "instanceKey": [
           "pool"
-        ]
+        ],
+        "coverage": {
+          "group": "address-concentrated-swap-v1",
+          "key": [
+            "pool"
+          ]
+        }
       },
       "calls": [
         {

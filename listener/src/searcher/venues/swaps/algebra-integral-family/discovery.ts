@@ -90,6 +90,15 @@ export const algebraIntegralDiscovery: DiscoverySemantics<
     }
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
+  // These nominees compete for the same pool's complete token0/token1 swap
+  // task. The verified Family still owns its fee, callback and plugin rules.
+  candidateCoverageKey: (candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+    const value = candidate as Readonly<Record<string, unknown>>;
+    if (value.candidateKind !== undefined && value.candidateKind !== "algebra-integral-pool") return null;
+    try { return JSON.stringify(["address-concentrated-swap-v1", lowerAddress(String(value.pool ?? value.address ?? ""))]); }
+    catch { return null; }
+  },
   instanceNominationKey: (candidate) => {
     const value = candidate as Readonly<Record<string, unknown>>;
     return lowerAddress(String(value.pool ?? value.address ?? ""));

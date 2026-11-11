@@ -122,6 +122,15 @@ export const kyberswapElasticDiscovery: DiscoverySemantics<
     return null;
   },
   candidateKey: (candidate) => lowerAddress(candidate.pool),
+  // A successful pool identity covers both exact-input swap directions;
+  // the generic V3-shaped event is only a competing nomination of that task.
+  candidateCoverageKey: (candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+    const value = candidate as Readonly<Record<string, unknown>>;
+    if (value.candidateKind !== undefined && value.candidateKind !== "kyberswap-elastic-pool") return null;
+    try { return JSON.stringify(["address-concentrated-swap-v1", lowerAddress(String(value.pool ?? value.address ?? ""))]); }
+    catch { return null; }
+  },
   nominate: kyberswapElasticNomination,
   reverseBinding: explicitReverseBindingUnsupported(
     "no capture-channel reverse binding declared; admission is the pool's own " +

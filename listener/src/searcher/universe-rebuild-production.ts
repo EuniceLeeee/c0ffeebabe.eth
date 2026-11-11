@@ -10,6 +10,7 @@ import {
   assertDurableVerifiedMemoFingerprint,
   canonicalJson,
   durableVerifiedMemoFingerprint,
+  type CandidateCoverageBinding,
   type DurableSourceChunkReceipt,
   type DurableSourceReceipt,
   type DurableVerifiedMemo,
@@ -2104,6 +2105,50 @@ export function rebuildFamilyCandidateKey(
   return hashFamilyCandidateKey(familyId, candidateInstanceIdentity(candidate));
 }
 
+const coverageDefinitionFingerprints = new Map<string, string>();
+
+/** Pure scheduling evidence. Families own replacement semantics; neither an
+ * address match nor a candidate/memo hash can invent cross-Family coverage. */
+export function rebuildCandidateCoverage(
+  candidate: Readonly<Record<string, unknown>>,
+): CandidateCoverageBinding | null {
+  const familyId = candidateFamilyId(candidate);
+  const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
+    .forStrictFamily(familyId as never);
+  const project = family.plugin.discovery.candidateCoverageKey;
+  if (project === undefined) return null;
+  const localKey = project(candidate);
+  if (localKey === null) return null;
+  if (typeof localKey !== "string" || localKey.trim().length === 0) {
+    throw new Error("Family candidate coverage key must be a nonempty string or null");
+  }
+  const key = digest("ready-coverage-key-v1:" + canonicalJson({
+    // This production wiring pins its providers to Ethereum mainnet.
+    chainId: 1, domain: family.plugin.manifest.domain, key: localKey,
+  }));
+  const fingerprint = candidateFingerprint(candidate);
+  // The loaded catalog is immutable for this process. Do not re-hash every
+  // capability for every pool in a large retained Ready set.
+  let definitionFingerprint = coverageDefinitionFingerprints.get(familyId);
+  if (definitionFingerprint === undefined) {
+    definitionFingerprint = digest("ready-coverage-definition-v1:" + canonicalJson({
+      familyDefinitionHash: familyDefinitionHash(familyId),
+      discoveryDefinitionHash: familyDiscoveryDefinitionHash(familyId),
+    }));
+    coverageDefinitionFingerprints.set(familyId, definitionFingerprint);
+  }
+  return Object.freeze({
+    key,
+    candidateFingerprint: fingerprint,
+    fingerprint: digest("ready-candidate-coverage-v1:" + canonicalJson({
+      key, familyId,
+      definitionFingerprint,
+      candidateFingerprint: fingerprint,
+      candidateSnapshot: canonicalCandidateSnapshot(candidate),
+    })),
+  });
+}
+
 /**
  * Pre-partition alias key. A Family may expose several evidence spellings for
  * one instance; its plugin-owned instanceNominationKey collapses them before
@@ -3100,6 +3145,10 @@ export function createRebuildWiring(input?: {
   } = {
     readyThrottle,
     candidateFamilyId,
+    candidateCoverage: (candidate) => {
+      const row = candidate as Readonly<Record<string, unknown>>;
+      return candidateInScope(row) ? rebuildCandidateCoverage(row) : null;
+    },
     hasExplicitStartupCandidates: input?.startupCandidates !== undefined,
     readyReviewInputFingerprint: () => {
       const ids = [...new Set([...sourceCoverageKeys.startup, ...activityPlan.coverageKeys]

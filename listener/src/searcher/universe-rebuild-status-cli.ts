@@ -111,6 +111,7 @@ async function main(): Promise<void> {
         (accounting === undefined
           ? " candidateAccounting=legacy-unavailable"
           : " accounted=" + accounting.total +
+            ((accounting.covered ?? 0) > 0 ? " covered=" + accounting.covered : "") +
             " remainingUnaccounted=" + accounting.remainingUnaccounted) +
         " graphHash=" + ready.graphHash.slice(0, 16) + "...",
     );

@@ -11,6 +11,8 @@ import {
   prepareReadyFamilyUpdate,
   immutableReadyValue,
   validateReadyFamilyGraph,
+  type CandidateCoverageBinding,
+  type CoveredCandidateOutcome,
   type DurableVerifiedMemo,
   type DurableSourceReceipt,
   type InProgressUniverseRun,
@@ -28,6 +30,7 @@ import type { CanonicalSource } from
 import { strictEdgeCollectionFromBlock } from
   "./strict-edge-collection-policy.js";
 import type { ReadyRpcThrottle } from "./ready-rpc-throttle.js";
+import { assertCurrentCandidateCoverage, createCandidateRevalidation } from "./ready-candidate-processing.js";
 
 /**
  * Durable universe rebuild runner (adversarial audit §5-§6). Every rebuild
@@ -35,7 +38,7 @@ import type { ReadyRpcThrottle } from "./ready-rpc-throttle.js";
  * restores the fixed-cutoff run by durable candidate key, verifies only the
  * diff (new / invalidated / failed candidates), persists outcomes through
  * the serial writer, and - only when every candidate is accounted as
- * verified, terminal-rejected, or retryable - seals the ready generation
+ * verified, covered, terminal-rejected, or retryable - seals the ready generation
  * with one final CAS. Retryable is durable work, not an unfinished run.
  *
  * The runner is dependency-injected so the flow contract is testable
@@ -87,6 +90,9 @@ export interface UniverseRebuildDependencies {
   readonly candidateFamilyId?: (candidate: unknown) => string;
   readonly familyDefinitionHash?: (familyId: string) => string;
   readonly familyDiscoveryDefinitionHash?: (familyId: string) => string;
+  /** Family-owned equivalence of complete candidate tasks. Used only after
+   * ordinary input/hash rules decide that a candidate needs a fresh attempt. */
+  readonly candidateCoverage?: (candidate: unknown) => CandidateCoverageBinding | null;
   /** One representative per Family instance. An explicit selection pins its durable evidence keys. */
   readonly dedupeFamilyCandidates: (
     observations: readonly unknown[],
@@ -731,6 +737,12 @@ export async function rebuildUniverse(
       hash: cutoff.hash,
     }),
   }));
+  const revalidation = createCandidateRevalidation({
+    dependencies: input, candidates, cutoff,
+    // History orders work only. A memo becomes a winner only when the
+    // original reuse/retention/attestation path accepts it in this run.
+    historicalVerifiedKeys: new Set(Object.keys(attestationCheckpoint.verifiedMemos)),
+  });
   // By default every non-verified candidate gets a fresh attempt per resume.
   // Explicit same-run completion may retain their existing outcomes; neither
   // terminal-rejected nor retryable can supply an admitted Graph instance.
@@ -740,6 +752,7 @@ export async function rebuildUniverse(
     verified: 0,
     "terminal-rejected": 0,
     retryable: 0,
+    covered: 0,
   };
   let completedPending = 0;
   const logAttestationProgress = (phase: "start" | "progress"): void => {
@@ -750,7 +763,7 @@ export async function rebuildUniverse(
         " pending=" + (candidates.length - completedPending) +
         " verified=" + attestationCounts.verified +
         " terminalRejected=" + attestationCounts["terminal-rejected"] +
-        " retryable=" + attestationCounts.retryable,
+        " retryable=" + attestationCounts.retryable + " covered=" + attestationCounts.covered,
     );
   };
   logAttestationProgress("start");
@@ -767,12 +780,12 @@ export async function rebuildUniverse(
   };
   type Phase = "ordinary" | "review" | "strict";
   const processCandidate = async (
-    candidate: unknown, phase: Phase,
+    candidate: unknown, phase: Phase, deferStrict = false,
   ): Promise<RunOutcome["status"] | "needs-strict"> => {
     const candidateKey = input.familyCandidateKey(candidate);
     const oldOutcome = run.outcomesByCandidateKey[candidateKey];
     if (input.resumeCompletedOutcomes && oldOutcome !== undefined &&
-        oldOutcome.status !== "verified") {
+        oldOutcome.status !== "verified" && oldOutcome.status !== "covered") {
       return oldOutcome.status;
     }
     let reusableMemo: DurableVerifiedMemo | null = null;
@@ -806,6 +819,7 @@ export async function rebuildUniverse(
         oldOutcome.familyInstanceKey === reusableMemo.familyInstanceKey &&
         oldOutcome.memoFingerprint === reusableMemo.memoFingerprint
       ) {
+        revalidation.confirmVerified(candidate, reusableMemo);
         return "verified";
       }
       writer.record(Object.freeze({
@@ -814,9 +828,15 @@ export async function rebuildUniverse(
         familyInstanceKey: reusableMemo.familyInstanceKey,
         memoFingerprint: reusableMemo.memoFingerprint,
       }));
+      revalidation.confirmVerified(candidate, reusableMemo);
       return "verified";
     }
-    if (phase === "review") return "needs-strict";
+    if (phase === "review" || deferStrict) return "needs-strict";
+    const covered = revalidation.coveredOutcome(candidate);
+    if (covered !== null) {
+      writer.record(covered);
+      return "covered";
+    }
     const sourceRetryable = input.preAttestationRetryable?.(candidate) ?? null;
     if (sourceRetryable !== null) {
       const attemptCount = oldOutcome?.status === "retryable"
@@ -865,6 +885,7 @@ export async function rebuildUniverse(
         familyInstanceKey: memo.familyInstanceKey,
         memoFingerprint: memo.memoFingerprint,
       }), memo);
+      revalidation.confirmVerified(candidate, memo);
       return "verified";
     }
     if (result.status === "terminal-rejected") {
@@ -910,14 +931,14 @@ export async function rebuildUniverse(
   input.readyThrottle?.limitConcurrency(requestedConcurrency);
   let addedProgress: { completed: number; total: number } | undefined;
   const reviewedCounts = { reusedPrevious: 0, restoredVerified: 0, newlyVerified: 0 };
-  const runPhase = async (items: readonly unknown[], phase: Phase, deferred?: unknown[]) => {
+  const runBatch = async (items: readonly unknown[], phase: Phase, deferred?: unknown[]) => {
     const work = async (candidate: unknown) => {
-      const status = await processCandidate(candidate, phase);
+      const status = await processCandidate(candidate, phase, deferred !== undefined);
       return { candidate, status };
     };
     const completed = ({ candidate, status }: Awaited<ReturnType<typeof work>>) => {
       if (status === "needs-strict") {
-        if (!deferred) throw new Error("strict candidate deferred outside Ready review");
+        if (!deferred) throw new Error("strict candidate deferred without a pending set");
         deferred.push(candidate);
       }
       else {
@@ -956,6 +977,13 @@ export async function rebuildUniverse(
       }
     }));
     for (const result of workers) if (result.status === "rejected") throw result.reason;
+  };
+  const runPhase = async (items: readonly unknown[], phase: Phase, deferred?: unknown[]) => {
+    // The original prechecks have already decided this strict set. Await the
+    // old-success batch before allowing competing nominations to enter it.
+    for (const batch of phase === "strict" ? revalidation.batches(items) : [items]) {
+      await runBatch(batch, phase, deferred);
+    }
   };
   try {
     if (review) {
@@ -1000,6 +1028,13 @@ export async function rebuildUniverse(
             if (partition && canonicalJson(partition.candidatesByKey[key]) !== canonicalJson(run.candidatesByKey[key])) {
               throw new Error("retained Family nomination differs from the sealed run: " + key);
             }
+            if (row.status === "covered") {
+              // Derived skips are rebound to this run's accepted winner. All
+              // original verified and negative retention rules stay below.
+              if (partition) retainedSeen.set(id, (retainedSeen.get(id) ?? 0) + 1);
+              remaining.push(candidate);
+              continue;
+            }
             if (row.status === "verified") {
               const memo = attestationCheckpoint.verifiedMemos[key];
               if (!memo || memo.familyId !== id || memo.familyInstanceKey !== row.familyInstanceKey ||
@@ -1014,6 +1049,9 @@ export async function rebuildUniverse(
               retained++;
             } else {
               alreadyHandled++;
+            }
+            if (row.status === "verified") {
+              revalidation.confirmVerified(candidate, attestationCheckpoint.verifiedMemos[key]!);
             }
             recordAttestationProgress(row.status);
             continue;
@@ -1060,7 +1098,7 @@ export async function rebuildUniverse(
         const partition = unchangedPartitions.get(input.candidateFamilyId!(candidate));
         if (!partition) return true;
         const row = partition.outcomesByCandidateKey[key];
-        if (!row || row.status === "verified" ||
+        if (!row || row.status === "verified" || row.status === "covered" ||
             canonicalJson(partition.candidatesByKey[key]) !== canonicalJson(run.candidatesByKey[key])) return true;
         if (row.status === "terminal-rejected") {
           if (row.cutoff.number !== cutoff.number || row.cutoff.hash !== cutoff.hash) return true;
@@ -1080,9 +1118,11 @@ export async function rebuildUniverse(
         " completed=" + completedPending + " retainedNegative=" + retainedNegative + " remaining=" + pending.length);
       await runPhase(pending, "strict");
       log("Ready review results " + JSON.stringify({ ...reviewedCounts, terminalRejected: attestationCounts["terminal-rejected"],
-        retryable: attestationCounts.retryable }));
+        retryable: attestationCounts.retryable, covered: attestationCounts.covered }));
     } else {
-      await runPhase(candidates, "ordinary");
+      const pending: unknown[] = [];
+      await runPhase(candidates, "ordinary", pending);
+      await runPhase(pending, "strict");
     }
   } catch (error) {
     log("universe rebuild attestation stopped: processed=" + completedPending +
@@ -1245,6 +1285,36 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value: unknown) => value);
   await input.assertCanonicalHead(cutoff);
   const memos = new Array<DurableVerifiedMemo>(oldMemos.length);
+  const currentCandidateSnapshots = new Map<string, unknown>();
+  const oldCovered = new Map<string, CoveredCandidateOutcome>();
+  const coveredCandidates: unknown[] = [];
+  for (const partition of Object.values(ready.familyPartitions ?? {})) {
+    if (!partition.enabled) continue;
+    for (const [key, snapshot] of Object.entries(partition.candidatesByKey)) {
+      // Original memo reuse may retain an older observation snapshot. Coverage
+      // always binds the Ready partition's nomination, just like activation.
+      currentCandidateSnapshots.set(key, snapshot);
+    }
+    for (const row of Object.values(partition.outcomesByCandidateKey)) {
+      if (row.status !== "covered") continue;
+      if (input.isFamilyEnabled?.(row.familyId) === false) {
+        throw new Error("ready refresh covered Family is disabled; activation required");
+      }
+      const candidate = decodeCandidate(partition.candidatesByKey[row.familyCandidateKey]);
+      if (input.familyCandidateKey(candidate) !== row.familyCandidateKey) {
+        throw new Error("ready refresh covered candidate key changed");
+      }
+      oldCovered.set(row.familyCandidateKey, row);
+      coveredCandidates.push(candidate);
+    }
+  }
+  // With no derived rows, leave even decoder calls to the original worker.
+  const currentCandidates = new Map(oldCovered.size === 0 ? [] : oldMemos.map(old =>
+    [old.familyCandidateKey, decodeCandidate(currentCandidateSnapshots.get(old.familyCandidateKey) ?? old.candidateSnapshot)] as const));
+  const revalidation = createCandidateRevalidation({
+    dependencies: input, candidates: [...currentCandidates.values(), ...coveredCandidates], cutoff,
+    historicalVerifiedKeys: new Set(oldMemos.map(memo => memo.familyCandidateKey)),
+  });
   let next = 0;
   let completed = 0;
   let refreshed = 0;
@@ -1288,6 +1358,9 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
         });
         refreshed++;
       }
+      if (oldCovered.size !== 0) {
+        revalidation.confirmVerified(currentCandidates.get(old.familyCandidateKey)!, memos[index]!);
+      }
       completed++;
       if (completed === 1 || completed % 100 === 0 || completed === oldMemos.length) {
         input.log?.(`ready instance refresh ${completed}/${oldMemos.length} reattested=${refreshed}`);
@@ -1310,7 +1383,16 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
     const failed = workers.find(worker => worker.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
   }
-  if (memos.every((memo, index) => memo.memoFingerprint === oldMemos[index]!.memoFingerprint)) {
+  // Every refresh input is already a historical verified instance, so keep
+  // the original per-worker reuse -> strict -> stop sequence above. There is
+  // no remaining candidate batch to prioritize or admit in this exact set.
+  const coveredOutcomes = coveredCandidates.map(candidate => {
+    const row = revalidation.coveredOutcome(candidate);
+    if (!row) throw new Error("ready refresh coverage cannot retain its winner; incumbent unchanged");
+    return row;
+  });
+  const coverageUnchanged = coveredOutcomes.every(row => canonicalJson(row) === canonicalJson(oldCovered.get(row.familyCandidateKey)));
+  if (coverageUnchanged && memos.every((memo, index) => memo.memoFingerprint === oldMemos[index]!.memoFingerprint)) {
     await input.assertCanonicalHead(cutoff);
     if ((await input.store.load())?.revision !== checkpoint.revision) {
       throw new Error("ready refresh checkpoint changed during validation");
@@ -1322,6 +1404,7 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
   await input.assertCanonicalHead(cutoff);
   const updated = await input.store.casRefreshReadyInstances({
     expectedRevision: checkpoint.revision, memos, graphSnapshot,
+    ...(oldCovered.size === 0 ? {} : { coveredOutcomes }),
   });
   return updated.readyGeneration!;
 }
@@ -1358,6 +1441,7 @@ export async function restrictReadyFamilies(input: UniverseRebuildDependencies &
       throw new Error("Ready restriction retained definition is stale: " + memo.familyCandidateKey);
     }
   }
+  assertReadyCoverageCurrent(input, ready.familyPartitions, new Set(enabledIds));
   await input.assertCanonicalHead(ready.cutoff);
   const instances = retained.map(memo => input.rehydrateVerifiedInstance({ memo, cutoff: ready.cutoff }));
   const publications = input.aggregateOnceByFamily(instances);
@@ -1421,6 +1505,7 @@ export async function updateReadyFamilies(input: UniverseRebuildDependencies & {
       throw new Error("Ready Family retained definition is stale; scoped rebuild required: " + memo.familyId);
     }
   }
+  assertReadyCoverageCurrent(input, plan.familyPartitions, new Set(enabledFamilyIds));
   await input.assertCanonicalHead(ready.cutoff);
   const instances = plan.activeMemos.map(memo => input.rehydrateVerifiedInstance({ memo, cutoff: ready.cutoff }));
   const publications = input.aggregateOnceByFamily(instances);
@@ -1439,6 +1524,33 @@ export async function updateReadyFamilies(input: UniverseRebuildDependencies & {
   input.log?.(`Ready Family update: generation=${next.readyGeneration!.generation} ` +
     `active=${plan.activeMemos.length} excluded=${plan.excludedMemos.length} replaced=${plan.replacedFamilyIds.join(",")}`);
   return next.readyGeneration!;
+}
+
+function assertReadyCoverageCurrent(
+  input: UniverseRebuildDependencies,
+  partitions: Readonly<Record<string, ReadyFamilyPartition>> | undefined,
+  enabled: ReadonlySet<string>,
+): void {
+  const covered = Object.entries(partitions ?? {}).flatMap(([id, partition]) =>
+    enabled.has(id) ? Object.values(partition.outcomesByCandidateKey).filter(
+      (row): row is CoveredCandidateOutcome => row.status === "covered") : []);
+  if (covered.length === 0) return;
+  const candidates = new Map<string, { readonly familyId: string; readonly snapshot: unknown }>();
+  for (const [id, partition] of Object.entries(partitions ?? {})) {
+    for (const [key, snapshot] of Object.entries(partition.candidatesByKey)) {
+      candidates.set(key, { familyId: id, snapshot });
+    }
+  }
+  const decode = input.decodeCandidateSnapshot ?? ((value: unknown) => value);
+  for (const outcome of covered) {
+    const candidate = candidates.get(outcome.familyCandidateKey);
+    const winner = candidates.get(outcome.winnerFamilyCandidateKey);
+    if (!candidate || !winner || !enabled.has(winner.familyId)) {
+      throw new Error("Ready candidate coverage lost its active winner; review required");
+    }
+    assertCurrentCandidateCoverage({ dependencies: input, outcome,
+      candidate: decode(candidate.snapshot), winnerCandidate: decode(winner.snapshot) });
+  }
 }
 
 function assertRestrictionNotExpanded(
@@ -1612,7 +1724,8 @@ function exactCandidateAccounting(
     if (
       status !== "verified" &&
       status !== "terminal-rejected" &&
-      status !== "retryable"
+      status !== "retryable" &&
+      status !== "covered"
     ) {
       throw new Error(
         "universe rebuild: unaccounted outcome " + key + " = " + status,
@@ -1635,6 +1748,8 @@ function exactCandidateAccounting(
       outcome.status === "terminal-rejected"
     ).length,
     retryable: outcomes.filter((outcome) => outcome.status === "retryable").length,
+    ...(outcomes.some(outcome => outcome.status === "covered")
+      ? { covered: outcomes.filter(outcome => outcome.status === "covered").length } : {}),
     remainingUnaccounted: 0 as const,
   });
 }
@@ -1725,7 +1840,7 @@ export async function probeOneFailure(input: {
   ];
   readonly assertCanonicalHead: UniverseRebuildDependencies["assertCanonicalHead"];
   readonly decodeCandidateSnapshot: (snapshot: unknown) => unknown;
-}): Promise<RunOutcome> {
+}): Promise<Exclude<RunOutcome, CoveredCandidateOutcome>> {
   const checkpoint = await input.store.load();
   if (checkpoint === null) {
     throw new Error("universe rebuild probe: no checkpoint");
@@ -1754,7 +1869,7 @@ export async function probeOneFailure(input: {
       ? {}
       : { evidenceRef: old.evidenceRef }),
   });
-  let next: RunOutcome;
+  let next: Exclude<RunOutcome, CoveredCandidateOutcome>;
   let verifiedMemo: DurableVerifiedMemo | undefined;
   if (result.status === "verified") {
     const memo = input.sealDurableVerifiedMemo({

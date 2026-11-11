@@ -91,6 +91,30 @@ export interface DurableRetryableQueueEntry extends RetryableAttempt {
   readonly cutoff: CanonicalSource;
 }
 
+/** Family-owned competing nomination identity; never an admission proof. */
+export interface CandidateCoverageBinding {
+  readonly key: string;
+  readonly fingerprint: string;
+  readonly candidateFingerprint: string;
+}
+
+/** No lifecycle result is claimed for this candidate. Its task is covered by
+ * one currently verified winner in the same fixed candidate partition. */
+export interface CoveredCandidateOutcome {
+  readonly status: "covered";
+  readonly familyCandidateKey: string;
+  readonly familyId: string;
+  readonly candidateFingerprint: string;
+  readonly candidateSnapshotFingerprint: string;
+  readonly familyDefinitionHash: string;
+  readonly coverageKey: string;
+  readonly coverageFingerprint: string;
+  readonly winnerFamilyCandidateKey: string;
+  readonly winnerMemoFingerprint: string;
+  readonly winnerCoverageFingerprint: string;
+  readonly cutoff: { readonly number: number; readonly hash: string };
+}
+
 export type RunOutcome =
   | {
     readonly status: "verified";
@@ -116,7 +140,8 @@ export type RunOutcome =
     readonly candidateFingerprint: string;
     readonly cutoff: { readonly number: number; readonly hash: string };
   }
-  | RetryableAttempt;
+  | RetryableAttempt
+  | CoveredCandidateOutcome;
 
 export interface DurableSourceChunkReceipt {
   readonly fromBlock: number;
@@ -210,6 +235,8 @@ export interface ReadyUniverseGeneration {
     readonly verified: number;
     readonly terminalRejected: number;
     readonly retryable: number;
+    /** Omitted when zero to preserve existing checkpoint fingerprints. */
+    readonly covered?: number;
     /** Previously verified, explicitly excluded by an activation-only restriction. */
     readonly activationExcluded?: number;
     readonly remainingUnaccounted: 0;
@@ -361,6 +388,137 @@ export function buildReadyCatalogSnapshot(memos: readonly DurableVerifiedMemo[])
   });
 }
 
+/** Storage binding for the exact durable candidate, independent of Family semantics. */
+export function durableCandidateSnapshotFingerprint(snapshot: unknown): string {
+  return canonicalJsonFingerprint(snapshot, "ready-candidate-snapshot-v1:");
+}
+
+export interface CandidateCoverageValidationInput {
+  readonly outcome: CoveredCandidateOutcome;
+  readonly candidatesByKey: Readonly<Record<string, unknown>>;
+  readonly outcomesByCandidateKey: Readonly<Record<string, RunOutcome>>;
+  readonly verifiedMemos: Readonly<Record<string, DurableVerifiedMemo>>;
+  readonly cutoff: { readonly number: number; readonly hash: string };
+}
+
+function assertCoveredCandidateSnapshotBinding(input: Pick<CandidateCoverageValidationInput,
+  "outcome" | "candidatesByKey" | "cutoff">): void {
+  const row = input.outcome;
+  const key = row.familyCandidateKey;
+  const winnerKey = row.winnerFamilyCandidateKey;
+  const strings = [key, row.familyId, row.candidateFingerprint, row.familyDefinitionHash,
+    row.coverageKey, row.coverageFingerprint, winnerKey, row.winnerMemoFingerprint, row.winnerCoverageFingerprint];
+  if (row.status !== "covered" || strings.some(value => typeof value !== "string" || value.length === 0) ||
+    key === winnerKey || !Object.prototype.hasOwnProperty.call(input.candidatesByKey, key) ||
+    !Object.prototype.hasOwnProperty.call(input.candidatesByKey, winnerKey) ||
+    !Number.isSafeInteger(row.cutoff?.number) || row.cutoff.number < 0 ||
+    row.cutoff.number !== input.cutoff.number || typeof row.cutoff.hash !== "string" ||
+    row.cutoff.hash.toLowerCase() !== input.cutoff.hash.toLowerCase() ||
+    row.candidateSnapshotFingerprint !== durableCandidateSnapshotFingerprint(input.candidatesByKey[key])) {
+    throw new Error("candidate coverage candidate/source binding is invalid; review required");
+  }
+  const candidate = input.candidatesByKey[key] as { readonly familyId?: unknown } | null;
+  if (candidate !== null && typeof candidate === "object" && typeof candidate.familyId === "string" &&
+    candidate.familyId !== row.familyId) {
+    throw new Error("candidate coverage candidate/source binding is invalid; review required");
+  }
+}
+
+/** Check the durable relation only. The candidate processor additionally
+ * recomputes both Family-owned coverage bindings before reusing it. */
+export function assertCoveredCandidateOutcome(input: CandidateCoverageValidationInput): void {
+  assertCoveredCandidateSnapshotBinding(input);
+  const row = input.outcome;
+  const winnerKey = row.winnerFamilyCandidateKey;
+  const winner = input.outcomesByCandidateKey[winnerKey];
+  const memo = input.verifiedMemos[winnerKey];
+  if (winner?.status !== "verified" || winner.familyCandidateKey !== winnerKey ||
+    memo === undefined || memo.memoFingerprint !== row.winnerMemoFingerprint) {
+    throw new Error("candidate coverage requires its verified winner; review required");
+  }
+  assertMemoMatchesVerifiedOutcome(memo, winner);
+  assertDurableVerifiedMemoFingerprint(memo);
+  const winnerCandidate = input.candidatesByKey[winnerKey] as { readonly familyId?: unknown } | null;
+  const proof = memo.validity.proofSource;
+  if ((winnerCandidate !== null && typeof winnerCandidate === "object" && typeof winnerCandidate.familyId === "string" &&
+      winnerCandidate.familyId !== memo.familyId) ||
+    !Number.isSafeInteger(proof.number) || proof.number < 0 || proof.number > input.cutoff.number ||
+    (proof.number === input.cutoff.number
+      ? proof.hash.toLowerCase() !== input.cutoff.hash.toLowerCase()
+      : memo.validity.policy !== "immutable-code")) {
+    throw new Error("candidate coverage winner source/family differs; review required");
+  }
+}
+
+export function isCoveredCandidateOutcomeValid(input: CandidateCoverageValidationInput): boolean {
+  try { assertCoveredCandidateOutcome(input); return true; } catch { return false; }
+}
+
+function assertRunCandidateCoverage(run: InProgressUniverseRun,
+  verifiedMemos: Readonly<Record<string, DurableVerifiedMemo>>): void {
+  for (const [key, row] of Object.entries(run.outcomesByCandidateKey)) {
+    if (row.status !== "covered") continue;
+    if (key !== row.familyCandidateKey) throw new Error("candidate coverage outcome key differs");
+    assertCoveredCandidateOutcome({ outcome: row, candidatesByKey: run.candidatesByKey,
+      outcomesByCandidateKey: run.outcomesByCandidateKey, verifiedMemos, cutoff: run.cutoff });
+  }
+}
+
+function assertReadyCandidateCoverage(partitions: Readonly<Record<string, ReadyFamilyPartition>> | undefined,
+  verifiedMemos: Readonly<Record<string, DurableVerifiedMemo>>,
+  cutoff: { readonly number: number; readonly hash: string }): void {
+  if (partitions === undefined) return;
+  const covered: CoveredCandidateOutcome[] = [];
+  for (const [familyId, partition] of Object.entries(partitions)) {
+    for (const [key, row] of Object.entries(partition.outcomesByCandidateKey)) {
+      if (row.status !== "covered") continue;
+      if (row.familyId !== familyId || row.familyCandidateKey !== key) {
+        throw new Error("Ready candidate coverage Family binding differs; review required");
+      }
+      covered.push(row);
+    }
+  }
+  if (covered.length === 0) return;
+  const candidatesByKey: Record<string, unknown> = {};
+  const outcomesByCandidateKey: Record<string, RunOutcome> = {};
+  const owners = new Map<string, string>();
+  for (const [familyId, partition] of Object.entries(partitions)) {
+    for (const [key, candidate] of Object.entries(partition.candidatesByKey)) {
+      if (owners.has(key)) throw new Error("Ready candidate coverage partition ownership collision");
+      owners.set(key, familyId);
+      candidatesByKey[key] = candidate;
+    }
+    Object.assign(outcomesByCandidateKey, partition.outcomesByCandidateKey);
+  }
+  for (const row of covered) {
+    // Disabled partitions retain historical task outcomes, not current
+    // coverage authority. Never rewrite their old proof bindings during an
+    // active winner refresh; enabling them restores the full checks below.
+    if (!partitions[row.familyId]!.enabled) {
+      assertCoveredCandidateSnapshotBinding({ outcome: row, candidatesByKey, cutoff });
+      continue;
+    }
+    assertCoveredCandidateOutcome({ outcome: row, candidatesByKey, outcomesByCandidateKey, verifiedMemos, cutoff });
+    const winnerFamilyId = owners.get(row.winnerFamilyCandidateKey);
+    if (winnerFamilyId === undefined || verifiedMemos[row.winnerFamilyCandidateKey]?.familyId !== winnerFamilyId ||
+      (partitions[row.familyId]!.enabled && !partitions[winnerFamilyId]!.enabled)) {
+      throw new Error("Ready candidate coverage lost its active winner; review required");
+    }
+  }
+}
+
+/** Replacing a winner invalidates only its derived task skips. The candidates
+ * remain in the run and must be accounted again by the ordinary processor. */
+function invalidateCoveredWinnerReferences(outcomes: Record<string, RunOutcome>, next: RunOutcome): void {
+  const prior = outcomes[next.familyCandidateKey];
+  if (prior?.status !== "verified" || (next.status === "verified" &&
+    prior.memoFingerprint === next.memoFingerprint && prior.familyInstanceKey === next.familyInstanceKey)) return;
+  for (const [key, row] of Object.entries(outcomes)) {
+    if (row.status === "covered" && row.winnerFamilyCandidateKey === next.familyCandidateKey &&
+      (next.status !== "verified" || row.winnerMemoFingerprint !== next.memoFingerprint)) delete outcomes[key];
+  }
+}
+
 /** Resolve exactly the memos sealed into Ready, not extra probe/legacy memos. */
 export function activeReadyMemos(envelope: StartupCheckpointEnvelope): readonly DurableVerifiedMemo[] {
   const ready = envelope.readyGeneration;
@@ -409,7 +567,7 @@ export function activeReadyMemos(envelope: StartupCheckpointEnvelope): readonly 
       new Set(excluded.map(entry => entry.familyCandidateKey)).size !== excluded.length ||
       new Set(excluded.map(entry => entry.familyInstanceKey)).size !== excluded.length ||
       accounting.total !== accounting.verified + accounting.terminalRejected +
-        accounting.retryable + excludedCount ||
+        accounting.retryable + (accounting.covered ?? 0) + excludedCount ||
       memos.some(memo => disabled.has(memo.familyId)) ||
       [...disabled].some(id => !ready.sourceCoverage.some(entry => entry.familyId === id)) ||
       excluded.some(entry => {
@@ -425,6 +583,8 @@ export function activeReadyMemos(envelope: StartupCheckpointEnvelope): readonly 
   }
   if (ready.familyPartitions !== undefined) {
     assertReadyFamilyPartitions(envelope, memos);
+  } else if ((ready.candidateAccounting.covered ?? 0) !== 0) {
+    throw new Error("Ready candidate coverage requires retained Family partitions");
   }
   return Object.freeze(memos);
 }
@@ -432,7 +592,7 @@ export function activeReadyMemos(envelope: StartupCheckpointEnvelope): readonly 
 export function readyPartitionAccounting(
   partitions: Readonly<Record<string, ReadyFamilyPartition>>,
 ): ReadyUniverseGeneration["candidateAccounting"] {
-  let total = 0, verified = 0, terminalRejected = 0, retryable = 0, activationExcluded = 0;
+  let total = 0, verified = 0, terminalRejected = 0, retryable = 0, covered = 0, activationExcluded = 0;
   for (const partition of Object.values(partitions)) {
     for (const outcome of Object.values(partition.outcomesByCandidateKey)) {
       total++;
@@ -440,10 +600,12 @@ export function readyPartitionAccounting(
         if (partition.enabled) verified++; else activationExcluded++;
       } else if (outcome.status === "terminal-rejected") terminalRejected++;
       else if (outcome.status === "retryable") retryable++;
+      else if (outcome.status === "covered") covered++;
       else throw new Error("Ready Family partition has an invalid outcome");
     }
   }
   return Object.freeze({ total, verified, terminalRejected, retryable,
+    ...(covered === 0 ? {} : { covered }),
     ...(activationExcluded === 0 ? {} : { activationExcluded }), remainingUnaccounted: 0 });
 }
 
@@ -504,6 +666,7 @@ function assertReadyFamilyPartitions(
   if (canonicalJson(activeKeys.sort()) !== canonicalJson(activeMemos.map(memo => memo.familyCandidateKey).sort())) {
     throw new Error("Ready Family partition active set mismatch");
   }
+  assertReadyCandidateCoverage(partitions, envelope.verifiedMemos, ready.cutoff);
 }
 
 function readyRootHash(prefix: string, value: unknown): string {
@@ -683,6 +846,7 @@ export function prepareReadyFamilyUpdate(base: StartupCheckpointEnvelope, input:
       (enabled.has(id) ? memos : excluded).push(memo);
     }
   }
+  assertReadyCandidateCoverage(partitions, verifiedMemos, ready.cutoff);
   return Object.freeze({
     familyPartitions: Object.freeze(partitions),
     verifiedMemos: Object.freeze(verifiedMemos),
@@ -920,6 +1084,14 @@ function parseEnvelopeValue(parsed: unknown): StartupCheckpointEnvelope {
   if (inProgressRun !== null) {
     assertCompleteSourceReceipts(inProgressRun.sourceReceipts);
     assertSourceReceiptsBindRun(inProgressRun.sourceReceipts, inProgressRun);
+    assertRunCandidateCoverage(inProgressRun, legacyEnvelope.verifiedMemos);
+  } else if (legacyEnvelope.readyGeneration !== null && legacyEnvelope.readyGeneration !== undefined) {
+    if ((legacyEnvelope.readyGeneration.candidateAccounting.covered ?? 0) !== 0 &&
+      legacyEnvelope.readyGeneration.familyPartitions === undefined) {
+      throw new Error("Ready candidate coverage requires retained Family partitions");
+    }
+    assertReadyCandidateCoverage(legacyEnvelope.readyGeneration.familyPartitions,
+      legacyEnvelope.verifiedMemos, legacyEnvelope.readyGeneration.cutoff);
   }
   assertRetryableQueue(
     retryableQueue as Readonly<Record<string, DurableRetryableQueueEntry>>,
@@ -1171,6 +1343,7 @@ function mergeAttestationWrites(
   };
   for (const write of writes) {
     const { outcome, memo } = write;
+    invalidateCoveredWinnerReferences(merged, outcome);
     if (memo !== undefined) {
       assertMemoMatchesVerifiedOutcome(memo, outcome);
       writableMemos()[memo.familyCandidateKey] = Object.freeze(memo);
@@ -1193,6 +1366,10 @@ function mergeAttestationWrites(
       if (outcome.status === "terminal-rejected") {
         delete writableMemos()[outcome.familyCandidateKey];
       }
+    }
+    if (outcome.status === "covered") {
+      assertCoveredCandidateOutcome({ outcome, candidatesByKey: run.candidatesByKey,
+        outcomesByCandidateKey: merged, verifiedMemos: memos, cutoff: run.cutoff });
     }
     merged[outcome.familyCandidateKey] = outcome;
   }
@@ -1610,6 +1787,10 @@ export class UniverseRebuildCheckpointStore {
         }
         const next = mutate(current);
         if (next === current) return next;
+        if (next.inProgressRun !== null) assertRunCandidateCoverage(next.inProgressRun, next.verifiedMemos);
+        else if (next.readyGeneration !== null) {
+          assertReadyCandidateCoverage(next.readyGeneration.familyPartitions, next.verifiedMemos, next.readyGeneration.cutoff);
+        }
         const sealed = sealEnvelope(next);
         const tmp = this.#path + ".tmp." + process.pid;
         await this.#writeEnvelope(tmp, sealed);
@@ -1757,7 +1938,9 @@ export class UniverseRebuildCheckpointStore {
       if (
         old === undefined ||
         old.status !== "retryable" ||
-        old.attemptCount !== input.expectedAttemptCount
+        old.attemptCount !== input.expectedAttemptCount ||
+        (input.nextOutcome.status === "covered" &&
+          input.nextOutcome.familyCandidateKey !== input.familyCandidateKey)
       ) {
         throw new Error(
           "universe rebuild checkpoint: probe CAS conflict for " +
@@ -1789,16 +1972,20 @@ export class UniverseRebuildCheckpointStore {
           delete memos[input.familyCandidateKey];
         }
       }
+      const outcomes = { ...run.outcomesByCandidateKey };
+      invalidateCoveredWinnerReferences(outcomes, input.nextOutcome);
+      if (input.nextOutcome.status === "covered") {
+        assertCoveredCandidateOutcome({ outcome: input.nextOutcome, candidatesByKey: run.candidatesByKey,
+          outcomesByCandidateKey: outcomes, verifiedMemos: memos, cutoff: run.cutoff });
+      }
+      outcomes[input.familyCandidateKey] = input.nextOutcome;
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
         verifiedMemos: Object.freeze(memos),
         inProgressRun: Object.freeze({
           ...run,
-          outcomesByCandidateKey: Object.freeze({
-            ...run.outcomesByCandidateKey,
-            [input.familyCandidateKey]: input.nextOutcome,
-          }),
+          outcomesByCandidateKey: Object.freeze(outcomes),
         }),
       });
     });
@@ -1825,7 +2012,9 @@ export class UniverseRebuildCheckpointStore {
       if (
         old === undefined ||
         old.runId !== input.runId ||
-        old.attemptCount !== input.expectedAttemptCount
+        old.attemptCount !== input.expectedAttemptCount ||
+        (input.nextOutcome.status === "covered" &&
+          input.nextOutcome.familyCandidateKey !== input.familyCandidateKey)
       ) {
         throw new Error(
           "universe rebuild checkpoint: queued probe CAS conflict for " +
@@ -1876,6 +2065,13 @@ export class UniverseRebuildCheckpointStore {
       const updateRun = run !== null &&
         runOutcome?.status === "retryable" &&
         runOutcome.attemptCount === input.expectedAttemptCount;
+      if (input.nextOutcome.status === "covered") {
+        if (!updateRun || run === null || canonicalJson(old.cutoff) !== canonicalJson(run.cutoff)) {
+          throw new Error("queued candidate coverage requires the same active run; review required");
+        }
+        assertCoveredCandidateOutcome({ outcome: input.nextOutcome, candidatesByKey: run.candidatesByKey,
+          outcomesByCandidateKey: run.outcomesByCandidateKey, verifiedMemos: memos, cutoff: run.cutoff });
+      }
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
@@ -1953,7 +2149,10 @@ export class UniverseRebuildCheckpointStore {
     readonly expectedRevision: number;
     readonly memos: readonly DurableVerifiedMemo[];
     readonly graphSnapshot: unknown;
+    /** Recomputed by the shared candidate processor, never rewritten by hash alone. */
+    readonly coveredOutcomes?: readonly CoveredCandidateOutcome[];
   }): Promise<StartupCheckpointEnvelope> {
+    const coveredOutcomes = input.coveredOutcomes === undefined ? undefined : immutableReadyValue(input.coveredOutcomes);
     return this.#cas(input.expectedRevision, (base) => {
       if (base === null) throw new Error("ready refresh checkpoint is absent");
       const oldMemos = activeReadyMemos(base);
@@ -1979,15 +2178,33 @@ export class UniverseRebuildCheckpointStore {
         }
         verifiedMemos[memo.familyCandidateKey] = Object.freeze(memo);
       }
+      const replacements = new Map<string, CoveredCandidateOutcome>();
+      if (coveredOutcomes !== undefined) {
+        const priorCovered = Object.values(ready.familyPartitions ?? {}).filter(partition => partition.enabled)
+          .flatMap(partition => Object.values(partition.outcomesByCandidateKey).filter(
+            (row): row is CoveredCandidateOutcome => row.status === "covered"));
+        const expected = new Set(priorCovered.map(row => row.familyCandidateKey));
+        for (const row of coveredOutcomes) {
+          if (row.status !== "covered" || !expected.has(row.familyCandidateKey) || replacements.has(row.familyCandidateKey)) {
+            throw new Error("ready refresh candidate coverage membership differs; review required");
+          }
+          replacements.set(row.familyCandidateKey, row);
+        }
+        if (replacements.size !== expected.size) {
+          throw new Error("ready refresh lost candidate coverage outcomes; review required");
+        }
+      }
       const catalogSnapshot = buildReadyCatalogSnapshot(input.memos);
       const familyPartitions = ready.familyPartitions === undefined ? undefined : Object.freeze(
         Object.fromEntries(Object.entries(ready.familyPartitions).map(([id, partition]) => [id, Object.freeze({
           ...partition,
           outcomesByCandidateKey: Object.freeze(Object.fromEntries(Object.entries(partition.outcomesByCandidateKey)
             .map(([key, outcome]) => [key, outcome.status === "verified" && verifiedMemos[key] !== undefined
-              ? Object.freeze({ ...outcome, memoFingerprint: verifiedMemos[key]!.memoFingerprint }) : outcome]))),
+              ? Object.freeze({ ...outcome, memoFingerprint: verifiedMemos[key]!.memoFingerprint })
+              : replacements.get(key) ?? outcome]))),
         })])),
       );
+      assertReadyCandidateCoverage(familyPartitions, verifiedMemos, ready.cutoff);
       return Object.freeze({
         ...base,
         revision: base.revision + 1,
@@ -2332,7 +2549,9 @@ export class UniverseRebuildCheckpointStore {
       const keptKeys = new Set(Object.keys(input.candidatesByKey));
       const keptOutcomes: Record<string, RunOutcome> = {};
       for (const [key, outcome] of Object.entries(run.outcomesByCandidateKey)) {
-        if (keptKeys.has(key)) keptOutcomes[key] = outcome;
+        // Coverage is derived from both nominations and the discovery rules.
+        // A reconciled plan must recompute it through the ordinary processor.
+        if (keptKeys.has(key) && outcome.status !== "covered") keptOutcomes[key] = outcome;
       }
       for (const [key, outcome] of Object.entries(inheritedQueuedRetryables(
         base.retryableAttemptsByCandidateKey,
@@ -2602,6 +2821,7 @@ function assertReadyPromotion(
   run: InProgressUniverseRun,
   ready: ReadyUniverseGeneration,
 ): void {
+  assertRunCandidateCoverage(run, envelope.verifiedMemos);
   if (canonicalJson(run.familyUpdateScope ?? null) !== canonicalJson(ready.familyUpdateScope ?? null) ||
     (run.familyUpdateScope !== undefined && canonicalJson([...run.familyUpdateScope.familyIds].sort()) !==
       canonicalJson(Object.keys(ready.familyPartitions ?? {}).sort()))) {
@@ -2622,7 +2842,8 @@ function assertReadyPromotion(
       outcome.familyCandidateKey !== key ||
       (outcome.status !== "verified" &&
         outcome.status !== "terminal-rejected" &&
-        outcome.status !== "retryable")
+        outcome.status !== "retryable" &&
+        outcome.status !== "covered")
     )
   ) {
     throw new Error(
@@ -2639,12 +2860,17 @@ function assertReadyPromotion(
   const retryable = outcomes.filter((outcome) =>
     outcome.status === "retryable"
   ).length;
+  const covered = outcomes.filter(outcome => outcome.status === "covered").length;
+  if (covered > 0 && ready.familyPartitions === undefined) {
+    throw new Error("Ready candidate coverage requires retained Family partitions");
+  }
   const accountingMatches = canonicalJson(ready.candidateAccounting) ===
     canonicalJson({
       total: run.candidateCount,
       verified: verified.length,
       terminalRejected,
       retryable,
+      ...(covered === 0 ? {} : { covered }),
       remainingUnaccounted: 0,
     });
   const expectedInstances = verified.map((outcome) => {

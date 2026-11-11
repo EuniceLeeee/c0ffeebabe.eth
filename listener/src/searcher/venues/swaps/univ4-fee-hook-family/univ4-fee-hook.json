@@ -73,7 +73,14 @@
         "instanceKey": [
           "manager",
           "poolId"
-        ]
+        ],
+        "coverage": {
+          "group": "pool-manager-swap-v1",
+          "key": [
+            "manager",
+            "poolId"
+          ]
+        }
       },
       "calls": [
         {

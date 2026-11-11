@@ -30,7 +30,10 @@ async function main():Promise<void>{
   assert(wiring.requiredSourceCoverageKeys().every(key=>coverage.has(key)),"new Family lacks Ready coverage; scoped Ready required");
   const disabled=base.readyGeneration.activationRestriction?.disabledFamilyIds??[];
   const restore=disabled.some(id=>wiring.isFamilyEnabled!(id));
-  const restrict=activeReadyMemos(base).some(memo=>!wiring.isFamilyEnabled!(memo.familyId));
+  const restrict=activeReadyMemos(base).some(memo=>!wiring.isFamilyEnabled!(memo.familyId))||
+    Object.entries(base.readyGeneration.familyPartitions??{}).some(([id,partition])=>
+      partition.enabled&&!wiring.isFamilyEnabled!(id)&&
+      Object.values(partition.outcomesByCandidateKey).some(row=>row.status==="covered"));
   if(restore)await updateReadyFamilies(pure);
   else if(restrict)await restrictReadyFamilies(pure);
   const ready=await refreshReadyInstances(pure),next=await store.load();assert(next);

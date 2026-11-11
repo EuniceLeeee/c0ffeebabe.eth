@@ -63,6 +63,9 @@ export interface DeclarativeMappedDiscovery {
     readonly durableKey?: { readonly addresses: readonly string[]; readonly evidence?: readonly string[] };
     /** Pre-partition nomination grouping; evidence candidate keys stay distinct. */
     readonly instanceKey?: readonly string[];
+    /** Families sharing a group promise interchangeable complete capabilities
+     * for the same key. A shared address alone is not that promise. */
+    readonly coverage?: { readonly group: string; readonly key: readonly string[] };
   };
   readonly calls: readonly MappedPattern[];
   readonly events: readonly MappedPattern[];
@@ -139,7 +142,7 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
   validateDeclarativeValue(raw);
   const d = JSON.parse(JSON.stringify(raw)) as DeclarativeMappedDiscovery;
   shape(d, ["version", "sources", "candidateSources", "candidate", "calls", "events", "labels", "nomination"], ["surface", "nominationReadFlow", "txSeedNominations", "recentCallNomination", "reverseBinding", "reverseBindingTraceFallback"], "mapping");
-  shape(d.candidate, ["kind", "addressField", "fields", "key"], ["optionalFields", "nullableFields", "instanceKey", "durableKey"], "candidate");
+  shape(d.candidate, ["kind", "addressField", "fields", "key"], ["optionalFields", "nullableFields", "instanceKey", "durableKey", "coverage"], "candidate");
   if (typeof d.candidate.kind !== "string" || !d.candidate.kind || !["tx-evidence", "address-surface"].includes(d.nomination))
     throw new Error("invalid discovery candidate or nomination kind");
   for (const [field, types] of [["sources", ["factory-log", "landed-log", "observed-call", "address-surface"]],
@@ -170,6 +173,16 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
     new Set(d.candidate.instanceKey).size !== d.candidate.instanceKey.length || !d.candidate.instanceKey.includes(d.candidate.addressField) ||
     d.candidate.instanceKey.some(key => !fields.includes(key) || optional.has(key) || nullable.has(key))))
     throw new Error("invalid discovery instance key");
+  const coverage = d.candidate.coverage;
+  if (coverage !== undefined) {
+    shape(coverage, ["group", "key"], [], "candidate coverage");
+    if (typeof coverage.group !== "string" || !/^[a-z][a-z0-9:._-]*$/.test(coverage.group) ||
+        !Array.isArray(coverage.key) || !coverage.key.length ||
+        new Set(coverage.key).size !== coverage.key.length || !coverage.key.includes(d.candidate.addressField) ||
+        coverage.key.some(key => !fields.includes(key) || optional.has(key) || nullable.has(key))) {
+      throw new Error("invalid discovery candidate coverage key");
+    }
+  }
   if (!Array.isArray(d.calls) || !Array.isArray(d.events)) throw new Error("invalid discovery patterns");
   const ids = [...d.calls, ...d.events, ...(d.surface ? [d.surface] : [])].map(p => p.id);
   if (new Set(ids).size !== ids.length || ids.some(id => typeof id !== "string" || !id)) throw new Error("duplicate or invalid discovery pattern");
@@ -531,6 +544,20 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
       },
     } : explicitReverseBindingUnsupported("no reverse-binding registry declared (explicit unsupported)"),
     decodeCandidate,
+    ...(coverage === undefined ? {} : {
+      candidateCoverageKey(value: unknown): string | null {
+        // A partial/legacy nomination remains ordinary work. It cannot cover
+        // another Family until every declared identity component is present.
+        if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+        const row = value as Readonly<Record<string, unknown>>;
+        if (row.candidateKind !== undefined && row.candidateKind !== d.candidate.kind) return null;
+        try {
+          if (row[d.candidate.addressField] === undefined && row.address !== undefined)
+            value = { ...row, [d.candidate.addressField]: row.address };
+          return JSON.stringify([coverage.group, encodeKey(value, coverage.key)]);
+        } catch { return null; }
+      },
+    }),
     ...(d.candidate.instanceKey === undefined ? {} : {
       instanceNominationKey(value: unknown) {
         // Retained Ready nominations use the shared address envelope. It can

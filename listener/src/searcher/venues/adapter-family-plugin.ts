@@ -468,6 +468,14 @@ export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
    * level without any central per-family branch.
    */
   readonly instanceNominationKey?: (candidate: unknown) => string;
+  /**
+   * Optional cross-Family replacement group for this candidate. Equal keys
+   * declare the same logical subject and the same complete capability, so a
+   * currently verified member can cover the other nominations in one Ready
+   * run. Independent capabilities must use different keys (or return null).
+   * This only schedules work; it never grants another Family admission.
+   */
+  readonly candidateCoverageKey?: (candidate: unknown) => string | null;
 }
 
 export interface IdentityProvenance {
@@ -3462,6 +3470,7 @@ function validateDiscovery(
       "canonicalIntakeTargets",
       "candidateSources",
       "candidateKey",
+      "candidateCoverageKey",
       "decodeCandidate",
       "evidenceChannel",
       "instanceNominationKey",
@@ -3478,6 +3487,10 @@ function validateDiscovery(
     true,
     ["candidateKey", "decodeCandidate", "evidenceChannel", "sources"],
   );
+  if (discovery.candidateCoverageKey !== undefined &&
+      typeof discovery.candidateCoverageKey !== "function") {
+    throw new Error("discovery.candidateCoverageKey must be a function");
+  }
   validateAddressList(
     discovery.canonicalIntakeTargets,
     "discovery canonicalIntakeTargets",
