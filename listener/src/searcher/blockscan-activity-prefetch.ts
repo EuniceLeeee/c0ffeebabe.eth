@@ -10,7 +10,7 @@ type Read<T> = Promise<PromiseSettledResult<T>>;
 interface Entry {
   readonly hash: string;
   readonly logs: Read<Logs>;
-  readonly traces?: Read<unknown>;
+  readonly traces: Read<unknown>;
   readonly drained: Promise<unknown>;
   logsTaken: boolean;
   tracesTaken: boolean;
@@ -34,8 +34,7 @@ export class BlockScanActivityPrefetch implements BlockTouchedProvider {
   private readonly active = new Set<Promise<unknown>>();
   private closed = false;
 
-  constructor(private readonly provider: BlockTouchedProvider, private readonly signal: AbortSignal,
-    private readonly mode: "trace" | "logs-shadow" = "trace") {}
+  constructor(private readonly provider: BlockTouchedProvider, private readonly signal: AbortSignal) {}
 
   noteHead(number: number, hash: string): void {
     if (this.closed || this.signal.aborted || !Number.isSafeInteger(number) || number < 0 ||
@@ -89,12 +88,9 @@ export class BlockScanActivityPrefetch implements BlockTouchedProvider {
 
   send(method: string, params: unknown[]): Promise<unknown> {
     this.assertOpen();
-    if (this.mode === "logs-shadow" && (method === "debug_traceBlockByHash" || method === "debug_traceBlockByNumber")) {
-      return Promise.reject(new Error("logs-shadow live activity provider cannot issue block traces"));
-    }
     const entry = typeof params[0] === "string" ? this.confirmed.get(params[0].toLowerCase()) : undefined;
     const options = params[1] as { tracer?: unknown; tracerConfig?: { onlyTopCall?: unknown } } | undefined;
-    if (!entry || !entry.traces || entry.tracesTaken || method !== "debug_traceBlockByHash" || params.length !== 2 ||
+    if (!entry || entry.tracesTaken || method !== "debug_traceBlockByHash" || params.length !== 2 ||
         options?.tracer !== "callTracer" || options.tracerConfig?.onlyTopCall !== false ||
         Object.keys(options).length !== 2 || Object.keys(options.tracerConfig).length !== 1) {
       return this.provider.send(method, params);
@@ -128,17 +124,15 @@ export class BlockScanActivityPrefetch implements BlockTouchedProvider {
 
   private start(hash: string): Entry {
     const logs = settle(() => { this.assertOpen(); return this.provider.getLogs({ blockHash: hash }); });
-    const traces = this.mode === "logs-shadow" ? undefined : settle(() => {
+    const traces = settle(() => {
       this.assertOpen();
       return this.provider.send("debug_traceBlockByHash", [hash,
         { tracer: "callTracer", tracerConfig: { onlyTopCall: false } }]);
     });
-    // The diagnostic observer owns trace I/O separately. No header, orphan,
-    // pass-finally or shutdown barrier can join a shadow request here.
-    const drained = traces === undefined ? Promise.all([logs]) : Promise.all([logs, traces]);
+    const drained = Promise.all([logs, traces]);
     this.active.add(drained);
     void drained.then(() => this.active.delete(drained));
-    return { hash, logs, traces, drained, logsTaken: false, tracesTaken: traces === undefined };
+    return { hash, logs, traces, drained, logsTaken: false, tracesTaken: false };
   }
 
   private async consume<T>(entry: Entry, pending: Read<T>, fallback: () => Promise<T>): Promise<T> {

@@ -109,7 +109,7 @@ export type StrictFundingPreparationInput = Pick<PrepareAdapterRuntimeInput,
   "preparationSettleDeadlineAtMs" | "signal" | "pricingCallBackend" | "simulationTransport"
 >;
 
-export interface PrepareStrictRuntimeInput extends Omit<PrepareAdapterRuntimeInput, "canonicalActivity"> {
+export interface PrepareStrictRuntimeInput extends PrepareAdapterRuntimeInput {
   readonly fundingPreparation?: StrictFundingPreparation;
   readonly canonicalActivity?: StrictCanonicalActivityProof;
   /**
@@ -122,31 +122,17 @@ export interface PrepareStrictRuntimeInput extends Omit<PrepareAdapterRuntimeInp
 
 const EMPTY_FUNDING_ASSETS: readonly string[] = Object.freeze([]);
 
-interface CanonicalActivityRange {
+export interface StrictCanonicalActivityProof {
   readonly source: CanonicalSource;
   readonly parentHash?: string;
   /** Present only after the activity reader verified every canonical transition
    * from this published source through source; never a target-only touched set. */
   readonly previousSource?: { readonly number: number; readonly hash: string };
+  /** Separate, complete old+new branch proof; never a naked forward range. */
+  readonly reorg?: VerifiedReorgActivity;
   readonly touchedStateKeys: ReadonlySet<string>;
+  readonly complete: true;
 }
-
-export type StrictCanonicalActivityProof = CanonicalActivityRange & (
-  | {
-      readonly complete: true;
-      /** Separate, complete old+new branch proof; never a naked forward range. */
-      readonly reorg?: VerifiedReorgActivity;
-      readonly experimentalLogOnly?: never;
-    }
-  | {
-      /** Canonical logs are complete; internal-call coverage is unproven. */
-      readonly complete: false;
-      readonly experimentalLogOnly: true;
-      readonly reorg?: never;
-    }
-);
-
-export type StrictActivityPolicy = "strict" | "logs-shadow";
 
 export type StrictPricingPublication =
   | {
@@ -261,12 +247,7 @@ export class StrictCurrentRuntimeCoordinator
     private readonly exactQuoteCache?: AdapterFamilyExactQuoteCache,
     /** Synchronous derived-column organization, only after publication guards. */
     private readonly organizePricing?: (snapshot: BlockScanStateSnapshot) => BlockScanStateSnapshot,
-    private readonly activityPolicy: StrictActivityPolicy = "strict",
-  ) {
-    assert(activityPolicy === "strict" || activityPolicy === "logs-shadow", "invalid activity policy");
-    assert(activityPolicy === "strict" || effectivePricing !== undefined,
-      "log shadow requires effective pricing");
-  }
+  ) {}
 
   latestPricingSnapshot(): BlockScanStateSnapshot | null {
     return this.publishedPricing;
@@ -277,7 +258,6 @@ export class StrictCurrentRuntimeCoordinator
   /** Revoke execution/cache authority, but retain immutable pricing data until
    * a verified two-branch update replaces it. This is not a cold-start reset. */
   async retirePricingForReorg(source: { readonly number: number; readonly hash: string }): Promise<void> {
-    assert(this.activityPolicy === "strict", "log shadow cannot recover pricing through a reorg");
     const previous = this.publishedPricing;
     assert(previous?.effectiveMids?.complete && previous.sourceBlock === source.number &&
       previous.sourceBlockHash.toLowerCase() === source.hash.toLowerCase(), "reorg retirement source changed");
@@ -293,7 +273,6 @@ export class StrictCurrentRuntimeCoordinator
   /** A cursor, not another exported/deep-copied table. The raw basis must stay
    * unchanged throughout a journal; a reset cannot silently start a new one. */
   continuationPricing() {
-    assert(this.activityPolicy === "strict", "log shadow cannot export continuation pricing");
     return { raw: this.bootstrapRawPricing, pricing: this.reorgBase === null ? this.publishedPricing : null };
   }
 
@@ -305,7 +284,6 @@ export class StrictCurrentRuntimeCoordinator
   }
 
   exportHistoricalBaseline(): HistoricalPricingBaseline {
-    assert(this.activityPolicy === "strict", "log shadow cannot export a historical pricing baseline");
     assert(this.reorgBase === null && this.bootstrapRawPricing && this.publishedPricing?.effectiveMids?.complete,
       "complete published pricing required for historical baseline");
     return { version: 1, raw: this.bootstrapRawPricing, pricing: this.publishedPricing,
@@ -320,7 +298,6 @@ export class StrictCurrentRuntimeCoordinator
     readonly graph: VerifiedGraphView; readonly rawGraph: VerifiedGraphView;
     readonly weth: string; readonly control: AdapterWorkControl;
   }): Promise<void> {
-    assert(this.activityPolicy === "strict", "log shadow cannot restore a historical pricing baseline");
     assert(this.publishedPricing === null && this.bootstrapRawPricing === null && baseline.version === 1,
       "historical pricing restore requires an empty coordinator");
     const { graph, rawGraph } = input, prior = baseline.pricing, raw = baseline.raw;
@@ -633,7 +610,7 @@ export class StrictCurrentRuntimeCoordinator
     }
     // A new raw epoch cannot reuse state authorized by an old graph/reorg.
     this.exactQuoteCache?.advanceState(sourceFor(graph),
-      (this.effectivePricing && rawBasis === null) || activity?.complete !== true ? undefined : activity);
+      this.effectivePricing && rawBasis === null ? undefined : activity);
     const raw = sessionPromise.then(session => {
       // Soft Family settlement may return degraded coverage while the outer
       // runtime pass is still open. Cancellation, unlike that deadline, retires it.
@@ -668,7 +645,7 @@ export class StrictCurrentRuntimeCoordinator
         disabledEdgeIds: this.disabledEffectiveEdges(sizing),
         quoteGraph: rawBasis === null ? undefined : graph,
         touchedStateKeys: resume !== undefined ? new Set<string>()
-          : rawBasis !== null && activityAllowsEffectiveCarry(previous, graph, activity, this.activityPolicy)
+          : rawBasis !== null && activityAllowsEffectiveCarry(previous, graph, activity)
             ? activity.touchedStateKeys : undefined,
       }, simulationTransport);
     })();
@@ -860,11 +837,8 @@ export class StrictCurrentRuntimeCoordinator
 
 function activityAllowsEffectiveCarry(previous: BlockScanStateSnapshot | null,
   graph: VerifiedGraphView, activity: StrictCanonicalActivityProof | undefined,
-  policy: StrictActivityPolicy = "strict",
 ): activity is StrictCanonicalActivityProof {
-  if (previous === null || activity === undefined ||
-      (activity.complete !== true && !(policy === "logs-shadow" &&
-        activity.complete === false && activity.experimentalLogOnly === true && activity.reorg === undefined)) ||
+  if (previous === null || activity?.complete !== true ||
       !sameCanonicalSource(activity.source, sourceFor(graph))) return false;
   if (activity.reorg !== undefined) return matchesReorgActivity(previous, graph, activity);
   const base = activity.previousSource;
@@ -874,8 +848,8 @@ function activityAllowsEffectiveCarry(previous: BlockScanStateSnapshot | null,
     return graph.sourceBlockHash.toLowerCase() === previous.sourceBlockHash.toLowerCase() &&
       graph.generation >= previous.generation;
   }
-  // The opt-in log experiment changes coverage, never canonical range linkage.
-  // A naked forward source still cannot bridge a cancelled/coalesced block.
+  // Only a complete range rooted in the still-published table can bridge a
+  // cancelled/coalesced block. A naked forward source remains insufficient.
   if (base !== undefined) return graph.sourceBlock > previous.sourceBlock && graph.generation > previous.generation;
   return graph.sourceBlock === previous.sourceBlock + 1 && graph.generation > previous.generation &&
     activity.parentHash?.toLowerCase() === previous.sourceBlockHash.toLowerCase();

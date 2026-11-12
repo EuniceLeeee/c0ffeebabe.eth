@@ -694,8 +694,6 @@ export class SourceSimulationWork {
 
 export interface BlockScanRuntimeLoopDependencies {
   readonly enabled: boolean;
-  /** Logs-shadow uses source-N logs for refresh; background trace is observation only. */
-  readonly activityMode?: "trace" | "logs-shadow";
   /** Lifecycle observation after pass work drains, including gas/revert writes.
    * Persistence uses the same hook in live and historical measurements. */
   readonly onPassSettled?: () => void;
@@ -1042,10 +1040,6 @@ export class BlockScanRuntimeLoop {
 
   private async runScheduledHead(number: number, observation: LatestHeadObservation): Promise<void> {
     if (this.reorgCatchupPending) {
-      if (this.deps.activityMode === "logs-shadow") {
-        this.stopLogShadowForReorg();
-        return;
-      }
       this.dropReorgExecutionRefreshes();
       while (!this.deps.runtimeAbort.signal.aborted && !this.deps.isShuttingDown()) {
         const prior = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
@@ -2146,7 +2140,6 @@ export class BlockScanRuntimeLoop {
   }
 
   restoreLiveContinuation(): void {
-    if (this.deps.activityMode === "logs-shadow") throw new Error("logs-shadow cannot restore live continuation");
     const baseline = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
     if (!this.deps.liveContinuation || this.deps.blind.enabled || this.deps.nMinusOneFallbackEnabled ||
         this.activePass !== null || this.generation !== 0 || !baseline?.effectiveMids?.complete) {
@@ -2160,7 +2153,6 @@ export class BlockScanRuntimeLoop {
   /** Resume data-only pricing in a new historical loop, never a live startup.
    * Funding and source-bound execution authority are reacquired by runHead. */
   restoreHistoricalBaseline(): void {
-    if (this.deps.activityMode === "logs-shadow") throw new Error("logs-shadow cannot restore a historical baseline");
     const baseline = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
     if (this.deps.historicalReadOnly !== true || this.deps.blind.enabled || this.deps.nMinusOneFallbackEnabled ||
         this.activePass !== null || this.generation !== 0 || !baseline?.effectiveMids?.complete) {
@@ -2772,7 +2764,6 @@ export class BlockScanRuntimeLoop {
         if (header.status === "rejected") throw header.reason;
         try {
           if (reorgRecoveryAttempt) {
-            if (this.deps.activityMode === "logs-shadow") throw this.stopLogShadowForReorg();
             if (!activityPreviousSource || !this.deps.readReorgActivity) throw new Error("reorg recovery requires complete two-branch activity reader");
             reorgActivity = await this.deps.readReorgActivity(blockNumber, header.value, {
               previousSource: activityPreviousSource, signal: passSignal, deadlineAtMs: passDeadlineAtMs,
@@ -3173,15 +3164,14 @@ export class BlockScanRuntimeLoop {
         const canonicalActivity: StrictCanonicalActivityProof = Object.freeze({
           parentHash: sourceHeader.parentHash,
           ...(activityPreviousSource === undefined ? {} : { previousSource: activityPreviousSource }),
+          ...(reorgActivity === undefined ? {} : { reorg: reorgActivity }),
           source: Object.freeze({
             number: graphView.sourceBlock,
             hash: graphView.sourceBlockHash,
             generation: graphView.generation,
           }),
           touchedStateKeys: touchedPools,
-          ...(this.deps.activityMode === "logs-shadow"
-            ? { complete: false as const, experimentalLogOnly: true as const }
-            : { complete: true as const, ...(reorgActivity === undefined ? {} : { reorg: reorgActivity }) }),
+          complete: true,
         });
         /*
          * Source-N is also a producer generation. Keep its pricing calls on
@@ -4760,12 +4750,6 @@ export class BlockScanRuntimeLoop {
         return;
       }
       if (error instanceof BlockActivityRangeInvalidatedError && activityCanonicalBaseHash !== null) {
-        if (this.deps.activityMode === "logs-shadow") {
-          outcome = "stale_state";
-          skippedReason = "log_shadow_reorg_requires_restart";
-          this.stopLogShadowForReorg();
-          return;
-        }
         // A separately confirmed reorg retires this pass, not the runtime.
         // No invalid activity reaches pricing; finally still drains all work
         // before discarding the orphaned publication and requesting warmup.
@@ -4838,7 +4822,7 @@ export class BlockScanRuntimeLoop {
               try { await simulationWork.closeAndDrain(); }
               finally {
                 await Promise.all([activity, fundingSettlement]);
-                if (this.deps.activityMode !== "logs-shadow" && activityCanonicalBaseHash !== null &&
+                if (activityCanonicalBaseHash !== null &&
                     currentRuntimeCoordinator.latestPricingSnapshot() === activityBasis) {
                   // Retire authority only after old work drains. Keep price DATA
                   // for a two-branch invalidation proof, never silently warm all.
@@ -4952,16 +4936,6 @@ export class BlockScanRuntimeLoop {
       }
     }
   };
-
-  private stopLogShadowForReorg(): Error {
-    const error = new Error("logs-shadow stopped: canonical reorg requires a fresh startup");
-    if (!this.deps.runtimeAbort.signal.aborted) {
-      this.deps.runtimeAbort.abort(error);
-      this.dropReorgExecutionRefreshes();
-      console.log("[searcher/blockscan-log-shadow-stopped] canonical_reorg_requires_restart");
-    }
-    return error;
-  }
 
   private dropReorgExecutionRefreshes(): void {
     this.pruneEvidenceContexts(Infinity, "pending_evidence_reorg_recovery");
