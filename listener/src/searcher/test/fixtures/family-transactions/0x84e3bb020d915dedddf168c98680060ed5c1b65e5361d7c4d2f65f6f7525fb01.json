@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x84e3bb020d915dedddf168c98680060ed5c1b65e5361d7c4d2f65f6f7525fb01",
+  "legs": [
+    {
+      "id": "protocol:erc4626--erc4626--0xc58d044404d8b14e953c115e67823784dea53d8f--0-deposit-original-event-input",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+      },
+      "instanceKey": "0xc58d044404d8b14e953c115e67823784dea53d8f",
+      "lineageId": "erc4626:standalone-standard-behavior",
+      "tokenIn": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+      "tokenOut": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+      "amountIn": "4075497995240840401175",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-deposit-original-event-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--0xc58d044404d8b14e953c115e67823784dea53d8f.json",
+          "sha256": "852993a8059e212bf37034854b840a1f9cf7c8b26a6401c08a31b07a6323544c",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--0xc58d044404d8b14e953c115e67823784dea53d8f--1-deposit-twice-original-event-input",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+      },
+      "instanceKey": "0xc58d044404d8b14e953c115e67823784dea53d8f",
+      "lineageId": "erc4626:standalone-standard-behavior",
+      "tokenIn": "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3",
+      "tokenOut": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+      "amountIn": "8150995990481680802350",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-deposit-twice-original-event-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--0xc58d044404d8b14e953c115e67823784dea53d8f.json",
+          "sha256": "852993a8059e212bf37034854b840a1f9cf7c8b26a6401c08a31b07a6323544c",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626-silo-redeem--erc4626-silo-redeem--junior--0-silo-redeem-spliced-production-input-only",
+      "familyId": "protocol:erc4626-silo-redeem",
+      "domain": "protocol",
+      "source": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+      },
+      "instanceKey": "0xc58d044404d8b14e953c115e67823784dea53d8f:0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+      "lineageId": "erc4626-silo:observed-payout-active-proof",
+      "tokenIn": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+      "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+      "amountIn": "4756507777847000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-silo-redeem-spliced-production-input-only",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626-silo-redeem--junior.json",
+          "sha256": "4d04ab6e00da398a82d91063f075bf4f448d05ee8efddec1059694ead66e6bec",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626-silo-redeem--erc4626-silo-redeem--junior--1-silo-redeem-original-burned-shares-at-N",
+      "familyId": "protocol:erc4626-silo-redeem",
+      "domain": "protocol",
+      "source": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+      },
+      "instanceKey": "0xc58d044404d8b14e953c115e67823784dea53d8f:0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+      "lineageId": "erc4626-silo:observed-payout-active-proof",
+      "tokenIn": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+      "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+      "amountIn": "3774740356452332000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-silo-redeem-original-burned-shares-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626-silo-redeem--junior.json",
+          "sha256": "4d04ab6e00da398a82d91063f075bf4f448d05ee8efddec1059694ead66e6bec",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626-silo-redeem--erc4626-silo-redeem--junior--2-silo-redeem-twice-original-burned-shares-at-N",
+      "familyId": "protocol:erc4626-silo-redeem",
+      "domain": "protocol",
+      "source": {
+        "number": 26130609,
+        "hash": "0xc2a34ba6aef82b049e82d6123a65656358d389a55bbb95dd1a5a252dae62e1bc"
+      },
+      "instanceKey": "0xc58d044404d8b14e953c115e67823784dea53d8f:0x9d39a5de30e57443bff2a8307a4256c8797a3497",
+      "lineageId": "erc4626-silo:observed-payout-active-proof",
+      "tokenIn": "0xC58D044404d8B14e953C115E67823784dEA53d8F",
+      "tokenOut": "0x9D39A5DE30e57443BfF2A8307A4256c8797A3497",
+      "amountIn": "7549480712904664000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "2-silo-redeem-twice-original-burned-shares-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626-silo-redeem--junior.json",
+          "sha256": "4d04ab6e00da398a82d91063f075bf4f448d05ee8efddec1059694ead66e6bec",
+          "jsonPointer": "/trials/2"
+        }
+      ]
+    },
+    {
+      "id": "fluid-dex--reference-1-0",
+      "familyId": "fluid-dex",
+      "domain": "swap",
+      "amountScope": "historical-reference-needs-inputs",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/swap-json/index.json",
+          "sha256": "4fa65d097cc21ad62a986fcfcddd2a6147c1a99199c9641d03c92804b548ad88",
+          "jsonPointer": "/families/8/samples/1"
+        }
+      ],
+      "referenceMissing": [
+        "canonical receipt and N-end block hash verification",
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ]
+    }
+  ]
+}

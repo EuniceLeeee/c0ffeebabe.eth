@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xdf6b912487a08189ea8a69e93fba7e1428df1edb22d41c1c5cd85c994e23cfef",
+  "legs": [
+    {
+      "id": "custom-swap:oneswap--reference-0-0",
+      "familyId": "custom-swap:oneswap",
+      "domain": "swap",
+      "amountScope": "historical-input-at-N",
+      "provenance": [
+        {
+          "file": "docs/research/reports/oneswap-current-independent-20261015.json",
+          "sha256": "275a4c1ebe32cacdb745daa7167c8d9d65905da1db24b80d4e0b70feec7c8100",
+          "jsonPointer": "/amounts/1"
+        }
+      ],
+      "referenceMissing": [
+        "canonical receipt and N-end block hash verification",
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "source": {
+        "number": 26130639,
+        "hash": "0x69fe42671a3df6c3bfcdc98f44d7078870696568246b1d9dfd976d2f3a0e42e5"
+      },
+      "instanceKey": "0x1025f2334e88a4a0e93e5e2ff4a4e67317682b60",
+      "lineageId": "oneswap:amm-orderbook-v1",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x0b342c51d1592c41068d5d4b4da4a68c0a04d5a4",
+      "amountIn": "12122890967166406"
+    },
+    {
+      "familyId": "custom-swap:oneswap",
+      "domain": "swap",
+      "source": {
+        "number": 26130639,
+        "hash": "0x69fe42671a3df6c3bfcdc98f44d7078870696568246b1d9dfd976d2f3a0e42e5"
+      },
+      "instanceKey": "0x7e8dc7c0fef7bb84304cc5c2dacf5e583198ca4f",
+      "lineageId": "oneswap:amm-orderbook-v1",
+      "tokenIn": "0x0b342c51d1592c41068d5d4b4da4a68c0a04d5a4",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "324178882015670094145",
+      "amountScope": "historical-input-at-N",
+      "provenance": [
+        {
+          "file": "docs/research/reports/oneswap-current-independent-20261015.json",
+          "sha256": "275a4c1ebe32cacdb745daa7167c8d9d65905da1db24b80d4e0b70feec7c8100",
+          "jsonPointer": "/amounts/7"
+        }
+      ],
+      "id": "custom-swap:oneswap--1"
+    }
+  ]
+}

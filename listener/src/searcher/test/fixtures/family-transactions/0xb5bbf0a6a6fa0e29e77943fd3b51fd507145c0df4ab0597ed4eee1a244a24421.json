@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xb5bbf0a6a6fa0e29e77943fd3b51fd507145c0df4ab0597ed4eee1a244a24421",
+  "legs": [
+    {
+      "id": "protocol:wsteth--wsteth--wrap-original-input--0-wrap-original-input",
+      "familyId": "protocol:wsteth",
+      "domain": "protocol",
+      "source": {
+        "number": 26319753,
+        "hash": "0xefd3117c72b6614caf178c31685c4aa3ea8d1ce2b554762b605f30789eefc263"
+      },
+      "instanceKey": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+      "lineageId": "wsteth:steth-active-binding",
+      "tokenIn": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+      "tokenOut": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+      "amountIn": "603000000000000000000",
+      "actors": {
+        "executor": "0x9C7F3400109F04e8044989BBb7D483dc4587053a",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-wrap-original-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--wrap-original-input.json",
+          "sha256": "2eec373b9bd03183a8ec7687920024475ed85f1ccf2daa942a1ada33e39ac41b",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    }
+  ]
+}

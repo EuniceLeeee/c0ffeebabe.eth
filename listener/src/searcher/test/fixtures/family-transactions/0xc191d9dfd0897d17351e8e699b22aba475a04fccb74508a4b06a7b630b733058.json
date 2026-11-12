@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+  "legs": [
+    {
+      "familyId": "vault-spot",
+      "domain": "swap",
+      "source": {
+        "number": 26182689,
+        "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c"
+      },
+      "instanceKey": "0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "lineageId": "vault-spot:gmx-v1-abi",
+      "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "71854376210288490340",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/vault-spot-family-acceptance-20261014.json",
+          "sha256": "dafecaf408ae688ae5c3b216460164c1c766c4954b8cc4e284e6f8ce17accdce",
+          "jsonPointer": "/originalTransaction"
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/13/historicalBindings/0"
+        }
+      ],
+      "id": "vault-spot--0"
+    },
+    {
+      "familyId": "protocol:few-wrapped",
+      "domain": "protocol",
+      "source": {
+        "number": 26182689,
+        "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c"
+      },
+      "instanceKey": "0xa250cc729bb3323e7933022a67b52200fe354767",
+      "lineageId": "few:factory-backed-wrap-v1",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xa250cc729bb3323e7933022a67b52200fe354767",
+      "amountIn": "4387060682263585",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/few-wrapped-acceptance-20261014.json",
+          "sha256": "8abab6164040e3cd31c396297d11f45fbf07fcd057369765f0f43e210d5863ba",
+          "jsonPointer": "/amountSources/0/original"
+        }
+      ],
+      "id": "protocol:few-wrapped--1"
+    },
+    {
+      "familyId": "protocol:few-wrapped",
+      "domain": "protocol",
+      "source": {
+        "number": 26182689,
+        "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c"
+      },
+      "instanceKey": "0x0e3fe143de98c73e72942c8f760a2e69d98bc1cb",
+      "lineageId": "few:factory-backed-wrap-v1",
+      "tokenIn": "0x0e3fe143de98c73e72942c8f760a2e69d98bc1cb",
+      "tokenOut": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "amountIn": "71854376210288490340",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/few-wrapped-acceptance-20261014.json",
+          "sha256": "8abab6164040e3cd31c396297d11f45fbf07fcd057369765f0f43e210d5863ba",
+          "jsonPointer": "/amountSources/1/original"
+        }
+      ],
+      "id": "protocol:few-wrapped--2"
+    }
+  ]
+}

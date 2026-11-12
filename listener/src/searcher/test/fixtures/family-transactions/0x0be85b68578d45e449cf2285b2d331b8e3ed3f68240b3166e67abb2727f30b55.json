@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x0be85b68578d45e449cf2285b2d331b8e3ed3f68240b3166e67abb2727f30b55",
+  "legs": [
+    {
+      "id": "univ4-fee-hook--reference-0-0",
+      "familyId": "univ4-fee-hook",
+      "domain": "swap",
+      "source": {
+        "number": 26029537,
+        "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2"
+      },
+      "amountScope": "historical-input-at-pinned-end-state",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "docs/research/reports/sat1-native-historical-acceptance-20261010.json",
+          "sha256": "3ec7a4d289a6966d7fe8abbf3a908b0eeb8a4df4be6121daacea1354cf022125",
+          "jsonPointer": "/originals/0"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0xc87e90621ca16da09311f57cd7ea8262a6f803f422699103e902593f31bd140f",
+      "lineageId": "univ4:pool-manager-fee-hook-subinstance",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x8f66337a0c2a02202fd91dd596c411cf977c6060",
+      "amountIn": "501748421931293584"
+    }
+  ]
+}

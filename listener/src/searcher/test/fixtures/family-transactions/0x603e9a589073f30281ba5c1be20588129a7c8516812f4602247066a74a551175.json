@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x603e9a589073f30281ba5c1be20588129a7c8516812f4602247066a74a551175",
+  "legs": [
+    {
+      "id": "protocol:wsteth--wsteth--unwrap-original-input--0-unwrap-original-input",
+      "familyId": "protocol:wsteth",
+      "domain": "protocol",
+      "source": {
+        "number": 26319029,
+        "hash": "0xa05f345f525994a85281b6de336d62ac6f34f834e1d1e8f573d8880618513f3f"
+      },
+      "instanceKey": "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0",
+      "lineageId": "wsteth:steth-active-binding",
+      "tokenIn": "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+      "tokenOut": "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+      "amountIn": "30000000000000000000",
+      "actors": {
+        "executor": "0x0DFD172B4D908dDac1DA2Bf5b474ADcee836c9e0",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-unwrap-original-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/wsteth--unwrap-original-input.json",
+          "sha256": "8ff1b3d1abc53e79605e85cc0de076f58197dd1d4efba1c41d2d80c87f2ad031",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:wsteth--reference-2-0",
+      "familyId": "protocol:wsteth",
+      "domain": "protocol",
+      "source": {
+        "number": 26319029,
+        "hash": "0xa05f345f525994a85281b6de336d62ac6f34f834e1d1e8f573d8880618513f3f"
+      },
+      "amountScope": "historical-reference-needs-inputs",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/index.json",
+          "sha256": "878ab8488b19df6339c0da46b7917715dd5756ed2661347b0164f89d1b4fd0c3",
+          "jsonPointer": "/families/25/samples/2"
+        }
+      ],
+      "referenceMissing": [
+        "zero-tolerance quoted floor: actual stETH credit is 1 wei below the unwrap return, so this control is expected to reject; the runnable sample declares outputToleranceRawUnits=1"
+      ]
+    }
+  ]
+}

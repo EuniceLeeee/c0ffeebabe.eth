@@ -178,23 +178,41 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   const reviewedWiring = createRebuildWiring({ ...common, activityArchive: archive,
     readyThrottle: wiring.readyThrottle, startupCandidates: candidateFile ? startupCandidates :
       enabledIds.flatMap(id => Object.values(partitions[id]?.candidatesByKey ?? {}).map(decode)) });
-  const inputFingerprint = readyMaintenanceReviewFingerprint({
+  const reviewInput: Parameters<typeof readyMaintenanceReviewFingerprint>[0] = {
     parent: base.readyGeneration!, range, source,
     definitions: enabledIds.map(id => [id, familyDefinitionHash(id)] as const),
     executionIdentity: common.executionIdentity, sourcePlans: reviewedWiring.expectedSourcePlanFingerprints(),
     selection: candidateFileFingerprint ?? "previous-and-discovered",
     ...(proofRuntimeHash && { proofRuntimeHash }), ...(forceUpdate && { forceUpdate }),
     ...(forceStatuses && { forceStatuses }),
-  });
+  };
+  const inputFingerprint = readyMaintenanceReviewFingerprint(reviewInput);
+  let replacesInputFingerprint: string | undefined;
   if (base.inProgressRun) {
-    if (base.inProgressRun.reviewInputFingerprint !== inputFingerprint) throw new Error("cannot resume Ready review with changed inputs");
+    if (base.inProgressRun.reviewInputFingerprint !== inputFingerprint) {
+      const pending = base.inProgressRun;
+      const previousPlans = { ...reviewInput.sourcePlans };
+      for (const receipt of pending.sourceReceipts) {
+        if (receipt.sourceKind === "startup-candidate-union") previousPlans.startup = receipt.queryFingerprint;
+        else if (receipt.sourceKind === "catalog-activity-union") previousPlans.activity = receipt.queryFingerprint;
+        else throw new Error("paused Ready review has an unsupported source receipt");
+      }
+      // Do not silently change proof runtime, caller, source, force policy or
+      // an unrecorded candidate file. Only sealed rule/plan changes reconcile.
+      if (!pending.familyDefinitionHashes || readyMaintenanceReviewFingerprint({ ...reviewInput,
+        definitions: Object.entries(pending.familyDefinitionHashes), sourcePlans: previousPlans,
+      }) !== pending.reviewInputFingerprint) throw new Error("cannot resume Ready review with changed proof context or candidate file");
+      replacesInputFingerprint = pending.reviewInputFingerprint;
+      log("reconciling paused review with current Family definitions; compatible completed outcomes remain reusable");
+    }
     await verifyArchivedInputs();
   }
   log(JSON.stringify({ phase: "update-plan", familyCount: enabledIds.length,
     forceStatuses: forceStatuses ?? (forceUpdate ? ["terminal-rejected", "retryable"] : []),
     revalidateProofs: !!proofRuntimeHash, throttle: wiring.readyThrottle?.snapshot() }));
-  const ready = await rebuildUniverse({ ...reviewedWiring, store, runId: "ready-review-" + inputFingerprint,
+  const ready = await rebuildUniverse({ ...reviewedWiring, store, runId: base.inProgressRun?.runId ?? "ready-review-" + inputFingerprint,
     previousReadyReview: { inputFingerprint, candidateKeys: keys,
+      ...(replacesInputFingerprint && { replacesInputFingerprint }),
       ...(proofRuntimeHash && { revalidateParentProofs: true }),
       ...(forceUpdate && { retryNegativeOutcomes: true }), ...(forceStatuses && { forceStatuses }) },
     resumeCompletedOutcomes: !!base.inProgressRun,

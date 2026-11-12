@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x0bff8c156d526f052998a5f27e25ec44493d71818189226a53888e3826648b80",
+  "legs": [
+    {
+      "id": "protocol:boring-vault-teller--reference-0-0",
+      "familyId": "protocol:boring-vault-teller",
+      "domain": "protocol",
+      "instanceKey": "0x63b2b0528376d1b34ed8c9ff61bd67ab2c8c2bb0",
+      "amountScope": "historical-reference-needs-inputs",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/index.json",
+          "sha256": "878ab8488b19df6339c0da46b7917715dd5756ed2661347b0164f89d1b4fd0c3",
+          "jsonPointer": "/families/3/samples/0"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and source-bound actors",
+        "complete direction/amount inputs",
+        "canonical block-end receipt/header confirmation"
+      ]
+    }
+  ]
+}

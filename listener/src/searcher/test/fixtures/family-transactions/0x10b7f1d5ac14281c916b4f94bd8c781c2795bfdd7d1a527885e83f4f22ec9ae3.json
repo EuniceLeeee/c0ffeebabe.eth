@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x10b7f1d5ac14281c916b4f94bd8c781c2795bfdd7d1a527885e83f4f22ec9ae3",
+  "legs": [
+    {
+      "id": "protocol:token-conversion--token-conversion--xwin-mint--0-mint-saved-production-input-only",
+      "familyId": "protocol:token-conversion",
+      "domain": "protocol",
+      "source": {
+        "number": 26075823,
+        "hash": "0x4256c70c1fba6d441343680f94d07e2a1034dddb5628bb11858b9157490b501c"
+      },
+      "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+      "lineageId": "token-conversion:xwin-allocations-v1",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+      "amountIn": "5330762",
+      "actors": {
+        "executor": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+        "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c"
+      },
+      "amountScope": "0-mint-saved-production-input-only",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/token-conversion--xwin-mint.json",
+          "sha256": "b84c40c364b266421975f32e8e7d0a4d9b418d61a45fd022087ebe84b18fd43f",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:token-conversion--token-conversion--xwin-mint--1-mint-historical-input-at-N",
+      "familyId": "protocol:token-conversion",
+      "domain": "protocol",
+      "source": {
+        "number": 26075823,
+        "hash": "0x4256c70c1fba6d441343680f94d07e2a1034dddb5628bb11858b9157490b501c"
+      },
+      "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+      "lineageId": "token-conversion:xwin-allocations-v1",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+      "amountIn": "1",
+      "actors": {
+        "executor": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+        "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c"
+      },
+      "amountScope": "1-mint-historical-input-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/token-conversion--xwin-mint.json",
+          "sha256": "b84c40c364b266421975f32e8e7d0a4d9b418d61a45fd022087ebe84b18fd43f",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:token-conversion--token-conversion--xwin-redeem--0-redeem-saved-production-input-only",
+      "familyId": "protocol:token-conversion",
+      "domain": "protocol",
+      "source": {
+        "number": 26075823,
+        "hash": "0x4256c70c1fba6d441343680f94d07e2a1034dddb5628bb11858b9157490b501c"
+      },
+      "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+      "lineageId": "token-conversion:xwin-allocations-v1",
+      "tokenIn": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "5359753824301855890",
+      "actors": {
+        "executor": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+        "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c"
+      },
+      "amountScope": "0-redeem-saved-production-input-only",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/token-conversion--xwin-redeem.json",
+          "sha256": "f921c640caee3dc49941e629fa8aab6d931713410eb9734d928027276208957e",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:token-conversion--token-conversion--xwin-redeem--1-redeem-historical-input-at-N",
+      "familyId": "protocol:token-conversion",
+      "domain": "protocol",
+      "source": {
+        "number": 26075823,
+        "hash": "0x4256c70c1fba6d441343680f94d07e2a1034dddb5628bb11858b9157490b501c"
+      },
+      "instanceKey": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+      "lineageId": "token-conversion:xwin-allocations-v1",
+      "tokenIn": "0x49edcc5aab2e349c1f71c27c98fe9c65b01745b1",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "1484700796983592223",
+      "actors": {
+        "executor": "0x4af9495c4ac24c5cd3b0c90611550a1996415bce",
+        "owner": "0xb8578b6de173c8554ff0390db5a7effa567dda3c"
+      },
+      "amountScope": "1-redeem-historical-input-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/token-conversion--xwin-redeem.json",
+          "sha256": "f921c640caee3dc49941e629fa8aab6d931713410eb9734d928027276208957e",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    }
+  ]
+}

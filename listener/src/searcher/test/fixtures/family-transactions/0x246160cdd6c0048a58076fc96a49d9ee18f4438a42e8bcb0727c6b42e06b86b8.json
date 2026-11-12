@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x246160cdd6c0048a58076fc96a49d9ee18f4438a42e8bcb0727c6b42e06b86b8",
+  "legs": [
+    {
+      "id": "swap:algebra-integral--reference-3-0",
+      "familyId": "swap:algebra-integral",
+      "domain": "swap",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/algebra-current-executor-acceptance-20261012.json",
+          "sha256": "f1bc9424fef2dc69208102d3a16c2bdd9da6dda74c16a457fb197623899ac7d0",
+          "jsonPointer": "/samples/3/directions/0/trials/1"
+        }
+      ],
+      "referenceMissing": [
+        "canonical receipt and N-end block hash verification",
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "source": {
+        "number": 25946003,
+        "hash": "0x5536c70b740995bfa6bcc158673726dc7372a87ddfc534203ef4f4ba02cd97ff"
+      },
+      "instanceKey": "0x65937a5421603612c243300b250f64e58afcdbc4",
+      "lineageId": "algebra-integral:factory-child",
+      "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "339698859092837871530"
+    }
+  ]
+}

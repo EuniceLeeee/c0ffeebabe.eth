@@ -1,0 +1,2788 @@
+{
+  "version": 2,
+  "scope": {
+    "family": "custom-swap:zero1-curve"
+  },
+  "production": {
+    "domain": "swap",
+    "activation": {
+      "enabled": true,
+      "envKey": "SEARCHER_FAMILY_ZERO1_CURVE_ENABLED"
+    }
+  },
+  "manifest": {
+    "familyId": "custom-swap:zero1-curve",
+    "domain": "swap",
+    "ownedActionAdapterIds": [
+      "zero1-curve-sell",
+      "zero1-curve-buy"
+    ],
+    "requiredInfraActionAdapterIds": [
+      "erc20-approve"
+    ],
+    "allowedTaxonomy": [
+      {
+        "slotKind": "swap"
+      }
+    ],
+    "supportedLineages": [
+      "zero1-curve:bonding-sale"
+    ],
+    "poolAdapterIds": [
+      "zero1-curve",
+      "custom-swap:zero1-curve"
+    ],
+    "edgeAdapterIds": [
+      "zero1-curve-sell",
+      "zero1-curve-buy"
+    ],
+    "requiresProtocolEdgesFlag": false
+  },
+  "discovery": {
+    "definition": {
+      "version": 2,
+      "sources": [
+        "landed-log",
+        "observed-call",
+        "address-surface"
+      ],
+      "candidateSources": [],
+      "candidate": {
+        "kind": "zero1-curve-bonding-sale",
+        "addressField": "curve",
+        "fields": {
+          "curve": "address"
+        },
+        "key": [
+          "curve"
+        ],
+        "instanceKey": [
+          "curve"
+        ]
+      },
+      "calls": [
+        {
+          "id": "zero1-curve-sell-call",
+          "signature": "function sell(uint256 coinIn,uint256 minOut,address to) returns (uint256 zero1Out)",
+          "fields": {
+            "curve": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    0
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "zero1-curve-buy-call",
+          "signature": "function buy(uint256 zero1In,uint256 minOut,address to) returns (uint256 coinOut)",
+          "fields": {
+            "curve": {
+              "from": "target"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    0
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "events": [
+        {
+          "id": "zero1-curve-sell-log",
+          "signature": "event Sell(address indexed from,uint256 coinIn,uint256 usdsOut,uint256 burned,uint256 minted)",
+          "fields": {
+            "curve": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    1
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    0
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    2
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "zero1-curve-buy-log",
+          "signature": "event Buy(address indexed to,uint256 zero1Used,uint256 coinOut,uint256 burned,uint256 minted)",
+          "fields": {
+            "curve": {
+              "from": "emitter"
+            }
+          },
+          "predicates": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    1
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    0
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    2
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "nomination": "address-surface",
+      "surface": {
+        "id": "zero1-curve-interface",
+        "fingerprint": "zero1-curve-bonding-sale-v1",
+        "fields": {
+          "curve": {
+            "from": "emitter"
+          }
+        }
+      },
+      "labels": [
+        "zero1-curve",
+        "custom-swap:zero1-curve"
+      ],
+      "txSeedNominations": false
+    }
+  },
+  "identity": {
+    "memoReuse": "recheck-identity",
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "definition": {
+      "version": 1,
+      "expressions": {},
+      "identity": {
+        "applies": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$candidate",
+                "candidateKind"
+              ]
+            },
+            "zero1-curve-bonding-sale"
+          ]
+        },
+        "assets": {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$evidence.zero1"
+              ]
+            },
+            [
+              {
+                "key": "zero1",
+                "kind": "erc20",
+                "address": "$evidence.zero1"
+              },
+              {
+                "key": "coin",
+                "kind": "erc20",
+                "address": "$evidence.coin"
+              }
+            ],
+            []
+          ]
+        },
+        "select": [
+          {
+            "return": "surface",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "assets",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence.zero1Decimals"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": "assets"
+          }
+        ],
+        "stages": {
+          "surface": {
+            "requirements": {
+              "transports": [
+                "get-code",
+                "eth-call"
+              ]
+            },
+            "requests": [
+              {
+                "id": "identity-code",
+                "kind": "get-code",
+                "address": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.curve"
+                  ]
+                }
+              },
+              {
+                "id": "identity-zero1",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.curve"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "curve",
+                    "zero1",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-coin",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.curve"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "curve",
+                    "coin",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-owner",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.curve"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "curve",
+                    "owner",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-bonded",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.curve"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "curve",
+                    "bonded",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              },
+              {
+                "id": "identity-minted",
+                "kind": "eth-call",
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.curve"
+                  ]
+                },
+                "data": {
+                  "op": "encode",
+                  "args": [
+                    "curve",
+                    "minted",
+                    []
+                  ]
+                },
+                "completion": "return-data"
+              }
+            ],
+            "decode": [
+              {
+                "let": "source",
+                "value": {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$results",
+                        0
+                      ]
+                    },
+                    "source"
+                  ]
+                }
+              },
+              {
+                "let": "codeHash",
+                "value": {
+                  "op": "codeHash",
+                  "args": [
+                    {
+                      "op": "code",
+                      "args": [
+                        "identity-code"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "let": "zero1",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "curve",
+                    "zero1",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-zero1"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "coin",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "curve",
+                    "coin",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-coin"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "owner",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "curve",
+                    "owner",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-owner"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "bonded",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "curve",
+                    "bonded",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-bonded"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "minted",
+                "value": {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "curve",
+                    "minted",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "identity-minted"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "every",
+                  "args": [
+                    "$results",
+                    "r",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$r",
+                                    "source"
+                                  ]
+                                },
+                                "number"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                "$source",
+                                "number"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$r",
+                                        "source"
+                                      ]
+                                    },
+                                    "hash"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$source",
+                                    "hash"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "error": "zero1-curve mixed identity source"
+              },
+              {
+                "assert": {
+                  "op": "gt",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "code",
+                          "args": [
+                            "identity-code"
+                          ]
+                        }
+                      ]
+                    },
+                    2
+                  ]
+                },
+                "error": "zero1-curve candidate has no contract code"
+              },
+              {
+                "return": {
+                  "curve": {
+                    "op": "address",
+                    "args": [
+                      "$candidate.curve"
+                    ]
+                  },
+                  "codeHash": "$codeHash",
+                  "zero1": "$zero1",
+                  "coin": "$coin",
+                  "owner": "$owner",
+                  "bonded": "$bonded",
+                  "minted": "$minted"
+                }
+              }
+            ]
+          },
+          "assets": {
+            "requirements": {
+              "transports": []
+            },
+            "requests": [],
+            "decode": [
+              {
+                "let": "zero1Asset",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$assets",
+                        "asset",
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$asset",
+                                "key"
+                              ]
+                            },
+                            "zero1"
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "let": "coinAsset",
+                "value": {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$assets",
+                        "asset",
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$asset",
+                                "key"
+                              ]
+                            },
+                            "coin"
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                }
+              },
+              {
+                "assert": {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$zero1Asset.token",
+                        "$evidence.zero1"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coinAsset.token",
+                        "$evidence.coin"
+                      ]
+                    }
+                  ]
+                },
+                "error": "zero1-curve asset metadata escaped the identity subject"
+              },
+              {
+                "return": {
+                  "op": "merge",
+                  "args": [
+                    "$evidence",
+                    {
+                      "zero1Code": "$zero1Asset.code",
+                      "zero1Decimals": "$zero1Asset.decimals",
+                      "coinCode": "$coinAsset.code",
+                      "coinDecimals": "$coinAsset.decimals"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "decide": [
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "continue"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "defined",
+                  "args": [
+                    "$evidence.zero1Decimals"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "zero1_curve_tokens_not_distinct",
+              "evidenceRequestIds": [
+                "identity-zero1",
+                "identity-coin"
+              ]
+            },
+            "when": {
+              "op": "sameAddress",
+              "args": [
+                "$evidence.zero1",
+                "$evidence.coin"
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "zero1_curve_issuance_closed",
+              "evidenceRequestIds": [
+                "identity-bonded"
+              ]
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$evidence.bonded",
+                true
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "chain-proven-rejected",
+              "reasonCode": "zero1_curve_token_metadata_invalid",
+              "evidenceRequestIds": [
+                "central-asset:zero1:decimals",
+                "central-asset:coin:decimals"
+              ]
+            },
+            "when": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "lte",
+                  "args": [
+                    "$evidence.zero1Decimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        0
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    "$evidence.coinDecimals",
+                    {
+                      "op": "uint",
+                      "args": [
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "status": "verified",
+              "identity": {
+                "familyId": "$profile.familyId",
+                "lineageId": "$profile.lineageId",
+                "subject": {
+                  "op": "address",
+                  "args": [
+                    "$candidate.curve"
+                  ]
+                },
+                "provenance": [
+                  {
+                    "kind": "zero1-curve-code-identity",
+                    "subject": {
+                      "op": "address",
+                      "args": [
+                        "$candidate.curve"
+                      ]
+                    },
+                    "evidenceHash": {
+                      "op": "hash",
+                      "args": [
+                        {
+                          "codeHash": "$evidence.codeHash",
+                          "zero1": "$evidence.zero1",
+                          "coin": "$evidence.coin",
+                          "owner": "$evidence.owner",
+                          "bonded": "$evidence.bonded",
+                          "minted": "$evidence.minted",
+                          "zero1Decimals": "$evidence.zero1Decimals",
+                          "coinDecimals": "$evidence.coinDecimals"
+                        }
+                      ]
+                    }
+                  }
+                ],
+                "facts": {
+                  "curve": "$evidence.curve",
+                  "codeHash": "$evidence.codeHash",
+                  "zero1": "$evidence.zero1",
+                  "coin": "$evidence.coin",
+                  "owner": "$evidence.owner",
+                  "zero1Decimals": "$evidence.zero1Decimals",
+                  "coinDecimals": "$evidence.coinDecimals"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "instance": {
+    "key": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$identity.subject"
+          ]
+        }
+      ]
+    },
+    "draft": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$identity.familyId",
+          "lineageId": "$identity.lineageId",
+          "instanceKey": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$identity.subject"
+                ]
+              }
+            ]
+          },
+          "provenance": "$identity.provenance",
+          "runtimeRequirements": [
+            {
+              "kind": "source-state",
+              "freshness": "pinned-block"
+            }
+          ]
+        },
+        "$identity.facts",
+        {
+          "target": {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        }
+      ]
+    },
+    "bindingProjection": {
+      "familyId": "$descriptor.familyId",
+      "lineageId": "$descriptor.lineageId",
+      "instanceKey": "$descriptor.instanceKey",
+      "curve": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.curve"
+            ]
+          }
+        ]
+      },
+      "zero1": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.zero1"
+            ]
+          }
+        ]
+      },
+      "coin": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.coin"
+            ]
+          }
+        ]
+      },
+      "owner": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.owner"
+            ]
+          }
+        ]
+      },
+      "codeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.codeHash"
+        ]
+      },
+      "zero1Decimals": "$descriptor.zero1Decimals",
+      "coinDecimals": "$descriptor.coinDecimals"
+    }
+  },
+  "routes": {
+    "target": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "curve"
+      ]
+    },
+    "bindingKey": {
+      "op": "lower",
+      "args": [
+        {
+          "op": "address",
+          "args": [
+            "$descriptor.curve"
+          ]
+        }
+      ]
+    },
+    "key": {
+      "op": "join",
+      "args": [
+        [
+          "$descriptor.familyId",
+          ":",
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.curve"
+                ]
+              }
+            ]
+          },
+          ":",
+          "$route.direction"
+        ],
+        ""
+      ]
+    },
+    "directions": [
+      {
+        "id": "sell",
+        "enabled": true,
+        "tokenIn": "$descriptor.coin",
+        "tokenOut": "$descriptor.zero1",
+        "adapterId": "zero1-curve-sell",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "executionAssets": {
+          "input": "erc20",
+          "output": "erc20"
+        },
+        "fields": {
+          "zero1Decimals": "$descriptor.zero1Decimals",
+          "coinDecimals": "$descriptor.coinDecimals"
+        }
+      },
+      {
+        "id": "buy",
+        "enabled": true,
+        "tokenIn": "$descriptor.zero1",
+        "tokenOut": "$descriptor.coin",
+        "adapterId": "zero1-curve-buy",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "executionAssets": {
+          "input": "erc20",
+          "output": "erc20"
+        },
+        "fields": {
+          "zero1Decimals": "$descriptor.zero1Decimals",
+          "coinDecimals": "$descriptor.coinDecimals"
+        }
+      }
+    ],
+    "graphVenue": {
+      "kind": "address-pool",
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.curve"
+            ]
+          }
+        ]
+      }
+    },
+    "effects": [
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenIn",
+        "account": "executor",
+        "direction": "decrease"
+      },
+      {
+        "kind": "token-delta",
+        "token": "$route.tokenOut",
+        "account": "executor",
+        "direction": "increase"
+      }
+    ]
+  },
+  "pricing": {
+    "draft": {
+      "instanceKey": "$descriptor.instanceKey",
+      "curve": "$descriptor.curve",
+      "zero1": "$descriptor.zero1",
+      "coin": "$descriptor.coin",
+      "codeHash": "$descriptor.codeHash",
+      "zero1Decimals": "$descriptor.zero1Decimals",
+      "coinDecimals": "$descriptor.coinDecimals",
+      "familyId": "$descriptor.familyId",
+      "lineageId": "$descriptor.lineageId",
+      "routes": "$routes"
+    },
+    "compatibility": {
+      "familyId": "$descriptor.familyId",
+      "lineageId": "$descriptor.lineageId",
+      "curve": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.curve"
+            ]
+          }
+        ]
+      },
+      "codeHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.codeHash"
+        ]
+      },
+      "zero1": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.zero1"
+            ]
+          }
+        ]
+      },
+      "coin": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.coin"
+            ]
+          }
+        ]
+      }
+    },
+    "static": {
+      "requirements": {
+        "transports": []
+      },
+      "dependencies": [],
+      "requests": [],
+      "decode": [
+        {
+          "return": {}
+        }
+      ]
+    },
+    "finalize": {
+      "op": "merge",
+      "args": [
+        "$draft",
+        "$staticEvidence"
+      ]
+    },
+    "sampleAmount": {
+      "op": "uint",
+      "args": [
+        "1000000000000000000"
+      ]
+    },
+    "exactCompatibility": {
+      "curve": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.curve"
+            ]
+          }
+        ]
+      },
+      "direction": "$route.direction",
+      "bindingFingerprint": "$route.bindingRef.fingerprint"
+    },
+    "mutationKinds": [
+      "call",
+      "log"
+    ],
+    "stateKey": "$route.instanceKey"
+  },
+  "standard": {
+    "id": "bonding-sale",
+    "lineageId": "zero1-curve:bonding-sale",
+    "identityKind": "standalone-contract",
+    "match": true,
+    "context": {},
+    "boundState": "$descriptor",
+    "abi": {
+      "curve": [
+        "function zero1() view returns (address)",
+        "function coin() view returns (address)",
+        "function owner() view returns (address)",
+        "function bonded() view returns (bool)",
+        "function minted() view returns (uint256)",
+        "function quoteSell(uint256 coinIn) view returns (uint256 zero1Out,uint256 burned,uint256 redeemed)",
+        "function quoteBuy(uint256 zero1In) view returns (uint256 coinOut,uint256 gross,uint256 burned,uint256 zero1Used)",
+        "function sell(uint256 coinIn,uint256 minOut,address to) returns (uint256 zero1Out)",
+        "function buy(uint256 zero1In,uint256 minOut,address to) returns (uint256 coinOut)"
+      ]
+    },
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "sampleAmount": "1000000000000000000"
+    },
+    "expressions": {},
+    "programs": {},
+    "pricing": {
+      "refreshPolicy": "each-block",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "dependencies": [
+        "$descriptor.curve"
+      ],
+      "mutationAddresses": [
+        "$descriptor.curve"
+      ],
+      "classifyUnavailable": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "sell"
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$snapshot.sellOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "or",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$snapshot.buyOut",
+                          {
+                            "op": "uint",
+                            "args": [
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      "$snapshot.bonded"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "routeKey"
+              ]
+            },
+            "zero1-curve sample quote is zero or issuance is closed"
+          ]
+        ]
+      },
+      "finalizeChecks": [
+        {
+          "assert": {
+            "op": "ne",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.curve"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$descriptor.zero1"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "zero1-curve pricing descriptor target collision"
+        }
+      ]
+    },
+    "exact": {
+      "methodId": "zero1-curve-chain-quote",
+      "requirements": {
+        "transports": [
+          "eth-call"
+        ]
+      },
+      "retainReadEvidence": true,
+      "protectedAddresses": [
+        "$descriptor.curve",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "checks": [
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "gte",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "lte",
+                "args": [
+                  "$amountIn",
+                  {
+                    "op": "uint",
+                    "args": [
+                      "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "zero1-curve exact amountIn must be uint256"
+        },
+        {
+          "assert": {
+            "op": "or",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$route.direction",
+                  "sell"
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  "$route.direction",
+                  "buy"
+                ]
+              }
+            ]
+          },
+          "error": "zero1-curve unknown direction"
+        },
+        {
+          "assert": {
+            "op": "and",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$executor",
+                      {
+                        "op": "address",
+                        "args": [
+                          "$constants.zero"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$executor",
+                      "$descriptor.curve"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "zero1-curve unsupported executor"
+        }
+      ],
+      "amountOut": "$quoteResult.amountOut",
+      "evidence": {
+        "kind": "zero1-curve-chain-quote",
+        "source": "$source",
+        "curve": "$descriptor.curve",
+        "direction": "$route.direction",
+        "tokenIn": "$route.tokenIn",
+        "tokenOut": "$route.tokenOut",
+        "amountIn": "$amountIn",
+        "amountOut": "$amountOut",
+        "quote": "$quoteResult",
+        "executor": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$executor"
+              ]
+            }
+          ]
+        },
+        "routeKey": "$route.routeKey",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      },
+      "zeroEvidence": {
+        "kind": "zero1-curve-zero-input",
+        "source": "$source",
+        "curve": "$descriptor.curve",
+        "direction": "$route.direction",
+        "tokenIn": "$route.tokenIn",
+        "tokenOut": "$route.tokenOut",
+        "amountIn": {
+          "op": "uint",
+          "args": [
+            0
+          ]
+        },
+        "amountOut": {
+          "op": "uint",
+          "args": [
+            0
+          ]
+        },
+        "executor": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$executor"
+              ]
+            }
+          ]
+        },
+        "routeKey": "$route.routeKey",
+        "bindingFingerprint": "$route.bindingRef.fingerprint"
+      }
+    },
+    "execution": {
+      "version": 2,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$descriptor.curve",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "and",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$executor",
+                      {
+                        "op": "address",
+                        "args": [
+                          "$constants.zero"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$executor",
+                      "$descriptor.curve"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "zero1-curve runtime requires a distinct executor"
+        }
+      ],
+      "steps": [
+        {
+          "id": "sellCurve",
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.direction",
+              "sell"
+            ]
+          },
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$descriptor.curve",
+            "mode": "ensure"
+          },
+          "call": {
+            "target": "$descriptor.curve",
+            "signature": "function sell(uint256 coinIn,uint256 minOut,address to) returns (uint256 zero1Out)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              },
+              "$minAmountOut",
+              "$recipient"
+            ]
+          }
+        },
+        {
+          "id": "buyCurve",
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.direction",
+              "buy"
+            ]
+          },
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$descriptor.curve",
+            "mode": "ensure"
+          },
+          "call": {
+            "target": "$descriptor.curve",
+            "signature": "function buy(uint256 zero1In,uint256 minOut,address to) returns (uint256 coinOut)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              },
+              "$minAmountOut",
+              "$recipient"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "asset": "erc20",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "asset": "erc20",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    },
+    "readPrograms": {}
+  },
+  "swap": {
+    "version": 1,
+    "events": [
+      {
+        "id": "zero1-curve-sell-log",
+        "signature": "event Sell(address indexed from,uint256 coinIn,uint256 usdsOut,uint256 burned,uint256 minted)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "curve": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$log.address"
+                ]
+              }
+            ]
+          },
+          "seller": {
+            "op": "address",
+            "args": [
+              "$args.from"
+            ]
+          },
+          "coinIn": "$args.coinIn",
+          "zero1Out": "$args.usdsOut",
+          "burned": "$args.burned",
+          "minted": "$args.minted"
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                "$args.coinIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    0
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.usdsOut",
+                {
+                  "op": "uint",
+                  "args": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "target"
+                  ]
+                },
+                "$pool"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "direction"
+                  ]
+                },
+                "sell"
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "target"
+            ]
+          },
+          "tokenIn": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenOut"
+            ]
+          },
+          "matchedAdapterId": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "adapterId"
+            ]
+          },
+          "amountIn": "$args.coinIn",
+          "amountOut": "$args.usdsOut"
+        }
+      },
+      {
+        "id": "zero1-curve-buy-log",
+        "signature": "event Buy(address indexed to,uint256 zero1Used,uint256 coinOut,uint256 burned,uint256 minted)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "curve": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$log.address"
+                ]
+              }
+            ]
+          },
+          "buyer": {
+            "op": "address",
+            "args": [
+              "$args.to"
+            ]
+          },
+          "zero1Used": "$args.zero1Used",
+          "coinOut": "$args.coinOut",
+          "burned": "$args.burned",
+          "minted": "$args.minted"
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                "$args.zero1Used",
+                {
+                  "op": "uint",
+                  "args": [
+                    0
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.coinOut",
+                {
+                  "op": "uint",
+                  "args": [
+                    0
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "target"
+                  ]
+                },
+                "$pool"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "direction"
+                  ]
+                },
+                "buy"
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "target"
+            ]
+          },
+          "tokenIn": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenOut"
+            ]
+          },
+          "matchedAdapterId": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "adapterId"
+            ]
+          },
+          "amountIn": "$args.zero1Used",
+          "amountOut": "$args.coinOut"
+        }
+      }
+    ],
+    "calls": [
+      {
+        "id": "zero1-curve-sell-call",
+        "signature": "function sell(uint256 coinIn,uint256 minOut,address to) returns (uint256 zero1Out)",
+        "classification": "swap",
+        "payload": {
+          "curve": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$observation.target"
+                ]
+              }
+            ]
+          },
+          "coinIn": "$args.coinIn",
+          "minOut": "$args.minOut",
+          "recipient": {
+            "op": "address",
+            "args": [
+              "$args.to"
+            ]
+          }
+        }
+      },
+      {
+        "id": "zero1-curve-buy-call",
+        "signature": "function buy(uint256 zero1In,uint256 minOut,address to) returns (uint256 coinOut)",
+        "classification": "swap",
+        "payload": {
+          "curve": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$observation.target"
+                ]
+              }
+            ]
+          },
+          "zero1In": "$args.zero1In",
+          "minOut": "$args.minOut",
+          "recipient": {
+            "op": "address",
+            "args": [
+              "$args.to"
+            ]
+          }
+        }
+      }
+    ],
+    "canonicalIntakeTargets": [],
+    "victimSupport": "detect-only"
+  },
+  "modules": {
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "view",
+      "steps": [
+        {
+          "id": "quote",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "exact-zero1-curve-quote",
+              "kind": "eth-call",
+              "to": "$descriptor.curve",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "curve",
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$route.direction",
+                          "sell"
+                        ]
+                      },
+                      "quoteSell",
+                      "quoteBuy"
+                    ]
+                  },
+                  [
+                    "$amountIn"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "data",
+              "value": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "returned",
+                    "args": [
+                      "exact-zero1-curve-quote"
+                    ]
+                  },
+                  "data"
+                ]
+              }
+            },
+            {
+              "let": "quote",
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "sell"
+                    ]
+                  },
+                  {
+                    "functionName": "quoteSell",
+                    "amountOut": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "curve",
+                        "quoteSell",
+                        "$data",
+                        0
+                      ]
+                    },
+                    "burned": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "curve",
+                        "quoteSell",
+                        "$data",
+                        1
+                      ]
+                    },
+                    "redeemed": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "curve",
+                        "quoteSell",
+                        "$data",
+                        2
+                      ]
+                    }
+                  },
+                  {
+                    "functionName": "quoteBuy",
+                    "amountOut": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "curve",
+                        "quoteBuy",
+                        "$data",
+                        0
+                      ]
+                    },
+                    "gross": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "curve",
+                        "quoteBuy",
+                        "$data",
+                        1
+                      ]
+                    },
+                    "burned": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "curve",
+                        "quoteBuy",
+                        "$data",
+                        2
+                      ]
+                    },
+                    "zero1Used": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "curve",
+                        "quoteBuy",
+                        "$data",
+                        3
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "return": "$quote"
+            }
+          ]
+        }
+      ],
+      "result": "$steps.quote",
+      "chainQuote": {
+        "version": 2,
+        "choices": [
+          {
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "sell"
+              ]
+            },
+            "proof": {
+              "version": 2,
+              "step": "quote",
+              "requestId": "exact-zero1-curve-quote",
+              "signature": "function quoteSell(uint256 coinIn) view returns (uint256 zero1Out,uint256 burned,uint256 redeemed)",
+              "amountPath": [
+                0
+              ],
+              "outputPath": [
+                0
+              ],
+              "requestBinding": {
+                "target": "$descriptor.curve",
+                "caller": {
+                  "kind": "none"
+                }
+              }
+            }
+          },
+          {
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "buy"
+              ]
+            },
+            "proof": {
+              "version": 2,
+              "step": "quote",
+              "requestId": "exact-zero1-curve-quote",
+              "signature": "function quoteBuy(uint256 zero1In) view returns (uint256 coinOut,uint256 gross,uint256 burned,uint256 zero1Used)",
+              "amountPath": [
+                0
+              ],
+              "outputPath": [
+                0
+              ],
+              "requestBinding": {
+                "target": "$descriptor.curve",
+                "caller": {
+                  "kind": "none"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "current",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-zero1-curve-sell-quote",
+              "kind": "eth-call",
+              "to": "$descriptor.curve",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "curve",
+                  "quoteSell",
+                  [
+                    "$constants.sampleAmount"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-zero1-curve-buy-quote",
+              "kind": "eth-call",
+              "to": "$descriptor.curve",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "curve",
+                  "quoteBuy",
+                  [
+                    "$constants.sampleAmount"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-zero1-curve-bonded",
+              "kind": "eth-call",
+              "to": "$descriptor.curve",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "curve",
+                  "bonded",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-zero1-curve-zero1",
+              "kind": "eth-call",
+              "to": "$descriptor.curve",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "curve",
+                  "zero1",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-zero1-curve-coin",
+              "kind": "eth-call",
+              "to": "$descriptor.curve",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "curve",
+                  "coin",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "source",
+              "value": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$results",
+                      0
+                    ]
+                  },
+                  "source"
+                ]
+              }
+            },
+            {
+              "let": "onchainZero1",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "curve",
+                  "zero1",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-zero1-curve-zero1"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "onchainCoin",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "curve",
+                  "coin",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-zero1-curve-coin"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "assert": {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$onchainZero1",
+                      "$descriptor.zero1"
+                    ]
+                  },
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$onchainCoin",
+                      "$descriptor.coin"
+                    ]
+                  }
+                ]
+              },
+              "error": "zero1-curve token identity changed"
+            },
+            {
+              "let": "sellOut",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "curve",
+                  "quoteSell",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-zero1-curve-sell-quote"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "sellBurned",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "curve",
+                  "quoteSell",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-zero1-curve-sell-quote"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  1
+                ]
+              }
+            },
+            {
+              "let": "buyOut",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "curve",
+                  "quoteBuy",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-zero1-curve-buy-quote"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "let": "bonded",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "curve",
+                  "bonded",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-zero1-curve-bonded"
+                        ]
+                      },
+                      "data"
+                    ]
+                  },
+                  0
+                ]
+              }
+            },
+            {
+              "return": {
+                "source": "$source",
+                "sellIn": {
+                  "op": "uint",
+                  "args": [
+                    "$constants.sampleAmount"
+                  ]
+                },
+                "sellOut": "$sellOut",
+                "sellBurned": "$sellBurned",
+                "buyIn": {
+                  "op": "uint",
+                  "args": [
+                    "$constants.sampleAmount"
+                  ]
+                },
+                "buyOut": "$buyOut",
+                "bonded": "$bonded"
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.current"
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [
+        {
+          "assert": {
+            "op": "gt",
+            "args": [
+              {
+                "op": "length",
+                "args": [
+                  "$routes"
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  0
+                ]
+              }
+            ]
+          },
+          "error": "zero1-curve requires at least one direction"
+        }
+      ],
+      "rows": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "sell"
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$snapshot.sellOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          0
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "gt",
+                        "args": [
+                          "$snapshot.buyOut",
+                          {
+                            "op": "uint",
+                            "args": [
+                              0
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "not",
+                        "args": [
+                          "$snapshot.bonded"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "row",
+          {
+            "routeKey": "$row.routeKey",
+            "numerator": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$row.direction",
+                    "sell"
+                  ]
+                },
+                "$snapshot.sellOut",
+                "$snapshot.buyOut"
+              ]
+            },
+            "denominator": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$row.direction",
+                    "sell"
+                  ]
+                },
+                "$snapshot.sellIn",
+                "$snapshot.buyIn"
+              ]
+            },
+            "depth": {
+              "op": "min",
+              "args": [
+                {
+                  "op": "mul",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$row.direction",
+                            "sell"
+                          ]
+                        },
+                        "$snapshot.sellIn",
+                        "$snapshot.buyIn"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        10000
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "mul",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$row.direction",
+                            "sell"
+                          ]
+                        },
+                        "$snapshot.sellOut",
+                        "$snapshot.buyOut"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        10000
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "reserveA": {
+              "op": "mul",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$row.direction",
+                        "sell"
+                      ]
+                    },
+                    "$snapshot.sellIn",
+                    "$snapshot.buyIn"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    10000
+                  ]
+                }
+              ]
+            },
+            "reserveB": {
+              "op": "mul",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$row.direction",
+                        "sell"
+                      ]
+                    },
+                    "$snapshot.sellOut",
+                    "$snapshot.buyOut"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    10000
+                  ]
+                }
+              ]
+            },
+            "feeBps": {
+              "op": "uint",
+              "args": [
+                0
+              ]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "variantFiles": [],
+  "actionAdapters": [
+    {
+      "descriptor": {
+        "adapterId": "zero1-curve-sell",
+        "lineage": "zero1-curve",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function sell(uint256,uint256,address)"
+        }
+      ]
+    },
+    {
+      "descriptor": {
+        "adapterId": "zero1-curve-buy",
+        "lineage": "zero1-curve",
+        "edgeKind": "swap",
+        "action": "swap",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function buy(uint256,uint256,address)"
+        }
+      ]
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import { gunzipSync } from "node:zlib";
 import { setTimeout as wait } from "node:timers/promises";
 import { ReadyRpcRateError, type ReadyRpcThrottle } from "./ready-rpc-throttle.js";
 import { isRpcQuotaExhaustedError, isRpcThrottleError } from "./rpc-throttle-guard.js";
+import { StateCallAbortedError, type StateCallControl } from "../shared/state/state-backend.js";
 
 const MAX_PHYSICAL_REQUESTS = 8;
 type ReadyRpcResult = ethers.JsonRpcResult & { error?: unknown };
@@ -42,6 +43,7 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
   private readonly maxDecompressedBytes?: number;
   private readonly readyThrottle?: ReadyRpcThrottle;
   private readonly inflight = new Set<AbortController>();
+  private controlledRequestId = 0;
   private readonly waiting: {
     resolve: () => void;
     reject: (error: Error) => void;
@@ -152,18 +154,50 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
     return error;
   }
 
-  private async sendBounded(payload: ethers.JsonRpcPayload | ethers.JsonRpcPayload[]) {
+  /** One source-bound read with per-work cancellation. It uses the same Ready
+   * throttle and physical queue without coupling a caller's abort to siblings. */
+  async sendControlled(method: string, params: readonly unknown[], control?: StateCallControl): Promise<any> {
+    const check = () => {
+      this.assertOpen(); control?.signal?.throwIfAborted();
+      if (control?.deadlineAtMs !== undefined && Date.now() >= control.deadlineAtMs) {
+        throw new StateCallAbortedError("rebuild read deadline reached", "deadline");
+      }
+    };
+    check();
+    const payload: ethers.JsonRpcPayload = { id: ++this.controlledRequestId, jsonrpc: "2.0", method, params: [...params] };
+    const operation = () => this.ownedRead(async () => {
+      check(); await this.acquire();
+      try {
+        check();
+        const response = validateReadyRpcResponse(payload, await this.sendBounded(payload, control))[0]!;
+        check();
+        if (response.error !== undefined) throw this.getRpcError(payload, response as unknown as ethers.JsonRpcError);
+        return response.result;
+      } finally { this.release(); }
+    });
+    return this.readyThrottle ? this.readyThrottle.read(operation) : operation();
+  }
+
+  private async sendBounded(payload: ethers.JsonRpcPayload | ethers.JsonRpcPayload[], control?: StateCallControl) {
     const request = this._getConnection();
     request.body = JSON.stringify(payload);
     request.setHeader("content-type", "application/json");
-    const timeoutMs = Math.min(request.timeout, this.requestTimeoutMs ?? request.timeout);
+    control?.signal?.throwIfAborted();
+    const workRemaining = (control?.deadlineAtMs ?? Infinity) - Date.now();
+    if (workRemaining <= 0) throw new StateCallAbortedError("rebuild read deadline reached", "deadline");
+    const transportTimeout = Math.min(request.timeout, this.requestTimeoutMs ?? request.timeout);
+    const timeoutMs = Math.min(transportTimeout, workRemaining);
     const deadline = performance.now() + timeoutMs;
     const controller = new AbortController();
     const sizeError = () => Object.assign(new Error("rebuild RPC response exceeds configured byte limit"), { code: "RESPONSE_SIZE_LIMIT" });
-    const timeoutError = ethers.makeError("rebuild RPC request deadline timed out", "TIMEOUT", {
+    const timeoutError = workRemaining <= transportTimeout ? new StateCallAbortedError("rebuild read deadline reached", "deadline")
+      : ethers.makeError("rebuild RPC request deadline timed out", "TIMEOUT", {
       operation: "request.send", reason: "absolute request deadline exceeded",
     });
     const timer = setTimeout(() => controller.abort(timeoutError), timeoutMs);
+    const onCallerAbort = () => controller.abort(control?.signal?.reason ?? new StateCallAbortedError("rebuild read aborted", "signal"));
+    control?.signal?.addEventListener("abort", onCallerAbort, { once: true });
+    if (control?.signal?.aborted) onCallerAbort();
     this.inflight.add(controller);
     const checkDeadline = () => {
       if (performance.now() >= deadline && !controller.signal.aborted) controller.abort(timeoutError);
@@ -291,6 +325,7 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
     try {
       // The abort also settles time spent in ethers' redirect/throttle wait;
       // cancel prevents that wait from dispatching a late request afterwards.
+      checkDeadline();
       const response = await Promise.race([request.send(), cancelled]);
       checkDeadline();
       response.assertOk();
@@ -315,6 +350,7 @@ export class RebuildReadProvider extends ethers.JsonRpcProvider {
       throw error;
     } finally {
       clearTimeout(timer);
+      control?.signal?.removeEventListener("abort", onCallerAbort);
       this.inflight.delete(controller);
     }
   }

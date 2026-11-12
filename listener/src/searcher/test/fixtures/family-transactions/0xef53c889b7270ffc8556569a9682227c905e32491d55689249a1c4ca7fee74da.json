@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xef53c889b7270ffc8556569a9682227c905e32491d55689249a1c4ca7fee74da",
+  "legs": [
+    {
+      "id": "ella-exchange--reference-0-0",
+      "familyId": "ella-exchange",
+      "domain": "swap",
+      "source": {
+        "number": 26023524,
+        "hash": "0x97c956ae1457521651e3a17b675c16fef5340483d0cf3b710d0d34d5afbb57f9"
+      },
+      "amountScope": "legal capacity control",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "docs/research/reports/ella-native-historical-acceptance-20261010.json",
+          "sha256": "ae5218fc9cb8589f736433b0231323dd916896af3bc9d71786b2419304e6b0cc",
+          "jsonPointer": "/execution/positiveGroups/0"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "instanceKey": "0x33c577296b0cdece6186ea48cd8fe98bd1a6e3a4",
+      "lineageId": "ella-exchange:native-base-v1",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xe41d2489571d322189246dafa5ebde1f4699f498",
+      "amountIn": "105467303314"
+    }
+  ]
+}

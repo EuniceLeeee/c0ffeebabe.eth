@@ -1,0 +1,215 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xd62e67ae40e3479b6e6612ab49ba0d2aea3c0cd09d8921b31e7bfd29a9a4a2b8",
+  "legs": [
+    {
+      "id": "protocol:psv--psv--historical-dual--0-sell-gem-production-effective",
+      "familyId": "protocol:psv",
+      "domain": "protocol",
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
+      },
+      "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+      "lineageId": "psv:uups-exact-input-v1",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "amountIn": "4969763",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-sell-gem-production-effective",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psv--historical-dual.json",
+          "sha256": "363c410b2119831963ad99028c3bf763903b3def0a38fab7749cae263a754af8",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psv--psv--historical-dual--1-sell-gem-original-size-at-N-end",
+      "familyId": "protocol:psv",
+      "domain": "protocol",
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
+      },
+      "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+      "lineageId": "psv:uups-exact-input-v1",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "amountIn": "7361655916",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-sell-gem-original-size-at-N-end",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psv--historical-dual.json",
+          "sha256": "363c410b2119831963ad99028c3bf763903b3def0a38fab7749cae263a754af8",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psv--psv--historical-dual--2-sell-gem-one-token-control",
+      "familyId": "protocol:psv",
+      "domain": "protocol",
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
+      },
+      "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+      "lineageId": "psv:uups-exact-input-v1",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "amountIn": "1000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "2-sell-gem-one-token-control",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psv--historical-dual.json",
+          "sha256": "363c410b2119831963ad99028c3bf763903b3def0a38fab7749cae263a754af8",
+          "jsonPointer": "/trials/2"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psv--psv--historical-dual--3-sell-gem-one-raw-control",
+      "familyId": "protocol:psv",
+      "domain": "protocol",
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
+      },
+      "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+      "lineageId": "psv:uups-exact-input-v1",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "amountIn": "1",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "3-sell-gem-one-raw-control",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psv--historical-dual.json",
+          "sha256": "363c410b2119831963ad99028c3bf763903b3def0a38fab7749cae263a754af8",
+          "jsonPointer": "/trials/3"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psv--psv--historical-dual--4-buy-gem-production-effective",
+      "familyId": "protocol:psv",
+      "domain": "protocol",
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
+      },
+      "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+      "lineageId": "psv:uups-exact-input-v1",
+      "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "4969763",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "4-buy-gem-production-effective",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psv--historical-dual.json",
+          "sha256": "363c410b2119831963ad99028c3bf763903b3def0a38fab7749cae263a754af8",
+          "jsonPointer": "/trials/4"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psv--psv--historical-dual--5-buy-gem-original-size-at-N-end",
+      "familyId": "protocol:psv",
+      "domain": "protocol",
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
+      },
+      "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+      "lineageId": "psv:uups-exact-input-v1",
+      "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "7361655916",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "5-buy-gem-original-size-at-N-end",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psv--historical-dual.json",
+          "sha256": "363c410b2119831963ad99028c3bf763903b3def0a38fab7749cae263a754af8",
+          "jsonPointer": "/trials/5"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psv--psv--historical-dual--6-buy-gem-one-token-control",
+      "familyId": "protocol:psv",
+      "domain": "protocol",
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
+      },
+      "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+      "lineageId": "psv:uups-exact-input-v1",
+      "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "1000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "6-buy-gem-one-token-control",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psv--historical-dual.json",
+          "sha256": "363c410b2119831963ad99028c3bf763903b3def0a38fab7749cae263a754af8",
+          "jsonPointer": "/trials/6"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psv--psv--historical-dual--7-buy-gem-one-raw-control",
+      "familyId": "protocol:psv",
+      "domain": "protocol",
+      "source": {
+        "number": 26152596,
+        "hash": "0x107b98060d965fb8a7323495a1c4fdbc06acd4315ad3f9ba1967918985f6fbeb"
+      },
+      "instanceKey": "0xc72178d412256a6dc5f04d749859b4cd95076d61",
+      "lineageId": "psv:uups-exact-input-v1",
+      "tokenIn": "0x14913815bcfde78baead2111f463d038ac9c2949",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "1",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "7-buy-gem-one-raw-control",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psv--historical-dual.json",
+          "sha256": "363c410b2119831963ad99028c3bf763903b3def0a38fab7749cae263a754af8",
+          "jsonPointer": "/trials/7"
+        }
+      ]
+    }
+  ]
+}

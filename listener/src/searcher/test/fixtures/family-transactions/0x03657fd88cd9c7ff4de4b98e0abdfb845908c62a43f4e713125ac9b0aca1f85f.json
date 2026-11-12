@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x03657fd88cd9c7ff4de4b98e0abdfb845908c62a43f4e713125ac9b0aca1f85f",
+  "legs": [
+    {
+      "familyId": "fluid-dex",
+      "domain": "swap",
+      "source": {
+        "number": 26152607,
+        "hash": "0x20557c985376610e7464ea48fed96cbc0fcbfec936ca1519b067f3a855e4b369"
+      },
+      "instanceKey": "0x836951eb21f3df98273517b7249dceff270d34bf",
+      "lineageId": "fluid-dex:factory-child",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "4965193",
+      "amountScope": "retained-production-effective-control",
+      "provenance": [
+        {
+          "file": "docs/research/reports/fluid-recipient-correctness-20261015.json",
+          "sha256": "406f6185ab386e5875f17760a22a125be8711f86f645763335f42e071152f6dd",
+          "jsonPointer": "/inputPairs/4"
+        },
+        {
+          "file": "docs/research/reports/fluid-recipient-correctness-20261015.json",
+          "sha256": "406f6185ab386e5875f17760a22a125be8711f86f645763335f42e071152f6dd",
+          "jsonPointer": "/identityBindings/1"
+        }
+      ],
+      "id": "fluid-dex--0"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x85e9c8d4b8f799dca214f6057d9caea6ca9485d7d4f9ae7603a7aec3427ac8b0",
+  "legs": [
+    {
+      "id": "custom-swap:angstrom-v4--reference-0-0",
+      "familyId": "custom-swap:angstrom-v4",
+      "domain": "swap",
+      "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x90078845bceb849b171873cfbc92db8540e9c803ff57d9d21b1215ec158e79b3",
+      "amountScope": "original-route-input",
+      "provenance": [
+        {
+          "file": "docs/research/reports/tx85-angstrom-v4-evidence.md",
+          "sha256": "cad97a3007d60a356552607e965d1529e663c462011d478fb489a533839826d5",
+          "jsonPointer": ""
+        }
+      ],
+      "referenceMissing": [
+        "canonical receipt and N-end block hash verification",
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "source": {
+        "number": 25635365,
+        "hash": "0x6c4964b47c2cf9a1b82cc63f01083c18f30961ed85357a43b83bb9e970b40644"
+      },
+      "lineageId": "angstrom-v4:official-hook-poolkey",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "791076021036708663"
+    },
+    {
+      "id": "univ3-standard--reference-0-0",
+      "familyId": "univ3-standard",
+      "domain": "swap",
+      "source": {
+        "number": 25635365,
+        "hash": "0x6c4964b47c2cf9a1b82cc63f01083c18f30961ed85357a43b83bb9e970b40644"
+      },
+      "instanceKey": "0xc7bbec68d12a0d1830360f8ec58fa599ba1b0e9b",
+      "amountScope": "original-route-input",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "docs/research/reports/tx85-angstrom-v4-evidence.md",
+          "sha256": "cad97a3007d60a356552607e965d1529e663c462011d478fb489a533839826d5",
+          "jsonPointer": ""
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "lineageId": "univ3:factory-child",
+      "tokenIn": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "1506689810"
+    }
+  ]
+}

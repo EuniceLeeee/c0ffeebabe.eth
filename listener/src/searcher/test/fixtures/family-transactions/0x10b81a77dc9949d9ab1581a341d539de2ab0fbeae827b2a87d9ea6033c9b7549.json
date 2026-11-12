@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x10b81a77dc9949d9ab1581a341d539de2ab0fbeae827b2a87d9ea6033c9b7549",
+  "legs": [
+    {
+      "id": "kyberswap-elastic--reference-0-0",
+      "familyId": "kyberswap-elastic",
+      "domain": "swap",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/kyber-coverage-acceptance-20261012.json",
+          "sha256": "dd0bfe86115834bbb21387b613e09393d728d134346d4a46a84d0b3a33be30fa",
+          "jsonPointer": "/dualExecution/sampleRows/1"
+        }
+      ],
+      "referenceMissing": [
+        "canonical receipt and N-end block hash verification",
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "source": {
+        "number": 26030898,
+        "hash": "0x05d0271146d5fbe99d5a6c525520896d869f7da473de5e89bfc259b25a01fe3e"
+      },
+      "instanceKey": "0x952ffc4c47d66b454a8181f5c68b6248e18b66ec",
+      "lineageId": "kyberswap-elastic:factory-getpool-child",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      "amountIn": "1340362"
+    }
+  ]
+}

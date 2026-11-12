@@ -1,0 +1,124 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87",
+  "legs": [
+    {
+      "id": "protocol:rocksolid--rocksolid--original-input-at-block-end--0-deposit-original-call",
+      "familyId": "protocol:rocksolid",
+      "domain": "protocol",
+      "source": {
+        "number": 25535037,
+        "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e"
+      },
+      "instanceKey": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+      "lineageId": "rocksolid:active-sync-deposit",
+      "tokenIn": "0xae78736Cd615f374D3085123A210448E74Fc6393",
+      "tokenOut": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+      "amountIn": "665705106594162807",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-deposit-original-call",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/rocksolid--original-input-at-block-end.json",
+          "sha256": "22ab4e5ee38ddb1eddc64d2908a6eb9cfc2ea12f16bd2a683880419ebfc7fa6d",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "familyId": "univ3-standard",
+      "domain": "swap",
+      "source": {
+        "number": 25535037,
+        "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e"
+      },
+      "instanceKey": "0x553e9c493678d8606d6a5ba284643db2110df823",
+      "lineageId": "univ3:factory-child",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+      "amountIn": "777530305867301711",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/loops/rocksolid-balancer-v3-7ce631.json",
+          "sha256": "9732624f374f7ebb0fc10b2bf35ee91c4b85f825698c52d80c701703167ac4ec",
+          "jsonPointer": "/legs/0"
+        }
+      ],
+      "id": "univ3-standard--1"
+    },
+    {
+      "familyId": "balancer-v3",
+      "domain": "swap",
+      "source": {
+        "number": 25535037,
+        "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e"
+      },
+      "instanceKey": "0xbb6f701f42a6104deffc041c5c0057b8a9c46bbc",
+      "lineageId": "balancer-v3:vault-registered-pool",
+      "tokenIn": "0x936facdf10c8c36294e7b9d28345255539d81bc7",
+      "tokenOut": "0xae78736cd615f374d3085123a210448e74fc6393",
+      "amountIn": "653072044530122959",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/loops/rocksolid-balancer-v3-7ce631.json",
+          "sha256": "9732624f374f7ebb0fc10b2bf35ee91c4b85f825698c52d80c701703167ac4ec",
+          "jsonPointer": "/legs/2"
+        }
+      ],
+      "id": "balancer-v3--2"
+    },
+    {
+      "familyId": "univ3-standard",
+      "domain": "swap",
+      "source": {
+        "number": 25535037,
+        "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e"
+      },
+      "instanceKey": "0x553e9c493678d8606d6a5ba284643db2110df823",
+      "lineageId": "univ3:factory-child",
+      "tokenIn": "0xae78736cd615f374d3085123a210448e74fc6393",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "665967421909204163",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/loops/rocksolid-balancer-v3-7ce631.json",
+          "sha256": "9732624f374f7ebb0fc10b2bf35ee91c4b85f825698c52d80c701703167ac4ec",
+          "jsonPointer": "/legs/3"
+        }
+      ],
+      "id": "univ3-standard--3"
+    },
+    {
+      "familyId": "flash-loan:balancer-v2",
+      "domain": "funding",
+      "source": {
+        "number": 25535037,
+        "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e"
+      },
+      "instanceKey": "flash-loan:balancer-v2\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "lineageId": "balancer-flash",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "777530305867301711",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/loops/rocksolid-balancer-v3-7ce631.json",
+          "sha256": "9732624f374f7ebb0fc10b2bf35ee91c4b85f825698c52d80c701703167ac4ec",
+          "jsonPointer": "/flash"
+        }
+      ],
+      "funding": {
+        "fee": "0"
+      },
+      "id": "flash-loan:balancer-v2--4"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "scope": { "family": "custom-swap:ammalgam" },
+  "production": {
+    "domain": "swap",
+    "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_AMMALGAM_ENABLED" }
+  },
+  "manifest": { "binding": { "module": "./manifest.js", "export": "manifest" } },
+  "capture": { "binding": { "module": "./capture.js", "export": "capture" } },
+  "discovery": { "binding": { "module": "./discovery.js", "export": "discovery" } },
+  "identity": { "binding": { "module": "./identity.js", "export": "identity" } },
+  "instance": { "binding": { "module": "./instance.js", "export": "instance" } },
+  "routes": { "binding": { "module": "./routes.js", "export": "routes" } },
+  "pricing": { "binding": { "module": "./pricing.js", "export": "pricing" } },
+  "exact": { "binding": { "module": "./exact.js", "export": "exact" } },
+  "execution": { "binding": { "module": "./execution.js", "export": "execution" } },
+  "swap": { "binding": { "module": "./swap.js", "export": "swap" } },
+  "actionAdapters": [ { "module": "./action.js", "export": "action" } ]
+}

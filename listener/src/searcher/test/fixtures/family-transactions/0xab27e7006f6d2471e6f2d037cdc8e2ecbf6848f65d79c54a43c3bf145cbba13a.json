@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xab27e7006f6d2471e6f2d037cdc8e2ecbf6848f65d79c54a43c3bf145cbba13a",
+  "legs": [
+    {
+      "id": "protocol:origin-ousd--reference-0-0",
+      "familyId": "protocol:origin-ousd",
+      "domain": "protocol",
+      "source": {
+        "number": 26185253,
+        "hash": "0xdd643ebc4407cddccee0ae6e7f5e9d34f8978fde5340d24aaacc39849ad91a2f"
+      },
+      "instanceKey": "0xe75d77b1865ae93c7eaa3040b038d7aa7bc02f70",
+      "amountScope": "historical-reference-needs-inputs",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/index.json",
+          "sha256": "878ab8488b19df6339c0da46b7917715dd5756ed2661347b0164f89d1b4fd0c3",
+          "jsonPointer": "/families/15/samples/0"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and source-bound actors",
+        "complete direction/amount inputs",
+        "canonical block-end receipt/header confirmation"
+      ]
+    }
+  ]
+}

@@ -43,6 +43,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          submodules: recursive
 
       - uses: actions/setup-node@v6
         with:
@@ -71,3 +72,30 @@ jobs:
       - name: Type-check listener
         run: npm run build -- --noEmit
         working-directory: listener
+
+      - name: Install Foundry for listener execution tests
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Build current test executor
+        run: forge build src/BotVM.sol
+
+      - name: Test installed listener families
+        working-directory: listener
+        env:
+          MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}
+        run: |
+          if [ -n "$MAINNET_RPC_URL" ]; then
+            export FAMILY_TEST_RPC_FILE="$RUNNER_TEMP/family-rpc.json"
+            node --input-type=module -e 'import {writeFileSync} from "node:fs"; writeFileSync(process.env.FAMILY_TEST_RPC_FILE, JSON.stringify({MAINNET_RPC_URL:process.env.MAINNET_RPC_URL}), {mode:0o600});'
+            npm test -- --rpc-file "$FAMILY_TEST_RPC_FILE" --executor-code-mode counterfactual --simulation-method eth_simulateV1 --out "$RUNNER_TEMP/family-facts"
+          else
+            npm test -- --out "$RUNNER_TEMP/family-facts"
+          fi
+
+      - name: Retain family test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: family-facts
+          path: ${{ runner.temp }}/family-facts
+          if-no-files-found: ignore

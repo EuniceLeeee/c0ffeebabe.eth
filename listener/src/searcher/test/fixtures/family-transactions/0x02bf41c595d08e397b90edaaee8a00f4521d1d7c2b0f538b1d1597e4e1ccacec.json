@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x02bf41c595d08e397b90edaaee8a00f4521d1d7c2b0f538b1d1597e4e1ccacec",
+  "legs": [
+    {
+      "id": "protocol:erc4626--erc4626--frax-custodian--0-deposit-spliced-production-input-at-N",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 26017168,
+        "hash": "0x66d34fc4bd940719cad79467fd98df3e98297d50bfd9bcc39ec1a83505aa3350"
+      },
+      "instanceKey": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+      "lineageId": "erc4626:frax-custodian-sync-conversion",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+      "amountIn": "5135191",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-deposit-spliced-production-input-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--frax-custodian.json",
+          "sha256": "0b946f5439070ce5d7b4b00173ff42003090677b4fe6c02b0ac0e69eef0c5a6e",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--frax-custodian--1-deposit-twice-spliced-production-input-at-N",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 26017168,
+        "hash": "0x66d34fc4bd940719cad79467fd98df3e98297d50bfd9bcc39ec1a83505aa3350"
+      },
+      "instanceKey": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+      "lineageId": "erc4626:frax-custodian-sync-conversion",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+      "amountIn": "10270382",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-deposit-twice-spliced-production-input-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--frax-custodian.json",
+          "sha256": "0b946f5439070ce5d7b4b00173ff42003090677b4fe6c02b0ac0e69eef0c5a6e",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--frax-custodian--2-redeem-spliced-production-input-at-N",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 26017168,
+        "hash": "0x66d34fc4bd940719cad79467fd98df3e98297d50bfd9bcc39ec1a83505aa3350"
+      },
+      "instanceKey": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+      "lineageId": "erc4626:frax-custodian-sync-conversion",
+      "tokenIn": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "5135328596662424906",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "2-redeem-spliced-production-input-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--frax-custodian.json",
+          "sha256": "0b946f5439070ce5d7b4b00173ff42003090677b4fe6c02b0ac0e69eef0c5a6e",
+          "jsonPointer": "/trials/2"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--frax-custodian--3-redeem-historical-input-at-N",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 26017168,
+        "hash": "0x66d34fc4bd940719cad79467fd98df3e98297d50bfd9bcc39ec1a83505aa3350"
+      },
+      "instanceKey": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+      "lineageId": "erc4626:frax-custodian-sync-conversion",
+      "tokenIn": "0xCAcd6fd266aF91b8AeD52aCCc382b4e165586E29",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "215200560000000000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "3-redeem-historical-input-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--frax-custodian.json",
+          "sha256": "0b946f5439070ce5d7b4b00173ff42003090677b4fe6c02b0ac0e69eef0c5a6e",
+          "jsonPointer": "/trials/3"
+        }
+      ]
+    }
+  ]
+}

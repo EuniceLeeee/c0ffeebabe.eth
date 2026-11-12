@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x63fb77b723f3bd7fd4d9539ef1e1e248cb5499153dbfc225e8b24ae1522ec6e7",
+  "legs": [
+    {
+      "id": "protocol:erc4626--erc4626--0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066--0-deposit-original-event-input",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "instanceKey": "0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066",
+      "lineageId": "erc4626:standalone-standard-behavior",
+      "tokenIn": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+      "tokenOut": "0xFaa9a0e1Db9E22AE3A20B2B58a68DC24D053d066",
+      "amountIn": "1012540431",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-deposit-original-event-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066.json",
+          "sha256": "0259eb5ebbcd1178f1e56b4cf56438ad9547d8637c7f421b9e8bb6a016172714",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066--1-deposit-twice-original-event-input",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "instanceKey": "0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066",
+      "lineageId": "erc4626:standalone-standard-behavior",
+      "tokenIn": "0x23238f20b894f29041f48D88eE91131C395Aaa71",
+      "tokenOut": "0xFaa9a0e1Db9E22AE3A20B2B58a68DC24D053d066",
+      "amountIn": "2025080862",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-deposit-twice-original-event-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--0xfaa9a0e1db9e22ae3a20b2b58a68dc24d053d066.json",
+          "sha256": "0259eb5ebbcd1178f1e56b4cf56438ad9547d8637c7f421b9e8bb6a016172714",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:staked-usdat--reference-0-0",
+      "familyId": "protocol:staked-usdat",
+      "domain": "protocol",
+      "instanceKey": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/erc4626-staked-usdat-split-correctness-20261020.json",
+          "sha256": "6aff133bfc85dc76d802e6651bba29d07e00820404bf60ef4324e2c364a4be83",
+          "jsonPointer": "/historicalSample"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and source-bound actors",
+        "complete direction/amount inputs",
+        "canonical block-end receipt/header confirmation"
+      ],
+      "source": {
+        "number": 25462190,
+        "hash": "0x3b02e4d1911cefa4a6e5cef387db42da16821da9d48196421156ae63ab1bac13"
+      },
+      "lineageId": "staked-usdat:source-bound-deposit",
+      "tokenIn": "0x23238f20b894f29041f48d88ee91131c395aaa71",
+      "tokenOut": "0xd166337499e176bbc38a1fbd113ab144e5bd2df7",
+      "amountIn": "1012540431"
+    }
+  ]
+}

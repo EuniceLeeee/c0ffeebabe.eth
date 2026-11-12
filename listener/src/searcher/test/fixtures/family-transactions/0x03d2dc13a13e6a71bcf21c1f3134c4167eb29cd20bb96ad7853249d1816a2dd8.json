@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x03d2dc13a13e6a71bcf21c1f3134c4167eb29cd20bb96ad7853249d1816a2dd8",
+  "legs": [
+    {
+      "familyId": "mooniswap",
+      "domain": "swap",
+      "source": {
+        "number": 26030091,
+        "hash": "0x589ef7d0d24a9dc2cbccd0c24fe6857794ead5e47e79aad0b8dd875e8e861f53"
+      },
+      "instanceKey": "0x2c4ea51d9dec7cdabe2d1bde01882f87b5231d21",
+      "lineageId": "mooniswap:verified-v2-runtime",
+      "tokenIn": "0xaaaaaa20d9e0e2461697782ef11675f668207961",
+      "tokenOut": "0x111111111117dc0aa78b770fa6a738034120c302",
+      "amountIn": "947347012323163156825",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/mooniswap-recipient-correctness-20261014.json",
+          "sha256": "9def6c51e49fddb8755b1f4d99d77d9db4aaaa3bc28d38f901a929a5eaaa0805",
+          "jsonPointer": "/historicalExecution/matrix/5"
+        }
+      ],
+      "id": "mooniswap--0"
+    }
+  ]
+}

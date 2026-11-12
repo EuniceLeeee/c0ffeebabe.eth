@@ -1,0 +1,293 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+  "legs": [
+    {
+      "id": "protocol:psm--psm--recipient66--0-sell-gem-production-P",
+      "familyId": "protocol:psm",
+      "domain": "protocol",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "amountIn": "5494762",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-sell-gem-production-P",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psm--recipient66.json",
+          "sha256": "d636ddbbeee4e19b1618e828a059533deb2a20763e7410275b225061de7836e4",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psm--psm--recipient66--1-sell-gem-double-production-P",
+      "familyId": "protocol:psm",
+      "domain": "protocol",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "amountIn": "10989524",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-sell-gem-double-production-P",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psm--recipient66.json",
+          "sha256": "d636ddbbeee4e19b1618e828a059533deb2a20763e7410275b225061de7836e4",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psm--psm--recipient66--2-sell-gem-original-USDC-size-at-N",
+      "familyId": "protocol:psm",
+      "domain": "protocol",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "amountIn": "8137414",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "2-sell-gem-original-USDC-size-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psm--recipient66.json",
+          "sha256": "d636ddbbeee4e19b1618e828a059533deb2a20763e7410275b225061de7836e4",
+          "jsonPointer": "/trials/2"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psm--psm--recipient66--3-sell-gem-one-output-unit-cost",
+      "familyId": "protocol:psm",
+      "domain": "protocol",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "amountIn": "1",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "3-sell-gem-one-output-unit-cost",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psm--recipient66.json",
+          "sha256": "d636ddbbeee4e19b1618e828a059533deb2a20763e7410275b225061de7836e4",
+          "jsonPointer": "/trials/3"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psm--psm--recipient66--4-sell-gem-one-output-unit-cost-plus-one",
+      "familyId": "protocol:psm",
+      "domain": "protocol",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "amountIn": "2",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "4-sell-gem-one-output-unit-cost-plus-one",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psm--recipient66.json",
+          "sha256": "d636ddbbeee4e19b1618e828a059533deb2a20763e7410275b225061de7836e4",
+          "jsonPointer": "/trials/4"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psm--psm--recipient66--5-buy-gem-production-P",
+      "familyId": "protocol:psm",
+      "domain": "protocol",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "5483517075214014766",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "5-buy-gem-production-P",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psm--recipient66.json",
+          "sha256": "d636ddbbeee4e19b1618e828a059533deb2a20763e7410275b225061de7836e4",
+          "jsonPointer": "/trials/5"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psm--psm--recipient66--6-buy-gem-double-production-P",
+      "familyId": "protocol:psm",
+      "domain": "protocol",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "10967034150428029532",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "6-buy-gem-double-production-P",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psm--recipient66.json",
+          "sha256": "d636ddbbeee4e19b1618e828a059533deb2a20763e7410275b225061de7836e4",
+          "jsonPointer": "/trials/6"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psm--psm--recipient66--7-buy-gem-historical-amount-at-N",
+      "familyId": "protocol:psm",
+      "domain": "protocol",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "8137414000000000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "7-buy-gem-historical-amount-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psm--recipient66.json",
+          "sha256": "d636ddbbeee4e19b1618e828a059533deb2a20763e7410275b225061de7836e4",
+          "jsonPointer": "/trials/7"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psm--psm--recipient66--8-buy-gem-one-output-unit-cost",
+      "familyId": "protocol:psm",
+      "domain": "protocol",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "1000000000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "8-buy-gem-one-output-unit-cost",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psm--recipient66.json",
+          "sha256": "d636ddbbeee4e19b1618e828a059533deb2a20763e7410275b225061de7836e4",
+          "jsonPointer": "/trials/8"
+        }
+      ]
+    },
+    {
+      "id": "protocol:psm--psm--recipient66--9-buy-gem-one-output-unit-cost-plus-one",
+      "familyId": "protocol:psm",
+      "domain": "protocol",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "lineageId": "psm:lite-active-pair",
+      "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "1000000000001",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "9-buy-gem-one-output-unit-cost-plus-one",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/psm--recipient66.json",
+          "sha256": "d636ddbbeee4e19b1618e828a059533deb2a20763e7410275b225061de7836e4",
+          "jsonPointer": "/trials/9"
+        }
+      ]
+    },
+    {
+      "id": "custom-swap:ekubo-router-v1--reference-0-0",
+      "familyId": "custom-swap:ekubo-router-v1",
+      "domain": "swap",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "amountScope": "historical-reference-needs-inputs",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/swap-json/index.json",
+          "sha256": "4fa65d097cc21ad62a986fcfcddd2a6147c1a99199c9641d03c92804b548ad88",
+          "jsonPointer": "/families/3/samples/0"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ]
+    }
+  ]
+}

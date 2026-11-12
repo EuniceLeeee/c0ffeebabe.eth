@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x28c9e5f8b41db8e2a0b5653b0a48520307bcafe95d1edf993f6f15e1ea904696",
+  "legs": [
+    {
+      "id": "protocol:olympus--reference-0-0",
+      "familyId": "protocol:olympus",
+      "domain": "protocol",
+      "instanceKey": "0xb63cac384247597756545b500253ff8e607a8020",
+      "amountScope": "historical-reference-needs-inputs",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/index.json",
+          "sha256": "878ab8488b19df6339c0da46b7917715dd5756ed2661347b0164f89d1b4fd0c3",
+          "jsonPointer": "/families/14/samples/0"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and source-bound actors",
+        "complete direction/amount inputs",
+        "canonical block-end receipt/header confirmation"
+      ]
+    }
+  ]
+}

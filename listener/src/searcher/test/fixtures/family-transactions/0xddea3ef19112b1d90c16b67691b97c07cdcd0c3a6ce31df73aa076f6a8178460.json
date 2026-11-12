@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xddea3ef19112b1d90c16b67691b97c07cdcd0c3a6ce31df73aa076f6a8178460",
+  "legs": [
+    {
+      "id": "protocol:arcana-migration--reference-1-0",
+      "familyId": "protocol:arcana-migration",
+      "domain": "protocol",
+      "instanceKey": "0x5b370e144d41e596033fe3dc60e1c30e6c493962",
+      "amountScope": "historical-reference-needs-inputs",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/index.json",
+          "sha256": "878ab8488b19df6339c0da46b7917715dd5756ed2661347b0164f89d1b4fd0c3",
+          "jsonPointer": "/families/0/samples/1"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and source-bound actors",
+        "complete direction/amount inputs",
+        "canonical block-end receipt/header confirmation"
+      ]
+    }
+  ]
+}

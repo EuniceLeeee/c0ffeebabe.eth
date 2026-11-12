@@ -47,7 +47,7 @@ test("Swap cases require an explicit domain while legacy Protocol cases remain u
   }
   assert.equal(parseProtocolJsonAcceptanceCase({ ...caseData(), domain: "protocol" }).domain, "protocol");
   for (const [domain, familyId] of [["swap", "protocol:fixture"], ["swap", "credit:fixture"],
-    ["swap", "funding:fixture"], ["protocol", "balancer-v1"], ["credit", "credit:fixture"],
+    ["swap", "funding:fixture"], ["protocol", "balancer-v1"], ["credit", "protocol:fixture"],
     [null, "protocol:fixture"], ["swap", "../fixture"], ["swap", " fixture"], ["protocol", "protocol::fixture"]])
     assert.throws(() => parseProtocolJsonAcceptanceCase({ ...caseData(), domain, familyId }), /domain/);
 });
@@ -222,4 +222,14 @@ test("read-only execution requires measured unchanged token/native balances and 
   assert(zero.ok && zero.effects);
   assert(!checkReadOnlyQuoteFacts(input({ ...zero, effects: { ...zero.effects, tokenDeltas: [] } })).passed);
   assert(!checkReadOnlyQuoteFacts(input({ ...zero, effects: { ...zero.effects, nativeDeltas: [{ account: executor, delta: 1n }] } })).passed);
+});
+
+
+test("Credit case explicitly selects a bounded risk policy and ordinary cases cannot smuggle one", () => {
+  const raw: any = { ...caseData(), domain: "credit", familyId: "credit:fixture" };
+  raw.trials[0].credit = { debtBps: 8500 };
+  assert.equal(parseProtocolJsonAcceptanceCase(raw).trials[0]!.credit!.debtBps, 8500);
+  for (const credit of [undefined, {}, { debtBps: "8500" }, { debtBps: 0 }, { debtBps: 10001 }, { debtBps: 1.5 }, { debtBps: 8500, amountOut: "200" }])
+    assert.throws(() => parseProtocolJsonAcceptanceCase({ ...raw, trials: [{ ...raw.trials[0], credit }] }));
+  assert.throws(() => parseProtocolJsonAcceptanceCase({ ...caseData(), trials: raw.trials }));
 });

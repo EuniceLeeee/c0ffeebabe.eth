@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x4d1e4e5103cb8e754847e085fcd8de7d2fb18f6fbe1fdfd84e0c74b5cae0e0e4",
+  "legs": [
+    {
+      "id": "protocol:metronome-hgusdc--metronome-hgusdc--msusd-to-usdc--original-msUSD-input",
+      "familyId": "protocol:metronome-hgusdc",
+      "domain": "protocol",
+      "source": {
+        "number": 25515277,
+        "hash": "0x62df172938e48b7bd6ca7aecfd812fd15168caea049289a72d45d4c7bfb60580"
+      },
+      "instanceKey": "0x365084b05fa7d5028346bd21d842ed0601bab5b8",
+      "lineageId": "metronome-hgusdc:observed-path-active-quote-v1",
+      "tokenIn": "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "123201027004629751869029",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "original-msUSD-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/metronome-hgusdc--msusd-to-usdc.json",
+          "sha256": "f1613d5979a3a3c1e26368eebedc71b28e03d8e1933b646e29eb4d1e14b80d35",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:metronome-synth--metronome-synth--metronome-winner--original-msETH-to-msBTC",
+      "familyId": "protocol:metronome-synth",
+      "domain": "protocol",
+      "source": {
+        "number": 25515277,
+        "hash": "0x62df172938e48b7bd6ca7aecfd812fd15168caea049289a72d45d4c7bfb60580"
+      },
+      "instanceKey": "0x3364f53cb866762aef66deef2a6b1a17c1f17f46",
+      "lineageId": "metronome-synth:active-membership",
+      "tokenIn": "0x64351fc9810adad17a690e4e1717df5e7e085160",
+      "tokenOut": "0x8b4f8ad3801b4015dea6da1d36f063cbf4e231c7",
+      "amountIn": "68190059945110642892",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "original-msETH-to-msBTC",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/metronome-synth--metronome-winner.json",
+          "sha256": "deb23dcefcbce3b227d8cabe992c2ccf23fb597fd0656e239854d8f43ef0c3ff",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:metronome-synth--metronome-synth--metronome-winner--original-msBTC-to-msUSD",
+      "familyId": "protocol:metronome-synth",
+      "domain": "protocol",
+      "source": {
+        "number": 25515277,
+        "hash": "0x62df172938e48b7bd6ca7aecfd812fd15168caea049289a72d45d4c7bfb60580"
+      },
+      "instanceKey": "0x3364f53cb866762aef66deef2a6b1a17c1f17f46",
+      "lineageId": "metronome-synth:active-membership",
+      "tokenIn": "0x8b4f8ad3801b4015dea6da1d36f063cbf4e231c7",
+      "tokenOut": "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa",
+      "amountIn": "1929728504258755512",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "original-msBTC-to-msUSD",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/metronome-synth--metronome-winner.json",
+          "sha256": "deb23dcefcbce3b227d8cabe992c2ccf23fb597fd0656e239854d8f43ef0c3ff",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    }
+  ]
+}

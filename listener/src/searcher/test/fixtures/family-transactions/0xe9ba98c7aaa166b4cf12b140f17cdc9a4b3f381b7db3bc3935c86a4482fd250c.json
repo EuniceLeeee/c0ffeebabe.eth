@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xe9ba98c7aaa166b4cf12b140f17cdc9a4b3f381b7db3bc3935c86a4482fd250c",
+  "legs": [
+    {
+      "id": "custom-swap-ammalgam--observed-swap",
+      "familyId": "custom-swap:ammalgam",
+      "domain": "swap",
+      "source": {
+        "number": 26245017,
+        "hash": "0x8c2b848a237af2b3a6a62f982580a3c3f4dd2fadbb601e58e795b6d3469b5d12"
+      },
+      "instanceKey": "0x1df5595c634167120d027cd68b847057b97f0f53",
+      "tokenIn": "0xb753428af26e81097e7fd17f40c88aaa3e04902c",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "243241818085649687",
+      "lineageId": "ammalgam:pair-beacon-v1",
+      "amountScope": "original transaction Ammalgam Swap input; simulated output is measured again",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "historicalAmountOut": "25116915",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/family-transaction-sources/ammalgam-e9ba98c7.json",
+          "sha256": "0f1ac95fa3e81433fbb55360593f259b034de473aab37dcb7b8e268e52b45a73",
+          "jsonPointer": "/observed"
+        },
+        {
+          "file": "listener/src/searcher/venues/swaps/ammalgam-family/manifest.ts",
+          "sha256": "91d3e54db0e1b4c038f1cd06f48f6290c7e76fa45af79a76ab71b706682329b0",
+          "jsonPointer": ""
+        }
+      ]
+    }
+  ]
+}

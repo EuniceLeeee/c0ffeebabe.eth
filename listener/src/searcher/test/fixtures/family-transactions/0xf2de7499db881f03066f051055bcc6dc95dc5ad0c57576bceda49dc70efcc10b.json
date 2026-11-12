@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b",
+  "legs": [
+    {
+      "id": "univ2-standard--reference-0-0",
+      "familyId": "univ2-standard",
+      "domain": "swap",
+      "source": {
+        "number": 25455297,
+        "hash": "0x6c510692c9e3040afcad67160119c611a5091ca8dd4d71f0ea81f6a672eb4090"
+      },
+      "instanceKey": "0x6d74748b7089409cd7c52dcb2cbcc3b204360296",
+      "tokenIn": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "270190",
+      "amountScope": "original transaction input only",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/swap-json/index.json",
+          "sha256": "4fa65d097cc21ad62a986fcfcddd2a6147c1a99199c9641d03c92804b548ad88",
+          "jsonPointer": "/families/11/samples/0"
+        },
+        {
+          "file": "listener/src/searcher/test/fixtures/family-transaction-sources/univ2-f2de7499.json",
+          "sha256": "a295a5e2dff17c3d561e9b20f7c1c0850dca28fdc36421455ea0e8d72c254723",
+          "jsonPointer": "/observed"
+        },
+        {
+          "file": "listener/src/searcher/test/fixtures/family-transaction-definitions/univ2-430e01ff.json",
+          "sha256": "7cf7e1d7c59d2eb493ec8c3652d97be0ac80ecfd2dbfb9a5bd914f7396786a40",
+          "jsonPointer": "/manifest/supportedLineages/0",
+          "origin": {
+            "commit": "430e01fff75c8555c6967953805ac60185859416",
+            "file": "listener/src/searcher/venues/swaps/univ2-family/univ2.json"
+          }
+        }
+      ],
+      "lineageId": "univ2:factory-child",
+      "historicalAmountOut": "157203701650240"
+    }
+  ]
+}

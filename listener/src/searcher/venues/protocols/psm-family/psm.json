@@ -1688,27 +1688,24 @@
               "op": "or",
               "args": [
                 {
-                  "op": "not",
+                  "op": "sameAddress",
                   "args": [
-                    {
-                      "op": "sameAddress",
-                      "args": [
-                        "$evidence.gem",
-                        "$constants.usdc"
-                      ]
-                    }
+                    "$evidence.gem",
+                    "$evidence.dai"
                   ]
                 },
                 {
-                  "op": "not",
+                  "op": "sameAddress",
                   "args": [
-                    {
-                      "op": "sameAddress",
-                      "args": [
-                        "$evidence.dai",
-                        "$constants.dai"
-                      ]
-                    }
+                    "$evidence.gem",
+                    "$constants.zero"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.dai",
+                    "$constants.zero"
                   ]
                 },
                 {

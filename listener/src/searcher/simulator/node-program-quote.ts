@@ -13,11 +13,12 @@ const WORD = (x: string | number) => (typeof x === "string" ? x.replace(/^0x/, "
 const SAVE = "0x00000001", END = "0x00000002";
 const push = (x: number) => "61" + x.toString(16).padStart(4, "0");
 
-/** Stores only values read by the ORIGINAL executor. No protocol calls, storage
- * writes or caller code substitution. Slots and execution count are transient,
- * confined to this RPC. A protocol cannot write a receipt on the executor's behalf.
+/** Stores only values read by the ORIGINAL executor, without substituting its
+ * code. Recorder slots are isolated to this RPC; simulateV1 can keep them across
+ * its calls. A protocol cannot write a receipt on the executor's behalf.
  */
-function recorderCode(executor: string, count: number, terminalRevert: boolean): string {
+function recorderCode(executor: string, count: number, terminalRevert: boolean, persistent = false): string {
+  const read = persistent ? "54" : "5c", write = persistent ? "55" : "5d";
   let s = "";
   const patches: [number, string][] = [], labels = new Map<string, number>();
   const jump = (name: string) => { s += "61"; patches.push([s.length, name]); s += "000057"; };
@@ -26,16 +27,16 @@ function recorderCode(executor: string, count: number, terminalRevert: boolean):
   s += "60003560e01c600114"; jump("save");
   s += "600435"; // discarded after exact end calldata validation
   s += "506004361460003560e01c6002141615"; jump("bad");
-  s += "60005c" + push(count * 2) + "1415"; jump("bad");
+  s += "6000" + read + push(count) + "1415"; jump("bad");
   s += "7f" + TAG.slice(2) + "600052";
-  for (let i = 0; i < count * 2; i++) s += push(i + 1) + "5c" + push((i + 1) * 32) + "52";
-  s += push((count * 2 + 1) * 32) + "6000" + (terminalRevert ? "fd" : "f3");
+  for (let i = 0; i < count; i++) s += push(i + 1) + read + push((i + 1) * 32) + "52";
+  s += push((count + 1) * 32) + "6000" + (terminalRevert ? "fd" : "f3");
   label("save");
   s += "6044361415"; jump("bad");
   // A strictly sequential write index makes incomplete/duplicate snapshots fail.
-  s += "60043560005c1415"; jump("bad");
-  s += push(count * 2) + "6004351015"; jump("bad");
-  s += "6024356004356001015d60043560010160005d00";
+  s += "6004356000" + read + "1415"; jump("bad");
+  s += push(count) + "6004351015"; jump("bad");
+  s += "602435600435600101" + write + "6004356001016000" + write + "00";
   label("bad"); s += "60006000fd";
   for (const [at, name] of patches) s = s.slice(0, at) + labels.get(name)!.toString(16).padStart(4, "0") + s.slice(at + 4);
   return "0x" + s;
@@ -54,14 +55,22 @@ export function isCanonicalNodeRuntimeCall(calldata: string): boolean {
 /** Wrap actual calls with observations through the deployed BotVM. Reverting
  * terminal receipts support trace-free canonical Exact; returning receipts let
  * callTracer independently measure successful quoted/runtime execution, logs,
- * main returndata and failures. Both use state AND block environment N.
+ * main returndata and failures. The RPC backend selects the common state and
+ * block environment for quote and execution.
  */
 export function buildNodeProgramQuote(input: {
   executor: string; calls: readonly { to: string; data: string }[];
   observations: readonly NodeObservation[]; baselineAfterPrefix?: boolean; terminalRevert: boolean;
+  /** Isolated RPC recorder storage can be read by a following simulateV1 call. */
+  persistent?: boolean;
+  /** Copy the actual final CALL return words before any balance probe overwrites them. */
+  outputWords?: number;
 }) {
   if (!input.calls.length || input.calls.length > 64 || input.observations.length > 64)
     throw new Error("node receipt bounds");
+  const outputWords = input.outputWords ?? 0;
+  if (!Number.isInteger(outputWords) || outputWords < 0 || outputWords > 15 ||
+      input.persistent && input.terminalRevert) throw new Error("node receipt output bounds");
   const key = hexlify(randomBytes(32));
   const flowHash = keccak256(toUtf8Bytes(JSON.stringify(input.calls)));
   const recorder = `0x${keccak256(toUtf8Bytes(`node-program-quote:${input.executor}:${key}`)).slice(-40)}`;
@@ -78,7 +87,7 @@ export function buildNodeProgramQuote(input: {
           const data = o.kind === "token" ? "0x70a08231" + WORD(o.account) : "0x18160ddd";
           part.call(o.token, data, { static: true }).load(1, 0);
         }
-        part.call(recorder, SAVE + WORD(i + (after ? input.observations.length : 0)) + WORD(0), { patches: [{ offset: 36, reg: 1 }] });
+        part.call(recorder, SAVE + WORD(i + (after ? input.observations.length + outputWords : 0)) + WORD(0), { patches: [{ offset: 36, reg: 1 }] });
       }
       program.run(part.bytes());
     }
@@ -87,17 +96,25 @@ export function buildNodeProgramQuote(input: {
   input.calls.forEach((call, i) => {
     program.call(call.to, call.data);
     if (i === 0 && input.baselineAfterPrefix) snapshot(false);
+    if (i === input.calls.length - 1 && outputWords) {
+      // Load every word BEFORE calling the recorder, whose return overwrites
+      // the VM's last-call buffer. No expected output enters this program.
+      for (let word = 0; word < outputWords; word++) program.load(word + 1, word * 32);
+      for (let word = 0; word < outputWords; word++) program.call(recorder,
+        SAVE + WORD(input.observations.length + word) + WORD(0), { patches: [{ offset: 36, reg: word + 1 }] });
+    }
   });
   snapshot(true);
   // Inner scripts may set diagnostic context; reset it only for our recorder.
   program.diagnosticHop(0, flowHash).call(recorder, END);
   const read = (reason: string) => {
     const result = getBytes(reason), n = input.observations.length;
-    if (result.length !== 32 + n * 64 || hexlify(result.slice(0, 32)) !== TAG) throw new Error("node receipt shape");
+    if (result.length !== 32 + n * 64 + outputWords * 32 || hexlify(result.slice(0, 32)) !== TAG) throw new Error("node receipt shape");
     const word = (i: number) => BigInt(hexlify(result.slice(32 + i * 32, 64 + i * 32)));
-    return { before: input.observations.map((_, i) => word(i)), after: input.observations.map((_, i) => word(n + i)) };
+    return { before: input.observations.map((_, i) => word(i)), after: input.observations.map((_, i) => word(n + outputWords + i)),
+      ...(input.outputWords === undefined ? {} : { output: hexlify(result.slice(32 + n * 32, 32 + (n + outputWords) * 32)) }) };
   };
-  return { recorder, code: recorderCode(input.executor, input.observations.length, input.terminalRevert), key, flowHash,
+  return { recorder, code: recorderCode(input.executor, input.observations.length * 2 + outputWords, input.terminalRevert, input.persistent), key, flowHash,
     diagnosticSlot: HOP_DIAGNOSTIC_SLOT, data: buildExecuteCalldata(runtimeProgramScript(program.bytes())),
     read,
     decode(data: string) {

@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x032b820506f44423a7f62918464e8e735619ff463bb6ecce1b3d0d6299ba99df",
+  "legs": [
+    {
+      "id": "protocol:compound-ctoken--compound-ctoken--0x39aa39c021dfbae8fac545936693ac917d5e7563--0-redeem-production-reference",
+      "familyId": "protocol:compound-ctoken",
+      "domain": "protocol",
+      "source": {
+        "number": 25944463,
+        "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316"
+      },
+      "instanceKey": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+      "lineageId": "compound-v2:comptroller-registered-ctoken",
+      "tokenIn": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "20453524572",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-redeem-production-reference",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/compound-ctoken--0x39aa39c021dfbae8fac545936693ac917d5e7563.json",
+          "sha256": "99eaea9f59fa3e9f45063dd5bfef6de14fc9b3334c8272f9e36e4bbef6706992",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:compound-ctoken--compound-ctoken--0x39aa39c021dfbae8fac545936693ac917d5e7563--1-redeem-original-burned-shares",
+      "familyId": "protocol:compound-ctoken",
+      "domain": "protocol",
+      "source": {
+        "number": 25944463,
+        "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316"
+      },
+      "instanceKey": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+      "lineageId": "compound-v2:comptroller-registered-ctoken",
+      "tokenIn": "0x39aa39c021dfbae8fac545936693ac917d5e7563",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "16895162987",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-redeem-original-burned-shares",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/compound-ctoken--0x39aa39c021dfbae8fac545936693ac917d5e7563.json",
+          "sha256": "99eaea9f59fa3e9f45063dd5bfef6de14fc9b3334c8272f9e36e4bbef6706992",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:compound-ctoken--compound-ctoken--0x5d3a536e4d6dbd6114cc1ead35777bab948e3643--0-redeem-production-reference",
+      "familyId": "protocol:compound-ctoken",
+      "domain": "protocol",
+      "source": {
+        "number": 25944463,
+        "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316"
+      },
+      "instanceKey": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+      "lineageId": "compound-v2:comptroller-registered-ctoken",
+      "tokenIn": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "20576236020",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-redeem-production-reference",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/compound-ctoken--0x5d3a536e4d6dbd6114cc1ead35777bab948e3643.json",
+          "sha256": "ddbc25176037875461cd94001aa17a1275c72ce808433b3f28f1dd01cfad04f2",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:compound-ctoken--compound-ctoken--0x5d3a536e4d6dbd6114cc1ead35777bab948e3643--1-redeem-original-burned-shares",
+      "familyId": "protocol:compound-ctoken",
+      "domain": "protocol",
+      "source": {
+        "number": 25944463,
+        "hash": "0xa19ca18cb14237fdb759a247bb8e983b2ffa0b8a7685101faaf817234ebca316"
+      },
+      "instanceKey": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+      "lineageId": "compound-v2:comptroller-registered-ctoken",
+      "tokenIn": "0x5d3a536e4d6dbd6114cc1ead35777bab948e3643",
+      "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+      "amountIn": "17733672807",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-redeem-original-burned-shares",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/compound-ctoken--0x5d3a536e4d6dbd6114cc1ead35777bab948e3643.json",
+          "sha256": "ddbc25176037875461cd94001aa17a1275c72ce808433b3f28f1dd01cfad04f2",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    }
+  ]
+}

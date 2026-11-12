@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xbc7223c28f592b70fd17b8ff9522efc244a1cffb2c73aec9a0dd4c1b820a0af7",
+  "legs": [
+    {
+      "id": "protocol:metafactory--reference-0-0",
+      "familyId": "protocol:metafactory",
+      "domain": "protocol",
+      "source": {
+        "number": 26244712,
+        "hash": "0x437e273550182b05f4d656e3afe50b9b665e828984b217838cf1a0d7abbd13a5"
+      },
+      "instanceKey": "0x585aba689bf7293fe66e9fded9eec9d0e732b180",
+      "amountScope": "historical-reference-needs-inputs",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/index.json",
+          "sha256": "878ab8488b19df6339c0da46b7917715dd5756ed2661347b0164f89d1b4fd0c3",
+          "jsonPointer": "/families/11/samples/0"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and source-bound actors",
+        "complete direction/amount inputs",
+        "canonical block-end receipt/header confirmation"
+      ]
+    }
+  ]
+}

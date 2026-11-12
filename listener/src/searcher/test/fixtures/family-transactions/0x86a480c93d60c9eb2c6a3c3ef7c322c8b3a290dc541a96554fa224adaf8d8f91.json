@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x86a480c93d60c9eb2c6a3c3ef7c322c8b3a290dc541a96554fa224adaf8d8f91",
+  "legs": [
+    {
+      "id": "protocol:token-conversion--token-conversion--btb--0-mint-recorded-input",
+      "familyId": "protocol:token-conversion",
+      "domain": "protocol",
+      "source": {
+        "number": 26029369,
+        "hash": "0x8406ef83427bd09be91ef479edff4830d245d4c4658b75299b12e37c8ac20928"
+      },
+      "instanceKey": "0x88888880d5ca13018d2dc11e2e4744bd91a5656f",
+      "lineageId": "token-conversion:btb-bear-v1",
+      "tokenIn": "0x88888888c90CD71B35830daBFD24743DbC135B51",
+      "tokenOut": "0x88888880d5Ca13018D2dC11e2e4744BD91a5656f",
+      "amountIn": "13484449607819709120667",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-mint-recorded-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/token-conversion--btb.json",
+          "sha256": "35f5f6192e5ae1dd93972b424cb10e64bc90728a14bbdfa51ced65a09226601e",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:token-conversion--token-conversion--btb--1-mint-recorded-input",
+      "familyId": "protocol:token-conversion",
+      "domain": "protocol",
+      "source": {
+        "number": 26029369,
+        "hash": "0x8406ef83427bd09be91ef479edff4830d245d4c4658b75299b12e37c8ac20928"
+      },
+      "instanceKey": "0x88888880d5ca13018d2dc11e2e4744bd91a5656f",
+      "lineageId": "token-conversion:btb-bear-v1",
+      "tokenIn": "0x88888888c90CD71B35830daBFD24743DbC135B51",
+      "tokenOut": "0x88888880d5Ca13018D2dC11e2e4744BD91a5656f",
+      "amountIn": "134844496078197091206672",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-mint-recorded-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/token-conversion--btb.json",
+          "sha256": "35f5f6192e5ae1dd93972b424cb10e64bc90728a14bbdfa51ced65a09226601e",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:token-conversion--token-conversion--btb--2-redeem-recorded-input",
+      "familyId": "protocol:token-conversion",
+      "domain": "protocol",
+      "source": {
+        "number": 26029369,
+        "hash": "0x8406ef83427bd09be91ef479edff4830d245d4c4658b75299b12e37c8ac20928"
+      },
+      "instanceKey": "0x88888880d5ca13018d2dc11e2e4744bd91a5656f",
+      "lineageId": "token-conversion:btb-bear-v1",
+      "tokenIn": "0x88888880d5Ca13018D2dC11e2e4744BD91a5656f",
+      "tokenOut": "0x88888888c90CD71B35830daBFD24743DbC135B51",
+      "amountIn": "13484449607819709120667",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "2-redeem-recorded-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/token-conversion--btb.json",
+          "sha256": "35f5f6192e5ae1dd93972b424cb10e64bc90728a14bbdfa51ced65a09226601e",
+          "jsonPointer": "/trials/2"
+        }
+      ]
+    },
+    {
+      "id": "protocol:token-conversion--token-conversion--btb--3-redeem-recorded-input",
+      "familyId": "protocol:token-conversion",
+      "domain": "protocol",
+      "source": {
+        "number": 26029369,
+        "hash": "0x8406ef83427bd09be91ef479edff4830d245d4c4658b75299b12e37c8ac20928"
+      },
+      "instanceKey": "0x88888880d5ca13018d2dc11e2e4744bd91a5656f",
+      "lineageId": "token-conversion:btb-bear-v1",
+      "tokenIn": "0x88888880d5Ca13018D2dC11e2e4744BD91a5656f",
+      "tokenOut": "0x88888888c90CD71B35830daBFD24743DbC135B51",
+      "amountIn": "134844496078197091206672",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "3-redeem-recorded-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/token-conversion--btb.json",
+          "sha256": "35f5f6192e5ae1dd93972b424cb10e64bc90728a14bbdfa51ced65a09226601e",
+          "jsonPointer": "/trials/3"
+        }
+      ]
+    }
+  ]
+}

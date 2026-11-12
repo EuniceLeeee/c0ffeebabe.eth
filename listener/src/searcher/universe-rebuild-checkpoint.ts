@@ -2581,6 +2581,7 @@ export class UniverseRebuildCheckpointStore {
    * carried and every candidate re-enters findReusableMemo.
    */
   async reconcileFixedRunPlan(input: {
+    readonly reviewReplacement?: { readonly previous: string; readonly next: string };
     readonly familyDefinitionHashes?: Readonly<Record<string, string>>;
     readonly candidateFamilyIds?: Readonly<Record<string, string>>;
     readonly expectedRevision: number;
@@ -2609,6 +2610,13 @@ export class UniverseRebuildCheckpointStore {
         throw new Error(
           "universe rebuild checkpoint: reconcile run id mismatch",
         );
+      }
+      if (input.reviewReplacement && (!run.reviewInputFingerprint ||
+          input.reviewReplacement.previous !== run.reviewInputFingerprint ||
+          !/^[0-9a-f]{64}$/.test(input.reviewReplacement.next) ||
+          input.reviewReplacement.next === input.reviewReplacement.previous ||
+          input.familyDefinitionHashes === undefined || input.candidateFamilyIds === undefined)) {
+        throw new Error("Ready review replacement lost its paused input binding");
       }
       // The run's time identity is checked FIRST: reconcile can never move
       // the cutoff/range, regardless of what the receipts claim.
@@ -2657,6 +2665,7 @@ export class UniverseRebuildCheckpointStore {
         revision: base.revision + 1,
         inProgressRun: Object.freeze({
           ...run,
+          ...(input.reviewReplacement && { reviewInputFingerprint: input.reviewReplacement.next }),
           ...(input.familyDefinitionHashes === undefined ? {} : { familyDefinitionHashes: immutableReadyValue(input.familyDefinitionHashes) }),
           universeHash: input.universeHash,
           candidateSetHash: input.candidateSetHash,

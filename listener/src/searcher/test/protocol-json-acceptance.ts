@@ -1,4 +1,4 @@
-// One opt-in, data-driven Swap/Protocol acceptance entry. No Family-specific codec,
+// Shared, data-driven Swap/Protocol/Credit acceptance entry. No Family-specific codec,
 // math, discovery, scheduler, executor deployment, signing or submission here.
 import assert from "node:assert/strict";
 import { registerAcceptanceSample, assertRegisteredAcceptanceSample, type SampleRegistration } from "./protocol-json-sample-registration.js";
@@ -10,6 +10,10 @@ import { Interface, getBytes } from "ethers";
 import { RuntimeAmountProgram, runtimeProgramScript, type RuntimeAmountLeg } from "../../adapters/runtime-amount-program.js";
 import { concatBytes } from "../../encoder.js";
 import type { ResolvedPlanNode } from "../../types.js";
+import type { PlanFragment } from "../venues/route-leg-adapter.js";
+import { prepareCreditFamilyRoutes, projectCreditRouteGraph } from "../adapter-credit-runtime.js";
+import { asPricedFamily } from "../venues/family-capability-catalog.js";
+import { quoteAcceptanceCredit, buildAcceptanceCreditFragment } from "./family-credit-acceptance.js";
 import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
 import { executeAdapterWork, type CentralAdapterRuntime } from "../adapter-work-intent.js";
 import { planFragmentNodes } from "../solver/plan-fragment-requirements.js";
@@ -95,7 +99,13 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
   assertRegisteredAcceptanceSample(sample, registration);
   report.registration = registration;
   const { family, instance, source, executor, runtime, catalog, control } = context;
-  assert(instance.routes.length > 0, "acceptance requires actual admitted directions");
+  const creditRoutes = family.plugin.manifest.domain === "credit"
+    ? prepareCreditFamilyRoutes({ family, instance, source, generation: source.generation }).routes.map(handle => {
+      const { edge } = projectCreditRouteGraph({ family, route: handle });
+      return { routeKey: handle.routeKey, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut };
+    }) : undefined;
+  const admittedRoutes = creditRoutes ?? instance.routes;
+  assert(admittedRoutes.length > 0, "acceptance requires actual admitted directions");
   assert.equal(source.number, sample.source.number);
   assert(same(source.hash, sample.source.hash), "case source differs from execution source");
   assert(same(executor, sample.executor) && same(context.owner, sample.owner), "case actors differ from execution actors");
@@ -136,35 +146,69 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
     const row: Record<string, any> = { id: trial.id, result: "failed", executions: [] };
     report.samples.push(row); checkpoint();
     try {
-      const route = selectAcceptanceRoute(instance.routes, trial), handle = instance.routeHandles.find(handle => handle.routeKey === route.routeKey)!;
-      assert(handle); covered.add(route.routeKey); row.routeKey = route.routeKey;
+      const route = selectAcceptanceRoute(admittedRoutes, trial);
+      const handle = instance.routeHandles.find(handle => handle.routeKey === route.routeKey);
+      covered.add(route.routeKey); row.routeKey = route.routeKey;
       assert(context.graph.some(edge => edge.instanceKey === instance.instanceKey &&
         same(edge.tokenIn, route.tokenIn) && same(edge.tokenOut, route.tokenOut)), "admitted direction missing from production graph");
-      const base = { family, route: handle, source, executor, runtimeEvidence: [], actionOwnership: catalog };
-      const build = (settlement?: Parameters<typeof buildFamilyRuntimeAmountLeg>[0]["settlement"]) =>
-        guard.build(() => buildFamilyRuntimeAmountLeg({ ...base, runtime: guard.runtime, ...(settlement ? { settlement } : {}) }));
-      // This is deliberately before Exact, including on the first trial.
-      const leg = build(); assert(leg, "runtime is missing; no quoted fallback");
+      const credit = family.plugin.manifest.domain === "credit";
+      const runtimeRequired = !credit || "execution" in family.plugin && typeof family.plugin.execution.buildRuntimeLeg === "function";
+      row.runtimeInterface = { required: runtimeRequired, status: runtimeRequired ? "required" : "not-declared",
+        kind: credit ? "credit-risk-bound-execution" : "ordinary-runtime-amount" };
+      const build = (settlement?: Parameters<typeof buildFamilyRuntimeAmountLeg>[0]["settlement"]) => {
+        assert(handle, "runtime execution requires an issued route handle");
+        return guard.build(() => buildFamilyRuntimeAmountLeg({ family: asPricedFamily(family), route: handle,
+          source, executor, runtimeEvidence: [], actionOwnership: catalog, runtime: guard.runtime,
+          ...(settlement ? { settlement } : {}) }));
+      };
+      // A declared runtime builder is called before any off-chain amount quote.
+      const leg = runtimeRequired ? build() : null;
+      if (runtimeRequired) assert(leg, "runtime is missing; no quoted fallback");
       const amountIn = BigInt(trial.amountIn);
-      const quote = await guard.exact(() => executeFamilyExactQuote({ ...base, amountIn,
-        generation: source.generation, runtime, control }));
-      row.quote = quote; checkpoint();
-      assert.equal(quote.status, "resolved", "state refusal/unavailable is retained, never promoted to execution support");
-      if (quote.status !== "resolved") throw new Error("amount quote unavailable");
-      assert(quote.amountOut > 0n);
-      if (trial.expectedAmountOut !== undefined) assert.equal(quote.amountOut, BigInt(trial.expectedAmountOut));
-      const minimum = quote.amountOut > BigInt(trial.outputToleranceRawUnits ?? 0)
-        ? quote.amountOut - BigInt(trial.outputToleranceRawUnits ?? 0) : 1n;
-      const fragment = guard.quoted(() => buildFamilyExecutionFragment({ ...base, exact: quote, minAmountOut: minimum,
-        quoteToleranceRawUnits: BigInt(trial.inputToleranceRawUnits ?? 0) }));
-      assert.equal(fragment.status, "resolved");
-      if (fragment.status !== "resolved") throw new Error("quoted fragment unavailable");
+      let quoteAmountOut: bigint, fragment: PlanFragment;
+      if (credit) {
+        assert(trial.credit, "Credit trial requires its risk policy");
+        const prepared = await guard.exact(() => quoteAcceptanceCredit({ context, routeKey: route.routeKey,
+          amountIn, debtBps: trial.credit!.debtBps }));
+        row.quote = prepared.risk; checkpoint();
+        assert.equal(prepared.risk.status, "resolved", "Credit risk quote unavailable");
+        if (prepared.risk.status !== "resolved") throw new Error("Credit risk quote unresolved");
+        row.quoteAmountIn = prepared.risk.collateralAmount;
+        assert.equal(prepared.risk.collateralAmount, amountIn, "Credit quote changed requested input");
+        quoteAmountOut = prepared.risk.amountOut;
+        const built = guard.quoted(() => buildAcceptanceCreditFragment({ context, route: prepared.route,
+          risk: prepared.risk as Extract<typeof prepared.risk, {status: "resolved"}>, minAmountOut: quoteAmountOut }));
+        assert.equal(built.status, "resolved");
+        if (built.status !== "resolved") throw new Error("Credit execution fragment unavailable");
+        fragment = built.fragment;
+      } else {
+        assert(handle, "Exact requires an issued route handle");
+        const base = { family: asPricedFamily(family), route: handle, source, executor,
+          runtimeEvidence: [], actionOwnership: catalog };
+        const quote = await guard.exact(() => executeFamilyExactQuote({ ...base, amountIn,
+          generation: source.generation, runtime, control }));
+        row.quote = quote; checkpoint();
+        assert.equal(quote.status, "resolved", "state refusal/unavailable is retained, never promoted to execution support");
+        if (quote.status !== "resolved") throw new Error("amount quote unavailable");
+        row.quoteAmountIn = quote.amountIn;
+        assert.equal(quote.amountIn, amountIn, "Exact quote changed requested input");
+        quoteAmountOut = quote.amountOut;
+        const minimum = quoteAmountOut > BigInt(trial.outputToleranceRawUnits ?? 0)
+          ? quoteAmountOut - BigInt(trial.outputToleranceRawUnits ?? 0) : 1n;
+        const built = guard.quoted(() => buildFamilyExecutionFragment({ ...base, exact: quote, minAmountOut: minimum,
+          quoteToleranceRawUnits: BigInt(trial.inputToleranceRawUnits ?? 0) }));
+        assert.equal(built.status, "resolved");
+        if (built.status !== "resolved") throw new Error("quoted fragment unavailable");
+        fragment = built.fragment;
+      }
+      assert(quoteAmountOut > 0n);
+      if (trial.expectedAmountOut !== undefined) assert.equal(quoteAmountOut, BigInt(trial.expectedAmountOut));
       const scripts: Array<{ encoding: string; script: Uint8Array; recipient: string; dynamicQuote?: boolean; inputMode?: "maximum" }> = [
-        { encoding: "quoted", script: concatBytes(...planFragmentNodes(fragment.fragment, route.tokenIn, amountIn).map(encode)), recipient: executor, inputMode: leg.inputMode },
-        { encoding: "runtime", script: runtimeProgramScript(getBytes(leg.program), amountIn), recipient: executor, inputMode: leg.inputMode },
+        { encoding: "quoted", script: concatBytes(...planFragmentNodes(fragment, route.tokenIn, amountIn).map(encode)), recipient: executor, inputMode: leg?.inputMode },
+        ...(leg ? [{ encoding: "runtime", script: runtimeProgramScript(getBytes(leg.program), amountIn), recipient: executor, inputMode: leg.inputMode }] : []),
       ];
-      row.settlement = leg.settlement ?? {};
-      const caps = leg.settlement;
+      row.settlement = leg?.settlement ?? {};
+      const caps = leg?.settlement;
       const declared: AcceptanceSettlementMode[] = [];
       if (caps?.directOutput) declared.push("direct-output");
       if (caps?.quoteOutput) declared.push("quote-output");
@@ -179,7 +223,7 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
           const prepared = build({ kind: "quote-output", recipient }); assert(prepared, "declared quote output missing");
           const read = new RuntimeAmountProgram().run(prepared.program, 0, 1, true);
           // The executor is also the caller/receiver of specified-amount Exact. External recipients can have a different rate.
-          if (same(recipient, executor)) read.constant(2, quote.amountOut).equal(1, 2);
+          if (same(recipient, executor)) read.constant(2, quoteAmountOut).equal(1, 2);
           else read.constant(2, 1n).math("sub", 3, 1, 2);
           scripts.push({ encoding: "quote-only", recipient, script: runtimeProgramScript(read.bytes(), amountIn) });
         }
@@ -196,7 +240,7 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
       }
       for (const execution of scripts) for (const probe of (execution.encoding === "quote-only"
         ? ["positive"] as const : ["positive", "no-input", "forced-revert"] as const)) {
-        const record: Record<string, any> = { encoding: execution.encoding, recipient: execution.recipient, probe, result: "failed" };
+        const record: Record<string, any> = { encoding: execution.encoding, recipient: execution.recipient, probe, inputMode: execution.inputMode ?? "exact", result: "failed" };
         row.executions.push(record); checkpoint();
         try {
           const script = probe === "forced-revert" ? concatBytes(execution.script,
@@ -209,7 +253,7 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
             call: { caller, executionMode: "executor-program", to: executor, data: buildSubscriptCalldata(script) },
             overrideIntent: execution.encoding === "quote-only" ? { caller } : { caller, nativeBalanceWei: 17n, tokenBalances: [
               { token: route.tokenIn, amount: probe === "no-input" ? 0n : amountIn + 101n },
-              { token: route.tokenOut, amount: quote.amountOut + 103n },
+              { token: route.tokenOut, amount: quoteAmountOut + 103n },
             ] }, observeTokenBalances: observations, observe: effects };
           record.scriptSha256 = hash(script); record.request = request;
           record.resultEvidence = await dispatch(request); checkpoint();
@@ -220,7 +264,7 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
             record.facts = checkReadOnlyQuoteFacts(common);
           } else if (probe === "positive") {
             const recipientSpecific = execution.dynamicQuote && !same(execution.recipient, executor);
-            const expected = recipientSpecific ? delta(common.result, route.tokenOut, execution.recipient) : quote.amountOut;
+            const expected = recipientSpecific ? delta(common.result, route.tokenOut, execution.recipient) : quoteAmountOut;
             record.outputComparison = recipientSpecific ? "recipient-specific quote equality enforced in executed script" : "specified-amount Exact";
             record.facts = checkProtocolJsonExecutionFacts({ ...common, amountIn, quoteAmountOut: expected,
               inputMode: execution.inputMode ?? "exact", inputToleranceRawUnits: trial.inputToleranceRawUnits,
@@ -241,7 +285,8 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
     const proved = (encoding: string, recipient: string, probes: readonly string[]) => probes.every(probe =>
       row.executions.some((e: any) => e.encoding === encoding && same(e.recipient, recipient) && e.probe === probe && e.result === "pass"));
     const controls = ["positive", "no-input", "forced-revert"];
-    const ordinary = proved("quoted", executor, controls) && proved("runtime", executor, controls);
+    const ordinary = proved("quoted", executor, controls) &&
+      (row.runtimeInterface?.required === false || proved("runtime", executor, controls));
     if (ordinary) successful.add(row.routeKey);
     const verified = new Set<AcceptanceSettlementMode>();
     if (recipients.length > 1 && recipients.every(r => proved("runtime-direct", r, controls))) verified.add("direct-output");
@@ -258,11 +303,11 @@ export async function runProtocolJsonAcceptance(sample: ProtocolJsonAcceptanceCa
     settlementGaps: report.samples.filter((row: any) => row.unverifiedSettlement?.length || row.missingDeclarations?.length)
       .map((row: any) => ({ trial: row.id, routeKey: row.routeKey, missingDeclaration: row.missingDeclarations ?? [],
         unverified: row.unverifiedSettlement ?? row.requiredSettlement })),
-    admittedRoutes: instance.routes.length, sampledRoutes: covered.size, executedRoutes: successful.size,
-    unsampledRoutes: instance.routes.filter(route => !covered.has(route.routeKey)).map(route => ({ routeKey: route.routeKey, tokenIn: route.tokenIn, tokenOut: route.tokenOut })) };
+    admittedRoutes: admittedRoutes.length, sampledRoutes: covered.size, executedRoutes: successful.size,
+    unsampledRoutes: admittedRoutes.filter(route => !covered.has(route.routeKey)).map(route => ({ routeKey: route.routeKey, tokenIn: route.tokenIn, tokenOut: route.tokenOut })) };
   assertRegisteredAcceptanceSample(sample, registration);
   report.result = report.samples.every((row: any) => row.result === "pass" && row.executions.length > 0) &&
-    successful.size === instance.routes.length && guard.counts.forbiddenDuringRuntimeBuild === 0 ? "pass" : "incomplete-or-failed";
+    successful.size === admittedRoutes.length && guard.counts.forbiddenDuringRuntimeBuild === 0 ? "pass" : "incomplete-or-failed";
   report.referenceSettlementCoverage = sample.trials.every(trial => trial.requiredSettlement !== undefined)
     ? (report.result === "pass" ? "requirements-met-for-this-case" : "incomplete-for-this-case")
     : "prior-settlement-requirements-not-specified";

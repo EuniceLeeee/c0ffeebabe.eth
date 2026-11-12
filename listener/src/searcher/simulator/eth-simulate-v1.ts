@@ -665,3 +665,7 @@ function parseCall(value: unknown, gasLimit: bigint): Record<string, unknown> {
   }
   return call;
 }
+
+// Shared wire validators. Family acceptance uses the same node response
+// checks while choosing its own explicit same-state execution environment.
+export { checkedBlock as checkedEthSimulateV1Block, parseCall as checkedEthSimulateV1Call };

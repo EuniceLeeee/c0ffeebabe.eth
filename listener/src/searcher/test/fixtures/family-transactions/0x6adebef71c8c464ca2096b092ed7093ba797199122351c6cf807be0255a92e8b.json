@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x6adebef71c8c464ca2096b092ed7093ba797199122351c6cf807be0255a92e8b",
+  "legs": [
+    {
+      "id": "univ4--reference-1-0",
+      "familyId": "univ4",
+      "domain": "swap",
+      "source": {
+        "number": 26029537,
+        "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2"
+      },
+      "amountScope": "historical-reference-needs-inputs",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/swap-json/index.json",
+          "sha256": "4fa65d097cc21ad62a986fcfcddd2a6147c1a99199c9641d03c92804b548ad88",
+          "jsonPointer": "/families/13/samples/1"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ]
+    }
+  ]
+}

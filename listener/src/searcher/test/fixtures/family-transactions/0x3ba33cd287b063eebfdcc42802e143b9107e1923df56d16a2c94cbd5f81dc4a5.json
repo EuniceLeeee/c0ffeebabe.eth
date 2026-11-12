@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x3ba33cd287b063eebfdcc42802e143b9107e1923df56d16a2c94cbd5f81dc4a5",
+  "legs": [
+    {
+      "id": "protocol:erc4626--erc4626--infinifi-gateway--0-deposit-spliced-production-input-only",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e"
+      },
+      "instanceKey": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+      "lineageId": "erc4626:infinifi-gateway-staking",
+      "tokenIn": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+      "tokenOut": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+      "amountIn": "5131980894925000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-deposit-spliced-production-input-only",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--infinifi-gateway.json",
+          "sha256": "a1a3148d243f7e882984e2951d9a1ce7f6315f9cb630399f5e860ae0e891f556",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--infinifi-gateway--1-deposit-one-token-control-not-production-reference",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e"
+      },
+      "instanceKey": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+      "lineageId": "erc4626:infinifi-gateway-staking",
+      "tokenIn": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+      "tokenOut": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+      "amountIn": "1000000000000000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-deposit-one-token-control-not-production-reference",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--infinifi-gateway.json",
+          "sha256": "a1a3148d243f7e882984e2951d9a1ce7f6315f9cb630399f5e860ae0e891f556",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--infinifi-gateway--2-deposit-original-assets-as-deposit-control-at-tested-state",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e"
+      },
+      "instanceKey": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+      "lineageId": "erc4626:infinifi-gateway-staking",
+      "tokenIn": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+      "tokenOut": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+      "amountIn": "857213759247368899192",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "2-deposit-original-assets-as-deposit-control-at-tested-state",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--infinifi-gateway.json",
+          "sha256": "a1a3148d243f7e882984e2951d9a1ce7f6315f9cb630399f5e860ae0e891f556",
+          "jsonPointer": "/trials/2"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--infinifi-gateway--3-redeem-one-token-control-not-production-reference",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e"
+      },
+      "instanceKey": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+      "lineageId": "erc4626:infinifi-gateway-staking",
+      "tokenIn": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+      "tokenOut": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+      "amountIn": "1000000000000000000",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "3-redeem-one-token-control-not-production-reference",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--infinifi-gateway.json",
+          "sha256": "a1a3148d243f7e882984e2951d9a1ce7f6315f9cb630399f5e860ae0e891f556",
+          "jsonPointer": "/trials/3"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--infinifi-gateway--4-redeem-original-redeem-input-at-tested-state",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25944594,
+        "hash": "0x3fffa168458c84ea4cb5c5587db4e3eddcdad91c260baeff8b763ced64a7886e"
+      },
+      "instanceKey": "0xdbdc1ef57537e34680b898e1febd3d68c7389bcb",
+      "lineageId": "erc4626:infinifi-gateway-staking",
+      "tokenIn": "0xDBDC1Ef57537E34680B898E1FEBD3D68c7389bCB",
+      "tokenOut": "0x48f9e38f3070AD8945DFEae3FA70987722E3D89c",
+      "amountIn": "787606233728059501656",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "4-redeem-original-redeem-input-at-tested-state",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--infinifi-gateway.json",
+          "sha256": "a1a3148d243f7e882984e2951d9a1ce7f6315f9cb630399f5e860ae0e891f556",
+          "jsonPointer": "/trials/4"
+        }
+      ]
+    }
+  ]
+}

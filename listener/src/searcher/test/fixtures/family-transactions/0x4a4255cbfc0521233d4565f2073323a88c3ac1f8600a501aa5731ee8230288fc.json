@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x4a4255cbfc0521233d4565f2073323a88c3ac1f8600a501aa5731ee8230288fc",
+  "legs": [
+    {
+      "id": "custom-swap:uniswap-v1--reference-0-0",
+      "familyId": "custom-swap:uniswap-v1",
+      "domain": "swap",
+      "source": {
+        "number": 26029476,
+        "hash": "0x74997e992f9feddb1b373da2eb41e7cd3abe189c537b4fc79e7d15896c092c35"
+      },
+      "amountScope": "historical-input-at-N",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "docs/research/reports/univ1-recipient-independent-20261015.json",
+          "sha256": "307c0bc12e7a83eb79d5e29238bd385a96c9bb88a9f3656693c385463f50eb6c",
+          "jsonPointer": "/cases/5"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "instanceKey": "0x97386862594f4cacea245e8dbfa6230ca696c37c",
+      "lineageId": "uniswap-v1:immutable-vyper-exchange",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+      "amountIn": "6369530603920567"
+    }
+  ]
+}

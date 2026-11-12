@@ -1,16 +1,17 @@
 import { MaxUint256, ZeroAddress, getAddress, isHexString } from "ethers";
 import type { AdapterRequestResult, CanonicalSource } from "../venues/adapter-request-program.js";
 
-export type AcceptanceFamilyDomain = "protocol" | "swap";
+export type AcceptanceFamilyDomain = "protocol" | "swap" | "credit";
 
 /** Domain is an expected contract, never an admission grant. Runtime checks the
  * installed manifest. Omission preserves existing Protocol case documents. */
 export function acceptanceFamilyDomain(familyId: unknown, domain: unknown = "protocol"): AcceptanceFamilyDomain {
-  if ((domain !== "protocol" && domain !== "swap") ||
+  if ((domain !== "protocol" && domain !== "swap" && domain !== "credit") ||
       typeof familyId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(familyId) ||
-      (domain === "protocol" ? !/^protocol:[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(familyId)
+      (domain === "credit" ? !/^credit:[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(familyId)
+        : domain === "protocol" ? !/^protocol:[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(familyId)
         : /^(protocol|credit|funding):/.test(familyId)))
-    throw new Error("acceptance case must select the declared Swap or Protocol Family domain");
+    throw new Error("acceptance case must select the declared Swap, Protocol or Credit Family domain");
   return domain as AcceptanceFamilyDomain;
 }
 
@@ -26,6 +27,8 @@ export interface ProtocolJsonAcceptanceTrial {
   readonly outputToleranceRawUnits?: 0 | 1; readonly inputToleranceRawUnits?: 0 | 1;
   readonly expectedAmountOut?: string; readonly recipients?: readonly string[];
   readonly protectedBalances?: readonly ProtectedAcceptanceBalance[];
+  /** Current risk policy used for this simulation, not historical output inference. */
+  readonly credit?: { readonly debtBps: number };
 }
 export interface ProtocolJsonAcceptanceCase {
   readonly version: 1; readonly domain?: AcceptanceFamilyDomain; readonly familyId: string; readonly instanceKey: string; readonly lineageId: string;
@@ -118,7 +121,12 @@ export function parseProtocolJsonAcceptanceCase(raw: unknown): ProtocolJsonAccep
   const ids = new Set<string>();
   const trials = raw.trials.map((trial: unknown) => {
     shape(trial, ["id", "tokenIn", "tokenOut", "amountIn"],
-      ["outputToleranceRawUnits", "inputToleranceRawUnits", "expectedAmountOut", "recipients", "protectedBalances", "routeKey", "requiredSettlement"]);
+      ["outputToleranceRawUnits", "inputToleranceRawUnits", "expectedAmountOut", "recipients", "protectedBalances", "routeKey", "requiredSettlement", "credit"]);
+    if (domain === "credit") {
+      shape(trial.credit, ["debtBps"]);
+      if (!Number.isSafeInteger(trial.credit.debtBps) || trial.credit.debtBps <= 0 || trial.credit.debtBps > 10_000)
+        throw new Error("Credit acceptance requires an explicit debtBps policy in 1..10000");
+    } else if (trial.credit !== undefined) throw new Error("Credit policy on a non-Credit case");
     let requiredSettlement: readonly AcceptanceSettlementMode[] | undefined;
     if (trial.requiredSettlement !== undefined) {
       const modes = trial.requiredSettlement;
@@ -143,6 +151,7 @@ export function parseProtocolJsonAcceptanceCase(raw: unknown): ProtocolJsonAccep
       ...(trial.inputToleranceRawUnits !== undefined ? { inputToleranceRawUnits: trial.inputToleranceRawUnits } : {}),
       ...(trial.outputToleranceRawUnits !== undefined ? { outputToleranceRawUnits: trial.outputToleranceRawUnits } : {}),
       ...(trial.expectedAmountOut !== undefined ? { expectedAmountOut: decimal(trial.expectedAmountOut) } : {}),
+      ...(trial.credit !== undefined ? { credit: Object.freeze({ debtBps: trial.credit.debtBps }) } : {}),
       ...(recipients ? { recipients } : {}),
       ...(trial.protectedBalances !== undefined ? { protectedBalances: protection(trial.protectedBalances) } : {}) });
   });

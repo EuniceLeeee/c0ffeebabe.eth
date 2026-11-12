@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x65d0517289a6de7ad8c813799011907fadbb6b2bf6e5e8f8cf1ff872f93725f6",
+  "legs": [
+    {
+      "id": "univ4-fee-hook--reference-1-0",
+      "familyId": "univ4-fee-hook",
+      "domain": "swap",
+      "source": {
+        "number": 25811499,
+        "hash": "0xc74a1b23394c124821a039a487432dc5388444388209680460d6ae023607c786"
+      },
+      "amountScope": "historical-reference-needs-inputs",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/swap-json/index.json",
+          "sha256": "4fa65d097cc21ad62a986fcfcddd2a6147c1a99199c9641d03c92804b548ad88",
+          "jsonPointer": "/families/14/samples/1"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ]
+    }
+  ]
+}

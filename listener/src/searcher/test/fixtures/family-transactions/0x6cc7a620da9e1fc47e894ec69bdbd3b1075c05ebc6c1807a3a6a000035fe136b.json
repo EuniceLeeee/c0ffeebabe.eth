@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x6cc7a620da9e1fc47e894ec69bdbd3b1075c05ebc6c1807a3a6a000035fe136b",
+  "legs": [
+    {
+      "familyId": "protocol:yearn-auction",
+      "domain": "protocol",
+      "source": {
+        "number": 26152335,
+        "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3"
+      },
+      "instanceKey": "0xa00e6b35c23442fa9d5149cba5dd94623ffe6693:0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+      "lineageId": "yearn-auction:clone-1.0.4",
+      "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "tokenOut": "0xdbdb4d16eda451d0503b854cf79d55697f90c8df",
+      "amountIn": "267759246788654353808",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/yearn-curve-lp-core-replay-20261011.json",
+          "sha256": "e087a71e5ccd5b607755a1aafd7d3222dc243b7589ea20e67d3c0d28961fedf8",
+          "jsonPointer": "/original"
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/5/historicalBindings/0"
+        }
+      ],
+      "id": "protocol:yearn-auction--0"
+    },
+    {
+      "familyId": "protocol:curve-lp",
+      "domain": "protocol",
+      "source": {
+        "number": 26152335,
+        "hash": "0x62a1a08653dd520793f8526d405430bcaabd5152459fca18e79f843514f3e0b3"
+      },
+      "instanceKey": "0xdcef968d416a41cdac0ed8702fac8128a64241a2",
+      "lineageId": "curve-lp:stableswap2-18-6-v031",
+      "tokenIn": "0x3175df0976dfa876431c2e9ee6bc45b65d3473cc",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "265363627991310138877",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/curve-lp-correctness-20261010.json",
+          "sha256": "1ebc6ac3774c9f610b4250cb39d87cfb52b63371bb427ac6de0c3406b93d9afd",
+          "jsonPointer": "/blocks/0/amounts/11"
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/7/historicalBindings/0"
+        }
+      ],
+      "id": "protocol:curve-lp--1"
+    }
+  ]
+}

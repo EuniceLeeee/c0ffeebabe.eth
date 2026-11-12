@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x00f865180dc1ffacd181f69a99db506d08766a5086a4f57a886f9611669f4375",
+  "legs": [
+    {
+      "familyId": "protocol:set-redemption",
+      "domain": "protocol",
+      "source": {
+        "number": 26132613,
+        "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146"
+      },
+      "instanceKey": "0x6011242b6dc2c67ed3d484db09327e933054c90a:0xf55186cc537e7067ea616f2aae007b4427a120c8",
+      "lineageId": "set-redemption:legacy-core-0.5.7",
+      "tokenIn": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+      "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "amountIn": "1000000000000",
+      "amountScope": "retained-capacity-control",
+      "provenance": [
+        {
+          "file": "docs/research/reports/set-legacy-redemption-acceptance-20261009.json",
+          "sha256": "c28a254ae5888728309986a48c5317665f56899c447fcdf7a7294fd1f85fbed5",
+          "jsonPointer": "/samples/0/amountInputs/0"
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/1/historicalBindings/3"
+        }
+      ],
+      "id": "protocol:set-redemption--0"
+    },
+    {
+      "familyId": "protocol:set-redemption",
+      "domain": "protocol",
+      "source": {
+        "number": 26132613,
+        "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146"
+      },
+      "instanceKey": "0x6011242b6dc2c67ed3d484db09327e933054c90a:0xf55186cc537e7067ea616f2aae007b4427a120c8",
+      "lineageId": "set-redemption:legacy-core-0.5.7",
+      "tokenIn": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+      "tokenOut": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      "amountIn": "1000000000000000",
+      "amountScope": "retained-capacity-control",
+      "provenance": [
+        {
+          "file": "docs/research/reports/set-legacy-redemption-acceptance-20261009.json",
+          "sha256": "c28a254ae5888728309986a48c5317665f56899c447fcdf7a7294fd1f85fbed5",
+          "jsonPointer": "/samples/0/amountInputs/1"
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/1/historicalBindings/3"
+        }
+      ],
+      "id": "protocol:set-redemption--1"
+    },
+    {
+      "familyId": "protocol:set-redemption",
+      "domain": "protocol",
+      "source": {
+        "number": 26132613,
+        "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146"
+      },
+      "instanceKey": "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e:0xf55186cc537e7067ea616f2aae007b4427a120c8",
+      "lineageId": "set-redemption:legacy-core-0.5.7",
+      "tokenIn": "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e",
+      "tokenOut": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+      "amountIn": "100000000",
+      "amountScope": "retained-capacity-control",
+      "provenance": [
+        {
+          "file": "docs/research/reports/set-legacy-redemption-acceptance-20261009.json",
+          "sha256": "c28a254ae5888728309986a48c5317665f56899c447fcdf7a7294fd1f85fbed5",
+          "jsonPointer": "/samples/1/amountInputs/0"
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/1/historicalBindings/4"
+        }
+      ],
+      "id": "protocol:set-redemption--2"
+    },
+    {
+      "familyId": "protocol:set-redemption",
+      "domain": "protocol",
+      "source": {
+        "number": 26132613,
+        "hash": "0x13f05316470a96a0c2028435e4064bce29b3f39033a3a43041f6e66f5309b146"
+      },
+      "instanceKey": "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e:0xf55186cc537e7067ea616f2aae007b4427a120c8",
+      "lineageId": "set-redemption:legacy-core-0.5.7",
+      "tokenIn": "0xac8ea871e2d5f4be618905f36f73c760f8cfdc8e",
+      "tokenOut": "0x6011242b6dc2c67ed3d484db09327e933054c90a",
+      "amountIn": "1000000000000000000",
+      "amountScope": "retained-capacity-control",
+      "provenance": [
+        {
+          "file": "docs/research/reports/set-legacy-redemption-acceptance-20261009.json",
+          "sha256": "c28a254ae5888728309986a48c5317665f56899c447fcdf7a7294fd1f85fbed5",
+          "jsonPointer": "/samples/1/amountInputs/1"
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/1/historicalBindings/4"
+        }
+      ],
+      "id": "protocol:set-redemption--3"
+    }
+  ]
+}

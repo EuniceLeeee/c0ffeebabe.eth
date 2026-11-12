@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x951d8c926a820798e705158430aefb3ddc1883806e5b74a5b20e6e743445ec1e",
+  "legs": [
+    {
+      "familyId": "balancer-v2",
+      "domain": "swap",
+      "source": {
+        "number": 26138511,
+        "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771"
+      },
+      "instanceKey": "0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274",
+      "lineageId": "balancer-v2:vault-registered-exact-in",
+      "tokenIn": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "141331862836870691964",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/family-three-historical-integration-20261007.json",
+          "sha256": "c354b6193869266e908fe8551fe544ee17be315ae388157f4a8bd4e228dd19ea",
+          "jsonPointer": "/blocks/2/originalAmountAtN/2"
+        }
+      ],
+      "id": "balancer-v2--0"
+    }
+  ]
+}

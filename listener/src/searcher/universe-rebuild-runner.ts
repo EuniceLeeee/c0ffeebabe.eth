@@ -253,6 +253,9 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
    * An optional exact selection is keyed by the normal Family+instance candidate key. */
   readonly previousReadyReview?: {
     readonly inputFingerprint: string;
+    /** Explicit maintenance update of a paused review. The CLI authenticates
+     * its unchanged source, candidate file, executor and force policy first. */
+    readonly replacesInputFingerprint?: string;
     readonly candidateKeys?: ReadonlySet<string>;
     readonly retainedFamilyIds?: ReadonlySet<string>;
     /** Retry prior rejections and retryables in scope, keeping normal verified memo checks. */
@@ -403,7 +406,14 @@ export async function rebuildUniverse(
       !/^[0-9a-f]{64}$/.test(review.inputFingerprint))) {
     throw new Error("Ready review requires a partitioned parent and bound current input");
   }
-  if (incumbentRun && incumbentRun.reviewInputFingerprint !== review?.inputFingerprint) {
+  const replacingReview = review?.replacesInputFingerprint !== undefined;
+  if (replacingReview && (!incumbentRun?.reviewInputFingerprint ||
+      review!.replacesInputFingerprint !== incumbentRun.reviewInputFingerprint ||
+      review!.inputFingerprint === incumbentRun.reviewInputFingerprint ||
+      canonicalJson(incumbentRun.forcedOutcomeStatuses ?? null) !== canonicalJson(forcedOutcomeStatuses ?? null))) {
+    throw new Error("Ready review replacement does not bind the paused input/policy");
+  }
+  if (incumbentRun && incumbentRun.reviewInputFingerprint !== review?.inputFingerprint && !replacingReview) {
     throw new Error("Ready review input differs from the unfinished run");
   }
   if (incumbentRun && incumbentRun.currentInputFingerprint !== input.currentInputFingerprint) {
@@ -470,7 +480,7 @@ export async function rebuildUniverse(
           selectedCandidateSetHash: selected === undefined ? null : hashCandidateSet([...selected], value => value as string) })
       : undefined;
   if (incumbentRun !== null) {
-    if (review && !receiptsMatchCurrentSourcePlan(incumbentRun.sourceReceipts, input.expectedSourcePlanFingerprints())) {
+    if (review && !replacingReview && !receiptsMatchCurrentSourcePlan(incumbentRun.sourceReceipts, input.expectedSourcePlanFingerprints())) {
       throw new Error("Ready review discovery plan differs from the unfinished run");
     }
     if (incumbentRun.runId !== input.runId) {
@@ -494,7 +504,7 @@ export async function rebuildUniverse(
     // ★ The unfinished run's time world never changes.
     cutoff = incumbentRun.cutoff;
     fromBlock = incumbentRun.fromBlock;
-    if (receiptsMatchCurrentSourcePlan(
+    if (!replacingReview && receiptsMatchCurrentSourcePlan(
       incumbentRun.sourceReceipts,
       input.expectedSourcePlanFingerprints(),
     )) {
@@ -506,7 +516,7 @@ export async function rebuildUniverse(
         .map(([, candidate]) => decodeCandidate(candidate)));
       sourceReceipts = incumbentRun.sourceReceipts;
     } else {
-      if (input.resumeCompletedOutcomes) {
+      if (input.resumeCompletedOutcomes && !replacingReview) {
         throw new Error("universe rebuild: completed-outcome resume source plan changed");
       }
       // ★ Layer 2 slow path: discovery plan drift — re-run discovery over the
@@ -713,6 +723,9 @@ export async function rebuildUniverse(
   // reconciles the SAME run's partition/receipts (time identity immutable).
   checkpoint = discoveryPlanChanged || definitionInputChanged
     ? await input.store.reconcileFixedRunPlan({
+        ...(replacingReview && { reviewReplacement: {
+          previous: review!.replacesInputFingerprint!, next: review!.inputFingerprint,
+        } }),
         ...(familyDefinitionHashes === undefined ? {} : { familyDefinitionHashes, candidateFamilyIds }),
         expectedRevision: checkpoint?.revision ?? 0,
         runId: input.runId,

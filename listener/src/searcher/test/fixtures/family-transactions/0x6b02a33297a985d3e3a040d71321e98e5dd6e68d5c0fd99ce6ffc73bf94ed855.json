@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x6b02a33297a985d3e3a040d71321e98e5dd6e68d5c0fd99ce6ffc73bf94ed855",
+  "legs": [
+    {
+      "familyId": "curve-underlying",
+      "domain": "swap",
+      "source": {
+        "number": 26036250,
+        "hash": "0x9d33acd3247f825bdaaf52ca46c54f2e4166edaf6bb4dd9f3782658a8f3ca6ee"
+      },
+      "instanceKey": "0x3211c6cbef1429da3d0d58494938299c92ad5860",
+      "lineageId": "curve-underlying:metaregistry-member",
+      "tokenIn": "0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "42755115598334462450",
+      "amountScope": "retained-production-effective-control",
+      "provenance": [
+        {
+          "file": "docs/research/reports/curve-underlying-erc20-acceptance-20261013.json",
+          "sha256": "b345abb24d5c66fbc4a21c29b59a7a2b146c036a1aac291f2a2e02f6e9de224e",
+          "jsonPointer": "/target/amounts/0"
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/9/historicalBindings/7"
+        }
+      ],
+      "id": "curve-underlying--0"
+    }
+  ]
+}

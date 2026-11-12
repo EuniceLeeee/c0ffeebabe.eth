@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x1d1f257fc96b602e28292c8ff49a8e9924c3872a48ad0f9cf5d1b2af68d13e60",
+  "legs": [
+    {
+      "familyId": "protocol:yieldbasis-lt",
+      "domain": "protocol",
+      "source": {
+        "number": 25978646,
+        "hash": "0x92b3bae67fee715da326d8d9adcc0a9802bc99b44600996570d83c86ad2d43e4"
+      },
+      "instanceKey": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+      "lineageId": "yieldbasis:levamm-bound-single-asset-withdraw",
+      "tokenIn": "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf",
+      "tokenOut": "0x722fc3640ba007c3e9867ccdb0dca59f2e2f29f9",
+      "amountIn": "44648192",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/yb-cuni-additional-acceptance-20261012.json",
+          "sha256": "3bd97ddc5108d81ff41d7cb5c1291340ee345e473d5298965a2fcb3a69cb13e5",
+          "jsonPointer": "/yieldBasis/0/samples/1"
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/6/historicalBindings/0"
+        }
+      ],
+      "id": "protocol:yieldbasis-lt--0"
+    }
+  ]
+}

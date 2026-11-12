@@ -7,11 +7,11 @@ import { spawnSync } from "node:child_process";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const directory = "src/searcher/test";
 const shared = readdirSync(new URL("../src/searcher/test/", import.meta.url))
-  .filter(name => /^(declarative-.*|protocol-json-.*|swap-json-.*)\.test\.ts$/.test(name))
+  .filter(name => /^(declarative-.*|protocol-json-.*|swap-json-.*|family-transaction-.*|family-credit-.*|family-funding-.*|family-node-.*|family-discovery-.*|node-simulate-v1)\.test\.ts$/.test(name))
   .sort()
   .map(name => `${directory}/${name}`);
-// The all-domain installed-family fixture audit remains a separate existing
-// audit. It also covers swaps, credit and disabled entries outside this suite.
+// Preserve existing shared contracts. scripts/test-family.mjs runs this suite
+// before the all-domain installed-catalog transaction facts.
 const preserved = ["node-rpc-simulation.ts", "erc4626-declarative-pipeline.ts",
   "settlement-registrar-evidence.test.ts", "family-settlement-review-contract.ts", "adapter-credit-runtime.ts", "capability-content-hash.ts", "declarative-callback-frames.ts"];
 const files = [...shared, ...preserved.map(name => `${directory}/${name}`)];

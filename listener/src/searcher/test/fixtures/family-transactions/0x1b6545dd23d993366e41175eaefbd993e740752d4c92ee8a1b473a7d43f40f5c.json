@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x1b6545dd23d993366e41175eaefbd993e740752d4c92ee8a1b473a7d43f40f5c",
+  "legs": [
+    {
+      "id": "protocol:origin-steth-arm--reference-0-0",
+      "familyId": "protocol:origin-steth-arm",
+      "domain": "protocol",
+      "source": {
+        "number": 26244681,
+        "hash": "0xead5583a63d04578dfd01b4d82a3c423b13aeb40a520cec84370b4bbfb4a77a3"
+      },
+      "instanceKey": "0x85b78aca6deae198fbf201c82daf6ca21942acc6",
+      "amountScope": "historical-reference-needs-inputs",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/index.json",
+          "sha256": "878ab8488b19df6339c0da46b7917715dd5756ed2661347b0164f89d1b4fd0c3",
+          "jsonPointer": "/families/16/samples/0"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and source-bound actors",
+        "complete direction/amount inputs",
+        "canonical block-end receipt/header confirmation"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x00085da9420425f8f3de1243d41d71ff160984310edf5474341fbe628375bc3e",
+  "legs": [
+    {
+      "id": "custom-swap:dodo-v2--reference-0-0",
+      "familyId": "custom-swap:dodo-v2",
+      "domain": "swap",
+      "source": {
+        "number": 26016874,
+        "hash": "0xf2a4a8104b5ed1113df782166fbceeac9b8debdfef3a20a2b3993218215e5f0d"
+      },
+      "amountScope": "historical-reference-needs-inputs",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/swap-json/index.json",
+          "sha256": "4fa65d097cc21ad62a986fcfcddd2a6147c1a99199c9641d03c92804b548ad88",
+          "jsonPointer": "/families/2/samples/0"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ]
+    }
+  ]
+}

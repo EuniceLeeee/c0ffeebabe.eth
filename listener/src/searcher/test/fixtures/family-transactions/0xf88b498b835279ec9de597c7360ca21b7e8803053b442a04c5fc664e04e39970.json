@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970",
+  "legs": [
+    {
+      "familyId": "credit:fluid",
+      "domain": "credit",
+      "source": {
+        "number": 24710788,
+        "hash": "0x363e14a675e6c4faf10e17ba79dabe60fc4e9237a606ffa24bc00d4e608de9a5"
+      },
+      "instanceKey": "0xee327311d8640156e87ec33ea55fcbf2309e0ce6",
+      "lineageId": "fluid-credit:vault-factory-child",
+      "tokenIn": "0x1202f5c7b4b9e47a1a484e8b270be34dbbc75055",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "1766743380904387863297",
+      "amountScope": "replay-control-half-FLASH_AMOUNT",
+      "provenance": [
+        {
+          "file": "test/WstUSRArb.t.sol",
+          "sha256": "c365ec72677df867065188dba0d2f1bccb4ad6bb91a8fff1b36ea832803a6b89",
+          "jsonPointer": ""
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/10/historicalBindings/0"
+        },
+        {
+          "file": "src/FlashArb.sol",
+          "sha256": "e22c69c9f273a5ca42f1bf5478e61cd2a51ff9445bbfafe390d0788ae38314c8",
+          "jsonPointer": ""
+        },
+        {
+          "file": "listener/src/searcher/venues/credit/fluid-family/fluid.json",
+          "sha256": "76235fe5778479cdbb500b773a1ef5f70f909ac19884ccda140a4f6cbf126dac",
+          "jsonPointer": ""
+        }
+      ],
+      "credit": {
+        "debtBps": 8500
+      },
+      "id": "credit:fluid--0"
+    },
+    {
+      "familyId": "flash-loan:morpho",
+      "domain": "funding",
+      "source": {
+        "number": 24710788,
+        "hash": "0x363e14a675e6c4faf10e17ba79dabe60fc4e9237a606ffa24bc00d4e608de9a5"
+      },
+      "instanceKey": "flash-loan:morpho\u001f0x1202f5c7b4b9e47a1a484e8b270be34dbbc75055",
+      "lineageId": "morpho-flash",
+      "tokenIn": "0x1202f5c7b4b9e47a1a484e8b270be34dbbc75055",
+      "tokenOut": "0x1202f5c7b4b9e47a1a484e8b270be34dbbc75055",
+      "amountIn": "3533486761808775726594",
+      "amountScope": "replay-control-FLASH_AMOUNT",
+      "provenance": [
+        {
+          "file": "test/WstUSRArb.t.sol",
+          "sha256": "c365ec72677df867065188dba0d2f1bccb4ad6bb91a8fff1b36ea832803a6b89",
+          "jsonPointer": ""
+        },
+        {
+          "file": "docs/research/reports/family-settlement-interfaces-protocols-b-20261014.json",
+          "sha256": "a3c118b7850a9954af9570bce9dfc3f790a481db9072a336154199b7932b9aa3",
+          "jsonPointer": "/families/10/historicalBindings/0"
+        },
+        {
+          "file": "src/Constants.sol",
+          "sha256": "ffd21a8128308c1d2909dc9a50a307fe819c60b5f6701c2ddea3e85490aa8283",
+          "jsonPointer": ""
+        }
+      ],
+      "id": "flash-loan:morpho--1"
+    }
+  ]
+}

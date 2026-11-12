@@ -1,0 +1,4153 @@
+{
+  "id": "solidly-pool-owned-amount",
+  "lineageId": "univ2:solidly-factory-child",
+  "identityKind": "factory-child",
+  "inputs": [],
+  "abi": {
+    "pair": [
+      "function factory() view returns(address)",
+      "function token0() view returns(address)",
+      "function token1() view returns(address)",
+      "function getReserves() view returns(uint256,uint256,uint256)",
+      "function swap(uint256,uint256,address,bytes)",
+      "event Swap(address indexed sender,uint256 amount0In,uint256 amount1In,uint256 amount0Out,uint256 amount1Out,address indexed to)",
+      "event Sync(uint256 reserve0,uint256 reserve1)",
+      "function stable() view returns(bool)"
+    ],
+    "factory": [
+      "function getPair(address,address,bool) view returns(address)",
+      "event PairCreated(address indexed token0,address indexed token1,bool stable,address pair,uint256)"
+    ],
+    "token": [
+      "function balanceOf(address account) view returns(uint256)",
+      "function decimals() view returns(uint8)",
+      "function transfer(address to,uint256 amount) returns(bool)",
+      "function approve(address spender,uint256 amount) returns(bool)",
+      "function allowance(address owner,address spender) view returns(uint256)"
+    ],
+    "quote": [
+      "function getAmountOut(uint256 amountIn,address tokenIn) view returns(uint256)"
+    ],
+    "router": [
+      "function swapExactTokensForTokens(uint256,uint256,address[],address,uint256) returns(uint256[])"
+    ]
+  },
+  "constants": {
+    "zero": "0x0000000000000000000000000000000000000000",
+    "maxReserve": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "maxUint256": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+    "bips": "10000",
+    "pancakeFactory": "0x1097053fd2ea711dad45caccc45eff7548fcb362",
+    "bearRuntimeTemplateHash": "0xfc654b0b765d1f2031061e105e4d055a1462bd7ad3431a6adce20397ee41cfe6",
+    "syncLogTopic": "0x1c411e9a96e071241c2f21f7726b17ae89e3cab4c78be50e062b03a9fffbbad1",
+    "swapRouter": "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
+    "victimWhale": "0x000000000000000000000000000000000000dEaD"
+  },
+  "expressions": {
+    "bearRuntime": {
+      "op": "and",
+      "args": [
+        {
+          "op": "matches",
+          "args": [
+            "$code",
+            "^0x[0-9a-fA-F]{17224}$"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    837,
+                    32
+                  ]
+                }
+              ]
+            },
+            66
+          ]
+        },
+        {
+          "op": "matches",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                837,
+                32
+              ]
+            },
+            "^0x0{24}[0-9a-fA-F]{40}$"
+          ]
+        },
+        {
+          "op": "ne",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    837,
+                    32
+                  ]
+                }
+              ]
+            },
+            "0x0000000000000000000000000000000000000000000000000000000000000000"
+          ]
+        },
+        {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        837,
+                        32
+                      ]
+                    }
+                  ]
+                },
+                "$token"
+              ]
+            }
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                836,
+                1
+              ]
+            },
+            "0x7f"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                837,
+                12
+              ]
+            },
+            "0x000000000000000000000000"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    849,
+                    20
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        837,
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                2620,
+                1
+              ]
+            },
+            "0x7f"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                2621,
+                12
+              ]
+            },
+            "0x000000000000000000000000"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    2633,
+                    20
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        837,
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                3169,
+                1
+              ]
+            },
+            "0x7f"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                3170,
+                12
+              ]
+            },
+            "0x000000000000000000000000"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    3182,
+                    20
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        837,
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                3891,
+                1
+              ]
+            },
+            "0x7f"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                3892,
+                12
+              ]
+            },
+            "0x000000000000000000000000"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    3904,
+                    20
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        837,
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                4107,
+                1
+              ]
+            },
+            "0x7f"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                4108,
+                12
+              ]
+            },
+            "0x000000000000000000000000"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    4120,
+                    20
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$code",
+                        837,
+                        32
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                4693,
+                1
+              ]
+            },
+            "0x7f"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                4694,
+                12
+              ]
+            },
+            "0x000000000000000000000000"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    4706,
+                    20
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lower",
+              "args": [
+                "$token"
+              ]
+            }
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                4777,
+                1
+              ]
+            },
+            "0x7f"
+          ]
+        },
+        {
+          "op": "ne",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                4778,
+                32
+              ]
+            },
+            "0x0000000000000000000000000000000000000000000000000000000000000000"
+          ]
+        },
+        {
+          "op": "eq",
+          "args": [
+            {
+              "op": "maskHash",
+              "args": [
+                "$code",
+                [
+                  [
+                    837,
+                    32
+                  ],
+                  [
+                    2621,
+                    32
+                  ],
+                  [
+                    3170,
+                    32
+                  ],
+                  [
+                    3892,
+                    32
+                  ],
+                  [
+                    4108,
+                    32
+                  ],
+                  [
+                    4694,
+                    32
+                  ],
+                  [
+                    4778,
+                    32
+                  ]
+                ]
+              ]
+            },
+            "0xfc654b0b765d1f2031061e105e4d055a1462bd7ad3431a6adce20397ee41cfe6"
+          ]
+        }
+      ]
+    },
+    "tokenTransferModel": {
+      "kind": {
+        "op": "if",
+        "args": [
+          "$bear",
+          "verified-transfer-tax",
+          "nominal-unverified"
+        ]
+      },
+      "token": {
+        "op": "address",
+        "args": [
+          "$token"
+        ]
+      },
+      "codeHash": {
+        "op": "codeHash",
+        "args": [
+          "$code"
+        ]
+      },
+      "taxNumerator": {
+        "op": "if",
+        "args": [
+          "$bear",
+          {
+            "op": "uint",
+            "args": [
+              "100"
+            ]
+          },
+          {
+            "op": "uint",
+            "args": [
+              "0"
+            ]
+          }
+        ]
+      },
+      "taxDenominator": {
+        "op": "uint",
+        "args": [
+          "10000"
+        ]
+      }
+    }
+  },
+  "programs": {},
+  "match": {
+    "op": "eq",
+    "args": [
+      "$descriptor.quoteModel.kind",
+      "solidly-get-amount-out"
+    ]
+  },
+  "context": {},
+  "boundState": {
+    "pool": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "pool"
+      ]
+    },
+    "token0": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "token0"
+      ]
+    },
+    "token1": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "token1"
+      ]
+    },
+    "feeRule": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "feeRule"
+      ]
+    },
+    "quoteModel": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "quoteModel"
+      ]
+    },
+    "tokenTransfers": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "tokenTransfers"
+      ]
+    },
+    "factoryBinding": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "factoryBinding"
+      ]
+    }
+  },
+  "pricing": {
+    "refreshPolicy": "each-block",
+    "requirements": {
+      "transports": [
+        "eth-call"
+      ]
+    },
+    "dependencies": [
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      },
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "token0"
+        ]
+      },
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "token1"
+        ]
+      },
+      "$descriptor.factoryBinding.factory"
+    ],
+    "mutationAddresses": [
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      },
+      "$descriptor.factoryBinding.factory"
+    ],
+    "classifyUnavailable": {
+      "op": "map",
+      "args": [
+        {
+          "op": "filter",
+          "args": [
+            "$routes",
+            "route",
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$snapshot.reserve0",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$snapshot.reserve1",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "eq",
+                              "args": [
+                                "$route.direction",
+                                "zero-for-one"
+                              ]
+                            },
+                            "$snapshot.quoted0",
+                            "$snapshot.quoted1"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "route",
+        [
+          "$route.routeKey",
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$snapshot.reserve0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$snapshot.reserve1",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "univ2 zero reserve at current source",
+              "univ2 pool-owned mid quote unavailable at current source"
+            ]
+          }
+        ]
+      ]
+    }
+  },
+  "exact": {
+    "methodId": "solidly-execution-receipt",
+    "requirements": {
+      "transports": [
+        "effect-delta-simulation"
+      ],
+      "caller": "executor",
+      "effects": [
+        "return-data",
+        "revert-data",
+        "token-delta",
+        "native-delta"
+      ]
+    },
+    "protectedAddresses": {
+      "op": "concat",
+      "args": [
+        [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token0"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token1"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "factoryBinding"
+                ]
+              },
+              "factory"
+            ]
+          }
+        ]
+      ]
+    },
+    "checks": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gte",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "univ2 exact amountIn must be uint256"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$executor",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            }
+          ]
+        },
+        "error": "univ2 exact executor cannot be zero"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.quoteModel.kind",
+            "solidly-get-amount-out"
+          ]
+        },
+        "error": "univ2 pool-quote model mismatch"
+      }
+    ],
+    "evidence": {
+      "kind": "univ2-solidly-execution-receipt",
+      "quoteModel": "solidly-get-amount-out",
+      "source": "$source",
+      "pool": "$descriptor.pool",
+      "tokenIn": "$route.tokenIn",
+      "tokenOut": "$route.tokenOut",
+      "amountIn": "$amountIn",
+      "amountOut": "$amountOut",
+      "direction": "$route.direction",
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "zeroEvidence": {
+      "kind": "univ2-solidly-execution-receipt",
+      "quoteModel": "solidly-get-amount-out",
+      "source": "$source",
+      "pool": "$descriptor.pool",
+      "tokenIn": "$route.tokenIn",
+      "tokenOut": "$route.tokenOut",
+      "amountIn": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "amountOut": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "direction": "$route.direction",
+      "bindingFingerprint": "$route.bindingRef.fingerprint",
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "amountOut": "$quoteResult.amountOut",
+    "retainReadEvidence": true
+  },
+  "readPrograms": {},
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": {
+      "op": "concat",
+      "args": [
+        [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token0"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token1"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "factoryBinding"
+                ]
+              },
+              "factory"
+            ]
+          }
+        ]
+      ]
+    },
+    "requireCanonicalSource": true,
+    "contextChecks": [
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            "$descriptor.quoteModel.kind",
+            "solidly-get-amount-out"
+          ]
+        },
+        "error": "unexpected pair quote model for execution"
+      },
+      {
+        "condition": {
+          "op": "defined",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "tokenTransfers"
+              ]
+            }
+          ]
+        },
+        "error": "univ2 execution requires transfer-tax facts"
+      },
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            "$descriptor.feeRule.kind",
+            "included-in-pool-quote"
+          ]
+        },
+        "error": "univ2 execution fee rule differs from quote model"
+      }
+    ],
+    "steps": [
+      {
+        "id": "pairBalanceBefore",
+        "static": true,
+        "call": {
+          "target": "$route.tokenIn",
+          "signature": "function balanceOf(address) view returns(uint256)",
+          "args": [
+            "$descriptor.pool"
+          ],
+          "save": {
+            "pairBefore": 0
+          }
+        }
+      },
+      {
+        "id": "transferInput",
+        "call": {
+          "target": "$route.tokenIn",
+          "signature": "function transfer(address,uint256) returns(bool)",
+          "args": [
+            "$descriptor.pool",
+            {
+              "runtime": "amountIn"
+            }
+          ]
+        }
+      },
+      {
+        "id": "pairBalanceAfter",
+        "static": true,
+        "call": {
+          "target": "$route.tokenIn",
+          "signature": "function balanceOf(address) view returns(uint256)",
+          "args": [
+            "$descriptor.pool"
+          ],
+          "save": {
+            "pairAfter": 0
+          }
+        }
+      },
+      {
+        "id": "creditedInput",
+        "math": {
+          "model": "delta",
+          "inputs": {
+            "before": {
+              "runtime": "pairBefore"
+            },
+            "after": {
+              "runtime": "pairAfter"
+            }
+          },
+          "outputs": {
+            "delta": "receivedInput"
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "receivedInput"
+              },
+              "operator": "gte",
+              "right": {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "ownedQuote",
+        "static": true,
+        "call": {
+          "target": "$descriptor.pool",
+          "signature": "function getAmountOut(uint256,address) view returns(uint256)",
+          "args": [
+            {
+              "runtime": "receivedInput"
+            },
+            "$route.tokenIn"
+          ],
+          "save": {
+            "grossOutput": 0
+          }
+        }
+      },
+      {
+        "id": "swap",
+        "call": {
+          "target": "$descriptor.pool",
+          "signature": "function swap(uint256,uint256,address,bytes)",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "zero-for-one"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                },
+                {
+                  "runtime": "grossOutput"
+                }
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "zero-for-one"
+                  ]
+                },
+                {
+                  "runtime": "grossOutput"
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            "$recipient",
+            "0x"
+          ]
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-native"
+      }
+    ]
+  },
+  "version": 1,
+  "identity": {
+    "select": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$candidate",
+                "candidateKind"
+              ]
+            },
+            "univ2-pair"
+          ]
+        },
+        "error": "univ2 wrong candidate kind"
+      },
+      {
+        "return": "pool-static",
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$evidence"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": "reverse-binding",
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$evidence",
+                "phase"
+              ]
+            },
+            "pool-static"
+          ]
+        }
+      },
+      {
+        "return": "done"
+      }
+    ],
+    "stages": {
+      "pool-static": {
+        "requirements": {
+          "transports": [
+            "eth-call",
+            "get-code"
+          ]
+        },
+        "requests": [
+          {
+            "id": "pair-factory",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "pair",
+                "factory",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "pair-token0",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "pair",
+                "token0",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "pair-token1",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "pair",
+                "token1",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "pair-stable",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "pair",
+                "stable",
+                []
+              ]
+            },
+            "completion": "return-data"
+          },
+          {
+            "id": "pair-code",
+            "kind": "get-code",
+            "address": "$candidate.pool"
+          },
+          {
+            "id": "pair-reserves",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "pair",
+                "getReserves",
+                []
+              ]
+            },
+            "completion": "return-data"
+          }
+        ],
+        "decode": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$results"
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$requests"
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 missing/extra identity results"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    {
+                      "op": "unique",
+                      "args": [
+                        {
+                          "op": "map",
+                          "args": [
+                            "$results",
+                            "row",
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "id"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 duplicate identity results"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "op": "sortId",
+                      "args": [
+                        {
+                          "op": "map",
+                          "args": [
+                            "$results",
+                            "row",
+                            {
+                              "id": {
+                                "op": "get",
+                                "args": [
+                                  "$row",
+                                  "id"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "op": "sortId",
+                      "args": [
+                        {
+                          "op": "map",
+                          "args": [
+                            "$requests",
+                            "row",
+                            {
+                              "id": {
+                                "op": "get",
+                                "args": [
+                                  "$row",
+                                  "id"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 unexpected identity results"
+          },
+          {
+            "let": "source",
+            "value": {
+              "op": "source",
+              "args": [
+                "$results"
+              ]
+            }
+          },
+          {
+            "let": "factoryRaw",
+            "value": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "returned",
+                  "args": [
+                    "pair-factory"
+                  ]
+                },
+                "data"
+              ]
+            }
+          },
+          {
+            "let": "token0Raw",
+            "value": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "returned",
+                  "args": [
+                    "pair-token0"
+                  ]
+                },
+                "data"
+              ]
+            }
+          },
+          {
+            "let": "token1Raw",
+            "value": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "returned",
+                  "args": [
+                    "pair-token1"
+                  ]
+                },
+                "data"
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "matches",
+              "args": [
+                "$factoryRaw",
+                "^0x0{24}[0-9a-fA-F]{40}$"
+              ]
+            },
+            "error": "univ2 pair-factory has a non-canonical address shape"
+          },
+          {
+            "assert": {
+              "op": "matches",
+              "args": [
+                "$token0Raw",
+                "^0x0{24}[0-9a-fA-F]{40}$"
+              ]
+            },
+            "error": "univ2 pair-token0 has a non-canonical address shape"
+          },
+          {
+            "assert": {
+              "op": "matches",
+              "args": [
+                "$token1Raw",
+                "^0x0{24}[0-9a-fA-F]{40}$"
+              ]
+            },
+            "error": "univ2 pair-token1 has a non-canonical address shape"
+          },
+          {
+            "let": "factory",
+            "value": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$factoryRaw",
+                    12,
+                    20
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "token0",
+            "value": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$token0Raw",
+                    12,
+                    20
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "token1",
+            "value": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$token1Raw",
+                    12,
+                    20
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "stable",
+            "value": {
+              "op": "at",
+              "args": [
+                {
+                  "op": "decodeCanonical",
+                  "args": [
+                    "pair",
+                    "stable",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "pair-stable"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                },
+                0
+              ]
+            }
+          },
+          {
+            "let": "pairCode",
+            "value": {
+              "op": "code",
+              "args": [
+                "pair-code"
+              ]
+            }
+          },
+          {
+            "let": "reserves",
+            "value": {
+              "op": "decodeCanonical",
+              "args": [
+                "pair",
+                "getReserves",
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "pair-reserves"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "phase": "pool-static",
+              "source": "$source",
+              "factory": "$factory",
+              "token0": "$token0",
+              "token1": "$token1",
+              "ids": {
+                "op": "map",
+                "args": [
+                  "$requests",
+                  "request",
+                  {
+                    "op": "get",
+                    "args": [
+                      "$request",
+                      "id"
+                    ]
+                  }
+                ]
+              },
+              "stable": "$stable",
+              "pairCodeHash": {
+                "op": "codeHash",
+                "args": [
+                  "$pairCode"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "reverse-binding": {
+        "requirements": {
+          "transports": [
+            "eth-call",
+            "get-code"
+          ]
+        },
+        "optionalFailures": [
+          "model-decimals-0",
+          "model-decimals-1"
+        ],
+        "requests": [
+          {
+            "id": "factory-get-pair",
+            "kind": "eth-call",
+            "to": "$evidence.factory",
+            "data": {
+              "op": "encode",
+              "args": [
+                "factory",
+                "getPair",
+                [
+                  "$evidence.token0",
+                  "$evidence.token1",
+                  "$evidence.stable"
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data"
+          },
+          {
+            "id": "model-surface-0",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "quote",
+                "getAmountOut",
+                [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  },
+                  "$evidence.token0"
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data"
+          },
+          {
+            "id": "model-surface-1",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "quote",
+                "getAmountOut",
+                [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  },
+                  "$evidence.token1"
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data"
+          },
+          {
+            "id": "model-decimals-0",
+            "kind": "eth-call",
+            "to": "$evidence.token0",
+            "data": {
+              "op": "encode",
+              "args": [
+                "token",
+                "decimals",
+                []
+              ]
+            },
+            "completion": "return-or-revert-data",
+            "required": false
+          },
+          {
+            "id": "model-decimals-1",
+            "kind": "eth-call",
+            "to": "$evidence.token1",
+            "data": {
+              "op": "encode",
+              "args": [
+                "token",
+                "decimals",
+                []
+              ]
+            },
+            "completion": "return-or-revert-data",
+            "required": false
+          },
+          {
+            "id": "transfer-code-0",
+            "kind": "get-code",
+            "address": "$evidence.token0"
+          },
+          {
+            "id": "transfer-code-1",
+            "kind": "get-code",
+            "address": "$evidence.token1"
+          }
+        ],
+        "decode": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$results"
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$requests"
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 missing/extra identity results"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    {
+                      "op": "unique",
+                      "args": [
+                        {
+                          "op": "map",
+                          "args": [
+                            "$results",
+                            "row",
+                            {
+                              "op": "get",
+                              "args": [
+                                "$row",
+                                "id"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$results"
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 duplicate identity results"
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "op": "sortId",
+                      "args": [
+                        {
+                          "op": "map",
+                          "args": [
+                            "$results",
+                            "row",
+                            {
+                              "id": {
+                                "op": "get",
+                                "args": [
+                                  "$row",
+                                  "id"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "op": "sortId",
+                      "args": [
+                        {
+                          "op": "map",
+                          "args": [
+                            "$requests",
+                            "row",
+                            {
+                              "id": {
+                                "op": "get",
+                                "args": [
+                                  "$row",
+                                  "id"
+                                ]
+                              }
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 unexpected identity results"
+          },
+          {
+            "let": "source",
+            "value": {
+              "op": "source",
+              "args": [
+                "$results"
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "hash",
+                  "args": [
+                    "$source"
+                  ]
+                },
+                {
+                  "op": "hash",
+                  "args": [
+                    "$evidence.source"
+                  ]
+                }
+              ]
+            },
+            "error": "solidly identity source changed between rounds"
+          },
+          {
+            "let": "factory",
+            "value": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.factory"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "token0",
+            "value": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.token0"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "token1",
+            "value": {
+              "op": "address",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$evidence.token1"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "reverseShape",
+            "value": {
+              "op": "shape",
+              "args": [
+                "factory-get-pair"
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    "$reverseShape",
+                    "returned"
+                  ]
+                },
+                {
+                  "op": "matches",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "factory-get-pair"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    "^0x0{24}[0-9a-fA-F]{40}$"
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 factory reverse binding has a non-canonical address shape"
+          },
+          {
+            "let": "reversePool",
+            "value": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$reverseShape",
+                    "returned"
+                  ]
+                },
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "factory-get-pair"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        12,
+                        20
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "address",
+                  "args": [
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "shape",
+                      "args": [
+                        "model-surface-0"
+                      ]
+                    },
+                    "returned"
+                  ]
+                },
+                {
+                  "op": "matches",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "model-surface-0"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    "^0x(?:[0-9a-fA-F]{64})?$"
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 model-surface-0 returned a non-uint256 body"
+          },
+          {
+            "assert": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "shape",
+                      "args": [
+                        "model-surface-1"
+                      ]
+                    },
+                    "returned"
+                  ]
+                },
+                {
+                  "op": "matches",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "model-surface-1"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    "^0x(?:[0-9a-fA-F]{64})?$"
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 model-surface-1 returned a non-uint256 body"
+          },
+          {
+            "let": "quoteWitness",
+            "value": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "shape",
+                          "args": [
+                            "model-surface-0"
+                          ]
+                        },
+                        "returned"
+                      ]
+                    },
+                    {
+                      "op": "matches",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "model-surface-0"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        "^0x[0-9a-fA-F]{64}$"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "shape",
+                          "args": [
+                            "model-surface-1"
+                          ]
+                        },
+                        "returned"
+                      ]
+                    },
+                    {
+                      "op": "matches",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "model-surface-1"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        "^0x[0-9a-fA-F]{64}$"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "code0",
+            "value": {
+              "op": "code",
+              "args": [
+                "transfer-code-0"
+              ]
+            }
+          },
+          {
+            "let": "code1",
+            "value": {
+              "op": "code",
+              "args": [
+                "transfer-code-1"
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "matches",
+              "args": [
+                "$code0",
+                "^0x(?:[0-9a-fA-F]{2})+$"
+              ]
+            },
+            "error": "univ2 token0 has no runtime code"
+          },
+          {
+            "assert": {
+              "op": "matches",
+              "args": [
+                "$code1",
+                "^0x(?:[0-9a-fA-F]{2})+$"
+              ]
+            },
+            "error": "univ2 token1 has no runtime code"
+          },
+          {
+            "let": "bear0",
+            "value": {
+              "op": "expression",
+              "args": [
+                "bearRuntime",
+                {
+                  "code": "$code0",
+                  "token": "$token0"
+                }
+              ]
+            }
+          },
+          {
+            "let": "bear1",
+            "value": {
+              "op": "expression",
+              "args": [
+                "bearRuntime",
+                {
+                  "code": "$code1",
+                  "token": "$token1"
+                }
+              ]
+            }
+          },
+          {
+            "let": "tokenTransfers",
+            "value": [
+              {
+                "op": "expression",
+                "args": [
+                  "tokenTransferModel",
+                  {
+                    "bear": "$bear0",
+                    "token": "$token0",
+                    "code": "$code0"
+                  }
+                ]
+              },
+              {
+                "op": "expression",
+                "args": [
+                  "tokenTransferModel",
+                  {
+                    "bear": "$bear1",
+                    "token": "$token1",
+                    "code": "$code1"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "let": "pancake",
+            "value": {
+              "op": "sameAddress",
+              "args": [
+                "$factory",
+                "$constants.pancakeFactory"
+              ]
+            }
+          },
+          {
+            "let": "feeBps",
+            "value": {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          },
+          {
+            "let": "feeEvidence",
+            "value": "pool-quote"
+          },
+          {
+            "let": "dec0",
+            "value": {
+              "op": "if",
+              "args": [
+                "$quoteWitness",
+                {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "token",
+                        "decimals",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "model-decimals-0"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "lte",
+              "args": [
+                "$dec0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "77"
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 model-decimals-0 has invalid decimals"
+          },
+          {
+            "let": "dec1",
+            "value": {
+              "op": "if",
+              "args": [
+                "$quoteWitness",
+                {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "token",
+                        "decimals",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "model-decimals-1"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    },
+                    0
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "lte",
+              "args": [
+                "$dec1",
+                {
+                  "op": "uint",
+                  "args": [
+                    "77"
+                  ]
+                }
+              ]
+            },
+            "error": "univ2 model-decimals-1 has invalid decimals"
+          },
+          {
+            "return": {
+              "phase": "reverse-binding",
+              "source": "$source",
+              "factory": "$factory",
+              "token0": "$token0",
+              "token1": "$token1",
+              "reversePool": "$reversePool",
+              "quoteWitness": "$quoteWitness",
+              "feeBps": "$feeBps",
+              "feeEvidence": "$feeEvidence",
+              "tokenTransfers": "$tokenTransfers",
+              "ids": {
+                "op": "map",
+                "args": [
+                  "$requests",
+                  "request",
+                  {
+                    "op": "get",
+                    "args": [
+                      "$request",
+                      "id"
+                    ]
+                  }
+                ]
+              },
+              "probe0": {
+                "op": "if",
+                "args": [
+                  "$quoteWitness",
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$dec0",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      },
+                      {
+                        "op": "pow",
+                        "args": [
+                          {
+                            "op": "uint",
+                            "args": [
+                              "10"
+                            ]
+                          },
+                          {
+                            "op": "sub",
+                            "args": [
+                              "$dec0",
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "1"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "probe1": {
+                "op": "if",
+                "args": [
+                  "$quoteWitness",
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$dec1",
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      },
+                      {
+                        "op": "pow",
+                        "args": [
+                          {
+                            "op": "uint",
+                            "args": [
+                              "10"
+                            ]
+                          },
+                          {
+                            "op": "sub",
+                            "args": [
+                              "$dec1",
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "1"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "stable": "$evidence.stable",
+              "pairCodeHash": "$evidence.pairCodeHash"
+            }
+          }
+        ]
+      },
+      "done": {
+        "requirements": {
+          "transports": []
+        },
+        "requests": [],
+        "decode": [
+          {
+            "return": "$evidence"
+          }
+        ]
+      }
+    },
+    "decide": [
+      {
+        "return": {
+          "status": "continue"
+        },
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$evidence"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "continue"
+        },
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$evidence",
+                "phase"
+              ]
+            },
+            "pool-static"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "chain-proven-rejected",
+          "reasonCode": "candidate_static_binding_mismatch",
+          "evidenceRequestIds": [
+            "pair-factory",
+            "pair-token0",
+            "pair-token1"
+          ]
+        },
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "reverse-binding"
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$evidence.token0",
+                    "$evidence.token1"
+                  ]
+                },
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "hintedFactory"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "hintedFactory"
+                              ]
+                            },
+                            "$evidence.factory"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "hintedToken0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "hintedToken0"
+                              ]
+                            },
+                            "$evidence.token0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$candidate",
+                            "hintedToken1"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "hintedToken1"
+                              ]
+                            },
+                            "$evidence.token1"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "chain-proven-rejected",
+          "reasonCode": "factory_reverse_binding_failed",
+          "evidenceRequestIds": [
+            "factory-get-pair"
+          ]
+        },
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$evidence",
+                    "phase"
+                  ]
+                },
+                "reverse-binding"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$evidence",
+                        "reversePool"
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$candidate",
+                                "pool"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "reverse-binding"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                "$evidence.quoteWitness"
+              ]
+            }
+          ]
+        },
+        "return": {
+          "status": "chain-proven-rejected",
+          "reasonCode": "solidly_native_quote_surface_missing",
+          "evidenceRequestIds": [
+            "model-surface-0",
+            "model-surface-1"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "verified",
+          "identity": {
+            "familyId": "univ2-standard",
+            "lineageId": "univ2:solidly-factory-child",
+            "subject": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$candidate",
+                        "pool"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "provenance": [
+              {
+                "kind": "factory-reverse-binding",
+                "subject": "$evidence.factory",
+                "evidenceHash": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "pool": {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$candidate",
+                              "pool"
+                            ]
+                          }
+                        ]
+                      },
+                      "factory": "$evidence.factory",
+                      "token0": "$evidence.token0",
+                      "token1": "$evidence.token1",
+                      "reversePool": "$evidence.reversePool",
+                      "quoteModel": {
+                        "op": "if",
+                        "args": [
+                          "$evidence.quoteWitness",
+                          {
+                            "kind": "solidly-get-amount-out",
+                            "probe0": "$evidence.probe0",
+                            "probe1": "$evidence.probe1"
+                          },
+                          {
+                            "kind": "constant-product"
+                          }
+                        ]
+                      },
+                      "tokenTransfers": "$evidence.tokenTransfers",
+                      "stable": "$evidence.stable",
+                      "pairCodeHash": "$evidence.pairCodeHash",
+                      "reverseSignature": "getPair(address,address,bool)"
+                    }
+                  ]
+                }
+              }
+            ],
+            "facts": {
+              "pool": {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$candidate",
+                      "pool"
+                    ]
+                  }
+                ]
+              },
+              "token0": "$evidence.token0",
+              "token1": "$evidence.token1",
+              "feeRule": {
+                "op": "if",
+                "args": [
+                  "$evidence.quoteWitness",
+                  {
+                    "kind": "included-in-pool-quote",
+                    "feeBps": {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    },
+                    "evidence": "pool-quote"
+                  },
+                  {
+                    "kind": "constant-bps",
+                    "feeBps": "$evidence.feeBps",
+                    "evidence": "$evidence.feeEvidence"
+                  }
+                ]
+              },
+              "quoteModel": {
+                "op": "if",
+                "args": [
+                  "$evidence.quoteWitness",
+                  {
+                    "kind": "solidly-get-amount-out",
+                    "probe0": "$evidence.probe0",
+                    "probe1": "$evidence.probe1"
+                  },
+                  {
+                    "kind": "constant-product"
+                  }
+                ]
+              },
+              "tokenTransfers": "$evidence.tokenTransfers",
+              "factoryBinding": {
+                "factory": "$evidence.factory",
+                "reversePool": "$evidence.reversePool",
+                "stable": "$evidence.stable",
+                "pairCodeHash": "$evidence.pairCodeHash",
+                "selector": "0x6801cc30"
+              }
+            }
+          }
+        },
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$evidence",
+                "phase"
+              ]
+            },
+            "reverse-binding"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "retryable",
+          "reasonCode": "univ2-identity-phase-unknown"
+        }
+      }
+    ]
+  },
+  "modules": {
+    "trialState": {},
+    "liveStateProjection": {
+      "version": 1,
+      "result": null
+    },
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "state",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "current-reserves",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "pool"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "pair",
+                  "getReserves",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-balance-0",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token0"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-balance-1",
+              "kind": "eth-call",
+              "to": {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token1"
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "token",
+                  "balanceOf",
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "current-quote-0",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "quote",
+                  "getAmountOut",
+                  [
+                    {
+                      "op": "model",
+                      "args": [
+                        "netTransfer",
+                        {
+                          "amount": "$descriptor.quoteModel.probe0",
+                          "numerator": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          0
+                                        ]
+                                      },
+                                      "kind"
+                                    ]
+                                  },
+                                  "verified-transfer-tax"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "sameAddress",
+                                    "args": [
+                                      "$descriptor.pool",
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          {
+                                            "op": "at",
+                                            "args": [
+                                              "$descriptor.tokenTransfers",
+                                              0
+                                            ]
+                                          },
+                                          "token"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "0"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          0
+                                        ]
+                                      },
+                                      "taxNumerator"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "0"
+                                ]
+                              }
+                            ]
+                          },
+                          "denominator": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          0
+                                        ]
+                                      },
+                                      "kind"
+                                    ]
+                                  },
+                                  "verified-transfer-tax"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "sameAddress",
+                                    "args": [
+                                      "$descriptor.pool",
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          {
+                                            "op": "at",
+                                            "args": [
+                                              "$descriptor.tokenTransfers",
+                                              0
+                                            ]
+                                          },
+                                          "token"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "1"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          0
+                                        ]
+                                      },
+                                      "taxDenominator"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "1"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "$descriptor.token0"
+                  ]
+                ]
+              },
+              "completion": "return-or-revert-data"
+            },
+            {
+              "id": "current-quote-1",
+              "kind": "eth-call",
+              "to": "$descriptor.pool",
+              "data": {
+                "op": "encode",
+                "args": [
+                  "quote",
+                  "getAmountOut",
+                  [
+                    {
+                      "op": "model",
+                      "args": [
+                        "netTransfer",
+                        {
+                          "amount": "$descriptor.quoteModel.probe1",
+                          "numerator": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          1
+                                        ]
+                                      },
+                                      "kind"
+                                    ]
+                                  },
+                                  "verified-transfer-tax"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "sameAddress",
+                                    "args": [
+                                      "$descriptor.pool",
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          {
+                                            "op": "at",
+                                            "args": [
+                                              "$descriptor.tokenTransfers",
+                                              1
+                                            ]
+                                          },
+                                          "token"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "0"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          1
+                                        ]
+                                      },
+                                      "taxNumerator"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "0"
+                                ]
+                              }
+                            ]
+                          },
+                          "denominator": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "eq",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          1
+                                        ]
+                                      },
+                                      "kind"
+                                    ]
+                                  },
+                                  "verified-transfer-tax"
+                                ]
+                              },
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "sameAddress",
+                                    "args": [
+                                      "$descriptor.pool",
+                                      {
+                                        "op": "get",
+                                        "args": [
+                                          {
+                                            "op": "at",
+                                            "args": [
+                                              "$descriptor.tokenTransfers",
+                                              1
+                                            ]
+                                          },
+                                          "token"
+                                        ]
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "op": "uint",
+                                    "args": [
+                                      "1"
+                                    ]
+                                  },
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      {
+                                        "op": "at",
+                                        "args": [
+                                          "$descriptor.tokenTransfers",
+                                          1
+                                        ]
+                                      },
+                                      "taxDenominator"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "op": "uint",
+                                "args": [
+                                  "1"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "$descriptor.token1"
+                  ]
+                ]
+              },
+              "completion": "return-or-revert-data"
+            }
+          ],
+          "decode": [
+            {
+              "let": "reserves",
+              "value": {
+                "op": "decodeCanonical",
+                "args": [
+                  "pair",
+                  "getReserves",
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-reserves"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "balance0",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-balance-0"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "let": "balance1",
+              "value": {
+                "op": "word",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "current-balance-1"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "return": {
+                "source": "$source",
+                "reserve0": {
+                  "op": "at",
+                  "args": [
+                    "$reserves",
+                    0
+                  ]
+                },
+                "reserve1": {
+                  "op": "at",
+                  "args": [
+                    "$reserves",
+                    1
+                  ]
+                },
+                "blockTimestampLast": {
+                  "op": "number",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$reserves",
+                        2
+                      ]
+                    }
+                  ]
+                },
+                "balance0": "$balance0",
+                "balance1": "$balance1",
+                "quoted0": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "result",
+                                  "args": [
+                                    "current-quote-0"
+                                  ]
+                                },
+                                "completion"
+                              ]
+                            },
+                            "reverted-as-declared"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "result",
+                                  "args": [
+                                    "current-quote-0"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            "0x"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    },
+                    {
+                      "op": "word",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "result",
+                              "args": [
+                                "current-quote-0"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "quoted1": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "or",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "result",
+                                  "args": [
+                                    "current-quote-1"
+                                  ]
+                                },
+                                "completion"
+                              ]
+                            },
+                            "reverted-as-declared"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "result",
+                                  "args": [
+                                    "current-quote-1"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            "0x"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    },
+                    {
+                      "op": "word",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "result",
+                              "args": [
+                                "current-quote-1"
+                              ]
+                            },
+                            "data"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "result": "$steps.state"
+    },
+    "pricingProjection": {
+      "version": 1,
+      "checks": [],
+      "rows": {
+        "op": "map",
+        "args": [
+          {
+            "op": "filter",
+            "args": [
+              "$routes",
+              "route",
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$snapshot.reserve0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$snapshot.reserve1",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "eq",
+                            "args": [
+                              "$route.direction",
+                              "zero-for-one"
+                            ]
+                          },
+                          "$snapshot.quoted0",
+                          "$snapshot.quoted1"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "route",
+          {
+            "routeKey": "$route.routeKey",
+            "feeBps": {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            "depth": {
+              "op": "min",
+              "args": [
+                "$snapshot.reserve0",
+                "$snapshot.reserve1"
+              ]
+            },
+            "reserveA": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "zero-for-one"
+                  ]
+                },
+                "$snapshot.reserve0",
+                "$snapshot.reserve1"
+              ]
+            },
+            "reserveB": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "zero-for-one"
+                  ]
+                },
+                "$snapshot.reserve1",
+                "$snapshot.reserve0"
+              ]
+            },
+            "numerator": {
+              "op": "model",
+              "args": [
+                "netTransfer",
+                {
+                  "amount": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          "$route.direction",
+                          "zero-for-one"
+                        ]
+                      },
+                      "$snapshot.quoted0",
+                      "$snapshot.quoted1"
+                    ]
+                  },
+                  "numerator": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "at",
+                                "args": [
+                                  "$descriptor.tokenTransfers",
+                                  {
+                                    "op": "if",
+                                    "args": [
+                                      {
+                                        "op": "eq",
+                                        "args": [
+                                          "$route.direction",
+                                          "zero-for-one"
+                                        ]
+                                      },
+                                      1,
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "kind"
+                            ]
+                          },
+                          "verified-transfer-tax"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$descriptor.tokenTransfers",
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "eq",
+                                    "args": [
+                                      "$route.direction",
+                                      "zero-for-one"
+                                    ]
+                                  },
+                                  1,
+                                  0
+                                ]
+                              }
+                            ]
+                          },
+                          "taxNumerator"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  "denominator": {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "at",
+                                "args": [
+                                  "$descriptor.tokenTransfers",
+                                  {
+                                    "op": "if",
+                                    "args": [
+                                      {
+                                        "op": "eq",
+                                        "args": [
+                                          "$route.direction",
+                                          "zero-for-one"
+                                        ]
+                                      },
+                                      1,
+                                      0
+                                    ]
+                                  }
+                                ]
+                              },
+                              "kind"
+                            ]
+                          },
+                          "verified-transfer-tax"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "at",
+                            "args": [
+                              "$descriptor.tokenTransfers",
+                              {
+                                "op": "if",
+                                "args": [
+                                  {
+                                    "op": "eq",
+                                    "args": [
+                                      "$route.direction",
+                                      "zero-for-one"
+                                    ]
+                                  },
+                                  1,
+                                  0
+                                ]
+                              }
+                            ]
+                          },
+                          "taxDenominator"
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "denominator": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "zero-for-one"
+                  ]
+                },
+                "$descriptor.quoteModel.probe0",
+                "$descriptor.quoteModel.probe1"
+              ]
+            },
+            "balanceHeadroomIn": {
+              "op": "sub",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                  ]
+                },
+                {
+                  "op": "min",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$route.direction",
+                            "zero-for-one"
+                          ]
+                        },
+                        "$snapshot.balance0",
+                        "$snapshot.balance1"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "kind": "v2"
+          }
+        ]
+      }
+    },
+    "quoteFlow": {
+      "version": 1,
+      "sourceKind": "effect-simulation",
+      "chainQuote": {
+        "step": "execution",
+        "requestId": "solidly-receipt"
+      },
+      "steps": [
+        {
+          "id": "execution",
+          "requirements": {
+            "transports": [
+              "effect-delta-simulation"
+            ],
+            "caller": "executor",
+            "effects": [
+              "return-data",
+              "revert-data",
+              "token-delta",
+              "native-delta"
+            ]
+          },
+          "requests": [
+            {
+              "id": "solidly-receipt",
+              "kind": "declarative-execution-simulation",
+              "amountIn": "$amountIn",
+              "observe": [
+                "token-delta",
+                "native-delta"
+              ],
+              "required": true
+            }
+          ],
+          "result": {
+            "amountOut": {
+              "op": "programReceipt",
+              "args": [
+                {
+                  "requestId": "solidly-receipt",
+                  "source": "$source",
+                  "executor": "$executor",
+                  "tokenIn": "$route.tokenIn",
+                  "tokenOut": "$route.tokenOut",
+                  "amountIn": "$amountIn"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "result": "$steps.execution"
+    },
+    "quoteOutput": {}
+  }
+}

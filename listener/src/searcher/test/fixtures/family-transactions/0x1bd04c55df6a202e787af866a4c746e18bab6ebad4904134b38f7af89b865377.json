@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x1bd04c55df6a202e787af866a4c746e18bab6ebad4904134b38f7af89b865377",
+  "legs": [
+    {
+      "familyId": "aqua-swapvm",
+      "domain": "swap",
+      "source": {
+        "number": 25680255,
+        "hash": "0x66fbec383892eea3070319e86f831a8fb7a7ad57a3e0291c1965b5f8f7c09166"
+      },
+      "instanceKey": "0x111111338c5091e8440b67b168bae16a668ac0de:0xa2a439326c7d5cbccf896e63ee323ea39404d18a:0x440b9454c95df7a0aa43091585a188c3709d0e8a605f1f559569e4b6a53bfd9c:0x111111111117dc0aa78b770fa6a738034120c302:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "lineageId": "aqua-swapvm:v1-concentrated-xyc",
+      "tokenIn": "0x111111111117dc0aa78b770fa6a738034120c302",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "5852067890086280293",
+      "amountScope": "registered-strategy-fixture-control",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/venues/swaps/aqua-swapvm-family/test/historical-fixtures.json",
+          "sha256": "461343470fafbf842786ee1d6682ad4bbfbf54af3a6fdb57d9091ff506727497",
+          "jsonPointer": "/samples/2/quotes/0"
+        }
+      ],
+      "id": "aqua-swapvm--0"
+    },
+    {
+      "familyId": "aqua-swapvm",
+      "domain": "swap",
+      "source": {
+        "number": 25680255,
+        "hash": "0x66fbec383892eea3070319e86f831a8fb7a7ad57a3e0291c1965b5f8f7c09166"
+      },
+      "instanceKey": "0x111111338c5091e8440b67b168bae16a668ac0de:0xa2a439326c7d5cbccf896e63ee323ea39404d18a:0x440b9454c95df7a0aa43091585a188c3709d0e8a605f1f559569e4b6a53bfd9c:0x111111111117dc0aa78b770fa6a738034120c302:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "lineageId": "aqua-swapvm:v1-concentrated-xyc",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x111111111117dc0aa78b770fa6a738034120c302",
+      "amountIn": "268686500229597",
+      "amountScope": "registered-strategy-fixture-control",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/venues/swaps/aqua-swapvm-family/test/historical-fixtures.json",
+          "sha256": "461343470fafbf842786ee1d6682ad4bbfbf54af3a6fdb57d9091ff506727497",
+          "jsonPointer": "/samples/2/quotes/1"
+        }
+      ],
+      "id": "aqua-swapvm--1"
+    }
+  ]
+}

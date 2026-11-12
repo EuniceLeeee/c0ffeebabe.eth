@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x3bb12ee62e791d51b1081ecf956eac33a7bc964984ad845d25886a0cbdcaed61",
+  "legs": [
+    {
+      "id": "custom-swap:dodo-v2--reference-1-0",
+      "familyId": "custom-swap:dodo-v2",
+      "domain": "swap",
+      "source": {
+        "number": 25534475,
+        "hash": "0x9b54cf2b3362883b0a7c9b24accf6da17a59248e6945c5c76fc58ffdb321806b"
+      },
+      "instanceKey": "0x9f491edc967e186e00ff6c48f62ef1bec79fc50e",
+      "tokenIn": "0x1aad217b8f78dba5e6693460e8470f8b1a3977f3",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "21192254089977174",
+      "amountScope": "original transaction input only",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/swap-json/index.json",
+          "sha256": "4fa65d097cc21ad62a986fcfcddd2a6147c1a99199c9641d03c92804b548ad88",
+          "jsonPointer": "/families/2/samples/1"
+        },
+        {
+          "file": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
+          "sha256": "b5df6ef6d860120d4b9cbf66eef347792358c70af996f0dbdad24f74d80b43e4",
+          "jsonPointer": ""
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "lineageId": "dodo-v2:registry-member"
+    }
+  ]
+}

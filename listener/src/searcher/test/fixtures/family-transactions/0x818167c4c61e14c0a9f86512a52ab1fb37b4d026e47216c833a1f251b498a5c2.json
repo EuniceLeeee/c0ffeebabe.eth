@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x818167c4c61e14c0a9f86512a52ab1fb37b4d026e47216c833a1f251b498a5c2",
+  "legs": [
+    {
+      "familyId": "curve-plain-lp",
+      "domain": "swap",
+      "source": {
+        "number": 26373824,
+        "hash": "0x74a1b653943cd2fef59d940c4cb372f139e52e7d5236d255f47a8d3491919e37"
+      },
+      "instanceKey": "0x635ef0056a597d13863b73825cca297236578595",
+      "lineageId": "curve-plain-lp:ng-stableswap-2coin",
+      "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+      "tokenOut": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+      "amountIn": "13841602413681833810310",
+      "amountScope": "transaction-block-component-control-crvUSD-to-GHO",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/node-rpc/curve-lp-add-remove.json",
+          "sha256": "2bd6697fac1386797a2bdba51423046ba89c6e130342fb776a25c84d8311965a",
+          "jsonPointer": ""
+        },
+        {
+          "file": "docs/research/design/node-rpc-family-simulation-20261109.md",
+          "sha256": "a91d2f9d345fd6758878ed9460e9c1b10835845b04f6000210258d2a316326a0",
+          "jsonPointer": ""
+        },
+        {
+          "file": "listener/src/searcher/test/fixtures/family-transaction-sources/curve-lp-818167c4.json",
+          "sha256": "50dae5796fb2fbe435edc4e359d720e44183f1793d9684a58ed00667052d3747",
+          "jsonPointer": "/observed/source"
+        }
+      ],
+      "id": "curve-plain-lp--0"
+    }
+  ]
+}

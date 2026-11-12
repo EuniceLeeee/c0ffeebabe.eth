@@ -20,8 +20,8 @@ import {
 } from "./universe-rebuild-checkpoint.js";
 import type { UniverseRebuildProbeWiring } from "./universe-rebuild-probe-cli.js";
 import type { UniverseRebuildDependencies } from "./universe-rebuild-runner.js";
-import type { CentralAdapterRuntime } from "./adapter-work-intent.js";
-import { normalizeTransactionOrigin } from "./adapter-work-intent.js";
+import type { AdapterWorkControl, CentralAdapterRuntime } from "./adapter-work-intent.js";
+import { assertAdapterWorkControl, normalizeTransactionOrigin } from "./adapter-work-intent.js";
 import { buildFamilyRouteGraphView } from "./adapter-family-graph-runtime.js";
 import { StrictProductionRuntimeRoot } from "./strict-production-runtime-session.js";
 import type { TokenEdge } from "./planner/token-graph.js";
@@ -39,8 +39,9 @@ import { attestPoolIdentitiesStrict } from "./strict-identity-attestation.js";
 import { createMinimalIdentityRuntime } from "./strict-identity-attestation.js";
 import { createStrictCentralAdapterRuntime } from
   "./strict-central-adapter-runtime.js";
-import { RevmFatalError, type RevmFatalReason } from "./revm-sim-client.js";
+import { RevmFatalError, type ExecutorRuntimeCode, type RevmFatalReason } from "./revm-sim-client.js";
 import { createNodeStrictSourceSimulation } from "./node-strict-source-simulation.js";
+import { createNodeSimulateV1Rpc, NodeSimulateV1CallRevert } from "./simulator/node-simulate-v1.js";
 import { createNodeFundingCache } from "./simulator/node-input-funding.js";
 import { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import { logRevmFault } from "./revm-fault-diagnostics.js";
@@ -503,8 +504,9 @@ export function providerAdapter(
   assertOpen: () => void = () => {},
 ): {
   call(
-    transaction: { readonly to: string; readonly data: string; readonly from?: string },
+    transaction: { readonly to: string; readonly data: string; readonly from?: string; readonly blockTag?: number },
     blockTag?: number,
+    control?: AdapterWorkControl,
   ): Promise<string>;
   getCode(address: string, blockTag?: number): Promise<string>;
   getStorage(address: string, slot: string, blockTag?: number): Promise<string>;
@@ -891,11 +893,76 @@ export function resolveRebuildRevmTimeoutMs(env: NodeJS.ProcessEnv = process.env
   return timeoutMs;
 }
 
+/** Explicit test actors only. A source with different deployed code is never replaced. */
+export interface RebuildTestExecutorProvisioning {
+  readonly owner: string;
+  readonly runtimeCode: ExecutorRuntimeCode;
+}
+type RebuildSimulationMethod = "debug_traceCall" | "eth_simulateV1";
+
+function testExecutorProvisioning(input: {
+  readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
+  readonly testExecutorProvisioning?: RebuildTestExecutorProvisioning;
+} | undefined): RebuildTestExecutorProvisioning | undefined {
+  const provision = input?.testExecutorProvisioning;
+  if (!provision) return undefined;
+  const identity = input?.executionIdentity;
+  if (!identity || !ethers.isAddress(identity.executor) || identity.executor === ethers.ZeroAddress ||
+      normalizeTransactionOrigin(provision.owner) !== normalizeTransactionOrigin(identity.transactionOrigin) ||
+      identity.executor.toLowerCase() === provision.owner.toLowerCase()) {
+    throw new Error("rebuild test executor provisioning requires an explicit executor and matching distinct owner");
+  }
+  const { code, keccak256 } = provision.runtimeCode;
+  if (!/^0x(?:[a-f0-9]{2})+$/i.test(code) || ethers.keccak256(code) !== keccak256) {
+    throw new Error("rebuild test executor runtime code/hash mismatch");
+  }
+  return Object.freeze({ owner: provision.owner.toLowerCase(), runtimeCode: Object.freeze({ code, keccak256 }) });
+}
+
+/** Read-only contract execution shares V1's explicit virtual block with active
+ * probes. Canonical code/storage/log reads continue to read immutable state N. */
+function sourceSimulationProvider(
+  base: ReturnType<typeof providerAdapter>, provider: RebuildReadProvider,
+  source: CanonicalSource, assertOpen: () => void, method?: RebuildSimulationMethod,
+): ReturnType<typeof providerAdapter> {
+  if (method !== "eth_simulateV1") return base;
+  const pinned = Object.freeze({ ...source });
+  let header: Parameters<typeof createNodeSimulateV1Rpc>[1] | undefined;
+  return Object.freeze({ ...base, async call({ blockTag: transactionBlock, ...transaction }, blockTag, control) {
+    if ((transactionBlock ?? blockTag) !== pinned.number || blockTag !== undefined && blockTag !== pinned.number) {
+      throw new Error("simulation read escaped the fixed canonical cutoff");
+    }
+    const send = async (method: string, params: readonly unknown[]): Promise<any> => {
+      assertOpen(); assertAdapterWorkControl(control);
+      const result = await provider.sendControlled(method, params, control);
+      assertOpen(); assertAdapterWorkControl(control); return result;
+    };
+    if (!header) {
+      const actual = await send("eth_getBlockByHash", [pinned.hash, false]);
+      if (!actual || actual.hash?.toLowerCase() !== pinned.hash.toLowerCase() || Number(BigInt(actual.number)) !== pinned.number) {
+        throw new RevmFatalError({ kind: "source-fault" });
+      }
+      header = Object.freeze({ ...actual });
+    }
+    try { return await createNodeSimulateV1Rpc(send, header!)("eth_call", [transaction, { blockHash: pinned.hash, requireCanonical: true }]); }
+    catch (error) {
+      if (error instanceof NodeSimulateV1CallRevert) throw Object.assign(new Error("execution reverted"), {
+        code: "CALL_EXCEPTION", data: error.data, info: {
+          error: { code: 3, message: "execution reverted", data: error.data }, payload: { method: "eth_call" },
+        },
+      });
+      throw error;
+    }
+  } });
+}
+
 export function createProbeWiring(
   input?: {
     readonly rpcUrl?: string;
     readonly familyIds?: readonly string[];
     readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
+    readonly testExecutorProvisioning?: RebuildTestExecutorProvisioning;
+    readonly simulationMethod?: RebuildSimulationMethod;
     readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
     readonly readyThrottle?: ReadyRpcThrottle;
   },
@@ -916,6 +983,11 @@ export function createProbeWiring(
   const simulationScheduler = new RethTransportScheduler({ capacity: 4, producerReserved: 1 });
   const executionIdentity = input?.executionIdentity === undefined
     ? undefined : Object.freeze({ ...input.executionIdentity });
+  const provision = testExecutorProvisioning(input);
+  const simulationMethod = input?.simulationMethod;
+  if (simulationMethod !== undefined && !["debug_traceCall", "eth_simulateV1"].includes(simulationMethod)) {
+    throw new Error("invalid rebuild simulation method");
+  }
   const executor = executionIdentity?.executor ?? process.env.BOTVM_ADDRESS;
   const transactionOrigin = executionIdentity?.transactionOrigin ?? process.env.BOTVM_OWNER;
   const canSimulate = executor !== undefined && executor.trim() !== "";
@@ -943,12 +1015,22 @@ export function createProbeWiring(
   // Ethers' short cache keys code by height, not canonical hash/generation.
   // Source-bound code reuse below owns caching instead, including reorg changes.
   const provider = new RebuildReadProvider(read, rpcUrl, undefined, { cacheTimeout: -1, readyThrottle: input?.readyThrottle });
-  const strictProviderFor = createSourceCodeProviders(
+  const codeProviderFor = createSourceCodeProviders(
     providerAdapter(provider, assertOpen), assertOpen,
     { onReadError(error) {
       if (error instanceof Error && input?.readyThrottle?.isThrottle(error)) input.readyThrottle.markFailure(error);
     } },
   );
+  const simulationProviders = new WeakMap<ReturnType<typeof providerAdapter>, ReturnType<typeof providerAdapter>>();
+  const strictProviderFor = (source: CanonicalSource): ReturnType<typeof providerAdapter> => {
+    const base = codeProviderFor(source);
+    let scoped = simulationProviders.get(base);
+    if (!scoped) {
+      scoped = sourceSimulationProvider(base, provider, source, assertOpen, simulationMethod);
+      simulationProviders.set(base, scoped);
+    }
+    return scoped;
+  };
   const onFatal = (reason: RevmFatalReason): void => {
     if (fatal) return;
     fatal = new RevmFatalError(reason);
@@ -985,7 +1067,11 @@ export function createProbeWiring(
     try { diagnosticCandidateKey = rebuildFamilyCandidateKey(candidate); } catch { /* Observability only. */ }
     const failAttempt = input?.readyThrottle?.captureFailure();
     const sourceCode = networkChainId === undefined ? undefined : await strictProvider.getCode(executor!, source.number);
-    const executorRuntimeCode = sourceCode && sourceCode !== "0x"
+    if (provision && sourceCode !== "0x" && sourceCode?.toLowerCase() !== provision.runtimeCode.code.toLowerCase()) {
+      throw new Error("rebuild test executor has different deployed code at source");
+    }
+    const allowExecutorCodeOverride = provision !== undefined && sourceCode === "0x";
+    const executorRuntimeCode = allowExecutorCodeOverride ? provision.runtimeCode : sourceCode && sourceCode !== "0x"
       ? { code: sourceCode, keccak256: ethers.keccak256(sourceCode) } : undefined;
     const simulation = networkChainId === undefined ? undefined : createNodeStrictSourceSimulation({
       identity: { source, rpcUrl, chainId: networkChainId },
@@ -993,7 +1079,8 @@ export function createProbeWiring(
       // Preserve the engine's existing DEFAULT_GAS_LIMIT; make it explicit at
       // the transport boundary rather than relying on an unbound wire default.
       executionGasLimit: 0x1000000,
-      timeoutMs, executor, executorRuntimeCode, scheduler: simulationScheduler, lane: "discovery", fundingCache,
+      timeoutMs, executor, executorRuntimeCode, allowExecutorCodeOverride, simulationMethod,
+      scheduler: simulationScheduler, lane: "discovery", fundingCache,
       onFatal(reason) {
         const ownedAttempt = failAttempt?.(reason);
         if (ownedAttempt && input?.readyThrottle?.isTemporary(reason)) return;
@@ -3036,12 +3123,16 @@ export function createRebuildWiring(input?: {
   readonly activityArchive?: ReadyActivityArchive;
   readonly startupCandidates?: readonly Readonly<Record<string, unknown>>[];
   readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
+  readonly testExecutorProvisioning?: RebuildTestExecutorProvisioning;
+  readonly simulationMethod?: RebuildSimulationMethod;
   readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
 }): UniverseRebuildDependencies & {
   readonly candidateFamilyId: (candidate: unknown) => string;
   readonly familyDiscoveryDefinitionHash: (familyId: string) => string;
 } {
   const readyThrottle = input?.readyThrottle ?? new ReadyRpcThrottle();
+  const provision = testExecutorProvisioning(input);
+  const simulationMethod = input?.simulationMethod;
   const activityArchive = input?.activityArchive?.withEntryLimit(ARCHIVE_ACTIVITY_ENTRY_BYTES);
   const archiveTransportLimits = activityArchive === undefined ? {} : {
     maxReceivedBytes: ARCHIVE_ACTIVITY_RESPONSE_BYTES,
@@ -3145,6 +3236,7 @@ export function createRebuildWiring(input?: {
   // and fails closed on resume. Call tracing is another physical transport
   // inside this same catalog activity plan, not a second discovery source.
   const probe = createProbeWiring({ rpcUrl, familyIds, executionIdentity: input?.executionIdentity,
+    testExecutorProvisioning: provision, simulationMethod,
     onSimulationFatal, readyThrottle });
 
   const disabledPlugins = PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins;
@@ -3169,7 +3261,10 @@ export function createRebuildWiring(input?: {
         .map(key => key.slice(0, key.indexOf("|"))))].sort();
       const hash = createHash("sha256").update(canonicalJson({ policy: "ready-review-v1", planFingerprints,
         definitions: ids.map(id => [id, familyDefinitionHash(id)]),
-        executionIdentity: input?.executionIdentity ?? null, explicitPool: input?.startupCandidates !== undefined }));
+        executionIdentity: input?.executionIdentity ?? null,
+        ...(provision ? { testExecutorProvisioning: { owner: provision.owner, codeHash: provision.runtimeCode.keccak256 } } : {}),
+        ...(simulationMethod ? { simulationMethod } : {}),
+        explicitPool: input?.startupCandidates !== undefined }));
       for (const candidate of input?.startupCandidates ?? []) hash.update(canonicalJson(encodeDurableValue(candidate))).update("\n");
       return hash.digest("hex");
     },
@@ -3746,7 +3841,8 @@ export function createRebuildWiring(input?: {
       // global bounded queue: no Family partitioning, deterministic output
       // order, and no serial RPC tail across thousands of opaque pools.
       const verified: UnifiedObservation[] = [];
-      const providerFacade = providerAdapter(provider);
+      const providerFacade = sourceSimulationProvider(providerAdapter(provider, assertOpen), provider,
+        reverseInput.cutoff, assertOpen, simulationMethod);
       const resolved = new Array<readonly UnifiedObservation[]>(
         nominations.length,
       );
@@ -4024,7 +4120,7 @@ export function createRebuildWiring(input?: {
         if (!oldBinding?.staticBindingFingerprint || !oldIdentity?.lineageId) return null;
         const source = Object.freeze({ ...memoInput.cutoff });
         const runtime = createStrictCentralAdapterRuntime({
-          provider: providerAdapter(provider, assertOpen),
+          provider: sourceSimulationProvider(providerAdapter(provider, assertOpen), provider, source, assertOpen, simulationMethod),
           verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
           generationFence: { assertCurrent(generation, requested) {
             assertOpen();

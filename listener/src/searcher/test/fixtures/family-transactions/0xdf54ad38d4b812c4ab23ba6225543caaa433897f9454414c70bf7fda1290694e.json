@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xdf54ad38d4b812c4ab23ba6225543caaa433897f9454414c70bf7fda1290694e",
+  "legs": [
+    {
+      "id": "protocol:ethertoken-native-redeem--ethertoken-native-redeem--c082--0-redeem-production-effective",
+      "familyId": "protocol:ethertoken-native-redeem",
+      "domain": "protocol",
+      "source": {
+        "number": 25648967,
+        "hash": "0x65058fd339c9dbdabc378620f354a7e48b2dfae2df896536c985885f66085c1d"
+      },
+      "instanceKey": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+      "lineageId": "ethertoken-native:active-effect-delta-v1",
+      "tokenIn": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "1887004883045915",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-redeem-production-effective",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/ethertoken-native-redeem--c082.json",
+          "sha256": "831e4e9af5c53e5ba8a7f131b4baa773246ee7569e7432ce716bb09857bcd295",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:ethertoken-native-redeem--ethertoken-native-redeem--c082--1-redeem-historical-input-at-N",
+      "familyId": "protocol:ethertoken-native-redeem",
+      "domain": "protocol",
+      "source": {
+        "number": 25648967,
+        "hash": "0x65058fd339c9dbdabc378620f354a7e48b2dfae2df896536c985885f66085c1d"
+      },
+      "instanceKey": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+      "lineageId": "ethertoken-native:active-effect-delta-v1",
+      "tokenIn": "0xc0829421c1d260bd3cb3e0f06cfe2d52db2ce315",
+      "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "amountIn": "1056367846106427",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-redeem-historical-input-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/ethertoken-native-redeem--c082.json",
+          "sha256": "831e4e9af5c53e5ba8a7f131b4baa773246ee7569e7432ce716bb09857bcd295",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    }
+  ]
+}

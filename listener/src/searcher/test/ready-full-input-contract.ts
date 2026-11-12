@@ -923,3 +923,30 @@ test("reappearing disabled history keeps its original proof source after an empt
   }
 });
 
+
+
+test("paused review update preserves unchanged completed work and revalidates changed Family rules", async t => {
+  const a = candidate("family:a", "a"), b = candidate("family:b", "b");
+  const pending = candidate("family:c", "c"), removed = candidate("family:a", "removed");
+  const f = await fixture([a, b, pending, removed]); t.after(f.dispose);
+  await f.run(); f.changeDefinition(a.familyId); f.changeDefinition(b.familyId); f.changeDefinition(pending.familyId);
+  f.onAttest(async c => { if (key(c) === key(pending)) throw new Error("pause before definitions update"); });
+  await assert.rejects(f.run({ overrides: { attestationConcurrency: 1 } }), /pause before definitions update/);
+  const paused = (await f.store.load())!;
+  assert.equal(paused.inProgressRun!.outcomesByCandidateKey[key(a)]?.status, "verified");
+  assert.equal(paused.inProgressRun!.outcomesByCandidateKey[key(b)]?.status, "verified");
+  f.changeDefinition(b.familyId); f.setCandidates([a, b, pending]); f.onAttest(); f.clearCalls();
+  const update = { inputFingerprint: digest("replacement-review"),
+    replacesInputFingerprint: paused.inProgressRun!.reviewInputFingerprint!,
+    candidateKeys: new Set([a, b, pending].map(key)) };
+  await assert.rejects(f.run({ overrides: { previousReadyReview: { ...update,
+    replacesInputFingerprint: digest("wrong-paused-input") } } }), /replacement does not bind/);
+  assert.deepEqual(f.calls, []);
+  const ready = await f.run({ overrides: { attestationConcurrency: 1, previousReadyReview: update } });
+  assert.deepEqual(f.calls, [key(b), key(pending)]);
+  assert(!f.memoLookups.includes(key(a)), "unchanged completed proof inherits without per-memo RPC");
+  assert.equal(ready.candidateAccounting.total, 3);
+  assert.equal(ready.candidateAccounting.verified, 3);
+  assert.deepEqual(ready.cutoff, SOURCE);
+  assert.equal((await f.store.load())!.inProgressRun, null);
+});

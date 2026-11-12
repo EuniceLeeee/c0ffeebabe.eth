@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x80334cda165c424da8ffc9bbb4ccd302b77b79a3bc1f4e25bbbcd643c1712e3d",
+  "legs": [
+    {
+      "id": "protocol:badger-sett-withdraw--badger-sett-withdraw--graviaura--0-withdraw-production-P",
+      "familyId": "protocol:badger-sett-withdraw",
+      "domain": "protocol",
+      "source": {
+        "number": 26138511,
+        "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771"
+      },
+      "instanceKey": "0xba485b556399123261a5f9c95d413b4f93107407",
+      "lineageId": "badger-sett:thevault-1.5-vlaura-1.2-liquid",
+      "tokenIn": "0xba485b556399123261a5f9c95d413b4f93107407",
+      "tokenOut": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+      "amountIn": "186879770730708662978",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-withdraw-production-P",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/badger-sett-withdraw--graviaura.json",
+          "sha256": "21b91b7ccbfc5eb23814c610196da98e863eba0bb2bcb197c53c3750bc3795ea",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:badger-sett-withdraw--badger-sett-withdraw--graviaura--1-withdraw-historical-amount-at-N",
+      "familyId": "protocol:badger-sett-withdraw",
+      "domain": "protocol",
+      "source": {
+        "number": 26138511,
+        "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771"
+      },
+      "instanceKey": "0xba485b556399123261a5f9c95d413b4f93107407",
+      "lineageId": "badger-sett:thevault-1.5-vlaura-1.2-liquid",
+      "tokenIn": "0xba485b556399123261a5f9c95d413b4f93107407",
+      "tokenOut": "0xc0c293ce456ff0ed870add98a0828dd4d2903dbf",
+      "amountIn": "131502308044455713821",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-withdraw-historical-amount-at-N",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/badger-sett-withdraw--graviaura.json",
+          "sha256": "21b91b7ccbfc5eb23814c610196da98e863eba0bb2bcb197c53c3750bc3795ea",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "familyId": "balancer-v2",
+      "domain": "swap",
+      "source": {
+        "number": 26138511,
+        "hash": "0xffdbdda6829f743dc05ad148586e96dc671f31ee30968f07d91963b9de22e771"
+      },
+      "instanceKey": "0x0578292cb20a443ba1cde459c985ce14ca2bdee5000100000000000000000269",
+      "lineageId": "balancer-v2:vault-registered-exact-in",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0xba485b556399123261a5f9c95d413b4f93107407",
+      "amountIn": "1273805887338394",
+      "amountScope": "historical-input-at-pinned-end-state",
+      "provenance": [
+        {
+          "file": "docs/research/reports/family-three-historical-integration-20261007.json",
+          "sha256": "c354b6193869266e908fe8551fe544ee17be315ae388157f4a8bd4e228dd19ea",
+          "jsonPointer": "/blocks/2/originalAmountAtN/0"
+        }
+      ],
+      "id": "balancer-v2--2"
+    }
+  ]
+}

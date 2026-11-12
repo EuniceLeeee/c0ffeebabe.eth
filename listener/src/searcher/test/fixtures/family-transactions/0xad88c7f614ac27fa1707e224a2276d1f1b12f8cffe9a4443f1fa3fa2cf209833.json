@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0xad88c7f614ac27fa1707e224a2276d1f1b12f8cffe9a4443f1fa3fa2cf209833",
+  "legs": [
+    {
+      "id": "protocol:default-collateral--reference-0-0",
+      "familyId": "protocol:default-collateral",
+      "domain": "protocol",
+      "source": {
+        "number": 26244778,
+        "hash": "0x4d8e7ee76e1d7ce145a752ae4185056d13c83f3b1de57fffe0a1282ef8c39646"
+      },
+      "instanceKey": "0x38b86004842d3fa4596f0b7a0b53de90745ab654",
+      "amountScope": "historical-reference-needs-inputs",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/index.json",
+          "sha256": "878ab8488b19df6339c0da46b7917715dd5756ed2661347b0164f89d1b4fd0c3",
+          "jsonPointer": "/families/5/samples/0"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and source-bound actors",
+        "complete direction/amount inputs",
+        "canonical block-end receipt/header confirmation"
+      ]
+    }
+  ]
+}

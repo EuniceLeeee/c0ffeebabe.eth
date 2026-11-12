@@ -25,7 +25,8 @@
       }
     ],
     "supportedLineages": [
-      "univ2:factory-child"
+      "univ2:factory-child",
+      "univ2:solidly-factory-child"
     ],
     "poolAdapterIds": [
       "univ2",
@@ -158,6 +159,70 @@
               "value": null
             }
           }
+        },
+        {
+          "id": "univ2-solidly-pair-created",
+          "signature": "event PairCreated(address indexed token0,address indexed token1,bool stable,address pair)",
+          "fields": {
+            "pool": {
+              "from": "argument",
+              "index": 3
+            },
+            "hintedFactory": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken0": {
+              "from": "argument",
+              "index": 0
+            },
+            "hintedToken1": {
+              "from": "argument",
+              "index": 1
+            }
+          }
+        },
+        {
+          "id": "univ2-solidly-factory-pair-created",
+          "signature": "event PairCreated(address indexed token0,address indexed token1,bool stable,address pair,uint256)",
+          "fields": {
+            "pool": {
+              "from": "argument",
+              "index": 3
+            },
+            "hintedFactory": {
+              "from": "emitter"
+            },
+            "hintedToken0": {
+              "from": "argument",
+              "index": 0
+            },
+            "hintedToken1": {
+              "from": "argument",
+              "index": 1
+            }
+          }
+        },
+        {
+          "id": "univ2-solidly-sync-log",
+          "signature": "event Sync(uint256 reserve0,uint256 reserve1)",
+          "fields": {
+            "pool": {
+              "from": "emitter"
+            },
+            "hintedFactory": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken0": {
+              "from": "literal",
+              "value": null
+            },
+            "hintedToken1": {
+              "from": "literal",
+              "value": null
+            }
+          }
         }
       ],
       "nomination": "address-surface",
@@ -187,6 +252,7 @@
         "univ2-standard"
       ],
       "txSeedNominations": false,
+      "reverseBinding": "address-surface",
       "nominationReadFlow": {
         "version": 1,
         "steps": [
@@ -401,8 +467,7 @@
           }
         ],
         "result": "$steps.pair"
-      },
-      "reverseBinding": "address-surface"
+      }
     }
   },
   "identity": {
@@ -3152,16 +3217,28 @@
               ]
             },
             {
-              "op": "eq",
+              "op": "or",
               "args": [
                 {
-                  "op": "get",
+                  "op": "eq",
                   "args": [
-                    "$descriptor",
-                    "lineageId"
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "lineageId"
+                      ]
+                    },
+                    "univ2:factory-child"
                   ]
                 },
-                "univ2:factory-child"
+                {
+                  "op": "eq",
+                  "args": [
+                    "$descriptor.lineageId",
+                    "univ2:solidly-factory-child"
+                  ]
+                }
               ]
             },
             {
@@ -3275,6 +3352,37 @@
                       "args": [
                         "$descriptor.quoteModel.kind",
                         "pool-get-amount-out"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.feeRule.kind",
+                        "included-in-pool-quote"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.feeRule.feeBps",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$descriptor.quoteModel.kind",
+                        "solidly-get-amount-out"
                       ]
                     },
                     {
@@ -3532,7 +3640,20 @@
           "feeRule"
         ]
       },
-      "quoteSemantics": "source-reserves-constant-product-v1"
+      "quoteSemantics": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              "$descriptor.quoteModel.kind",
+              "solidly-get-amount-out"
+            ]
+          },
+          "source-executor-solidly-receipt-v1",
+          "source-reserves-constant-product-v1"
+        ]
+      }
     },
     "mutationKinds": [
       "log"
@@ -4247,6 +4368,39 @@
         },
         "match": false,
         "impact": {}
+      },
+      {
+        "id": "univ2-solidly-sync-log",
+        "signature": "event Sync(uint256 reserve0,uint256 reserve1)",
+        "classification": "mutation",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$log.address"
+                ]
+              }
+            ]
+          },
+          "reserve0": "$args.reserve0",
+          "reserve1": "$args.reserve1"
+        },
+        "match": false,
+        "impact": {}
       }
     ],
     "calls": [
@@ -4651,31 +4805,13 @@
         "op": "if",
         "args": [
           {
-            "op": "and",
+            "op": "eq",
             "args": [
               {
-                "op": "eq",
+                "op": "lower",
                 "args": [
                   {
-                    "op": "length",
-                    "args": [
-                      {
-                        "op": "get",
-                        "args": [
-                          "$observation",
-                          "data"
-                        ]
-                      }
-                    ]
-                  },
-                  130
-                ]
-              },
-              {
-                "op": "eq",
-                "args": [
-                  {
-                    "op": "length",
+                    "op": "at",
                     "args": [
                       {
                         "op": "get",
@@ -4683,98 +4819,305 @@
                           "$observation",
                           "topics"
                         ]
+                      },
+                      0
+                    ]
+                  }
+                ]
+              },
+              "0x0a37da2b1868bfc70f4dc3988da03432d740f6ffbdc860da6941898a959a7df2"
+            ]
+          },
+          null,
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "at",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$observation",
+                              "topics"
+                            ]
+                          },
+                          0
+                        ]
                       }
                     ]
                   },
-                  3
+                  "0xc4805696c66d7cf352fc1d6bb633ad5ee82f6cb577c453024b6e0eb8306c6fc9"
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "length",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$observation",
+                                  "data"
+                                ]
+                              }
+                            ]
+                          },
+                          194
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "length",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$observation",
+                                  "topics"
+                                ]
+                              }
+                            ]
+                          },
+                          3
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "pool": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$observation",
+                                "data"
+                              ]
+                            },
+                            44,
+                            20
+                          ]
+                        }
+                      ]
+                    },
+                    "factory": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$observation",
+                            "address"
+                          ]
+                        }
+                      ]
+                    },
+                    "token0": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$observation",
+                                    "topics"
+                                  ]
+                                },
+                                1
+                              ]
+                            },
+                            12,
+                            20
+                          ]
+                        }
+                      ]
+                    },
+                    "token1": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$observation",
+                                    "topics"
+                                  ]
+                                },
+                                2
+                              ]
+                            },
+                            12,
+                            20
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  null
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "length",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$observation",
+                                  "data"
+                                ]
+                              }
+                            ]
+                          },
+                          130
+                        ]
+                      },
+                      {
+                        "op": "eq",
+                        "args": [
+                          {
+                            "op": "length",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$observation",
+                                  "topics"
+                                ]
+                              }
+                            ]
+                          },
+                          3
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "pool": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$observation",
+                                "data"
+                              ]
+                            },
+                            12,
+                            20
+                          ]
+                        }
+                      ]
+                    },
+                    "factory": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$observation",
+                            "address"
+                          ]
+                        }
+                      ]
+                    },
+                    "token0": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$observation",
+                                    "topics"
+                                  ]
+                                },
+                                1
+                              ]
+                            },
+                            12,
+                            20
+                          ]
+                        }
+                      ]
+                    },
+                    "token1": {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "bytes",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$observation",
+                                    "topics"
+                                  ]
+                                },
+                                2
+                              ]
+                            },
+                            12,
+                            20
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  null
                 ]
               }
             ]
-          },
-          {
-            "pool": {
-              "op": "address",
-              "args": [
-                {
-                  "op": "bytes",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$observation",
-                        "data"
-                      ]
-                    },
-                    12,
-                    20
-                  ]
-                }
-              ]
-            },
-            "factory": {
-              "op": "address",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$observation",
-                    "address"
-                  ]
-                }
-              ]
-            },
-            "token0": {
-              "op": "address",
-              "args": [
-                {
-                  "op": "bytes",
-                  "args": [
-                    {
-                      "op": "at",
-                      "args": [
-                        {
-                          "op": "get",
-                          "args": [
-                            "$observation",
-                            "topics"
-                          ]
-                        },
-                        1
-                      ]
-                    },
-                    12,
-                    20
-                  ]
-                }
-              ]
-            },
-            "token1": {
-              "op": "address",
-              "args": [
-                {
-                  "op": "bytes",
-                  "args": [
-                    {
-                      "op": "at",
-                      "args": [
-                        {
-                          "op": "get",
-                          "args": [
-                            "$observation",
-                            "topics"
-                          ]
-                        },
-                        2
-                      ]
-                    },
-                    12,
-                    20
-                  ]
-                }
-              ]
-            }
-          },
-          null
+          }
         ]
       }
     },
@@ -11519,7 +11862,8 @@
     }
   },
   "variantFiles": [
-    "./pool-get-amount-out.json"
+    "./pool-get-amount-out.json",
+    "./solidly-get-amount-out.json"
   ],
   "actionAdapters": [
     {

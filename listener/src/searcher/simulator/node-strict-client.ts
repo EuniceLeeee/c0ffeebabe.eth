@@ -8,6 +8,7 @@ import { RethTransportScheduler, type RethTransportLoad, type RethTransportAttem
 import { isRpcThrottleError, isRpcQuotaExhaustedError } from "../rpc-throttle-guard.js";
 import { assertCallTrace, successfulTraceLogs, traceNodeTopLevel, nodeNestedHalt } from "./node-trace-simulation.js";
 import { NodeInputFunding, createNodeFundingCache, type NodeFundingCache, type NodeFundingProof } from "./node-input-funding.js";
+import { createNodeSimulateV1Rpc, nodeSimulateV1Environment, simulateNodeProgramV1, simulateNodeTopLevelV1 } from "./node-simulate-v1.js";
 
 const hex = (n: bigint | number) => `0x${n.toString(16)}`;
 const hash = (v: unknown): v is string => typeof v === "string" && /^0x[0-9a-f]{64}$/i.test(v);
@@ -48,8 +49,11 @@ export class NodeStrictClient {
     executor?: string;
     executorRuntimeCode?: ExecutorRuntimeCode;
     allowExecutorCodeOverride?: boolean;
+    simulationMethod?: "debug_traceCall" | "eth_simulateV1";
   }) {
     if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1) throw new Error("invalid node simulation timeout");
+    if (options.simulationMethod !== undefined && !["debug_traceCall", "eth_simulateV1"].includes(options.simulationMethod))
+      throw new Error("invalid node simulation method");
     this.scheduler = options.scheduler ?? new RethTransportScheduler({ capacity: 1, producerReserved: 1 });
     this.fundingCache = options.fundingCache ?? createNodeFundingCache();
   }
@@ -76,7 +80,7 @@ export class NodeStrictClient {
     const timer = setTimeout(() => deadline.abort(new StateCallAbortedError("node simulation deadline", "deadline")), remaining);
     const signal = AbortSignal.any([this.abort.signal, deadline.signal, ...(control?.signal ? [control.signal] : [])]);
     const block = { blockHash: pin.blockHash, requireCanonical: true };
-    const rpc = (method: string, params: readonly unknown[]) => this.rpc(req.rpcUrl!, method, params, signal);
+    const rawRpc = (method: string, params: readonly unknown[]) => this.rpc(req.rpcUrl!, method, params, signal);
     try {
       signal.throwIfAborted();
       let h = this.header;
@@ -98,6 +102,9 @@ export class NodeStrictClient {
       }
       const sourceAttestation = { kind: "node-attested" as const, blockNumber: req.blockNumber,
         chainId: pin.chainId, blockHash: h.hash.toLowerCase(), parentHash: h.parentHash.toLowerCase(), stateRoot: h.stateRoot.toLowerCase() };
+      const v1 = this.options.simulationMethod === "eth_simulateV1";
+      const rpc = v1 ? createNodeSimulateV1Rpc(rawRpc, h) : rawRpc;
+      const executionObservation = v1 ? { executionObservation: nodeSimulateV1Environment(h) } : {};
       const codeAt = async (a: string, reuse = true): Promise<string> => {
         const cached = reuse ? this.code.get(a) : undefined;
         if (cached !== undefined) return cached;
@@ -138,14 +145,15 @@ export class NodeStrictClient {
       const deals = req.trialPrefix ? [{ token: req.trialPrefix.inputToken, to: req.trialPrefix.executor, amount: req.trialPrefix.inputAmount }] : req.tokenDeals ?? [];
       const funder = new NodeInputFunding(rpc, block, this.fundingCache, this.fundingProofs,
         (key, prove) => this.sourceRead(`funding:${key}`, signal, async readSignal => {
-          const result = await prove((method, params) => this.rpc(req.rpcUrl!, method, params, readSignal));
+          const raw = (method: string, params: readonly unknown[]) => this.rpc(req.rpcUrl!, method, params, readSignal);
+          const result = await prove(v1 ? createNodeSimulateV1Rpc(raw, h) : raw);
           readSignal.throwIfAborted();
           this.fundingProofs.set(key, result);
           return result;
         }));
       const prepared = await funder.prepare(deals);
       signal.throwIfAborted();
-      if (req.inputStateOnly) return { ok: true, latencyMs: performance.now() - started, sourceAttestation,
+      if (req.inputStateOnly) return { ok: true, latencyMs: performance.now() - started, sourceAttestation, ...executionObservation,
         strict: { ...proof, ...empty, executionGasUsed: "0", outcome: { kind: "InputPrepared", stateOverrides: prepared.overrides } } };
       if (req.stateRead) throw new RevmStrictError("validation", "node prefix storage/code observation unavailable");
       const from = addr(req.from), to = addr(req.to), origin = addr(req.callerMode === "impersonated-call-frame" ? req.transactionOrigin! : req.from);
@@ -166,7 +174,15 @@ export class NodeStrictClient {
       if (req.nativeBalanceWei !== undefined) overrides[from] = { ...overrides[from], balance: hex(BigInt(req.nativeBalanceWei)) };
       let receipt: { before: bigint[]; after: bigint[]; output: string; gasUsed: bigint;
         logs: { address: string; topics: string[]; data: string }[]; failure?: { index: number; nestedHalt: string | null } };
-      if (req.callerMode !== "impersonated-call-frame") {
+      if (v1) {
+        if (req.callerMode === "impersonated-call-frame") {
+          if (!this.options.executor || !executorCode || from !== addr(this.options.executor) || origin === from ||
+              (await codeAt(from)) === "0x" && !codeOverrides[from]) throw new RevmStrictError("validation", "node frame requires configured deployed executor and distinct origin");
+        } else if (req.trialPrefix) throw new RevmStrictError("validation", "node prefix requires executor frame");
+        const input = { rpc: rawRpc, header: h, from, origin, calls: plan, observations, overrides, gas,
+          baselineAfterPrefix: !!req.trialPrefix, codeAt };
+        receipt = await (req.callerMode === "impersonated-call-frame" ? simulateNodeProgramV1(input) : simulateNodeTopLevelV1(input));
+      } else if (req.callerMode !== "impersonated-call-frame") {
         if (req.trialPrefix) throw new RevmStrictError("validation", "node prefix requires executor frame");
         receipt = await traceNodeTopLevel({ rpc, block, from, calls: plan, observations, overrides, gas });
       } else {
@@ -227,7 +243,7 @@ export class NodeStrictClient {
           }
         }
       }
-      if (receipt.failure) return { ok: true, success: false, sourceAttestation, output: receipt.output,
+      if (receipt.failure) return { ok: true, success: false, sourceAttestation, ...executionObservation, output: receipt.output,
         revertReason: receipt.output, gasUsed: receipt.gasUsed.toString(), latencyMs: performance.now() - started,
         strict: { ...empty, ...proof, executionGasUsed: receipt.gasUsed.toString(), outcome: {
           kind: "Revert", ...(receipt.failure.index < plan.length - 1 ? { phase: "preCall" as const, preCallIndex: receipt.failure.index } : { phase: "main" as const }),
@@ -242,7 +258,7 @@ export class NodeStrictClient {
       const nativeDeltas = (req.observeNativeBalances ?? []).map(account => { const i = at++; return {
         account, before: receipt.before[i]!.toString(), after: receipt.after[i]!.toString(), delta: delta(i) }; });
       const totalSupplyDeltas = (req.observeTotalSupply ?? []).map(token => ({ token, delta: delta(at++) }));
-      return { ok: true, success: true, sourceAttestation, output: receipt.output, gasUsed: receipt.gasUsed.toString(), latencyMs: performance.now() - started,
+      return { ok: true, success: true, sourceAttestation, ...executionObservation, output: receipt.output, gasUsed: receipt.gasUsed.toString(), latencyMs: performance.now() - started,
         strict: { ...proof, executionGasUsed: receipt.gasUsed.toString(), tokenDeltas, nativeDeltas, totalSupplyDeltas,
           logs: req.observeLogs ? receipt.logs : [], outcome: { kind: "Success", phase: "main", output: receipt.output } } };
     } finally { clearTimeout(timer); }

@@ -11,6 +11,7 @@ import { syncDeclarativeProductionEntries } from "../build-declarative-productio
 import { loadFamilyJsonSamples } from "./protocol-json-samples.js";
 import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
 import { registerAcceptanceSample } from "./protocol-json-sample-registration.js";
+import { getInstalledTransactionFamilies } from "./family-transaction-registry.js";
 
 const defaultRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
@@ -39,13 +40,13 @@ export interface RegressionPlan {
   families: RegressionFamily[];
 }
 
-export async function buildFamilyRegressionPlan(root = defaultRoot): Promise<RegressionPlan> {
+export async function buildFamilyRegressionPlan(root = defaultRoot, scope: "json" | "installed" = "json"): Promise<RegressionPlan> {
   const entries = await syncDeclarativeProductionEntries({ rootDirectory: root, mode: "check" });
   const libraries = ["protocol", "swap"].map(domain => loadFamilyJsonSamples(
     resolve(root, `src/searcher/test/fixtures/${domain}-json/index.json`), domain as "protocol" | "swap"));
   const source = files(resolve(root, "src"));
   const tests = source.filter(path => relative(root, path).split("/").some(part => part === "test" || part === "tests"));
-  const families = [...entries.values()].filter(entry => entry.format !== "bindings-v1")
+  let families = [...entries.values()].filter(entry => entry.format !== "bindings-v1")
     .sort((a, b) => a.familyId.localeCompare(b.familyId)).map(entry => {
       const doc = json(entry.definitionFile);
       const variants = [doc.standard, ...entry.childFiles.map(json)].map(({ id, lineageId }) => ({ id, lineageId }));
@@ -57,7 +58,21 @@ export async function buildFamilyRegressionPlan(root = defaultRoot): Promise<Reg
           : [entry.domain === "credit" ? "historical Credit runner/sample library not available" : "no indexed historical sample library entry"],
       };
     });
-  assert(families.length > 0, "no installed JSON production families");
+  if (scope === "installed") {
+    const byId = new Map(families.map(family => [family.familyId, family]));
+    families = (await getInstalledTransactionFamilies()).map(family => {
+      const known = byId.get(family.familyId);
+      if (known) return known;
+      const entry = `src/searcher/venues/production-families/${family.sourceFile}`;
+      return { familyId: family.familyId, domain: family.domain, entry, definition: entry,
+        variants: family.lineages.map(lineageId => ({ id: lineageId, lineageId })),
+        cases: libraries.flatMap(library => library.cases).filter(row => row.familyId === family.familyId)
+          .map(row => ({ id: relative(root, row.path), familyId: family.familyId, file: relative(root, row.path), sha256: digest(readFileSync(row.path)) })),
+        gaps: ["Full-domain factual acceptance uses npm test and the centralized transaction registry"],
+      };
+    });
+  }
+  assert(families.length > 0, "no installed production families");
   return { format: "family-json-regression-plan-v1", families,
     testFingerprint: digest(process.version + ":" + fingerprint(root, [...tests, ...readdirSync(resolve(root, "scripts"))
       .filter(name => /^test-.*\.(mjs|js|ts)$/.test(name)).map(name => resolve(root, "scripts", name)), resolve(root, "package.json"),
@@ -164,12 +179,14 @@ export async function familyJsonRegressionMain(argv = process.argv.slice(2)) {
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i]!;
     if (key === "--run" && !run) { run = true; continue; }
-    assert(["--out", "--bindings", "--family", "--check-report"].includes(key) && !args.has(key) && argv[i + 1], "invalid regression arguments");
+    assert(["--out", "--bindings", "--family", "--check-report", "--scope"].includes(key) && !args.has(key) && argv[i + 1], "invalid regression arguments");
     args.set(key, argv[++i]!);
   }
-  const root = defaultRoot, installed = await buildFamilyRegressionPlan(root);
+  const scope = args.get("--scope") ?? "json";
+  assert(scope === "json" || scope === "installed", "invalid regression scope");
+  const root = defaultRoot, installed = await buildFamilyRegressionPlan(root, scope);
   if (args.has("--check-report")) {
-    assert(!run && args.size === 1, "report checking does not run tests");
+    assert(!run && args.size === (args.has("--scope") ? 2 : 1), "report checking does not run tests");
     const families = readFamilyRegressionVerdicts(args.get("--check-report")!, installed, root);
     const allPassed = families.every(row => row.result === "supplied-cases-pass");
     console.log(JSON.stringify({ current: true, allPassed, families, claim: "Does not certify all variants or performance" }));
@@ -243,7 +260,7 @@ export async function familyJsonRegressionMain(argv = process.argv.slice(2)) {
     } catch (error) { row.status = "failed"; row.reason = safe(error); }
     checkpoint();
   }
-  report.sourceStable = sameRegressionInputs(installed, await buildFamilyRegressionPlan(root));
+  report.sourceStable = sameRegressionInputs(installed, await buildFamilyRegressionPlan(root, scope));
   report.finished = true; report.ended = new Date().toISOString(); checkpoint();
   console.log(JSON.stringify({ report: resolve(out, "report.json"), sourceStable: report.sourceStable,
     results: report.families.map((row: any) => ({ familyId: row.familyId, result: row.result })) }));

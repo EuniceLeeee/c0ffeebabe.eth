@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x2068e9fc151ad0ea2cf273e50a8a0153cc1d0303deb9cf660f13dbbf8571548c",
+  "legs": [
+    {
+      "id": "univ4--reference-0-0",
+      "familyId": "univ4",
+      "domain": "swap",
+      "source": {
+        "number": 26029537,
+        "hash": "0xf5a4024438b6f1066af6dd18bcbe765fef47ccde9265ecd748bdebab0268cab2"
+      },
+      "amountScope": "historical-input-at-pinned-end-state",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "docs/research/reports/v4-nohook-native-historical-acceptance-20261010.json",
+          "sha256": "e8d2d9181732d1703122beff40bc540c4c21bf4fb4db8f250a757a7987161046",
+          "jsonPointer": "/originalObservation"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "instanceKey": "0x000000000004444c5dc75cb358380d2e3de08a90\u001f0x9ecc2b9b4171c12e89ea93ed63eb2b0b18048c51be2846e94be3d7c478354441",
+      "lineageId": "univ4:pool-manager-subinstance",
+      "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "tokenOut": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+      "amountIn": "52441220376341570"
+    }
+  ]
+}

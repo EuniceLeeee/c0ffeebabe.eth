@@ -11,8 +11,10 @@ import { RuntimeAmountProgram, runtimeProgramScript, type RuntimeAmountLeg } fro
 import type { CentralAdapterRuntime } from "../adapter-work-intent.js";
 import { buildFamilyRouteGraphView } from "../adapter-family-graph-runtime.js";
 import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
+import { prepareCreditFamilyRoutes, projectCreditRouteGraph } from "../adapter-credit-runtime.js";
+import { executeCreditFamilyInstanceLifecycle } from "../venues/adapter-family-runtime.js";
 import { runStrictFamilyLifecycle } from "../strict-family-lifecycle-runner.js";
-import { defineProtocolFamily, definedFamilyPluginContractSummary, explicitReverseBindingUnsupported } from "../venues/adapter-family-plugin.js";
+import { defineCreditFamily, defineProtocolFamily, definedFamilyPluginContractSummary, explicitReverseBindingUnsupported } from "../venues/adapter-family-plugin.js";
 import { familyId, lineageId } from "../venues/adapter-family-identifiers.js";
 import { bindFamilyOwnedAction } from "../venues/family-owned-action.js";
 import { FAMILY_CAPABILITY_NAMES, FamilyCapabilityCatalog, capabilityManifestHash } from "../venues/family-capability-catalog.js";
@@ -184,11 +186,14 @@ test("CLI saves structured early failures with restrictive permissions and never
 // A generic, synthetic conversion fixture. The actual Family issuer, Graph,
 // exact/quoted/runtime dispatch, scheduler and fact checker are exercised here.
 // Only provider responses and VM host balances are synthetic, not EVM evidence.
-async function issuedFixture(options: { fault?: "zero-debit" | "short-credit" | "old-inventory"; missingRuntime?: boolean; unsampledRoute?: boolean; direct?: boolean; callback?: boolean; wrongOnchainQuote?: boolean } = {}) {
-  const input = sample(), family = familyId(input.familyId), lineage = lineageId(input.lineageId), actionId = "fixture-convert";
+async function issuedFixture(options: { fault?: "zero-debit" | "short-credit" | "old-inventory"; missingRuntime?: boolean; unsampledRoute?: boolean; direct?: boolean; callback?: boolean; wrongOnchainQuote?: boolean; credit?: boolean } = {}) {
+  const baseInput = sample();
+  const input = options.credit ? parseProtocolJsonAcceptanceCase({ ...baseInput, domain: "credit", familyId: "credit:fixture",
+    trials: baseInput.trials.map(trial => ({ ...trial, credit: { debtBps: 8500 } })) }) : baseInput;
+  const family = familyId(input.familyId), lineage = lineageId(input.lineageId), actionId = "fixture-convert";
   const calls: string[] = [], simulations: string[] = [];
   const emit = (recipient = executor) => new RuntimeAmountProgram().call(target, abi.encodeFunctionData("convert", [0n, recipient]), { patches: [{ offset: 4, reg: 0 }] });
-  const plugin = defineProtocolFamily<any, any, any, any, any, any, any>({
+  const definition: Parameters<typeof defineProtocolFamily<any, any, any, any, any, any, any>>[0] = {
     manifest: { familyId: family, domain: "protocol", ownedActionAdapterIds: [actionId], requiredInfraActionAdapterIds: [],
       supportedLineages: [lineage], allowedTaxonomy: [{ slotKind: "protocol", protocolAction: "convert" }] },
     discovery: { sources: ["observed-call"], evidenceChannel: "tx-evidence", reverseBinding: explicitReverseBindingUnsupported("synthetic fixture"),
@@ -247,8 +252,21 @@ async function issuedFixture(options: { fault?: "zero-debit" | "short-credit" | 
     protocol: { candidateKinds: ["observed-call"], activeBehaviorProof: "required" },
     actionAdapters: [bindFamilyOwnedAction({ action: { id: actionId, isWrapper: false, field2Offset: null, matchTrace: () => false,
       encode: node => runtimeProgramScript(emit().bytes(), node.amount) }, descriptor: { adapterId: actionId, lineage: `custom-protocol:${actionId}`,
-      edgeKind: "protocol", action: "convert", canSendValue: false, leavesStandingPositionDefault: false } })],
-  });
+      edgeKind: options.credit ? "credit" : "protocol", action: options.credit ? "borrow" : "convert", canSendValue: false, leavesStandingPositionDefault: !!options.credit } })],
+  };
+  const { protocol: _protocol, pricing: _pricing, exact: _exact, ...commonDefinition } = definition;
+  const { buildRuntimeLeg: _runtime, ...creditExecution } = definition.execution;
+  const plugin = options.credit ? defineCreditFamily<any, any, any, any, any>({ ...commonDefinition,
+    manifest: { ...definition.manifest, domain: "credit", allowedTaxonomy: [{ slotKind: "lend" }] },
+    routes: { ...definition.routes, project: value => definition.routes.project(value).map(route => ({ ...route, taxonomy: { slotKind: "lend" } })) },
+    execution: creditExecution,
+    credit: { activeBehaviorProof: "required", position: { lifecycle: "standing-position", finalSafety: "position-and-repayment-required", positionKey: ({ route }) => route.routeKey },
+      risk: { debtBpsCandidates: [8500n], blocksPrefixInversion: true,
+        evidence: { requirements: () => ({ transports: ["eth-call"] }),
+          buildRequests: ({ collateralAmount }) => [{ id: "risk", kind: "eth-call", to: target, data: abi.encodeFunctionData("preview", [collateralAmount, executor]), completion: "return-data" }],
+          decode: ({ results }) => { assert(results[0]?.ok); return BigInt(results[0].data); } },
+        quoteOutputByDebtBps: ({ evidence }) => { assert(typeof evidence === "bigint"); return evidence; } } },
+  }) : defineProtocolFamily(definition);
   const entries = FAMILY_CAPABILITY_NAMES.map(capability => ({ familyId: family, capability, contractVersion: "s1-v1" as const,
     contentHash: createHash("sha256").update(`fixture/${capability}`).digest("hex"), semanticDependencies: ["fixture:runner"], provenanceCommit: null }));
   const catalog = new FamilyCapabilityCatalog({ modules: [{ plugin, sourceFile: "fixture.production.ts",
@@ -302,11 +320,15 @@ async function issuedFixture(options: { fault?: "zero-debit" | "short-credit" | 
         nativeDeltas: [{ account: executor, delta: 0n }], logs: [] } };
     } },
   });
-  const publication = await runStrictFamilyLifecycle({ catalog, familyId: family, runtime, source,
-    observations: [{ kind: "call", target, data: abi.encodeFunctionData("convert", [17n, executor]), source }] });
-  assert.equal(publication.instances.length, 1); const instance = publication.instances[0]!, loaded = catalog.forFamily(family);
-  const graph = buildFamilyRouteGraphView({ routes: instance.routes.map(route => ({ family: loaded, descriptor: instance.descriptor,
-    route, handle: instance.routeHandles.find(handle => handle.routeKey === route.routeKey)! })) }).edges;
+  const observation = { kind: "call" as const, target, data: abi.encodeFunctionData("convert", [17n, executor]), source };
+  const loaded = catalog.forStrictFamily(family);
+  const instance = options.credit
+    ? (await executeCreditFamilyInstanceLifecycle({ family: loaded, match: { matchedPatternId: "convert", observation }, runtime, source, generation: source.generation })).instance
+    : (await runStrictFamilyLifecycle({ catalog, familyId: family, runtime, source, observations: [observation] })).instances[0];
+  assert(instance);
+  const graph = options.credit ? prepareCreditFamilyRoutes({ family: loaded, instance, source, generation: source.generation }).routes.map(route => projectCreditRouteGraph({ family: loaded, route }).edge)
+    : buildFamilyRouteGraphView({ routes: instance.routes.map(route => ({ family: catalog.forFamily(family), descriptor: instance.descriptor,
+      route, handle: instance.routeHandles.find(handle => handle.routeKey === route.routeKey)! })) }).edges;
   return { sample: input, calls, simulations, context: { family: loaded, instance, source, executor, owner, runtime, catalog, graph,
     evidence: { kind: "synthetic-offline-fixture" }, control: { signal: new AbortController().signal, deadlineAtMs: Date.now() + 30_000 } } as any };
 }
@@ -394,5 +416,21 @@ test("settlement coverage requires a read-only result and real credit to both re
     assert.deepEqual(row.verifiedSettlement.sort(), ["direct-output", "quote-output"]);
     assert.equal(row.executions.filter((e: any) => e.facts.classification==="read-only-quote" && !e.request.overrideIntent.tokenBalances).length, 2);
     assert.equal(row.executions.filter((e: any) => e.encoding==="runtime-direct" && e.result==="pass").length, 6);
+  }
+});
+
+
+test("Credit uses real risk issuance and quoted controls without requiring undeclared ordinary Exact/runtime interfaces", async () => {
+  for (const fault of [undefined, "short-credit", "zero-debit"] as const) {
+    const fixture = await issuedFixture({ credit: true, fault }), report: any = {};
+    await runProtocolJsonAcceptance(fixture.sample, fixture.context, report);
+    const row = report.samples[0];
+    assert.equal(report.result, fault === undefined ? "pass" : "incomplete-or-failed", row.error);
+    assert.equal(row.quote.status, "resolved"); assert.equal(row.quote.collateralAmount, BigInt(fixture.sample.trials[0]!.amountIn));
+    assert.equal(row.quote.debtBps, 8500n); assert.equal(row.quote.amountIn, undefined);
+    assert.deepEqual(row.runtimeInterface, { required: false, status: "not-declared", kind: "credit-risk-bound-execution" });
+    assert.equal(report.runtimeConstruction.runtimeBuilds, 0); assert.equal(row.executions.length, 3);
+    assert(row.executions.every((entry: any) => entry.encoding === "quoted" && entry.inputMode === "exact"));
+    if (fault === undefined) assert(row.executions.every((entry: any) => entry.facts.passed));
   }
 });

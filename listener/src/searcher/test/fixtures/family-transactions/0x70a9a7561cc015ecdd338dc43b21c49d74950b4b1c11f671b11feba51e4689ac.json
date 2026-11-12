@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x70a9a7561cc015ecdd338dc43b21c49d74950b4b1c11f671b11feba51e4689ac",
+  "legs": [
+    {
+      "id": "custom-swap-zero1-curve--observed-swap",
+      "familyId": "custom-swap:zero1-curve",
+      "domain": "swap",
+      "source": {
+        "number": 25276175,
+        "hash": "0x3f2fcc7e3f90d73fc5eedab9dc25cac0e0ebe1f11057948051e193a4bf278c8b"
+      },
+      "instanceKey": "0x6c1a58ff0751a645ab0243dd6967b0338b34f572",
+      "tokenIn": "0xdc035d45d973e3ec169d2276ddab16f1e407384f",
+      "tokenOut": "0x32708538a107253b51a735a724330a23106ca4ca",
+      "amountIn": "88000000000000000000",
+      "lineageId": "zero1-curve:bonding-sale",
+      "amountScope": "original buy calldata input before refund; simulated output is measured again",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "historicalAmountOut": "2510801236405165607417",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/family-transaction-sources/zero1-curve-70a9a756.json",
+          "sha256": "08e4cc4a748faf79ad5d24c333fff5c54e7840a29a3e1bf77634a87c02c74f75",
+          "jsonPointer": "/observed"
+        },
+        {
+          "file": "listener/src/searcher/test/fixtures/family-transaction-definitions/zero1-curve-430e01ff.json",
+          "sha256": "f7d28cd28e194f063228bb10be1cbb412653ead3ef03e8ee256d54ed1848c2ac",
+          "jsonPointer": "/manifest/supportedLineages/0",
+          "origin": {
+            "commit": "430e01fff75c8555c6967953805ac60185859416",
+            "file": "listener/src/searcher/venues/swaps/zero1-curve-family/zero1-curve.json"
+          }
+        }
+      ]
+    }
+  ]
+}

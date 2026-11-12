@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x428e9a180d4da24d330450230c32f4c015ebcf4d34ddedc0d803cc66b018f4da",
+  "legs": [
+    {
+      "id": "protocol:erc4626--erc4626--0x9bd52f2805c6af014132874124686e7b248c2cbb--0-deposit-original-event-input",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "instanceKey": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+      "lineageId": "erc4626:standalone-standard-behavior",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x9bD52F2805c6aF014132874124686e7b248c2Cbb",
+      "amountIn": "99044493224",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "0-deposit-original-event-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--0x9bd52f2805c6af014132874124686e7b248c2cbb.json",
+          "sha256": "e82b15fbe09f301ff5dbec903a850bc63721fb471afaf2008e8916ae4a309676",
+          "jsonPointer": "/trials/0"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--0x9bd52f2805c6af014132874124686e7b248c2cbb--1-deposit-twice-original-event-input",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "instanceKey": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+      "lineageId": "erc4626:standalone-standard-behavior",
+      "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "tokenOut": "0x9bD52F2805c6aF014132874124686e7b248c2Cbb",
+      "amountIn": "198088986448",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "1-deposit-twice-original-event-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--0x9bd52f2805c6af014132874124686e7b248c2cbb.json",
+          "sha256": "e82b15fbe09f301ff5dbec903a850bc63721fb471afaf2008e8916ae4a309676",
+          "jsonPointer": "/trials/1"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--0x9bd52f2805c6af014132874124686e7b248c2cbb--2-redeem-original-event-input",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "instanceKey": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+      "lineageId": "erc4626:standalone-standard-behavior",
+      "tokenIn": "0x9bD52F2805c6aF014132874124686e7b248c2Cbb",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "95254173824",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "2-redeem-original-event-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--0x9bd52f2805c6af014132874124686e7b248c2cbb.json",
+          "sha256": "e82b15fbe09f301ff5dbec903a850bc63721fb471afaf2008e8916ae4a309676",
+          "jsonPointer": "/trials/2"
+        }
+      ]
+    },
+    {
+      "id": "protocol:erc4626--erc4626--0x9bd52f2805c6af014132874124686e7b248c2cbb--3-redeem-twice-original-event-input",
+      "familyId": "protocol:erc4626",
+      "domain": "protocol",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "instanceKey": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+      "lineageId": "erc4626:standalone-standard-behavior",
+      "tokenIn": "0x9bD52F2805c6aF014132874124686e7b248c2Cbb",
+      "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "amountIn": "190508347648",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "amountScope": "3-redeem-twice-original-event-input",
+      "provenance": [
+        {
+          "file": "listener/src/searcher/test/fixtures/protocol-json/cases/erc4626--0x9bd52f2805c6af014132874124686e7b248c2cbb.json",
+          "sha256": "e82b15fbe09f301ff5dbec903a850bc63721fb471afaf2008e8916ae4a309676",
+          "jsonPointer": "/trials/3"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,4466 @@
+{
+  "version": 1,
+  "id": "clone-execution-sim",
+  "lineageId": "curve-plain:registry-independent-clone-direct-coin",
+  "identityKind": "custom",
+  "match": {
+    "op": "eq",
+    "args": [
+      "$descriptor.lineageId",
+      "$constants.cloneLineage"
+    ]
+  },
+  "identity": {
+    "applies": {
+      "op": "eq",
+      "args": [
+        "$candidate.candidateKind",
+        "curve-plain-pool"
+      ]
+    },
+    "select": [
+      {
+        "return": "done",
+        "when": {
+          "op": "or",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$evidence.rejection"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "complete"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": "binding",
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$evidence"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": "surface",
+        "when": {
+          "op": "eq",
+          "args": [
+            "$evidence.phase",
+            "binding"
+          ]
+        }
+      },
+      {
+        "return": "execution",
+        "when": {
+          "op": "eq",
+          "args": [
+            "$evidence.phase",
+            "surface"
+          ]
+        }
+      }
+    ],
+    "decide": [
+      {
+        "return": {
+          "status": "continue"
+        },
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$evidence"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "chain-proven-rejected",
+          "reasonCode": "$evidence.rejection",
+          "evidenceRequestIds": "$evidence.ids"
+        },
+        "when": {
+          "op": "defined",
+          "args": [
+            "$evidence.rejection"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "retryable",
+          "reasonCode": "no-current-direct-liquidity"
+        },
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "surface"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$evidence.pairs"
+                  ]
+                },
+                0
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "continue"
+        },
+        "when": {
+          "op": "ne",
+          "args": [
+            "$evidence.phase",
+            "complete"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "retryable",
+          "reasonCode": "no-execution-proven-direction"
+        },
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$evidence.directions"
+              ]
+            },
+            0
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "retryable",
+          "reasonCode": "observed-direction-not-executable"
+        },
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$candidate.hintedI"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "some",
+                  "args": [
+                    "$evidence.directions",
+                    "pair",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$pair.i",
+                            "$candidate.hintedI"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$pair.j",
+                            "$candidate.hintedJ"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "verified",
+          "identity": {
+            "familyId": "$profile.familyId",
+            "lineageId": "$profile.lineageId",
+            "subject": "$evidence.pool",
+            "facts": {
+              "pool": "$evidence.pool",
+              "binding": "$evidence.binding",
+              "directions": "$evidence.directions"
+            },
+            "provenance": [
+              {
+                "kind": "curve-direct-executor-receipt",
+                "subject": "$evidence.pool",
+                "evidenceHash": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "source": "$evidence.source",
+                      "binding": "$evidence.binding",
+                      "directions": "$evidence.directions"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "stages": {
+      "binding": {
+        "requirements": {
+          "transports": [
+            "eth-call",
+            "get-code"
+          ]
+        },
+        "requests": [
+          {
+            "id": "pool-code",
+            "kind": "get-code",
+            "address": "$candidate.pool"
+          },
+          {
+            "id": "clone-coin:0",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "getterUint",
+                "coins",
+                [
+                  0
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data"
+          },
+          {
+            "id": "clone-coin:1",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "getterUint",
+                "coins",
+                [
+                  1
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data"
+          },
+          {
+            "id": "clone-coin:2",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "getterUint",
+                "coins",
+                [
+                  2
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data"
+          },
+          {
+            "id": "clone-balance:0",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "getterUint",
+                "balances",
+                [
+                  0
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data"
+          },
+          {
+            "id": "clone-balance:1",
+            "kind": "eth-call",
+            "to": "$candidate.pool",
+            "data": {
+              "op": "encode",
+              "args": [
+                "getterUint",
+                "balances",
+                [
+                  1
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data"
+          }
+        ],
+        "decode": [
+          {
+            "let": "source",
+            "value": {
+              "op": "program",
+              "args": [
+                "readSource",
+                {}
+              ]
+            }
+          },
+          {
+            "let": "pool",
+            "value": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$candidate.pool"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "poolCode",
+            "value": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "returned",
+                  "args": [
+                    "pool-code"
+                  ]
+                },
+                "data"
+              ]
+            }
+          },
+          {
+            "return": {
+              "op": "merge",
+              "args": [
+                {
+                  "phase": "binding",
+                  "source": "$source",
+                  "pool": "$pool",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  }
+                },
+                {
+                  "rejection": "clone-runtime-unrecognized"
+                }
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "matches",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$poolCode"
+                      ]
+                    },
+                    "$constants.cloneRuntimePattern"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "implementation",
+            "value": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$poolCode",
+                        15,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "op": "merge",
+              "args": [
+                {
+                  "phase": "binding",
+                  "source": "$source",
+                  "pool": "$pool",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  }
+                },
+                {
+                  "rejection": "clone-zero-implementation"
+                }
+              ]
+            },
+            "when": {
+              "op": "sameAddress",
+              "args": [
+                "$implementation",
+                "$constants.zero"
+              ]
+            }
+          },
+          {
+            "return": {
+              "op": "merge",
+              "args": [
+                {
+                  "phase": "binding",
+                  "source": "$source",
+                  "pool": "$pool",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  }
+                },
+                {
+                  "rejection": "clone-direct-surface-unavailable"
+                }
+              ]
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "every",
+                  "args": [
+                    [
+                      "clone-coin:0",
+                      "clone-coin:1",
+                      "clone-balance:0",
+                      "clone-balance:1"
+                    ],
+                    "requestId",
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "shape",
+                          "args": [
+                            "$requestId"
+                          ]
+                        },
+                        "returned"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "coins",
+            "value": [
+              {
+                "op": "program",
+                "args": [
+                  "scalarAddress",
+                  {
+                    "raw": {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "clone-coin:0"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "op": "program",
+                "args": [
+                  "scalarAddress",
+                  {
+                    "raw": {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "clone-coin:1"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "evaluate": {
+              "op": "program",
+              "args": [
+                "assertCoinDomain",
+                {
+                  "coins": "$coins",
+                  "pool": "$pool",
+                  "registryAddress": "$implementation"
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "every",
+              "args": [
+                "$coins",
+                "coin",
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "$constants.native"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "Curve clone must have two ERC20 coins"
+          },
+          {
+            "assert": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "shape",
+                      "args": [
+                        "clone-coin:2"
+                      ]
+                    },
+                    "reverted"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "program",
+                      "args": [
+                        "scalarAddress",
+                        {
+                          "raw": {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "returned",
+                                "args": [
+                                  "clone-coin:2"
+                                ]
+                              },
+                              "data"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            },
+            "error": "Curve clone has an unexpected third coin"
+          },
+          {
+            "let": "balances",
+            "value": [
+              {
+                "op": "program",
+                "args": [
+                  "scalarUint",
+                  {
+                    "raw": {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "clone-balance:0"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "op": "program",
+                "args": [
+                  "scalarUint",
+                  {
+                    "raw": {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "clone-balance:1"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "return": {
+              "op": "merge",
+              "args": [
+                {
+                  "phase": "binding",
+                  "source": "$source",
+                  "pool": "$pool",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  }
+                },
+                {
+                  "balances": "$balances",
+                  "binding": {
+                    "registry": "$implementation",
+                    "handlers": [],
+                    "coins": "$coins",
+                    "decimals": [],
+                    "coinAbi": "uint256",
+                    "balanceAbi": "uint256",
+                    "codeHash": {
+                      "op": "codeHash",
+                      "args": [
+                        "$poolCode"
+                      ]
+                    },
+                    "classKind": "clone"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "surface": {
+        "requirements": {
+          "transports": [
+            "eth-call",
+            "get-code",
+            "effect-delta-simulation"
+          ],
+          "caller": "executor",
+          "effects": [
+            "return-data",
+            "revert-data",
+            "token-delta",
+            "native-delta"
+          ]
+        },
+        "requests": {
+          "op": "concat",
+          "args": [
+            [
+              {
+                "id": "implementation-code",
+                "kind": "get-code",
+                "address": "$evidence.binding.registry"
+              }
+            ],
+            {
+              "op": "flatMap",
+              "args": [
+                "$evidence.binding.coins",
+                "coin",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "$constants.native"
+                      ]
+                    },
+                    [],
+                    [
+                      {
+                        "id": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "decimals",
+                              "$index"
+                            ],
+                            ":"
+                          ]
+                        },
+                        "kind": "eth-call",
+                        "to": "$coin",
+                        "data": {
+                          "op": "encode",
+                          "args": [
+                            "token",
+                            "decimals",
+                            []
+                          ]
+                        },
+                        "completion": "return-or-revert-data"
+                      },
+                      {
+                        "id": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "token-code",
+                              "$index"
+                            ],
+                            ":"
+                          ]
+                        },
+                        "kind": "get-code",
+                        "address": "$coin"
+                      }
+                    ]
+                  ]
+                }
+              ]
+            },
+            [
+              {
+                "id": "probe-executor",
+                "kind": "effect-delta-simulation",
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": "$constants.wrappedNative",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "balanceOf",
+                      [
+                        "$constants.zero"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  }
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": "$constants.wrappedNative",
+                    "account": {
+                      "kind": "executor"
+                    }
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "native-delta"
+                ]
+              }
+            ]
+          ]
+        },
+        "decode": [
+          {
+            "let": "source",
+            "value": {
+              "op": "program",
+              "args": [
+                "readSource",
+                {}
+              ]
+            }
+          },
+          {
+            "evaluate": {
+              "op": "assertSource",
+              "args": [
+                "$source",
+                "$evidence.source"
+              ]
+            }
+          },
+          {
+            "let": "pool",
+            "value": "$evidence.pool"
+          },
+          {
+            "let": "implementationCode",
+            "value": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "returned",
+                  "args": [
+                    "implementation-code"
+                  ]
+                },
+                "data"
+              ]
+            }
+          },
+          {
+            "return": {
+              "op": "merge",
+              "args": [
+                {
+                  "phase": "surface",
+                  "source": "$source",
+                  "pool": "$pool",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  }
+                },
+                {
+                  "rejection": "clone-implementation-class-mismatch"
+                }
+              ]
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "codeHash",
+                  "args": [
+                    "$implementationCode"
+                  ]
+                },
+                "$constants.cloneImplementationCodeHash"
+              ]
+            }
+          },
+          {
+            "let": "surface",
+            "value": {
+              "op": "program",
+              "args": [
+                "tokenSurface",
+                {
+                  "coins": "$evidence.binding.coins",
+                  "pool": "$pool"
+                }
+              ]
+            }
+          },
+          {
+            "let": "newBinding",
+            "value": {
+              "op": "merge",
+              "args": [
+                "$evidence.binding",
+                {
+                  "decimals": "$surface.decimals",
+                  "implementationCodeHash": "$constants.cloneImplementationCodeHash"
+                }
+              ]
+            }
+          },
+          {
+            "let": "pairs",
+            "value": {
+              "op": "program",
+              "args": [
+                "candidatePairs",
+                {
+                  "coins": "$newBinding.coins",
+                  "decimals": "$newBinding.decimals",
+                  "balances": "$evidence.balances"
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "op": "merge",
+              "args": [
+                "$evidence",
+                {
+                  "phase": "surface",
+                  "source": "$source",
+                  "pool": "$pool",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  }
+                },
+                {
+                  "binding": "$newBinding",
+                  "executor": "$surface.executor",
+                  "pairs": "$pairs"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "execution": {
+        "requirements": {
+          "transports": [
+            "effect-delta-simulation"
+          ],
+          "caller": "executor",
+          "effects": [
+            "return-data",
+            "revert-data",
+            "token-delta",
+            "native-delta"
+          ]
+        },
+        "optionalFailures": [
+          "execution:0:1:received",
+          "execution:0:1:received-no-receiver",
+          "execution:0:1:exchange",
+          "execution:0:1:received-uint",
+          "execution:0:1:exchange-uint",
+          "execution:0:1:native-exchange",
+          "execution:0:1:native-exchange-uint",
+          "execution:0:2:received",
+          "execution:0:2:received-no-receiver",
+          "execution:0:2:exchange",
+          "execution:0:2:received-uint",
+          "execution:0:2:exchange-uint",
+          "execution:0:2:native-exchange",
+          "execution:0:2:native-exchange-uint",
+          "execution:0:3:received",
+          "execution:0:3:received-no-receiver",
+          "execution:0:3:exchange",
+          "execution:0:3:received-uint",
+          "execution:0:3:exchange-uint",
+          "execution:0:3:native-exchange",
+          "execution:0:3:native-exchange-uint",
+          "execution:0:4:received",
+          "execution:0:4:received-no-receiver",
+          "execution:0:4:exchange",
+          "execution:0:4:received-uint",
+          "execution:0:4:exchange-uint",
+          "execution:0:4:native-exchange",
+          "execution:0:4:native-exchange-uint",
+          "execution:0:5:received",
+          "execution:0:5:received-no-receiver",
+          "execution:0:5:exchange",
+          "execution:0:5:received-uint",
+          "execution:0:5:exchange-uint",
+          "execution:0:5:native-exchange",
+          "execution:0:5:native-exchange-uint",
+          "execution:0:6:received",
+          "execution:0:6:received-no-receiver",
+          "execution:0:6:exchange",
+          "execution:0:6:received-uint",
+          "execution:0:6:exchange-uint",
+          "execution:0:6:native-exchange",
+          "execution:0:6:native-exchange-uint",
+          "execution:0:7:received",
+          "execution:0:7:received-no-receiver",
+          "execution:0:7:exchange",
+          "execution:0:7:received-uint",
+          "execution:0:7:exchange-uint",
+          "execution:0:7:native-exchange",
+          "execution:0:7:native-exchange-uint",
+          "execution:1:0:received",
+          "execution:1:0:received-no-receiver",
+          "execution:1:0:exchange",
+          "execution:1:0:received-uint",
+          "execution:1:0:exchange-uint",
+          "execution:1:0:native-exchange",
+          "execution:1:0:native-exchange-uint",
+          "execution:1:2:received",
+          "execution:1:2:received-no-receiver",
+          "execution:1:2:exchange",
+          "execution:1:2:received-uint",
+          "execution:1:2:exchange-uint",
+          "execution:1:2:native-exchange",
+          "execution:1:2:native-exchange-uint",
+          "execution:1:3:received",
+          "execution:1:3:received-no-receiver",
+          "execution:1:3:exchange",
+          "execution:1:3:received-uint",
+          "execution:1:3:exchange-uint",
+          "execution:1:3:native-exchange",
+          "execution:1:3:native-exchange-uint",
+          "execution:1:4:received",
+          "execution:1:4:received-no-receiver",
+          "execution:1:4:exchange",
+          "execution:1:4:received-uint",
+          "execution:1:4:exchange-uint",
+          "execution:1:4:native-exchange",
+          "execution:1:4:native-exchange-uint",
+          "execution:1:5:received",
+          "execution:1:5:received-no-receiver",
+          "execution:1:5:exchange",
+          "execution:1:5:received-uint",
+          "execution:1:5:exchange-uint",
+          "execution:1:5:native-exchange",
+          "execution:1:5:native-exchange-uint",
+          "execution:1:6:received",
+          "execution:1:6:received-no-receiver",
+          "execution:1:6:exchange",
+          "execution:1:6:received-uint",
+          "execution:1:6:exchange-uint",
+          "execution:1:6:native-exchange",
+          "execution:1:6:native-exchange-uint",
+          "execution:1:7:received",
+          "execution:1:7:received-no-receiver",
+          "execution:1:7:exchange",
+          "execution:1:7:received-uint",
+          "execution:1:7:exchange-uint",
+          "execution:1:7:native-exchange",
+          "execution:1:7:native-exchange-uint",
+          "execution:2:0:received",
+          "execution:2:0:received-no-receiver",
+          "execution:2:0:exchange",
+          "execution:2:0:received-uint",
+          "execution:2:0:exchange-uint",
+          "execution:2:0:native-exchange",
+          "execution:2:0:native-exchange-uint",
+          "execution:2:1:received",
+          "execution:2:1:received-no-receiver",
+          "execution:2:1:exchange",
+          "execution:2:1:received-uint",
+          "execution:2:1:exchange-uint",
+          "execution:2:1:native-exchange",
+          "execution:2:1:native-exchange-uint",
+          "execution:2:3:received",
+          "execution:2:3:received-no-receiver",
+          "execution:2:3:exchange",
+          "execution:2:3:received-uint",
+          "execution:2:3:exchange-uint",
+          "execution:2:3:native-exchange",
+          "execution:2:3:native-exchange-uint",
+          "execution:2:4:received",
+          "execution:2:4:received-no-receiver",
+          "execution:2:4:exchange",
+          "execution:2:4:received-uint",
+          "execution:2:4:exchange-uint",
+          "execution:2:4:native-exchange",
+          "execution:2:4:native-exchange-uint",
+          "execution:2:5:received",
+          "execution:2:5:received-no-receiver",
+          "execution:2:5:exchange",
+          "execution:2:5:received-uint",
+          "execution:2:5:exchange-uint",
+          "execution:2:5:native-exchange",
+          "execution:2:5:native-exchange-uint",
+          "execution:2:6:received",
+          "execution:2:6:received-no-receiver",
+          "execution:2:6:exchange",
+          "execution:2:6:received-uint",
+          "execution:2:6:exchange-uint",
+          "execution:2:6:native-exchange",
+          "execution:2:6:native-exchange-uint",
+          "execution:2:7:received",
+          "execution:2:7:received-no-receiver",
+          "execution:2:7:exchange",
+          "execution:2:7:received-uint",
+          "execution:2:7:exchange-uint",
+          "execution:2:7:native-exchange",
+          "execution:2:7:native-exchange-uint",
+          "execution:3:0:received",
+          "execution:3:0:received-no-receiver",
+          "execution:3:0:exchange",
+          "execution:3:0:received-uint",
+          "execution:3:0:exchange-uint",
+          "execution:3:0:native-exchange",
+          "execution:3:0:native-exchange-uint",
+          "execution:3:1:received",
+          "execution:3:1:received-no-receiver",
+          "execution:3:1:exchange",
+          "execution:3:1:received-uint",
+          "execution:3:1:exchange-uint",
+          "execution:3:1:native-exchange",
+          "execution:3:1:native-exchange-uint",
+          "execution:3:2:received",
+          "execution:3:2:received-no-receiver",
+          "execution:3:2:exchange",
+          "execution:3:2:received-uint",
+          "execution:3:2:exchange-uint",
+          "execution:3:2:native-exchange",
+          "execution:3:2:native-exchange-uint",
+          "execution:3:4:received",
+          "execution:3:4:received-no-receiver",
+          "execution:3:4:exchange",
+          "execution:3:4:received-uint",
+          "execution:3:4:exchange-uint",
+          "execution:3:4:native-exchange",
+          "execution:3:4:native-exchange-uint",
+          "execution:3:5:received",
+          "execution:3:5:received-no-receiver",
+          "execution:3:5:exchange",
+          "execution:3:5:received-uint",
+          "execution:3:5:exchange-uint",
+          "execution:3:5:native-exchange",
+          "execution:3:5:native-exchange-uint",
+          "execution:3:6:received",
+          "execution:3:6:received-no-receiver",
+          "execution:3:6:exchange",
+          "execution:3:6:received-uint",
+          "execution:3:6:exchange-uint",
+          "execution:3:6:native-exchange",
+          "execution:3:6:native-exchange-uint",
+          "execution:3:7:received",
+          "execution:3:7:received-no-receiver",
+          "execution:3:7:exchange",
+          "execution:3:7:received-uint",
+          "execution:3:7:exchange-uint",
+          "execution:3:7:native-exchange",
+          "execution:3:7:native-exchange-uint",
+          "execution:4:0:received",
+          "execution:4:0:received-no-receiver",
+          "execution:4:0:exchange",
+          "execution:4:0:received-uint",
+          "execution:4:0:exchange-uint",
+          "execution:4:0:native-exchange",
+          "execution:4:0:native-exchange-uint",
+          "execution:4:1:received",
+          "execution:4:1:received-no-receiver",
+          "execution:4:1:exchange",
+          "execution:4:1:received-uint",
+          "execution:4:1:exchange-uint",
+          "execution:4:1:native-exchange",
+          "execution:4:1:native-exchange-uint",
+          "execution:4:2:received",
+          "execution:4:2:received-no-receiver",
+          "execution:4:2:exchange",
+          "execution:4:2:received-uint",
+          "execution:4:2:exchange-uint",
+          "execution:4:2:native-exchange",
+          "execution:4:2:native-exchange-uint",
+          "execution:4:3:received",
+          "execution:4:3:received-no-receiver",
+          "execution:4:3:exchange",
+          "execution:4:3:received-uint",
+          "execution:4:3:exchange-uint",
+          "execution:4:3:native-exchange",
+          "execution:4:3:native-exchange-uint",
+          "execution:4:5:received",
+          "execution:4:5:received-no-receiver",
+          "execution:4:5:exchange",
+          "execution:4:5:received-uint",
+          "execution:4:5:exchange-uint",
+          "execution:4:5:native-exchange",
+          "execution:4:5:native-exchange-uint",
+          "execution:4:6:received",
+          "execution:4:6:received-no-receiver",
+          "execution:4:6:exchange",
+          "execution:4:6:received-uint",
+          "execution:4:6:exchange-uint",
+          "execution:4:6:native-exchange",
+          "execution:4:6:native-exchange-uint",
+          "execution:4:7:received",
+          "execution:4:7:received-no-receiver",
+          "execution:4:7:exchange",
+          "execution:4:7:received-uint",
+          "execution:4:7:exchange-uint",
+          "execution:4:7:native-exchange",
+          "execution:4:7:native-exchange-uint",
+          "execution:5:0:received",
+          "execution:5:0:received-no-receiver",
+          "execution:5:0:exchange",
+          "execution:5:0:received-uint",
+          "execution:5:0:exchange-uint",
+          "execution:5:0:native-exchange",
+          "execution:5:0:native-exchange-uint",
+          "execution:5:1:received",
+          "execution:5:1:received-no-receiver",
+          "execution:5:1:exchange",
+          "execution:5:1:received-uint",
+          "execution:5:1:exchange-uint",
+          "execution:5:1:native-exchange",
+          "execution:5:1:native-exchange-uint",
+          "execution:5:2:received",
+          "execution:5:2:received-no-receiver",
+          "execution:5:2:exchange",
+          "execution:5:2:received-uint",
+          "execution:5:2:exchange-uint",
+          "execution:5:2:native-exchange",
+          "execution:5:2:native-exchange-uint",
+          "execution:5:3:received",
+          "execution:5:3:received-no-receiver",
+          "execution:5:3:exchange",
+          "execution:5:3:received-uint",
+          "execution:5:3:exchange-uint",
+          "execution:5:3:native-exchange",
+          "execution:5:3:native-exchange-uint",
+          "execution:5:4:received",
+          "execution:5:4:received-no-receiver",
+          "execution:5:4:exchange",
+          "execution:5:4:received-uint",
+          "execution:5:4:exchange-uint",
+          "execution:5:4:native-exchange",
+          "execution:5:4:native-exchange-uint",
+          "execution:5:6:received",
+          "execution:5:6:received-no-receiver",
+          "execution:5:6:exchange",
+          "execution:5:6:received-uint",
+          "execution:5:6:exchange-uint",
+          "execution:5:6:native-exchange",
+          "execution:5:6:native-exchange-uint",
+          "execution:5:7:received",
+          "execution:5:7:received-no-receiver",
+          "execution:5:7:exchange",
+          "execution:5:7:received-uint",
+          "execution:5:7:exchange-uint",
+          "execution:5:7:native-exchange",
+          "execution:5:7:native-exchange-uint",
+          "execution:6:0:received",
+          "execution:6:0:received-no-receiver",
+          "execution:6:0:exchange",
+          "execution:6:0:received-uint",
+          "execution:6:0:exchange-uint",
+          "execution:6:0:native-exchange",
+          "execution:6:0:native-exchange-uint",
+          "execution:6:1:received",
+          "execution:6:1:received-no-receiver",
+          "execution:6:1:exchange",
+          "execution:6:1:received-uint",
+          "execution:6:1:exchange-uint",
+          "execution:6:1:native-exchange",
+          "execution:6:1:native-exchange-uint",
+          "execution:6:2:received",
+          "execution:6:2:received-no-receiver",
+          "execution:6:2:exchange",
+          "execution:6:2:received-uint",
+          "execution:6:2:exchange-uint",
+          "execution:6:2:native-exchange",
+          "execution:6:2:native-exchange-uint",
+          "execution:6:3:received",
+          "execution:6:3:received-no-receiver",
+          "execution:6:3:exchange",
+          "execution:6:3:received-uint",
+          "execution:6:3:exchange-uint",
+          "execution:6:3:native-exchange",
+          "execution:6:3:native-exchange-uint",
+          "execution:6:4:received",
+          "execution:6:4:received-no-receiver",
+          "execution:6:4:exchange",
+          "execution:6:4:received-uint",
+          "execution:6:4:exchange-uint",
+          "execution:6:4:native-exchange",
+          "execution:6:4:native-exchange-uint",
+          "execution:6:5:received",
+          "execution:6:5:received-no-receiver",
+          "execution:6:5:exchange",
+          "execution:6:5:received-uint",
+          "execution:6:5:exchange-uint",
+          "execution:6:5:native-exchange",
+          "execution:6:5:native-exchange-uint",
+          "execution:6:7:received",
+          "execution:6:7:received-no-receiver",
+          "execution:6:7:exchange",
+          "execution:6:7:received-uint",
+          "execution:6:7:exchange-uint",
+          "execution:6:7:native-exchange",
+          "execution:6:7:native-exchange-uint",
+          "execution:7:0:received",
+          "execution:7:0:received-no-receiver",
+          "execution:7:0:exchange",
+          "execution:7:0:received-uint",
+          "execution:7:0:exchange-uint",
+          "execution:7:0:native-exchange",
+          "execution:7:0:native-exchange-uint",
+          "execution:7:1:received",
+          "execution:7:1:received-no-receiver",
+          "execution:7:1:exchange",
+          "execution:7:1:received-uint",
+          "execution:7:1:exchange-uint",
+          "execution:7:1:native-exchange",
+          "execution:7:1:native-exchange-uint",
+          "execution:7:2:received",
+          "execution:7:2:received-no-receiver",
+          "execution:7:2:exchange",
+          "execution:7:2:received-uint",
+          "execution:7:2:exchange-uint",
+          "execution:7:2:native-exchange",
+          "execution:7:2:native-exchange-uint",
+          "execution:7:3:received",
+          "execution:7:3:received-no-receiver",
+          "execution:7:3:exchange",
+          "execution:7:3:received-uint",
+          "execution:7:3:exchange-uint",
+          "execution:7:3:native-exchange",
+          "execution:7:3:native-exchange-uint",
+          "execution:7:4:received",
+          "execution:7:4:received-no-receiver",
+          "execution:7:4:exchange",
+          "execution:7:4:received-uint",
+          "execution:7:4:exchange-uint",
+          "execution:7:4:native-exchange",
+          "execution:7:4:native-exchange-uint",
+          "execution:7:5:received",
+          "execution:7:5:received-no-receiver",
+          "execution:7:5:exchange",
+          "execution:7:5:received-uint",
+          "execution:7:5:exchange-uint",
+          "execution:7:5:native-exchange",
+          "execution:7:5:native-exchange-uint",
+          "execution:7:6:received",
+          "execution:7:6:received-no-receiver",
+          "execution:7:6:exchange",
+          "execution:7:6:received-uint",
+          "execution:7:6:exchange-uint",
+          "execution:7:6:native-exchange",
+          "execution:7:6:native-exchange-uint"
+        ],
+        "requests": {
+          "op": "flatMap",
+          "args": [
+            "$evidence.pairs",
+            "pair",
+            {
+              "op": "map",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "modesForPair",
+                    {
+                      "pair": "$pair"
+                    }
+                  ]
+                },
+                "mode",
+                {
+                  "id": {
+                    "op": "expression",
+                    "args": [
+                      "executionReadId",
+                      {
+                        "pair": "$pair",
+                        "mode": "$mode"
+                      }
+                    ]
+                  },
+                  "kind": "declarative-execution-simulation",
+                  "required": false,
+                  "amountIn": "$pair.amountIn",
+                  "protectedTokens": {
+                    "op": "expression",
+                    "args": [
+                      "graphCoins",
+                      {
+                        "coins": "$evidence.binding.coins"
+                      }
+                    ]
+                  },
+                  "context": {
+                    "source": "$evidence.source",
+                    "executor": "$evidence.executor",
+                    "runtimeEvidence": [],
+                    "descriptor": {
+                      "familyId": "$profile.familyId",
+                      "lineageId": "$profile.lineageId",
+                      "instanceKey": "$evidence.pool",
+                      "pool": "$evidence.pool",
+                      "binding": "$evidence.binding"
+                    },
+                    "route": {
+                      "i": "$pair.i",
+                      "j": "$pair.j",
+                      "tokenIn": "$pair.tokenIn",
+                      "tokenOut": "$pair.tokenOut",
+                      "pool": "$evidence.pool",
+                      "target": "$evidence.pool",
+                      "executionMode": "$mode",
+                      "executionAssets": "$pair.executionAssets",
+                      "direction": {
+                        "op": "join",
+                        "args": [
+                          [
+                            "$pair.i",
+                            "$pair.j",
+                            "$mode"
+                          ],
+                          ":"
+                        ]
+                      },
+                      "adapterId": {
+                        "op": "get",
+                        "args": [
+                          "$constants.modeActions",
+                          "$mode"
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "decode": [
+          {
+            "let": "source",
+            "value": {
+              "op": "program",
+              "args": [
+                "readSource",
+                {}
+              ]
+            }
+          },
+          {
+            "evaluate": {
+              "op": "assertSource",
+              "args": [
+                "$source",
+                "$evidence.source"
+              ]
+            }
+          },
+          {
+            "let": "directions",
+            "value": {
+              "op": "filter",
+              "args": [
+                {
+                  "op": "map",
+                  "args": [
+                    "$evidence.pairs",
+                    "pair",
+                    {
+                      "op": "program",
+                      "args": [
+                        "verifiedDirection",
+                        {
+                          "pair": "$pair"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "item",
+                {
+                  "op": "defined",
+                  "args": [
+                    "$item"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "op": "merge",
+              "args": [
+                "$evidence",
+                {
+                  "phase": "complete",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  },
+                  "directions": "$directions"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "requirements": {
+          "transports": []
+        },
+        "requests": [],
+        "decode": [
+          {
+            "return": "$evidence"
+          }
+        ]
+      }
+    }
+  },
+  "inputs": [
+    "descriptor",
+    "route",
+    "source",
+    "executor",
+    "amountIn",
+    "amountOut",
+    "minAmountOut",
+    "recipient",
+    "binding",
+    "target",
+    "runtimeEvidence",
+    "direction",
+    "routes",
+    "snapshot",
+    "steps",
+    "method",
+    "requestId",
+    "raw",
+    "kind",
+    "getterAbi",
+    "position",
+    "coin",
+    "coins",
+    "decimal",
+    "balance",
+    "balances",
+    "decimals",
+    "pool",
+    "registryAddress",
+    "pair",
+    "mode"
+  ],
+  "abi": {
+    "registry": [
+      "function get_registry_handlers_from_pool(address) view returns(address[10])",
+      "function get_coins(address) view returns(address[8])"
+    ],
+    "getterUint": [
+      "function coins(uint256) view returns(address)",
+      "function balances(uint256) view returns(uint256)"
+    ],
+    "getterInt": [
+      "function coins(int128) view returns(address)",
+      "function balances(int128) view returns(uint256)"
+    ],
+    "token": [
+      "function decimals() view returns(uint8)",
+      "function balanceOf(address) view returns(uint256)"
+    ],
+    "curvePricingToken": [
+      "function balanceOf(address) view returns(uint256)"
+    ],
+    "curvePricingBalanceInt": [
+      "function balances(int128) view returns(uint256)"
+    ],
+    "curvePricingBalanceUint": [
+      "function balances(uint256) view returns(uint256)"
+    ],
+    "receiptInt": [
+      "function coins(int128) view returns(address)"
+    ],
+    "receiptUint": [
+      "function coins(uint256) view returns(address)"
+    ]
+  },
+  "constants": {
+    "zero": "0x0000000000000000000000000000000000000000",
+    "native": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "wrappedNative": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    "registry": "0xf98b45fa17de75fb1ad0e7afd971b0ca00e379fc",
+    "registryLineage": "curve-plain:registry-direct-coin-behavior",
+    "cloneLineage": "curve-plain:registry-independent-clone-direct-coin",
+    "cloneRuntimePattern": "^0x366000600037611000600036600073[0-9a-f]{40}5af4602c57600080fd5b6110006000f3$",
+    "cloneImplementationCodeHash": "0x260a286cc14e91f4a2d4a966e2e5f5030543a7d2f090a623f5fa15ba174a50f3",
+    "modeActions": {
+      "received": "curve-exchange",
+      "received-no-receiver": "curve-exchange-nr",
+      "exchange": "curve-exchange-plain",
+      "received-uint": "curve-exchange-received-uint",
+      "exchange-uint": "curve-exchange-uint",
+      "native-exchange": "curve-native-exchange",
+      "native-exchange-uint": "curve-native-exchange-uint"
+    },
+    "erc20Modes": [
+      "received",
+      "received-no-receiver",
+      "exchange",
+      "received-uint",
+      "exchange-uint"
+    ],
+    "nativeModes": [
+      "native-exchange",
+      "native-exchange-uint"
+    ],
+    "getterAbis": [
+      {
+        "id": "uint256",
+        "abi": "getterUint"
+      },
+      {
+        "id": "int128",
+        "abi": "getterInt"
+      }
+    ],
+    "curveExecutionModes": {
+      "received": {
+        "received": true,
+        "receiver": true,
+        "native": false,
+        "signature": "function exchange_received(int128,int128,uint256,uint256,address) returns(uint256)"
+      },
+      "received-no-receiver": {
+        "received": true,
+        "receiver": false,
+        "native": false,
+        "signature": "function exchange_received(int128,int128,uint256,uint256) returns(uint256)"
+      },
+      "exchange": {
+        "received": false,
+        "receiver": false,
+        "native": false,
+        "signature": "function exchange(int128,int128,uint256,uint256) returns(uint256)"
+      },
+      "received-uint": {
+        "received": true,
+        "receiver": true,
+        "native": false,
+        "signature": "function exchange_received(uint256,uint256,uint256,uint256,address) returns(uint256)"
+      },
+      "exchange-uint": {
+        "received": false,
+        "receiver": false,
+        "native": false,
+        "signature": "function exchange(uint256,uint256,uint256,uint256) returns(uint256)"
+      },
+      "native-exchange": {
+        "received": false,
+        "receiver": false,
+        "native": true,
+        "signature": "function exchange(int128,int128,uint256,uint256) payable"
+      },
+      "native-exchange-uint": {
+        "received": false,
+        "receiver": false,
+        "native": true,
+        "signature": "function exchange(uint256,uint256,uint256,uint256) payable"
+      }
+    },
+    "curveNativeSentinel": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "curveWrappedNative": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "curvePricingWeth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+    "curvePricingZero": "0x0000000000000000000000000000000000000000"
+  },
+  "expressions": {
+    "probeAmount": {
+      "op": "max",
+      "args": [
+        {
+          "op": "uint",
+          "args": [
+            "1"
+          ]
+        },
+        {
+          "op": "min",
+          "args": [
+            {
+              "op": "pow",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "10"
+                  ]
+                },
+                "$decimal"
+              ]
+            },
+            {
+              "op": "div",
+              "args": [
+                "$balance",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1000000"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "graphToken": {
+      "op": "if",
+      "args": [
+        {
+          "op": "sameAddress",
+          "args": [
+            "$coin",
+            "$constants.native"
+          ]
+        },
+        "$constants.wrappedNative",
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$coin"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "getterReadId": {
+      "op": "join",
+      "args": [
+        [
+          "$kind",
+          "$getterAbi",
+          "$position"
+        ],
+        ":"
+      ]
+    },
+    "executionReadId": {
+      "op": "join",
+      "args": [
+        [
+          "execution",
+          "$pair.i",
+          "$pair.j",
+          "$mode"
+        ],
+        ":"
+      ]
+    },
+    "modesForPair": {
+      "op": "if",
+      "args": [
+        {
+          "op": "eq",
+          "args": [
+            "$evidence.binding.classKind",
+            "clone"
+          ]
+        },
+        [
+          "exchange"
+        ],
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$pair.executionAssets.input",
+                    "native"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$pair.executionAssets.output",
+                    "native"
+                  ]
+                }
+              ]
+            },
+            "$constants.nativeModes",
+            "$constants.erc20Modes"
+          ]
+        }
+      ]
+    },
+    "graphCoins": {
+      "op": "map",
+      "args": [
+        "$coins",
+        "coin",
+        {
+          "op": "expression",
+          "args": [
+            "graphToken",
+            {
+              "coin": "$coin"
+            }
+          ]
+        }
+      ]
+    },
+    "curveExecutionMode": {
+      "op": "get",
+      "args": [
+        "$constants.curveExecutionModes",
+        "$route.executionMode"
+      ]
+    },
+    "curveNativeInput": {
+      "op": "eq",
+      "args": [
+        "$route.executionAssets.input",
+        "native"
+      ]
+    },
+    "curveNativeOutput": {
+      "op": "eq",
+      "args": [
+        "$route.executionAssets.output",
+        "native"
+      ]
+    },
+    "curveReceivedInput": {
+      "op": "get",
+      "args": [
+        {
+          "op": "expression",
+          "args": [
+            "curveExecutionMode",
+            {}
+          ]
+        },
+        "received"
+      ]
+    },
+    "curveGraphToken": {
+      "op": "if",
+      "args": [
+        {
+          "op": "sameAddress",
+          "args": [
+            "$coin",
+            "$constants.curveNativeSentinel"
+          ]
+        },
+        "$constants.curveWrappedNative",
+        {
+          "op": "address",
+          "args": [
+            "$coin"
+          ]
+        }
+      ]
+    },
+    "curvePricingSample": {
+      "op": "max",
+      "args": [
+        {
+          "op": "uint",
+          "args": [
+            "1"
+          ]
+        },
+        {
+          "op": "min",
+          "args": [
+            {
+              "op": "pow",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "10"
+                  ]
+                },
+                "$decimal"
+              ]
+            },
+            {
+              "op": "div",
+              "args": [
+                "$balance",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1000000"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "programs": {
+    "readSource": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$results"
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$requests"
+              ]
+            }
+          ]
+        },
+        "error": "Curve identity result count mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                {
+                  "op": "unique",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        "$results",
+                        "row",
+                        "$row.id"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$results"
+              ]
+            }
+          ]
+        },
+        "error": "Curve identity duplicate results"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "hash",
+              "args": [
+                {
+                  "op": "sortId",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        "$results",
+                        "row",
+                        {
+                          "id": "$row.id"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "hash",
+              "args": [
+                {
+                  "op": "sortId",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        "$requests",
+                        "row",
+                        {
+                          "id": "$row.id"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve identity result coverage mismatch"
+      },
+      {
+        "return": {
+          "op": "source",
+          "args": [
+            "$results"
+          ]
+        }
+      }
+    ],
+    "scalarWord": [
+      {
+        "assert": {
+          "op": "matches",
+          "args": [
+            "$raw",
+            "^0x(?:[0-9a-fA-F]{2}){32,}$"
+          ]
+        },
+        "error": "Curve scalar result is not complete byte data"
+      },
+      {
+        "return": {
+          "op": "bytes",
+          "args": [
+            "$raw",
+            0,
+            32
+          ]
+        }
+      }
+    ],
+    "scalarUint": [
+      {
+        "return": {
+          "op": "word",
+          "args": [
+            {
+              "op": "program",
+              "args": [
+                "scalarWord",
+                {
+                  "raw": "$raw"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "scalarAddress": [
+      {
+        "let": "wordData",
+        "value": {
+          "op": "program",
+          "args": [
+            "scalarWord",
+            {
+              "raw": "$raw"
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "matches",
+          "args": [
+            "$wordData",
+            "^0x0{24}[0-9a-fA-F]{40}$"
+          ]
+        },
+        "error": "Curve scalar address has dirty upper bits"
+      },
+      {
+        "return": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$wordData",
+                    12,
+                    20
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "addressArrayFromRead": [
+      {
+        "let": "paddedAddresses",
+        "value": {
+          "op": "decodeCanonical",
+          "args": [
+            "registry",
+            "$method",
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "returned",
+                  "args": [
+                    "$requestId"
+                  ]
+                },
+                "data"
+              ]
+            },
+            0
+          ]
+        }
+      },
+      {
+        "let": "addresses",
+        "value": {
+          "op": "filter",
+          "args": [
+            "$paddedAddresses",
+            "item",
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$item",
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            "$paddedAddresses",
+            "item",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "lt",
+                  "args": [
+                    "$index",
+                    {
+                      "op": "length",
+                      "args": [
+                        "$addresses"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$item",
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$item",
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve registry array has noncontiguous padding"
+      },
+      {
+        "let": "normalized",
+        "value": {
+          "op": "map",
+          "args": [
+            "$addresses",
+            "item",
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$item"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                {
+                  "op": "unique",
+                  "args": [
+                    "$normalized"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$normalized"
+              ]
+            }
+          ]
+        },
+        "error": "Curve registry array repeats an address"
+      },
+      {
+        "return": "$normalized"
+      }
+    ],
+    "assertCoinDomain": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$coins"
+                  ]
+                },
+                2
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$coins"
+                  ]
+                },
+                8
+              ]
+            }
+          ]
+        },
+        "error": "Curve direct coin count is unsupported"
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            "$coins",
+            "coin",
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "$pool"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "$registryAddress"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve direct coin aliases a protected address"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                {
+                  "op": "unique",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "graphCoins",
+                        {
+                          "coins": "$coins"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$coins"
+              ]
+            }
+          ]
+        },
+        "error": "Curve direct coin graph identities are not distinct"
+      },
+      {
+        "return": true
+      }
+    ],
+    "optionalGetter": [
+      {
+        "return": null,
+        "when": {
+          "op": "ne",
+          "args": [
+            {
+              "op": "shape",
+              "args": [
+                "$requestId"
+              ]
+            },
+            "returned"
+          ]
+        }
+      },
+      {
+        "let": "getterData",
+        "value": {
+          "op": "get",
+          "args": [
+            {
+              "op": "returned",
+              "args": [
+                "$requestId"
+              ]
+            },
+            "data"
+          ]
+        }
+      },
+      {
+        "return": null,
+        "when": {
+          "op": "eq",
+          "args": [
+            "$getterData",
+            "0x"
+          ]
+        }
+      },
+      {
+        "return": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$kind",
+                "coin"
+              ]
+            },
+            {
+              "op": "program",
+              "args": [
+                "scalarAddress",
+                {
+                  "raw": "$getterData"
+                }
+              ]
+            },
+            {
+              "op": "program",
+              "args": [
+                "scalarUint",
+                {
+                  "raw": "$getterData"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "selectGetter": [
+      {
+        "let": "unsignedValues",
+        "value": {
+          "op": "map",
+          "args": [
+            "$coins",
+            "coin",
+            {
+              "op": "program",
+              "args": [
+                "optionalGetter",
+                {
+                  "kind": "$kind",
+                  "requestId": {
+                    "op": "expression",
+                    "args": [
+                      "getterReadId",
+                      {
+                        "kind": "$kind",
+                        "getterAbi": "uint256",
+                        "position": "$index"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "signedValues",
+        "value": {
+          "op": "map",
+          "args": [
+            "$coins",
+            "coin",
+            {
+              "op": "program",
+              "args": [
+                "optionalGetter",
+                {
+                  "kind": "$kind",
+                  "requestId": {
+                    "op": "expression",
+                    "args": [
+                      "getterReadId",
+                      {
+                        "kind": "$kind",
+                        "getterAbi": "int128",
+                        "position": "$index"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            "$coins",
+            "coin",
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$unsignedValues",
+                            "$index"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$signedValues",
+                            "$index"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$unsignedValues",
+                        "$index"
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$signedValues",
+                        "$index"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve getter aliases disagree"
+      },
+      {
+        "return": {
+          "abi": "uint256",
+          "values": "$unsignedValues"
+        },
+        "when": {
+          "op": "every",
+          "args": [
+            "$unsignedValues",
+            "value",
+            {
+              "op": "defined",
+              "args": [
+                "$value"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "abi": "int128",
+          "values": "$signedValues"
+        },
+        "when": {
+          "op": "every",
+          "args": [
+            "$signedValues",
+            "value",
+            {
+              "op": "defined",
+              "args": [
+                "$value"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": null
+      }
+    ],
+    "actorFromZeroDelta": [
+      {
+        "let": "actorRead",
+        "value": {
+          "op": "returned",
+          "args": [
+            "probe-executor"
+          ]
+        }
+      },
+      {
+        "evaluate": {
+          "op": "program",
+          "args": [
+            "scalarUint",
+            {
+              "raw": "$actorRead.data"
+            }
+          ]
+        }
+      },
+      {
+        "let": "actorTokens",
+        "value": "$actorRead.effects.tokenDeltas"
+      },
+      {
+        "let": "actorNative",
+        "value": "$actorRead.effects.nativeDeltas"
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$actorTokens"
+                  ]
+                },
+                1
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$actorNative"
+                  ]
+                },
+                1
+              ]
+            }
+          ]
+        },
+        "error": "Curve executor authority observation is incomplete"
+      },
+      {
+        "let": "actorTokenRow",
+        "value": {
+          "op": "at",
+          "args": [
+            "$actorTokens",
+            0
+          ]
+        }
+      },
+      {
+        "let": "actorNativeRow",
+        "value": {
+          "op": "at",
+          "args": [
+            "$actorNative",
+            0
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$actorTokenRow.token",
+                "$constants.wrappedNative"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$actorTokenRow.delta",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$actorNativeRow.delta",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$actorTokenRow.account",
+                "$actorNativeRow.account"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$actorTokenRow.account",
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$actorTokenRow.account",
+                    "$pool"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve zero-delta probe did not establish executor authority"
+      },
+      {
+        "return": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$actorTokenRow.account"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "tokenSurface": [
+      {
+        "let": "decimals",
+        "value": {
+          "op": "map",
+          "args": [
+            "$coins",
+            "coin",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$coin",
+                    "$constants.native"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "18"
+                  ]
+                },
+                {
+                  "op": "program",
+                  "args": [
+                    "scalarUint",
+                    {
+                      "raw": {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              {
+                                "op": "join",
+                                "args": [
+                                  [
+                                    "decimals",
+                                    "$index"
+                                  ],
+                                  ":"
+                                ]
+                              }
+                            ]
+                          },
+                          "data"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            "$decimals",
+            "decimal",
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "gte",
+                  "args": [
+                    "$decimal",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    "$decimal",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "36"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve token decimal scale is unsupported"
+      },
+      {
+        "evaluate": {
+          "op": "map",
+          "args": [
+            "$coins",
+            "coin",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$coin",
+                    "$constants.native"
+                  ]
+                },
+                true,
+                {
+                  "op": "code",
+                  "args": [
+                    {
+                      "op": "join",
+                      "args": [
+                        [
+                          "token-code",
+                          "$index"
+                        ],
+                        ":"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "executor",
+        "value": {
+          "op": "program",
+          "args": [
+            "actorFromZeroDelta",
+            {
+              "pool": "$pool"
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "graphCoins",
+                {
+                  "coins": "$coins"
+                }
+              ]
+            },
+            "coin",
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$coin",
+                    "$executor"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve executor aliases a route token"
+      },
+      {
+        "return": {
+          "decimals": "$decimals",
+          "executor": "$executor"
+        }
+      }
+    ],
+    "candidatePairs": [
+      {
+        "return": {
+          "op": "flatMap",
+          "args": [
+            {
+              "op": "map",
+              "args": [
+                "$coins",
+                "coin",
+                {
+                  "coin": "$coin",
+                  "position": "$index"
+                }
+              ]
+            },
+            "left",
+            {
+              "op": "flatMap",
+              "args": [
+                {
+                  "op": "map",
+                  "args": [
+                    "$coins",
+                    "coin",
+                    {
+                      "coin": "$coin",
+                      "position": "$index"
+                    }
+                  ]
+                },
+                "right",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "ne",
+                          "args": [
+                            "$left.position",
+                            "$right.position"
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$balances",
+                                "$left.position"
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$balances",
+                                "$right.position"
+                              ]
+                            },
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    [
+                      {
+                        "i": "$left.position",
+                        "j": "$right.position",
+                        "tokenIn": {
+                          "op": "expression",
+                          "args": [
+                            "graphToken",
+                            {
+                              "coin": "$left.coin"
+                            }
+                          ]
+                        },
+                        "tokenOut": {
+                          "op": "expression",
+                          "args": [
+                            "graphToken",
+                            {
+                              "coin": "$right.coin"
+                            }
+                          ]
+                        },
+                        "amountIn": {
+                          "op": "expression",
+                          "args": [
+                            "probeAmount",
+                            {
+                              "decimal": {
+                                "op": "at",
+                                "args": [
+                                  "$decimals",
+                                  "$left.position"
+                                ]
+                              },
+                              "balance": {
+                                "op": "at",
+                                "args": [
+                                  "$balances",
+                                  "$left.position"
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        "executionAssets": {
+                          "input": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "sameAddress",
+                                "args": [
+                                  "$left.coin",
+                                  "$constants.native"
+                                ]
+                              },
+                              "native",
+                              "erc20"
+                            ]
+                          },
+                          "output": {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "sameAddress",
+                                "args": [
+                                  "$right.coin",
+                                  "$constants.native"
+                                ]
+                              },
+                              "native",
+                              "erc20"
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    []
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "modeResult": [
+      {
+        "let": "readId",
+        "value": {
+          "op": "expression",
+          "args": [
+            "executionReadId",
+            {
+              "pair": "$pair",
+              "mode": "$mode"
+            }
+          ]
+        }
+      },
+      {
+        "let": "modeRead",
+        "value": {
+          "op": "result",
+          "args": [
+            "$readId"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "unknown",
+          "requestId": "$readId"
+        },
+        "when": {
+          "op": "not",
+          "args": [
+            "$modeRead.ok"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "reverted",
+          "requestId": "$readId"
+        },
+        "when": {
+          "op": "ne",
+          "args": [
+            {
+              "op": "shape",
+              "args": [
+                "$readId"
+              ]
+            },
+            "returned"
+          ]
+        }
+      },
+      {
+        "let": "actualOutput",
+        "value": {
+          "op": "programReceipt",
+          "args": [
+            {
+              "requestId": "$readId",
+              "source": "$evidence.source",
+              "executor": "$evidence.executor",
+              "tokenIn": "$pair.tokenIn",
+              "tokenOut": "$pair.tokenOut",
+              "amountIn": "$pair.amountIn"
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "op": "merge",
+          "args": [
+            "$pair",
+            {
+              "status": "verified",
+              "executionMode": "$mode",
+              "amountOut": "$actualOutput",
+              "requestId": "$readId"
+            }
+          ]
+        }
+      }
+    ],
+    "verifiedDirection": [
+      {
+        "let": "modeResults",
+        "value": {
+          "op": "map",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "modesForPair",
+                {
+                  "pair": "$pair"
+                }
+              ]
+            },
+            "mode",
+            {
+              "op": "program",
+              "args": [
+                "modeResult",
+                {
+                  "pair": "$pair",
+                  "mode": "$mode"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "verifiedModes",
+        "value": {
+          "op": "filter",
+          "args": [
+            "$modeResults",
+            "item",
+            {
+              "op": "eq",
+              "args": [
+                "$item.status",
+                "verified"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "op": "omit",
+          "args": [
+            {
+              "op": "at",
+              "args": [
+                "$verifiedModes",
+                0
+              ]
+            },
+            [
+              "status",
+              "requestId"
+            ]
+          ]
+        },
+        "when": {
+          "op": "gt",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$verifiedModes"
+              ]
+            },
+            0
+          ]
+        }
+      },
+      {
+        "let": "unknownModes",
+        "value": {
+          "op": "filter",
+          "args": [
+            "$modeResults",
+            "item",
+            {
+              "op": "eq",
+              "args": [
+                "$item.status",
+                "unknown"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "evaluate": {
+          "op": "if",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$unknownModes"
+                  ]
+                },
+                0
+              ]
+            },
+            {
+              "op": "requestFailure",
+              "args": [
+                {
+                  "op": "result",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$unknownModes",
+                            0
+                          ]
+                        },
+                        "requestId"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            true
+          ]
+        }
+      },
+      {
+        "return": null
+      }
+    ],
+    "curvePricingActor": [
+      {
+        "let": "probe",
+        "value": {
+          "op": "returned",
+          "args": [
+            "probe-executor"
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "matches",
+          "args": [
+            "$probe.data",
+            "^0x[0-9a-fA-F]{64}$"
+          ]
+        },
+        "error": "Curve pricing authority probe uint256 return"
+      },
+      {
+        "let": "tokenRows",
+        "value": "$probe.effects.tokenDeltas"
+      },
+      {
+        "let": "nativeRows",
+        "value": "$probe.effects.nativeDeltas"
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$tokenRows"
+                  ]
+                },
+                1
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$nativeRows"
+                  ]
+                },
+                1
+              ]
+            }
+          ]
+        },
+        "error": "Curve pricing authority probe effects"
+      },
+      {
+        "let": "tokenRow",
+        "value": {
+          "op": "at",
+          "args": [
+            "$tokenRows",
+            0
+          ]
+        }
+      },
+      {
+        "let": "nativeRow",
+        "value": {
+          "op": "at",
+          "args": [
+            "$nativeRows",
+            0
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$tokenRow.token",
+                "$constants.curvePricingWeth"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$tokenRow.delta",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$nativeRow.account",
+                "$tokenRow.account"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$nativeRow.delta",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$tokenRow.account",
+                    "$constants.curvePricingZero"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$tokenRow.account",
+                    "$descriptor.pool"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve pricing missing executor authority"
+      },
+      {
+        "return": {
+          "op": "address",
+          "args": [
+            "$tokenRow.account"
+          ]
+        }
+      }
+    ]
+  },
+  "context": {
+    "route": {
+      "op": "coalesce",
+      "args": [
+        "$route",
+        {
+          "op": "at",
+          "args": [
+            "$routes",
+            0
+          ]
+        }
+      ]
+    },
+    "executor": {
+      "op": "coalesce",
+      "args": [
+        "$executor",
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$steps"
+              ]
+            },
+            "$steps.actor.executor",
+            "$missing"
+          ]
+        }
+      ]
+    }
+  },
+  "boundState": "$descriptor.binding",
+  "pricing": {
+    "refreshPolicy": "each-block",
+    "requirements": {
+      "transports": [
+        "eth-call",
+        "effect-delta-simulation"
+      ],
+      "caller": "executor",
+      "effects": [
+        "return-data",
+        "revert-data",
+        "token-delta",
+        "native-delta"
+      ]
+    },
+    "dependencies": {
+      "op": "concat",
+      "args": [
+        [
+          "$descriptor.pool"
+        ],
+        {
+          "op": "map",
+          "args": [
+            "$routes",
+            "route",
+            "$route.tokenIn"
+          ]
+        },
+        {
+          "op": "map",
+          "args": [
+            "$routes",
+            "route",
+            "$route.tokenOut"
+          ]
+        }
+      ]
+    },
+    "mutationAddresses": {
+      "op": "concat",
+      "args": [
+        [
+          "$descriptor.pool"
+        ],
+        {
+          "op": "map",
+          "args": [
+            "$routes",
+            "route",
+            "$route.tokenIn"
+          ]
+        },
+        {
+          "op": "map",
+          "args": [
+            "$routes",
+            "route",
+            "$route.tokenOut"
+          ]
+        }
+      ]
+    }
+  },
+  "exact": {
+    "methodId": "curve-plain-execution-receipt",
+    "requirements": {
+      "transports": [
+        "effect-delta-simulation"
+      ],
+      "caller": "executor",
+      "effects": [
+        "return-data",
+        "revert-data",
+        "token-delta",
+        "native-delta"
+      ]
+    },
+    "protectedAddresses": [
+      "$descriptor.pool",
+      "$route.tokenIn",
+      "$route.tokenOut"
+    ],
+    "checks": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gte",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve exact input must be uint256"
+      }
+    ],
+    "evidence": {
+      "kind": "curve-plain-execution-receipt",
+      "source": "$source",
+      "pool": "$descriptor.pool",
+      "binding": "$route.bindingRef.fingerprint",
+      "routeKey": "$route.routeKey",
+      "tokenIn": "$route.tokenIn",
+      "tokenOut": "$route.tokenOut",
+      "i": "$route.i",
+      "j": "$route.j",
+      "executionMode": "$route.executionMode",
+      "amountIn": "$amountIn",
+      "amountOut": "$amountOut",
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "zeroEvidence": {
+      "kind": "curve-plain-execution-receipt",
+      "source": "$source",
+      "pool": "$descriptor.pool",
+      "binding": "$route.bindingRef.fingerprint",
+      "routeKey": "$route.routeKey",
+      "tokenIn": "$route.tokenIn",
+      "tokenOut": "$route.tokenOut",
+      "i": "$route.i",
+      "j": "$route.j",
+      "executionMode": "$route.executionMode",
+      "amountIn": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "amountOut": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "amountOut": "$quoteResult.amountOut",
+    "retainReadEvidence": true
+  },
+  "readPrograms": {},
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": false
+    },
+    "protectedAddresses": [
+      "$descriptor.pool",
+      "$route.tokenIn",
+      "$route.tokenOut"
+    ],
+    "requireCanonicalSource": true,
+    "contextChecks": [
+      {
+        "condition": {
+          "op": "sameAddress",
+          "args": [
+            "$recipient",
+            "$executor"
+          ]
+        },
+        "error": "curve execution requires executor receipt"
+      },
+      {
+        "condition": {
+          "op": "defined",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "curveExecutionMode",
+                {}
+              ]
+            }
+          ]
+        },
+        "error": "unsupported Curve execution mode"
+      },
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "number",
+                  "args": [
+                    "$route.i"
+                  ]
+                },
+                "$route.i"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "number",
+                  "args": [
+                    "$route.j"
+                  ]
+                },
+                "$route.j"
+              ]
+            },
+            {
+              "op": "gte",
+              "args": [
+                "$route.i",
+                0
+              ]
+            },
+            {
+              "op": "lt",
+              "args": [
+                "$route.i",
+                8
+              ]
+            },
+            {
+              "op": "gte",
+              "args": [
+                "$route.j",
+                0
+              ]
+            },
+            {
+              "op": "lt",
+              "args": [
+                "$route.j",
+                8
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$route.i",
+                "$route.j"
+              ]
+            }
+          ]
+        },
+        "error": "invalid Curve coin indices"
+      },
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "curveExecutionMode",
+                        {}
+                      ]
+                    },
+                    "native"
+                  ]
+                },
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "curveNativeInput",
+                        {}
+                      ]
+                    },
+                    {
+                      "op": "expression",
+                      "args": [
+                        "curveNativeOutput",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "curveNativeInput",
+                        {}
+                      ]
+                    },
+                    {
+                      "op": "expression",
+                      "args": [
+                        "curveNativeOutput",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve execution mode differs from native asset boundary"
+      },
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$route.tokenIn",
+                {
+                  "op": "expression",
+                  "args": [
+                    "curveGraphToken",
+                    {
+                      "coin": {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.binding.coins",
+                          "$route.i"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$route.tokenOut",
+                {
+                  "op": "expression",
+                  "args": [
+                    "curveGraphToken",
+                    {
+                      "coin": {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.binding.coins",
+                          "$route.j"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "curveNativeInput",
+                    {}
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$descriptor.binding.coins",
+                        "$route.i"
+                      ]
+                    },
+                    "$constants.curveNativeSentinel"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "curveNativeOutput",
+                    {}
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$descriptor.binding.coins",
+                        "$route.j"
+                      ]
+                    },
+                    "$constants.curveNativeSentinel"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve route assets differ from proved direct coins"
+      }
+    ],
+    "steps": [
+      {
+        "id": "poolInputBefore",
+        "when": {
+          "op": "expression",
+          "args": [
+            "curveReceivedInput",
+            {}
+          ]
+        },
+        "static": true,
+        "call": {
+          "target": "$route.tokenIn",
+          "signature": "function balanceOf(address) view returns(uint256)",
+          "args": [
+            "$descriptor.pool"
+          ],
+          "save": {
+            "poolInputBefore": 0
+          }
+        }
+      },
+      {
+        "id": "transferInput",
+        "when": {
+          "op": "expression",
+          "args": [
+            "curveReceivedInput",
+            {}
+          ]
+        },
+        "call": {
+          "target": "$route.tokenIn",
+          "signature": "function transfer(address,uint256) returns(bool)",
+          "args": [
+            "$descriptor.pool",
+            {
+              "runtime": "amountIn"
+            }
+          ]
+        }
+      },
+      {
+        "id": "poolInputAfter",
+        "when": {
+          "op": "expression",
+          "args": [
+            "curveReceivedInput",
+            {}
+          ]
+        },
+        "static": true,
+        "call": {
+          "target": "$route.tokenIn",
+          "signature": "function balanceOf(address) view returns(uint256)",
+          "args": [
+            "$descriptor.pool"
+          ],
+          "save": {
+            "poolInputAfter": 0
+          }
+        }
+      },
+      {
+        "id": "measureInput",
+        "when": {
+          "op": "expression",
+          "args": [
+            "curveReceivedInput",
+            {}
+          ]
+        },
+        "math": {
+          "model": "curveDelta",
+          "inputs": {
+            "before": {
+              "runtime": "poolInputBefore"
+            },
+            "after": {
+              "runtime": "poolInputAfter"
+            }
+          },
+          "outputs": {
+            "delta": "receivedInput"
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "receivedInput"
+              },
+              "operator": "gte",
+              "right": {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "exchange",
+        "approval": {
+          "when": {
+            "op": "and",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "curveReceivedInput",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "curveNativeInput",
+                      {}
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "token": "$route.tokenIn",
+          "spender": "$descriptor.pool",
+          "mode": "exact-clear",
+          "verifyAllowance": true
+        },
+        "call": {
+          "target": "$descriptor.pool",
+          "signature": {
+            "op": "get",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "curveExecutionMode",
+                  {}
+                ]
+              },
+              "signature"
+            ]
+          },
+          "args": {
+            "op": "concat",
+            "args": [
+              [
+                "$route.i",
+                "$route.j",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "curveReceivedInput",
+                        {}
+                      ]
+                    },
+                    {
+                      "runtime": "receivedInput"
+                    },
+                    {
+                      "runtime": "amountIn"
+                    }
+                  ]
+                },
+                {
+                  "op": "max",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1"
+                      ]
+                    },
+                    "$minAmountOut"
+                  ]
+                }
+              ],
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "expression",
+                        "args": [
+                          "curveExecutionMode",
+                          {}
+                        ]
+                      },
+                      "receiver"
+                    ]
+                  },
+                  [
+                    "$executor"
+                  ],
+                  []
+                ]
+              }
+            ]
+          },
+          "value": {
+            "op": "if",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "curveNativeInput",
+                  {}
+                ]
+              },
+              {
+                "runtime": "amountIn"
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "effects": [
+      {
+        "op": "concat",
+        "args": [
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "curveNativeInput",
+                  {}
+                ]
+              },
+              [
+                {
+                  "kind": "debit",
+                  "asset": "native",
+                  "account": "$executor",
+                  "equals": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ],
+              [
+                {
+                  "kind": "debit",
+                  "token": "$route.tokenIn",
+                  "account": "$executor",
+                  "equals": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ]
+            ]
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "curveNativeOutput",
+                  {}
+                ]
+              },
+              [
+                {
+                  "kind": "credit",
+                  "asset": "native",
+                  "account": "$executor"
+                }
+              ],
+              [
+                {
+                  "kind": "credit",
+                  "token": "$route.tokenOut",
+                  "account": "$executor"
+                }
+              ]
+            ]
+          },
+          {
+            "op": "map",
+            "args": [
+              {
+                "op": "filter",
+                "args": [
+                  {
+                    "op": "map",
+                    "args": [
+                      "$descriptor.binding.coins",
+                      "coin",
+                      {
+                        "op": "expression",
+                        "args": [
+                          "curveGraphToken",
+                          {}
+                        ]
+                      }
+                    ]
+                  },
+                  "asset",
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$asset",
+                              "$route.tokenIn"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$asset",
+                              "$route.tokenOut"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "asset",
+              {
+                "kind": "unchanged-token",
+                "token": "$asset",
+                "account": "$executor"
+              }
+            ]
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "curveNativeInput",
+                      {}
+                    ]
+                  },
+                  {
+                    "op": "expression",
+                    "args": [
+                      "curveNativeOutput",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              [],
+              [
+                {
+                  "kind": "unchanged-native"
+                }
+              ]
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

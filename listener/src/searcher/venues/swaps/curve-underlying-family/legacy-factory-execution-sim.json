@@ -1,0 +1,4589 @@
+{
+  "version": 1,
+  "id": "legacy-factory-execution-sim",
+  "lineageId": "curve-underlying:legacy-factory-member",
+  "identityKind": "registry-member",
+  "match": {
+    "op": "eq",
+    "args": [
+      "$descriptor.lineageId",
+      "curve-underlying:legacy-factory-member"
+    ]
+  },
+  "identity": {
+    "applies": {
+      "op": "eq",
+      "args": [
+        "$candidate.candidateKind",
+        "curve-underlying-pool"
+      ]
+    },
+    "select": [
+      {
+        "return": "done",
+        "when": {
+          "op": "or",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$evidence.rejection"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$evidence.phase",
+                "complete"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": "binding",
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$evidence"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": "surface",
+        "when": {
+          "op": "eq",
+          "args": [
+            "$evidence.phase",
+            "binding"
+          ]
+        }
+      },
+      {
+        "return": "execution",
+        "when": {
+          "op": "eq",
+          "args": [
+            "$evidence.phase",
+            "surface"
+          ]
+        }
+      }
+    ],
+    "decide": [
+      {
+        "return": {
+          "status": "continue"
+        },
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$evidence"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "chain-proven-rejected",
+          "reasonCode": "$evidence.rejection",
+          "evidenceRequestIds": "$evidence.ids"
+        },
+        "when": {
+          "op": "defined",
+          "args": [
+            "$evidence.rejection"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "continue"
+        },
+        "when": {
+          "op": "ne",
+          "args": [
+            "$evidence.phase",
+            "complete"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "retryable",
+          "reasonCode": "no-execution-proven-direction"
+        },
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$evidence.directions"
+              ]
+            },
+            0
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "retryable",
+          "reasonCode": "observed-direction-not-executable"
+        },
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$candidate.hintedI"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "some",
+                  "args": [
+                    "$evidence.directions",
+                    "pair",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$pair.i",
+                            "$candidate.hintedI"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$pair.j",
+                            "$candidate.hintedJ"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "verified",
+          "identity": {
+            "familyId": "$profile.familyId",
+            "lineageId": "$profile.lineageId",
+            "subject": "$evidence.pool",
+            "facts": {
+              "pool": "$evidence.pool",
+              "binding": "$evidence.binding",
+              "directions": "$evidence.directions"
+            },
+            "provenance": [
+              {
+                "kind": "curve-underlying-executor-receipt",
+                "subject": "$evidence.pool",
+                "evidenceHash": {
+                  "op": "hash",
+                  "args": [
+                    {
+                      "source": "$evidence.source",
+                      "binding": "$evidence.binding",
+                      "directions": "$evidence.directions"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "stages": {
+      "surface": {
+        "requirements": {
+          "transports": [
+            "eth-call",
+            "get-code",
+            "effect-delta-simulation"
+          ],
+          "caller": "executor",
+          "effects": [
+            "return-data",
+            "revert-data",
+            "token-delta",
+            "native-delta"
+          ]
+        },
+        "requests": {
+          "op": "concat",
+          "args": [
+            {
+              "op": "flatMap",
+              "args": [
+                "$evidence.binding.coins",
+                "coin",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                      ]
+                    },
+                    [],
+                    [
+                      {
+                        "id": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "decimals",
+                              "$index"
+                            ],
+                            ":"
+                          ]
+                        },
+                        "kind": "eth-call",
+                        "to": "$coin",
+                        "data": {
+                          "op": "encode",
+                          "args": [
+                            "token",
+                            "decimals",
+                            []
+                          ]
+                        },
+                        "completion": "return-or-revert-data",
+                        "required": true
+                      },
+                      {
+                        "id": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "token-code",
+                              "$index"
+                            ],
+                            ":"
+                          ]
+                        },
+                        "kind": "get-code",
+                        "address": "$coin"
+                      }
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "map",
+              "args": [
+                "$evidence.binding.protectedTokens",
+                "coin",
+                {
+                  "id": {
+                    "op": "join",
+                    "args": [
+                      [
+                        "inventory-code",
+                        "$index"
+                      ],
+                      ":"
+                    ]
+                  },
+                  "kind": "get-code",
+                  "address": "$coin"
+                }
+              ]
+            },
+            [
+              {
+                "id": "probe-executor",
+                "kind": "effect-delta-simulation",
+                "call": {
+                  "caller": {
+                    "kind": "executor"
+                  },
+                  "executionMode": "impersonated-call-frame",
+                  "to": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "balanceOf",
+                      [
+                        "0x0000000000000000000000000000000000000000"
+                      ]
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": {
+                    "kind": "executor"
+                  }
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    "account": {
+                      "kind": "executor"
+                    }
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "native-delta"
+                ]
+              }
+            ]
+          ]
+        },
+        "decode": [
+          {
+            "let": "source",
+            "value": {
+              "op": "program",
+              "args": [
+                "readSource",
+                {}
+              ]
+            }
+          },
+          {
+            "evaluate": {
+              "op": "assertSource",
+              "args": [
+                "$source",
+                "$evidence.source"
+              ]
+            }
+          },
+          {
+            "let": "pool",
+            "value": "$evidence.pool"
+          },
+          {
+            "let": "surface",
+            "value": {
+              "op": "program",
+              "args": [
+                "tokenSurface",
+                {
+                  "coins": "$evidence.binding.coins",
+                  "pool": "$pool"
+                }
+              ]
+            }
+          },
+          {
+            "evaluate": {
+              "op": "map",
+              "args": [
+                "$evidence.binding.protectedTokens",
+                "coin",
+                {
+                  "op": "code",
+                  "args": [
+                    {
+                      "op": "join",
+                      "args": [
+                        [
+                          "inventory-code",
+                          "$index"
+                        ],
+                        ":"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "every",
+              "args": [
+                "$evidence.binding.protectedTokens",
+                "coin",
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "$surface.executor"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "Underlying executor aliases protected inventory"
+          },
+          {
+            "let": "pairs",
+            "value": {
+              "op": "flatMap",
+              "args": [
+                {
+                  "op": "map",
+                  "args": [
+                    "$evidence.binding.coins",
+                    "coin",
+                    {
+                      "coin": "$coin",
+                      "position": "$index"
+                    }
+                  ]
+                },
+                "left",
+                {
+                  "op": "flatMap",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        "$evidence.binding.coins",
+                        "coin",
+                        {
+                          "coin": "$coin",
+                          "position": "$index"
+                        }
+                      ]
+                    },
+                    "right",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "ne",
+                          "args": [
+                            "$left.position",
+                            "$right.position"
+                          ]
+                        },
+                        [
+                          {
+                            "i": "$left.position",
+                            "j": "$right.position",
+                            "tokenIn": {
+                              "op": "expression",
+                              "args": [
+                                "graphToken",
+                                {
+                                  "coin": "$left.coin"
+                                }
+                              ]
+                            },
+                            "tokenOut": {
+                              "op": "expression",
+                              "args": [
+                                "graphToken",
+                                {
+                                  "coin": "$right.coin"
+                                }
+                              ]
+                            },
+                            "amountIn": {
+                              "op": "pow",
+                              "args": [
+                                {
+                                  "op": "uint",
+                                  "args": [
+                                    "10"
+                                  ]
+                                },
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$surface.decimals",
+                                    "$left.position"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ],
+                        []
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "op": "merge",
+              "args": [
+                "$evidence",
+                {
+                  "phase": "surface",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  },
+                  "executor": "$surface.executor",
+                  "pairs": "$pairs",
+                  "binding": {
+                    "op": "merge",
+                    "args": [
+                      "$evidence.binding",
+                      {
+                        "decimals": "$surface.decimals"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "execution": {
+        "requirements": {
+          "transports": [
+            "effect-delta-simulation"
+          ],
+          "caller": "executor",
+          "effects": [
+            "return-data",
+            "revert-data",
+            "token-delta",
+            "native-delta"
+          ]
+        },
+        "optionalFailures": [
+          "execution:0:1:int128",
+          "execution:0:1:int128-receiver",
+          "execution:0:1:uint256",
+          "execution:0:1:uint256-receiver",
+          "execution:0:1:native-int128",
+          "execution:0:1:native-int128-receiver",
+          "execution:0:1:native-uint256",
+          "execution:0:1:native-uint256-receiver",
+          "execution:0:2:int128",
+          "execution:0:2:int128-receiver",
+          "execution:0:2:uint256",
+          "execution:0:2:uint256-receiver",
+          "execution:0:2:native-int128",
+          "execution:0:2:native-int128-receiver",
+          "execution:0:2:native-uint256",
+          "execution:0:2:native-uint256-receiver",
+          "execution:0:3:int128",
+          "execution:0:3:int128-receiver",
+          "execution:0:3:uint256",
+          "execution:0:3:uint256-receiver",
+          "execution:0:3:native-int128",
+          "execution:0:3:native-int128-receiver",
+          "execution:0:3:native-uint256",
+          "execution:0:3:native-uint256-receiver",
+          "execution:0:4:int128",
+          "execution:0:4:int128-receiver",
+          "execution:0:4:uint256",
+          "execution:0:4:uint256-receiver",
+          "execution:0:4:native-int128",
+          "execution:0:4:native-int128-receiver",
+          "execution:0:4:native-uint256",
+          "execution:0:4:native-uint256-receiver",
+          "execution:0:5:int128",
+          "execution:0:5:int128-receiver",
+          "execution:0:5:uint256",
+          "execution:0:5:uint256-receiver",
+          "execution:0:5:native-int128",
+          "execution:0:5:native-int128-receiver",
+          "execution:0:5:native-uint256",
+          "execution:0:5:native-uint256-receiver",
+          "execution:0:6:int128",
+          "execution:0:6:int128-receiver",
+          "execution:0:6:uint256",
+          "execution:0:6:uint256-receiver",
+          "execution:0:6:native-int128",
+          "execution:0:6:native-int128-receiver",
+          "execution:0:6:native-uint256",
+          "execution:0:6:native-uint256-receiver",
+          "execution:0:7:int128",
+          "execution:0:7:int128-receiver",
+          "execution:0:7:uint256",
+          "execution:0:7:uint256-receiver",
+          "execution:0:7:native-int128",
+          "execution:0:7:native-int128-receiver",
+          "execution:0:7:native-uint256",
+          "execution:0:7:native-uint256-receiver",
+          "execution:1:0:int128",
+          "execution:1:0:int128-receiver",
+          "execution:1:0:uint256",
+          "execution:1:0:uint256-receiver",
+          "execution:1:0:native-int128",
+          "execution:1:0:native-int128-receiver",
+          "execution:1:0:native-uint256",
+          "execution:1:0:native-uint256-receiver",
+          "execution:1:2:int128",
+          "execution:1:2:int128-receiver",
+          "execution:1:2:uint256",
+          "execution:1:2:uint256-receiver",
+          "execution:1:2:native-int128",
+          "execution:1:2:native-int128-receiver",
+          "execution:1:2:native-uint256",
+          "execution:1:2:native-uint256-receiver",
+          "execution:1:3:int128",
+          "execution:1:3:int128-receiver",
+          "execution:1:3:uint256",
+          "execution:1:3:uint256-receiver",
+          "execution:1:3:native-int128",
+          "execution:1:3:native-int128-receiver",
+          "execution:1:3:native-uint256",
+          "execution:1:3:native-uint256-receiver",
+          "execution:1:4:int128",
+          "execution:1:4:int128-receiver",
+          "execution:1:4:uint256",
+          "execution:1:4:uint256-receiver",
+          "execution:1:4:native-int128",
+          "execution:1:4:native-int128-receiver",
+          "execution:1:4:native-uint256",
+          "execution:1:4:native-uint256-receiver",
+          "execution:1:5:int128",
+          "execution:1:5:int128-receiver",
+          "execution:1:5:uint256",
+          "execution:1:5:uint256-receiver",
+          "execution:1:5:native-int128",
+          "execution:1:5:native-int128-receiver",
+          "execution:1:5:native-uint256",
+          "execution:1:5:native-uint256-receiver",
+          "execution:1:6:int128",
+          "execution:1:6:int128-receiver",
+          "execution:1:6:uint256",
+          "execution:1:6:uint256-receiver",
+          "execution:1:6:native-int128",
+          "execution:1:6:native-int128-receiver",
+          "execution:1:6:native-uint256",
+          "execution:1:6:native-uint256-receiver",
+          "execution:1:7:int128",
+          "execution:1:7:int128-receiver",
+          "execution:1:7:uint256",
+          "execution:1:7:uint256-receiver",
+          "execution:1:7:native-int128",
+          "execution:1:7:native-int128-receiver",
+          "execution:1:7:native-uint256",
+          "execution:1:7:native-uint256-receiver",
+          "execution:2:0:int128",
+          "execution:2:0:int128-receiver",
+          "execution:2:0:uint256",
+          "execution:2:0:uint256-receiver",
+          "execution:2:0:native-int128",
+          "execution:2:0:native-int128-receiver",
+          "execution:2:0:native-uint256",
+          "execution:2:0:native-uint256-receiver",
+          "execution:2:1:int128",
+          "execution:2:1:int128-receiver",
+          "execution:2:1:uint256",
+          "execution:2:1:uint256-receiver",
+          "execution:2:1:native-int128",
+          "execution:2:1:native-int128-receiver",
+          "execution:2:1:native-uint256",
+          "execution:2:1:native-uint256-receiver",
+          "execution:2:3:int128",
+          "execution:2:3:int128-receiver",
+          "execution:2:3:uint256",
+          "execution:2:3:uint256-receiver",
+          "execution:2:3:native-int128",
+          "execution:2:3:native-int128-receiver",
+          "execution:2:3:native-uint256",
+          "execution:2:3:native-uint256-receiver",
+          "execution:2:4:int128",
+          "execution:2:4:int128-receiver",
+          "execution:2:4:uint256",
+          "execution:2:4:uint256-receiver",
+          "execution:2:4:native-int128",
+          "execution:2:4:native-int128-receiver",
+          "execution:2:4:native-uint256",
+          "execution:2:4:native-uint256-receiver",
+          "execution:2:5:int128",
+          "execution:2:5:int128-receiver",
+          "execution:2:5:uint256",
+          "execution:2:5:uint256-receiver",
+          "execution:2:5:native-int128",
+          "execution:2:5:native-int128-receiver",
+          "execution:2:5:native-uint256",
+          "execution:2:5:native-uint256-receiver",
+          "execution:2:6:int128",
+          "execution:2:6:int128-receiver",
+          "execution:2:6:uint256",
+          "execution:2:6:uint256-receiver",
+          "execution:2:6:native-int128",
+          "execution:2:6:native-int128-receiver",
+          "execution:2:6:native-uint256",
+          "execution:2:6:native-uint256-receiver",
+          "execution:2:7:int128",
+          "execution:2:7:int128-receiver",
+          "execution:2:7:uint256",
+          "execution:2:7:uint256-receiver",
+          "execution:2:7:native-int128",
+          "execution:2:7:native-int128-receiver",
+          "execution:2:7:native-uint256",
+          "execution:2:7:native-uint256-receiver",
+          "execution:3:0:int128",
+          "execution:3:0:int128-receiver",
+          "execution:3:0:uint256",
+          "execution:3:0:uint256-receiver",
+          "execution:3:0:native-int128",
+          "execution:3:0:native-int128-receiver",
+          "execution:3:0:native-uint256",
+          "execution:3:0:native-uint256-receiver",
+          "execution:3:1:int128",
+          "execution:3:1:int128-receiver",
+          "execution:3:1:uint256",
+          "execution:3:1:uint256-receiver",
+          "execution:3:1:native-int128",
+          "execution:3:1:native-int128-receiver",
+          "execution:3:1:native-uint256",
+          "execution:3:1:native-uint256-receiver",
+          "execution:3:2:int128",
+          "execution:3:2:int128-receiver",
+          "execution:3:2:uint256",
+          "execution:3:2:uint256-receiver",
+          "execution:3:2:native-int128",
+          "execution:3:2:native-int128-receiver",
+          "execution:3:2:native-uint256",
+          "execution:3:2:native-uint256-receiver",
+          "execution:3:4:int128",
+          "execution:3:4:int128-receiver",
+          "execution:3:4:uint256",
+          "execution:3:4:uint256-receiver",
+          "execution:3:4:native-int128",
+          "execution:3:4:native-int128-receiver",
+          "execution:3:4:native-uint256",
+          "execution:3:4:native-uint256-receiver",
+          "execution:3:5:int128",
+          "execution:3:5:int128-receiver",
+          "execution:3:5:uint256",
+          "execution:3:5:uint256-receiver",
+          "execution:3:5:native-int128",
+          "execution:3:5:native-int128-receiver",
+          "execution:3:5:native-uint256",
+          "execution:3:5:native-uint256-receiver",
+          "execution:3:6:int128",
+          "execution:3:6:int128-receiver",
+          "execution:3:6:uint256",
+          "execution:3:6:uint256-receiver",
+          "execution:3:6:native-int128",
+          "execution:3:6:native-int128-receiver",
+          "execution:3:6:native-uint256",
+          "execution:3:6:native-uint256-receiver",
+          "execution:3:7:int128",
+          "execution:3:7:int128-receiver",
+          "execution:3:7:uint256",
+          "execution:3:7:uint256-receiver",
+          "execution:3:7:native-int128",
+          "execution:3:7:native-int128-receiver",
+          "execution:3:7:native-uint256",
+          "execution:3:7:native-uint256-receiver",
+          "execution:4:0:int128",
+          "execution:4:0:int128-receiver",
+          "execution:4:0:uint256",
+          "execution:4:0:uint256-receiver",
+          "execution:4:0:native-int128",
+          "execution:4:0:native-int128-receiver",
+          "execution:4:0:native-uint256",
+          "execution:4:0:native-uint256-receiver",
+          "execution:4:1:int128",
+          "execution:4:1:int128-receiver",
+          "execution:4:1:uint256",
+          "execution:4:1:uint256-receiver",
+          "execution:4:1:native-int128",
+          "execution:4:1:native-int128-receiver",
+          "execution:4:1:native-uint256",
+          "execution:4:1:native-uint256-receiver",
+          "execution:4:2:int128",
+          "execution:4:2:int128-receiver",
+          "execution:4:2:uint256",
+          "execution:4:2:uint256-receiver",
+          "execution:4:2:native-int128",
+          "execution:4:2:native-int128-receiver",
+          "execution:4:2:native-uint256",
+          "execution:4:2:native-uint256-receiver",
+          "execution:4:3:int128",
+          "execution:4:3:int128-receiver",
+          "execution:4:3:uint256",
+          "execution:4:3:uint256-receiver",
+          "execution:4:3:native-int128",
+          "execution:4:3:native-int128-receiver",
+          "execution:4:3:native-uint256",
+          "execution:4:3:native-uint256-receiver",
+          "execution:4:5:int128",
+          "execution:4:5:int128-receiver",
+          "execution:4:5:uint256",
+          "execution:4:5:uint256-receiver",
+          "execution:4:5:native-int128",
+          "execution:4:5:native-int128-receiver",
+          "execution:4:5:native-uint256",
+          "execution:4:5:native-uint256-receiver",
+          "execution:4:6:int128",
+          "execution:4:6:int128-receiver",
+          "execution:4:6:uint256",
+          "execution:4:6:uint256-receiver",
+          "execution:4:6:native-int128",
+          "execution:4:6:native-int128-receiver",
+          "execution:4:6:native-uint256",
+          "execution:4:6:native-uint256-receiver",
+          "execution:4:7:int128",
+          "execution:4:7:int128-receiver",
+          "execution:4:7:uint256",
+          "execution:4:7:uint256-receiver",
+          "execution:4:7:native-int128",
+          "execution:4:7:native-int128-receiver",
+          "execution:4:7:native-uint256",
+          "execution:4:7:native-uint256-receiver",
+          "execution:5:0:int128",
+          "execution:5:0:int128-receiver",
+          "execution:5:0:uint256",
+          "execution:5:0:uint256-receiver",
+          "execution:5:0:native-int128",
+          "execution:5:0:native-int128-receiver",
+          "execution:5:0:native-uint256",
+          "execution:5:0:native-uint256-receiver",
+          "execution:5:1:int128",
+          "execution:5:1:int128-receiver",
+          "execution:5:1:uint256",
+          "execution:5:1:uint256-receiver",
+          "execution:5:1:native-int128",
+          "execution:5:1:native-int128-receiver",
+          "execution:5:1:native-uint256",
+          "execution:5:1:native-uint256-receiver",
+          "execution:5:2:int128",
+          "execution:5:2:int128-receiver",
+          "execution:5:2:uint256",
+          "execution:5:2:uint256-receiver",
+          "execution:5:2:native-int128",
+          "execution:5:2:native-int128-receiver",
+          "execution:5:2:native-uint256",
+          "execution:5:2:native-uint256-receiver",
+          "execution:5:3:int128",
+          "execution:5:3:int128-receiver",
+          "execution:5:3:uint256",
+          "execution:5:3:uint256-receiver",
+          "execution:5:3:native-int128",
+          "execution:5:3:native-int128-receiver",
+          "execution:5:3:native-uint256",
+          "execution:5:3:native-uint256-receiver",
+          "execution:5:4:int128",
+          "execution:5:4:int128-receiver",
+          "execution:5:4:uint256",
+          "execution:5:4:uint256-receiver",
+          "execution:5:4:native-int128",
+          "execution:5:4:native-int128-receiver",
+          "execution:5:4:native-uint256",
+          "execution:5:4:native-uint256-receiver",
+          "execution:5:6:int128",
+          "execution:5:6:int128-receiver",
+          "execution:5:6:uint256",
+          "execution:5:6:uint256-receiver",
+          "execution:5:6:native-int128",
+          "execution:5:6:native-int128-receiver",
+          "execution:5:6:native-uint256",
+          "execution:5:6:native-uint256-receiver",
+          "execution:5:7:int128",
+          "execution:5:7:int128-receiver",
+          "execution:5:7:uint256",
+          "execution:5:7:uint256-receiver",
+          "execution:5:7:native-int128",
+          "execution:5:7:native-int128-receiver",
+          "execution:5:7:native-uint256",
+          "execution:5:7:native-uint256-receiver",
+          "execution:6:0:int128",
+          "execution:6:0:int128-receiver",
+          "execution:6:0:uint256",
+          "execution:6:0:uint256-receiver",
+          "execution:6:0:native-int128",
+          "execution:6:0:native-int128-receiver",
+          "execution:6:0:native-uint256",
+          "execution:6:0:native-uint256-receiver",
+          "execution:6:1:int128",
+          "execution:6:1:int128-receiver",
+          "execution:6:1:uint256",
+          "execution:6:1:uint256-receiver",
+          "execution:6:1:native-int128",
+          "execution:6:1:native-int128-receiver",
+          "execution:6:1:native-uint256",
+          "execution:6:1:native-uint256-receiver",
+          "execution:6:2:int128",
+          "execution:6:2:int128-receiver",
+          "execution:6:2:uint256",
+          "execution:6:2:uint256-receiver",
+          "execution:6:2:native-int128",
+          "execution:6:2:native-int128-receiver",
+          "execution:6:2:native-uint256",
+          "execution:6:2:native-uint256-receiver",
+          "execution:6:3:int128",
+          "execution:6:3:int128-receiver",
+          "execution:6:3:uint256",
+          "execution:6:3:uint256-receiver",
+          "execution:6:3:native-int128",
+          "execution:6:3:native-int128-receiver",
+          "execution:6:3:native-uint256",
+          "execution:6:3:native-uint256-receiver",
+          "execution:6:4:int128",
+          "execution:6:4:int128-receiver",
+          "execution:6:4:uint256",
+          "execution:6:4:uint256-receiver",
+          "execution:6:4:native-int128",
+          "execution:6:4:native-int128-receiver",
+          "execution:6:4:native-uint256",
+          "execution:6:4:native-uint256-receiver",
+          "execution:6:5:int128",
+          "execution:6:5:int128-receiver",
+          "execution:6:5:uint256",
+          "execution:6:5:uint256-receiver",
+          "execution:6:5:native-int128",
+          "execution:6:5:native-int128-receiver",
+          "execution:6:5:native-uint256",
+          "execution:6:5:native-uint256-receiver",
+          "execution:6:7:int128",
+          "execution:6:7:int128-receiver",
+          "execution:6:7:uint256",
+          "execution:6:7:uint256-receiver",
+          "execution:6:7:native-int128",
+          "execution:6:7:native-int128-receiver",
+          "execution:6:7:native-uint256",
+          "execution:6:7:native-uint256-receiver",
+          "execution:7:0:int128",
+          "execution:7:0:int128-receiver",
+          "execution:7:0:uint256",
+          "execution:7:0:uint256-receiver",
+          "execution:7:0:native-int128",
+          "execution:7:0:native-int128-receiver",
+          "execution:7:0:native-uint256",
+          "execution:7:0:native-uint256-receiver",
+          "execution:7:1:int128",
+          "execution:7:1:int128-receiver",
+          "execution:7:1:uint256",
+          "execution:7:1:uint256-receiver",
+          "execution:7:1:native-int128",
+          "execution:7:1:native-int128-receiver",
+          "execution:7:1:native-uint256",
+          "execution:7:1:native-uint256-receiver",
+          "execution:7:2:int128",
+          "execution:7:2:int128-receiver",
+          "execution:7:2:uint256",
+          "execution:7:2:uint256-receiver",
+          "execution:7:2:native-int128",
+          "execution:7:2:native-int128-receiver",
+          "execution:7:2:native-uint256",
+          "execution:7:2:native-uint256-receiver",
+          "execution:7:3:int128",
+          "execution:7:3:int128-receiver",
+          "execution:7:3:uint256",
+          "execution:7:3:uint256-receiver",
+          "execution:7:3:native-int128",
+          "execution:7:3:native-int128-receiver",
+          "execution:7:3:native-uint256",
+          "execution:7:3:native-uint256-receiver",
+          "execution:7:4:int128",
+          "execution:7:4:int128-receiver",
+          "execution:7:4:uint256",
+          "execution:7:4:uint256-receiver",
+          "execution:7:4:native-int128",
+          "execution:7:4:native-int128-receiver",
+          "execution:7:4:native-uint256",
+          "execution:7:4:native-uint256-receiver",
+          "execution:7:5:int128",
+          "execution:7:5:int128-receiver",
+          "execution:7:5:uint256",
+          "execution:7:5:uint256-receiver",
+          "execution:7:5:native-int128",
+          "execution:7:5:native-int128-receiver",
+          "execution:7:5:native-uint256",
+          "execution:7:5:native-uint256-receiver",
+          "execution:7:6:int128",
+          "execution:7:6:int128-receiver",
+          "execution:7:6:uint256",
+          "execution:7:6:uint256-receiver",
+          "execution:7:6:native-int128",
+          "execution:7:6:native-int128-receiver",
+          "execution:7:6:native-uint256",
+          "execution:7:6:native-uint256-receiver"
+        ],
+        "requests": {
+          "op": "flatMap",
+          "args": [
+            "$evidence.pairs",
+            "pair",
+            {
+              "op": "map",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "modesForPair",
+                    {
+                      "pair": "$pair"
+                    }
+                  ]
+                },
+                "mode",
+                {
+                  "id": {
+                    "op": "expression",
+                    "args": [
+                      "executionReadId",
+                      {
+                        "pair": "$pair",
+                        "mode": "$mode"
+                      }
+                    ]
+                  },
+                  "kind": "declarative-execution-simulation",
+                  "required": false,
+                  "amountIn": "$pair.amountIn",
+                  "protectedTokens": "$evidence.binding.protectedTokens",
+                  "context": {
+                    "source": "$evidence.source",
+                    "executor": "$evidence.executor",
+                    "runtimeEvidence": [],
+                    "descriptor": {
+                      "familyId": "$profile.familyId",
+                      "lineageId": "$profile.lineageId",
+                      "instanceKey": "$evidence.pool",
+                      "pool": "$evidence.pool",
+                      "binding": "$evidence.binding"
+                    },
+                    "route": {
+                      "i": "$pair.i",
+                      "j": "$pair.j",
+                      "tokenIn": "$pair.tokenIn",
+                      "tokenOut": "$pair.tokenOut",
+                      "pool": "$evidence.pool",
+                      "target": "$evidence.pool",
+                      "executionMode": "$mode",
+                      "executionAssets": {
+                        "op": "expression",
+                        "args": [
+                          "modeAssets",
+                          {
+                            "pair": "$pair",
+                            "mode": "$mode"
+                          }
+                        ]
+                      },
+                      "direction": {
+                        "op": "join",
+                        "args": [
+                          [
+                            "$pair.i",
+                            "$pair.j",
+                            "$mode"
+                          ],
+                          ":"
+                        ]
+                      },
+                      "adapterId": {
+                        "op": "expression",
+                        "args": [
+                          "adapterId",
+                          {
+                            "mode": "$mode"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "decode": [
+          {
+            "let": "source",
+            "value": {
+              "op": "program",
+              "args": [
+                "readSource",
+                {}
+              ]
+            }
+          },
+          {
+            "evaluate": {
+              "op": "assertSource",
+              "args": [
+                "$source",
+                "$evidence.source"
+              ]
+            }
+          },
+          {
+            "let": "pool",
+            "value": "$evidence.pool"
+          },
+          {
+            "let": "directions",
+            "value": {
+              "op": "filter",
+              "args": [
+                {
+                  "op": "map",
+                  "args": [
+                    "$evidence.pairs",
+                    "pair",
+                    {
+                      "op": "program",
+                      "args": [
+                        "verifiedDirection",
+                        {
+                          "pair": "$pair"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "entry",
+                {
+                  "op": "defined",
+                  "args": [
+                    "$entry"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "op": "merge",
+              "args": [
+                "$evidence",
+                {
+                  "phase": "complete",
+                  "ids": {
+                    "op": "map",
+                    "args": [
+                      "$requests",
+                      "request",
+                      "$request.id"
+                    ]
+                  },
+                  "directions": "$directions"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "done": {
+        "requirements": {
+          "transports": []
+        },
+        "requests": [],
+        "decode": [
+          {
+            "return": "$evidence"
+          }
+        ]
+      },
+      "binding": {
+        "requirements": {
+          "transports": [
+            "eth-call",
+            "get-code"
+          ]
+        },
+        "requests": [
+          {
+            "id": "pool-code",
+            "kind": "get-code",
+            "address": "$candidate.pool"
+          },
+          {
+            "id": "factory-code",
+            "kind": "get-code",
+            "address": "0xb9fc157394af804a3578134a6585c0dc9cc990d4"
+          },
+          {
+            "id": "underlying-coins",
+            "kind": "eth-call",
+            "to": "0xb9fc157394af804a3578134a6585c0dc9cc990d4",
+            "data": {
+              "op": "encode",
+              "args": [
+                "factory",
+                "get_underlying_coins",
+                [
+                  "$candidate.pool"
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data",
+            "required": true
+          },
+          {
+            "id": "direct-coins",
+            "kind": "eth-call",
+            "to": "0xb9fc157394af804a3578134a6585c0dc9cc990d4",
+            "data": {
+              "op": "encode",
+              "args": [
+                "factory",
+                "get_coins",
+                [
+                  "$candidate.pool"
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data",
+            "required": true
+          },
+          {
+            "id": "base-pool",
+            "kind": "eth-call",
+            "to": "0xb9fc157394af804a3578134a6585c0dc9cc990d4",
+            "data": {
+              "op": "encode",
+              "args": [
+                "factory",
+                "get_base_pool",
+                [
+                  "$candidate.pool"
+                ]
+              ]
+            },
+            "completion": "return-or-revert-data",
+            "required": true
+          }
+        ],
+        "decode": [
+          {
+            "let": "source",
+            "value": {
+              "op": "program",
+              "args": [
+                "readSource",
+                {}
+              ]
+            }
+          },
+          {
+            "let": "pool",
+            "value": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$candidate.pool"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "poolCode",
+            "value": {
+              "op": "get",
+              "args": [
+                {
+                  "op": "returned",
+                  "args": [
+                    "pool-code"
+                  ]
+                },
+                "data"
+              ]
+            }
+          },
+          {
+            "return": {
+              "phase": "complete",
+              "source": "$source",
+              "pool": "$pool",
+              "ids": {
+                "op": "map",
+                "args": [
+                  "$requests",
+                  "request",
+                  "$request.id"
+                ]
+              },
+              "rejection": "no-pool-code"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$poolCode",
+                "0x"
+              ]
+            }
+          },
+          {
+            "evaluate": {
+              "op": "code",
+              "args": [
+                "factory-code"
+              ]
+            }
+          },
+          {
+            "return": {
+              "phase": "complete",
+              "source": "$source",
+              "pool": "$pool",
+              "ids": {
+                "op": "map",
+                "args": [
+                  "$requests",
+                  "request",
+                  "$request.id"
+                ]
+              },
+              "rejection": "factory-base-unavailable"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "shape",
+                  "args": [
+                    "base-pool"
+                  ]
+                },
+                "returned"
+              ]
+            }
+          },
+          {
+            "let": "basePool",
+            "value": {
+              "op": "program",
+              "args": [
+                "scalarAddress",
+                {
+                  "raw": {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "returned",
+                        "args": [
+                          "base-pool"
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "phase": "complete",
+              "source": "$source",
+              "pool": "$pool",
+              "ids": {
+                "op": "map",
+                "args": [
+                  "$requests",
+                  "request",
+                  "$request.id"
+                ]
+              },
+              "rejection": "factory-has-no-base-pool"
+            },
+            "when": {
+              "op": "sameAddress",
+              "args": [
+                "$basePool",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            }
+          },
+          {
+            "return": {
+              "phase": "complete",
+              "source": "$source",
+              "pool": "$pool",
+              "ids": {
+                "op": "map",
+                "args": [
+                  "$requests",
+                  "request",
+                  "$request.id"
+                ]
+              },
+              "rejection": "factory-coins-unavailable"
+            },
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "every",
+                  "args": [
+                    [
+                      "underlying-coins",
+                      "direct-coins"
+                    ],
+                    "rid",
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "shape",
+                          "args": [
+                            "$rid"
+                          ]
+                        },
+                        "returned"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "handlers",
+            "value": []
+          },
+          {
+            "let": "coins",
+            "value": {
+              "op": "program",
+              "args": [
+                "arrayFromRead",
+                {
+                  "abiName": "factory",
+                  "method": "get_underlying_coins",
+                  "requestId": "underlying-coins"
+                }
+              ]
+            }
+          },
+          {
+            "let": "direct",
+            "value": {
+              "op": "program",
+              "args": [
+                "arrayFromRead",
+                {
+                  "abiName": "factory",
+                  "method": "get_coins",
+                  "requestId": "direct-coins"
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "phase": "complete",
+              "source": "$source",
+              "pool": "$pool",
+              "ids": {
+                "op": "map",
+                "args": [
+                  "$requests",
+                  "request",
+                  "$request.id"
+                ]
+              },
+              "rejection": "factory-pool-not-registered"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$coins"
+                  ]
+                },
+                0
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$direct"
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$coins",
+                        0
+                      ]
+                    },
+                    {
+                      "op": "at",
+                      "args": [
+                        "$direct",
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "Underlying factory registration topology mismatch"
+          },
+          {
+            "evaluate": {
+              "op": "program",
+              "args": [
+                "assertCoinDomain",
+                {
+                  "coins": "$coins",
+                  "pool": "$pool",
+                  "registryAddress": "0xb9fc157394af804a3578134a6585c0dc9cc990d4"
+                }
+              ]
+            }
+          },
+          {
+            "evaluate": {
+              "op": "program",
+              "args": [
+                "assertCoinDomain",
+                {
+                  "coins": "$direct",
+                  "pool": "$pool",
+                  "registryAddress": "0xb9fc157394af804a3578134a6585c0dc9cc990d4"
+                }
+              ]
+            }
+          },
+          {
+            "let": "protected",
+            "value": {
+              "op": "unique",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "graphCoins",
+                        {
+                          "coins": "$coins"
+                        }
+                      ]
+                    },
+                    {
+                      "op": "expression",
+                      "args": [
+                        "graphCoins",
+                        {
+                          "coins": "$direct"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$protected"
+                  ]
+                },
+                11
+              ]
+            },
+            "error": "Underlying protected inventory exceeds supported program budget"
+          },
+          {
+            "return": {
+              "phase": "binding",
+              "source": "$source",
+              "pool": "$pool",
+              "ids": {
+                "op": "map",
+                "args": [
+                  "$requests",
+                  "request",
+                  "$request.id"
+                ]
+              },
+              "binding": {
+                "registry": "0xb9fc157394af804a3578134a6585c0dc9cc990d4",
+                "registryAbi": "factory",
+                "classKind": "factory",
+                "handlers": "$handlers",
+                "coins": "$coins",
+                "directCoins": "$direct",
+                "protectedTokens": "$protected",
+                "decimals": [],
+                "codeHash": {
+                  "op": "codeHash",
+                  "args": [
+                    "$poolCode"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "inputs": [
+    "descriptor",
+    "route",
+    "source",
+    "executor",
+    "amountIn",
+    "amountOut",
+    "minAmountOut",
+    "recipient",
+    "binding",
+    "target",
+    "runtimeEvidence",
+    "direction",
+    "routes",
+    "snapshot",
+    "steps",
+    "method",
+    "requestId",
+    "raw",
+    "kind",
+    "getterAbi",
+    "position",
+    "coin",
+    "coins",
+    "decimal",
+    "balance",
+    "balances",
+    "decimals",
+    "pool",
+    "registryAddress",
+    "pair",
+    "mode",
+    "abiName",
+    "asset",
+    "rid"
+  ],
+  "abi": {
+    "registry": [
+      "function get_registry_handlers_from_pool(address) view returns(address[10])",
+      "function get_underlying_coins(address) view returns(address[8])",
+      "function get_coins(address) view returns(address[8])",
+      "function get_underlying_balances(address) view returns(uint256[8])"
+    ],
+    "factory": [
+      "function get_base_pool(address) view returns(address)",
+      "function get_underlying_coins(address) view returns(address[8])",
+      "function get_coins(address) view returns(address[4])",
+      "function get_underlying_balances(address) view returns(uint256[8])"
+    ],
+    "factoryV1": [
+      "function get_underlying_coins(address) view returns(address[8])",
+      "function get_coins(address) view returns(address[2])",
+      "function get_underlying_balances(address) view returns(uint256[8])"
+    ],
+    "token": [
+      "function decimals() view returns(uint8)",
+      "function balanceOf(address) view returns(uint256)",
+      "function token() view returns(address)"
+    ],
+    "poolInt": [
+      "function coins(int128) view returns(address)",
+      "function underlying_coins(int128) view returns(address)"
+    ],
+    "factoryNg": [
+      "function get_base_pool(address) view returns(address)",
+      "function get_coins(address) view returns(address[])",
+      "function get_underlying_coins(address) view returns(address[])",
+      "function get_underlying_balances(address) view returns(uint256[])",
+      "function get_implementation_address(address) view returns(address)",
+      "function is_meta(address) view returns(bool)"
+    ],
+    "metaNg": [
+      "function BASE_POOL() view returns(address)",
+      "function BASE_N_COINS() view returns(uint256)",
+      "function BASE_COINS(uint256) view returns(address)",
+      "function coins(uint256) view returns(address)"
+    ],
+    "underlyingProbeToken": [
+      "function balanceOf(address) view returns(uint256)"
+    ],
+    "underlyingBalances": [
+      "function get_underlying_balances(address) view returns(uint256[8])"
+    ]
+  },
+  "constants": {
+    "zero": "0x0000000000000000000000000000000000000000",
+    "native": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "wrappedNative": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    "registry": "0xf98b45fa17de75fb1ad0e7afd971b0ca00e379fc",
+    "factory": "0xb9fc157394af804a3578134a6585c0dc9cc990d4",
+    "factoryV1": "0xfd6f33a0509ec67defc500755322abd9df1bd5b8",
+    "factoryV1Hash": "0x5461dc0d8c266670a5479a18d78991b1fa0f4b0fe3c4d6f9492b09698b440276",
+    "lendingHashes": [
+      "0xd8fb8e75d76c5d00a7c3957ade802de43381f994e28ab7ffd155d748167aaf9b",
+      "0x6a9d8cf975fffdf7d2a7a1fc50cb3aae54f92676e3810d63a01f09a64b63b707"
+    ],
+    "lendingLpHash": "0xcb1d74e22245d0cf403f0be2b26f91d1eeaa0236c94bfaeca3673392aa1b1170",
+    "lineages": [
+      "curve-underlying:metaregistry-member",
+      "curve-underlying:legacy-factory-member",
+      "curve-underlying:factory-v1-member",
+      "curve-underlying:legacy-lending-lp-reverse",
+      "curve-underlying:factory-ng-class-member"
+    ],
+    "modes": [
+      "int128",
+      "int128-receiver",
+      "uint256",
+      "uint256-receiver",
+      "native-int128",
+      "native-int128-receiver",
+      "native-uint256",
+      "native-uint256-receiver"
+    ],
+    "erc20Modes": [
+      "int128",
+      "int128-receiver",
+      "uint256",
+      "uint256-receiver"
+    ],
+    "nativeModes": [
+      "native-int128",
+      "native-int128-receiver",
+      "native-uint256",
+      "native-uint256-receiver"
+    ],
+    "ngPoolClassHash": "0x4921a6e18874c75ab24b81df91354695aff9365c2c9fcdf5fee98971c892553c",
+    "ngFactoryClassHash": "0xb78c1b32cd364260f3fa497ccc7e98c73cdc26bdae2d3635e763ee8b59a1d6fd",
+    "underlyingWeth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    "underlyingNative": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "underlyingZero": "0x0000000000000000000000000000000000000000",
+    "underlyingExecutionModes": {
+      "int128": {
+        "signature": "function exchange_underlying(int128,int128,uint256,uint256)",
+        "native": false,
+        "receiver": false
+      },
+      "int128-receiver": {
+        "signature": "function exchange_underlying(int128,int128,uint256,uint256,address)",
+        "native": false,
+        "receiver": true
+      },
+      "uint256": {
+        "signature": "function exchange_underlying(uint256,uint256,uint256,uint256)",
+        "native": false,
+        "receiver": false
+      },
+      "uint256-receiver": {
+        "signature": "function exchange_underlying(uint256,uint256,uint256,uint256,address)",
+        "native": false,
+        "receiver": true
+      },
+      "native-int128": {
+        "signature": "function exchange_underlying(int128,int128,uint256,uint256) payable",
+        "native": true,
+        "receiver": false
+      },
+      "native-int128-receiver": {
+        "signature": "function exchange_underlying(int128,int128,uint256,uint256,address) payable",
+        "native": true,
+        "receiver": true
+      },
+      "native-uint256": {
+        "signature": "function exchange_underlying(uint256,uint256,uint256,uint256) payable",
+        "native": true,
+        "receiver": false
+      },
+      "native-uint256-receiver": {
+        "signature": "function exchange_underlying(uint256,uint256,uint256,uint256,address) payable",
+        "native": true,
+        "receiver": true
+      }
+    }
+  },
+  "expressions": {
+    "graphToken": {
+      "op": "if",
+      "args": [
+        {
+          "op": "sameAddress",
+          "args": [
+            "$coin",
+            "$constants.native"
+          ]
+        },
+        "$constants.wrappedNative",
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$coin"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "graphCoins": {
+      "op": "map",
+      "args": [
+        "$coins",
+        "coin",
+        {
+          "op": "expression",
+          "args": [
+            "graphToken",
+            {
+              "coin": "$coin"
+            }
+          ]
+        }
+      ]
+    },
+    "executionReadId": {
+      "op": "join",
+      "args": [
+        [
+          "execution",
+          "$pair.i",
+          "$pair.j",
+          "$mode"
+        ],
+        ":"
+      ]
+    },
+    "nativeMode": {
+      "op": "matches",
+      "args": [
+        "$mode",
+        "^native-"
+      ]
+    },
+    "nativeCapable": {
+      "op": "or",
+      "args": [
+        {
+          "op": "sameAddress",
+          "args": [
+            "$coin",
+            "$constants.native"
+          ]
+        },
+        {
+          "op": "sameAddress",
+          "args": [
+            "$coin",
+            "$constants.wrappedNative"
+          ]
+        }
+      ]
+    },
+    "modeAssets": {
+      "input": {
+        "op": "if",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "nativeMode",
+                  {
+                    "mode": "$mode"
+                  }
+                ]
+              },
+              {
+                "op": "expression",
+                "args": [
+                  "nativeCapable",
+                  {
+                    "coin": {
+                      "op": "at",
+                      "args": [
+                        "$evidence.binding.coins",
+                        "$pair.i"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "native",
+          "erc20"
+        ]
+      },
+      "output": {
+        "op": "if",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "nativeMode",
+                  {
+                    "mode": "$mode"
+                  }
+                ]
+              },
+              {
+                "op": "expression",
+                "args": [
+                  "nativeCapable",
+                  {
+                    "coin": {
+                      "op": "at",
+                      "args": [
+                        "$evidence.binding.coins",
+                        "$pair.j"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "native",
+          "erc20"
+        ]
+      }
+    },
+    "modesForPair": {
+      "op": "if",
+      "args": [
+        {
+          "op": "eq",
+          "args": [
+            "$evidence.binding.classKind",
+            "lending"
+          ]
+        },
+        [
+          "int128"
+        ],
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$evidence.binding.coins",
+                        "$pair.i"
+                      ]
+                    },
+                    "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$evidence.binding.coins",
+                        "$pair.j"
+                      ]
+                    },
+                    "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                  ]
+                }
+              ]
+            },
+            "$constants.nativeModes",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "nativeCapable",
+                        {
+                          "coin": {
+                            "op": "at",
+                            "args": [
+                              "$evidence.binding.coins",
+                              "$pair.i"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "op": "expression",
+                      "args": [
+                        "nativeCapable",
+                        {
+                          "coin": {
+                            "op": "at",
+                            "args": [
+                              "$evidence.binding.coins",
+                              "$pair.j"
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "$constants.modes",
+                "$constants.erc20Modes"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "adapterId": {
+      "op": "if",
+      "args": [
+        {
+          "op": "eq",
+          "args": [
+            "$evidence.binding.classKind",
+            "lending"
+          ]
+        },
+        "curve-exchange-underlying-lending",
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "nativeMode",
+                {
+                  "mode": "$mode"
+                }
+              ]
+            },
+            "curve-exchange-underlying-uint-native",
+            "curve-exchange-underlying"
+          ]
+        }
+      ]
+    },
+    "underlyingGraphToken": {
+      "op": "if",
+      "args": [
+        {
+          "op": "sameAddress",
+          "args": [
+            "$coin",
+            "$constants.underlyingNative"
+          ]
+        },
+        "$constants.underlyingWeth",
+        {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$coin"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "underlyingExecutionMode": {
+      "op": "get",
+      "args": [
+        "$constants.underlyingExecutionModes",
+        "$route.executionMode"
+      ]
+    },
+    "underlyingNativeInput": {
+      "op": "eq",
+      "args": [
+        "$route.executionAssets.input",
+        "native"
+      ]
+    },
+    "underlyingNativeOutput": {
+      "op": "eq",
+      "args": [
+        "$route.executionAssets.output",
+        "native"
+      ]
+    },
+    "underlyingSample": {
+      "op": "if",
+      "args": [
+        {
+          "op": "gt",
+          "args": [
+            "$balance",
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        {
+          "op": "max",
+          "args": [
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            },
+            {
+              "op": "min",
+              "args": [
+                {
+                  "op": "pow",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        "10"
+                      ]
+                    },
+                    "$decimal"
+                  ]
+                },
+                {
+                  "op": "div",
+                  "args": [
+                    "$balance",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1000000"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "op": "pow",
+          "args": [
+            {
+              "op": "uint",
+              "args": [
+                "10"
+              ]
+            },
+            "$decimal"
+          ]
+        }
+      ]
+    }
+  },
+  "programs": {
+    "readSource": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$results"
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$requests"
+              ]
+            }
+          ]
+        },
+        "error": "Curve identity result count mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                {
+                  "op": "unique",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        "$results",
+                        "row",
+                        "$row.id"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$results"
+              ]
+            }
+          ]
+        },
+        "error": "Curve identity duplicate results"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "hash",
+              "args": [
+                {
+                  "op": "sortId",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        "$results",
+                        "row",
+                        {
+                          "id": "$row.id"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "hash",
+              "args": [
+                {
+                  "op": "sortId",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        "$requests",
+                        "row",
+                        {
+                          "id": "$row.id"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve identity result coverage mismatch"
+      },
+      {
+        "return": {
+          "op": "source",
+          "args": [
+            "$results"
+          ]
+        }
+      }
+    ],
+    "scalarWord": [
+      {
+        "assert": {
+          "op": "matches",
+          "args": [
+            "$raw",
+            "^0x(?:[0-9a-fA-F]{2}){32,}$"
+          ]
+        },
+        "error": "Curve scalar result is not complete byte data"
+      },
+      {
+        "return": {
+          "op": "bytes",
+          "args": [
+            "$raw",
+            0,
+            32
+          ]
+        }
+      }
+    ],
+    "scalarUint": [
+      {
+        "return": {
+          "op": "word",
+          "args": [
+            {
+              "op": "program",
+              "args": [
+                "scalarWord",
+                {
+                  "raw": "$raw"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "scalarAddress": [
+      {
+        "let": "wordData",
+        "value": {
+          "op": "program",
+          "args": [
+            "scalarWord",
+            {
+              "raw": "$raw"
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "matches",
+          "args": [
+            "$wordData",
+            "^0x0{24}[0-9a-fA-F]{40}$"
+          ]
+        },
+        "error": "Curve scalar address has dirty upper bits"
+      },
+      {
+        "return": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$wordData",
+                    12,
+                    20
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "assertCoinDomain": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$coins"
+                  ]
+                },
+                2
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$coins"
+                  ]
+                },
+                8
+              ]
+            }
+          ]
+        },
+        "error": "Curve direct coin count is unsupported"
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            "$coins",
+            "coin",
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "$pool"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "$registryAddress"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve direct coin aliases a protected address"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                {
+                  "op": "unique",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "graphCoins",
+                        {
+                          "coins": "$coins"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$coins"
+              ]
+            }
+          ]
+        },
+        "error": "Curve direct coin graph identities are not distinct"
+      },
+      {
+        "return": true
+      }
+    ],
+    "actorFromZeroDelta": [
+      {
+        "let": "actorRead",
+        "value": {
+          "op": "returned",
+          "args": [
+            "probe-executor"
+          ]
+        }
+      },
+      {
+        "evaluate": {
+          "op": "program",
+          "args": [
+            "scalarUint",
+            {
+              "raw": "$actorRead.data"
+            }
+          ]
+        }
+      },
+      {
+        "let": "actorTokens",
+        "value": "$actorRead.effects.tokenDeltas"
+      },
+      {
+        "let": "actorNative",
+        "value": "$actorRead.effects.nativeDeltas"
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$actorTokens"
+                  ]
+                },
+                1
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$actorNative"
+                  ]
+                },
+                1
+              ]
+            }
+          ]
+        },
+        "error": "Curve executor authority observation is incomplete"
+      },
+      {
+        "let": "actorTokenRow",
+        "value": {
+          "op": "at",
+          "args": [
+            "$actorTokens",
+            0
+          ]
+        }
+      },
+      {
+        "let": "actorNativeRow",
+        "value": {
+          "op": "at",
+          "args": [
+            "$actorNative",
+            0
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$actorTokenRow.token",
+                "$constants.wrappedNative"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$actorTokenRow.delta",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$actorNativeRow.delta",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$actorTokenRow.account",
+                "$actorNativeRow.account"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$actorTokenRow.account",
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$actorTokenRow.account",
+                    "$pool"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve zero-delta probe did not establish executor authority"
+      },
+      {
+        "return": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$actorTokenRow.account"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "tokenSurface": [
+      {
+        "let": "decimals",
+        "value": {
+          "op": "map",
+          "args": [
+            "$coins",
+            "coin",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$coin",
+                    "$constants.native"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "18"
+                  ]
+                },
+                {
+                  "op": "program",
+                  "args": [
+                    "scalarUint",
+                    {
+                      "raw": {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "returned",
+                            "args": [
+                              {
+                                "op": "join",
+                                "args": [
+                                  [
+                                    "decimals",
+                                    "$index"
+                                  ],
+                                  ":"
+                                ]
+                              }
+                            ]
+                          },
+                          "data"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            "$decimals",
+            "decimal",
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "gte",
+                  "args": [
+                    "$decimal",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    "$decimal",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "36"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve token decimal scale is unsupported"
+      },
+      {
+        "evaluate": {
+          "op": "map",
+          "args": [
+            "$coins",
+            "coin",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$coin",
+                    "$constants.native"
+                  ]
+                },
+                true,
+                {
+                  "op": "code",
+                  "args": [
+                    {
+                      "op": "join",
+                      "args": [
+                        [
+                          "token-code",
+                          "$index"
+                        ],
+                        ":"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "executor",
+        "value": {
+          "op": "program",
+          "args": [
+            "actorFromZeroDelta",
+            {
+              "pool": "$pool"
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "graphCoins",
+                {
+                  "coins": "$coins"
+                }
+              ]
+            },
+            "coin",
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$coin",
+                    "$executor"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Curve executor aliases a route token"
+      },
+      {
+        "return": {
+          "decimals": "$decimals",
+          "executor": "$executor"
+        }
+      }
+    ],
+    "arrayFromRead": [
+      {
+        "let": "padded",
+        "value": {
+          "op": "decodeCanonical",
+          "args": [
+            "$abiName",
+            "$method",
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "returned",
+                  "args": [
+                    "$requestId"
+                  ]
+                },
+                "data"
+              ]
+            },
+            0
+          ]
+        }
+      },
+      {
+        "let": "values",
+        "value": {
+          "op": "filter",
+          "args": [
+            "$padded",
+            "coin",
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$coin",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            "$padded",
+            "coin",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "lt",
+                  "args": [
+                    "$index",
+                    {
+                      "op": "length",
+                      "args": [
+                        "$values"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$coin",
+                        "0x0000000000000000000000000000000000000000"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$coin",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "Underlying address array padding is not contiguous"
+      },
+      {
+        "let": "normalized",
+        "value": {
+          "op": "map",
+          "args": [
+            "$values",
+            "coin",
+            {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$coin"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                {
+                  "op": "unique",
+                  "args": [
+                    "$normalized"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$normalized"
+              ]
+            }
+          ]
+        },
+        "error": "Underlying address array contains duplicates"
+      },
+      {
+        "return": "$normalized"
+      }
+    ],
+    "modeResult": [
+      {
+        "let": "readId",
+        "value": {
+          "op": "expression",
+          "args": [
+            "executionReadId",
+            {
+              "pair": "$pair",
+              "mode": "$mode"
+            }
+          ]
+        }
+      },
+      {
+        "let": "read",
+        "value": {
+          "op": "result",
+          "args": [
+            "$readId"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "unknown",
+          "requestId": "$readId"
+        },
+        "when": {
+          "op": "not",
+          "args": [
+            "$read.ok"
+          ]
+        }
+      },
+      {
+        "return": {
+          "status": "reverted",
+          "requestId": "$readId"
+        },
+        "when": {
+          "op": "ne",
+          "args": [
+            {
+              "op": "shape",
+              "args": [
+                "$readId"
+              ]
+            },
+            "returned"
+          ]
+        }
+      },
+      {
+        "let": "output",
+        "value": {
+          "op": "programReceipt",
+          "args": [
+            {
+              "requestId": "$readId",
+              "source": "$evidence.source",
+              "executor": "$evidence.executor",
+              "tokenIn": "$pair.tokenIn",
+              "tokenOut": "$pair.tokenOut",
+              "amountIn": "$pair.amountIn"
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "op": "merge",
+          "args": [
+            "$pair",
+            {
+              "status": "verified",
+              "requestId": "$readId",
+              "amountOut": "$output",
+              "executionMode": "$mode",
+              "executionAssets": {
+                "op": "expression",
+                "args": [
+                  "modeAssets",
+                  {
+                    "pair": "$pair",
+                    "mode": "$mode"
+                  }
+                ]
+              },
+              "adapterId": {
+                "op": "expression",
+                "args": [
+                  "adapterId",
+                  {
+                    "mode": "$mode"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "verifiedDirection": [
+      {
+        "let": "modes",
+        "value": {
+          "op": "map",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "modesForPair",
+                {
+                  "pair": "$pair"
+                }
+              ]
+            },
+            "mode",
+            {
+              "op": "program",
+              "args": [
+                "modeResult",
+                {
+                  "pair": "$pair",
+                  "mode": "$mode"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "verified",
+        "value": {
+          "op": "filter",
+          "args": [
+            "$modes",
+            "entry",
+            {
+              "op": "eq",
+              "args": [
+                "$entry.status",
+                "verified"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "op": "omit",
+          "args": [
+            {
+              "op": "at",
+              "args": [
+                "$verified",
+                0
+              ]
+            },
+            [
+              "status",
+              "requestId"
+            ]
+          ]
+        },
+        "when": {
+          "op": "gt",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$verified"
+              ]
+            },
+            0
+          ]
+        }
+      },
+      {
+        "let": "unknown",
+        "value": {
+          "op": "filter",
+          "args": [
+            "$modes",
+            "entry",
+            {
+              "op": "eq",
+              "args": [
+                "$entry.status",
+                "unknown"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "evaluate": {
+          "op": "if",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$unknown"
+                  ]
+                },
+                0
+              ]
+            },
+            {
+              "op": "requestFailure",
+              "args": [
+                {
+                  "op": "result",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$unknown",
+                            0
+                          ]
+                        },
+                        "requestId"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            true
+          ]
+        }
+      },
+      {
+        "return": null
+      }
+    ],
+    "underlyingPricingActor": [
+      {
+        "let": "actorRead",
+        "value": {
+          "op": "returned",
+          "args": [
+            "underlying-pricing-actor"
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "matches",
+          "args": [
+            "$actorRead.data",
+            "^0x[0-9a-fA-F]{64}$"
+          ]
+        },
+        "error": "underlying executor probe return shape"
+      },
+      {
+        "let": "actorTokens",
+        "value": "$actorRead.effects.tokenDeltas"
+      },
+      {
+        "let": "actorNative",
+        "value": "$actorRead.effects.nativeDeltas"
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$actorTokens"
+                  ]
+                },
+                1
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$actorNative"
+                  ]
+                },
+                1
+              ]
+            }
+          ]
+        },
+        "error": "underlying executor authority observation is incomplete"
+      },
+      {
+        "let": "actorToken",
+        "value": {
+          "op": "at",
+          "args": [
+            "$actorTokens",
+            0
+          ]
+        }
+      },
+      {
+        "let": "actorNativeRow",
+        "value": {
+          "op": "at",
+          "args": [
+            "$actorNative",
+            0
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$actorToken.token",
+                "$constants.underlyingWeth"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$actorToken.delta",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$actorNativeRow.delta",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$actorToken.account",
+                "$actorNativeRow.account"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$actorToken.account",
+                    "$constants.underlyingZero"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$actorToken.account",
+                    "$descriptor.pool"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "every",
+              "args": [
+                "$descriptor.binding.protectedTokens",
+                "asset",
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$asset",
+                        "$actorToken.account"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "underlying zero-delta probe did not establish executor authority"
+      },
+      {
+        "return": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$actorToken.account"
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "underlyingPricingBalance": [
+      {
+        "return": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$descriptor.binding.registryAbi"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "balanceRead",
+        "value": {
+          "op": "result",
+          "args": [
+            "underlying-pricing-balances"
+          ]
+        }
+      },
+      {
+        "return": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "when": {
+          "op": "not",
+          "args": [
+            "$balanceRead.ok"
+          ]
+        }
+      },
+      {
+        "return": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "when": {
+          "op": "ne",
+          "args": [
+            {
+              "op": "shape",
+              "args": [
+                "underlying-pricing-balances"
+              ]
+            },
+            "returned"
+          ]
+        }
+      },
+      {
+        "return": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        },
+        "when": {
+          "op": "eq",
+          "args": [
+            "$balanceRead.data",
+            "0x"
+          ]
+        }
+      },
+      {
+        "let": "underlyingBalances",
+        "value": {
+          "op": "decodeCanonical",
+          "args": [
+            "$descriptor.binding.registryAbi",
+            "get_underlying_balances",
+            "$balanceRead.data",
+            0
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$underlyingBalances"
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.binding.coins"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$underlyingBalances"
+                  ]
+                },
+                8
+              ]
+            }
+          ]
+        },
+        "error": "underlying pricing balance array does not cover its bound coins"
+      },
+      {
+        "return": {
+          "op": "at",
+          "args": [
+            "$underlyingBalances",
+            "$route.i"
+          ]
+        }
+      }
+    ]
+  },
+  "context": {
+    "route": {
+      "op": "coalesce",
+      "args": [
+        "$route",
+        {
+          "op": "at",
+          "args": [
+            "$routes",
+            0
+          ]
+        }
+      ]
+    },
+    "executor": {
+      "op": "coalesce",
+      "args": [
+        "$executor",
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$steps"
+              ]
+            },
+            "$steps.actor.executor",
+            "$missing"
+          ]
+        }
+      ]
+    }
+  },
+  "boundState": "$descriptor.binding",
+  "pricing": {
+    "refreshPolicy": "each-block",
+    "requirements": {
+      "transports": [
+        "eth-call",
+        "effect-delta-simulation"
+      ],
+      "caller": "executor",
+      "effects": [
+        "return-data",
+        "revert-data",
+        "token-delta",
+        "native-delta"
+      ]
+    },
+    "dependencies": {
+      "op": "concat",
+      "args": [
+        [
+          "$descriptor.pool"
+        ],
+        "$descriptor.binding.protectedTokens",
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$descriptor.binding.registry"
+              ]
+            },
+            [
+              "$descriptor.binding.registry"
+            ],
+            []
+          ]
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$descriptor.binding.basePool"
+              ]
+            },
+            [
+              "$descriptor.binding.basePool"
+            ],
+            []
+          ]
+        }
+      ]
+    },
+    "mutationAddresses": {
+      "op": "concat",
+      "args": [
+        [
+          "$descriptor.pool"
+        ],
+        "$descriptor.binding.protectedTokens",
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$descriptor.binding.registry"
+              ]
+            },
+            [
+              "$descriptor.binding.registry"
+            ],
+            []
+          ]
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$descriptor.binding.basePool"
+              ]
+            },
+            [
+              "$descriptor.binding.basePool"
+            ],
+            []
+          ]
+        }
+      ]
+    }
+  },
+  "exact": {
+    "methodId": "curve-underlying-execution-receipt",
+    "requirements": {
+      "transports": [
+        "effect-delta-simulation"
+      ],
+      "caller": "executor",
+      "effects": [
+        "return-data",
+        "revert-data",
+        "token-delta",
+        "native-delta"
+      ]
+    },
+    "protectedAddresses": [
+      "$descriptor.pool",
+      "$route.tokenIn",
+      "$route.tokenOut"
+    ],
+    "checks": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gte",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                "$amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "underlying exact input must be uint256"
+      }
+    ],
+    "evidence": {
+      "kind": "curve-underlying-execution-receipt",
+      "source": "$source",
+      "pool": "$descriptor.pool",
+      "binding": "$route.bindingRef.fingerprint",
+      "routeKey": "$route.routeKey",
+      "tokenIn": "$route.tokenIn",
+      "tokenOut": "$route.tokenOut",
+      "i": "$route.i",
+      "j": "$route.j",
+      "executionMode": "$route.executionMode",
+      "executionAssets": "$route.executionAssets",
+      "amountIn": "$amountIn",
+      "amountOut": "$amountOut",
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "zeroEvidence": {
+      "kind": "curve-underlying-execution-receipt",
+      "source": "$source",
+      "pool": "$descriptor.pool",
+      "binding": "$route.bindingRef.fingerprint",
+      "routeKey": "$route.routeKey",
+      "tokenIn": "$route.tokenIn",
+      "tokenOut": "$route.tokenOut",
+      "i": "$route.i",
+      "j": "$route.j",
+      "executionMode": "$route.executionMode",
+      "executionAssets": "$route.executionAssets",
+      "amountIn": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "amountOut": {
+        "op": "uint",
+        "args": [
+          "0"
+        ]
+      },
+      "executor": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$executor"
+            ]
+          }
+        ]
+      }
+    },
+    "amountOut": "$quoteResult.amountOut",
+    "retainReadEvidence": true
+  },
+  "readPrograms": {},
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": false
+    },
+    "protectedAddresses": [
+      "$descriptor.pool",
+      "$route.tokenIn",
+      "$route.tokenOut"
+    ],
+    "requireCanonicalSource": true,
+    "contextChecks": [
+      {
+        "condition": {
+          "op": "sameAddress",
+          "args": [
+            "$recipient",
+            "$executor"
+          ]
+        },
+        "error": "underlying execution requires executor receipt"
+      },
+      {
+        "condition": {
+          "op": "defined",
+          "args": [
+            {
+              "op": "expression",
+              "args": [
+                "underlyingExecutionMode",
+                {}
+              ]
+            }
+          ]
+        },
+        "error": "unsupported underlying execution mode"
+      },
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "number",
+                  "args": [
+                    "$route.i"
+                  ]
+                },
+                "$route.i"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "number",
+                  "args": [
+                    "$route.j"
+                  ]
+                },
+                "$route.j"
+              ]
+            },
+            {
+              "op": "gte",
+              "args": [
+                "$route.i",
+                0
+              ]
+            },
+            {
+              "op": "gte",
+              "args": [
+                "$route.j",
+                0
+              ]
+            },
+            {
+              "op": "lt",
+              "args": [
+                "$route.i",
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.binding.coins"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lt",
+              "args": [
+                "$route.j",
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.binding.coins"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                "$route.i",
+                "$route.j"
+              ]
+            }
+          ]
+        },
+        "error": "invalid underlying coin indices"
+      },
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "underlyingExecutionMode",
+                        {}
+                      ]
+                    },
+                    "native"
+                  ]
+                },
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "underlyingNativeInput",
+                        {}
+                      ]
+                    },
+                    {
+                      "op": "expression",
+                      "args": [
+                        "underlyingNativeOutput",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "underlyingNativeInput",
+                        {}
+                      ]
+                    },
+                    {
+                      "op": "expression",
+                      "args": [
+                        "underlyingNativeOutput",
+                        {}
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "underlying execution mode differs from native asset boundary"
+      },
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$route.tokenIn",
+                {
+                  "op": "expression",
+                  "args": [
+                    "underlyingGraphToken",
+                    {
+                      "coin": {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.binding.coins",
+                          "$route.i"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$route.tokenOut",
+                {
+                  "op": "expression",
+                  "args": [
+                    "underlyingGraphToken",
+                    {
+                      "coin": {
+                        "op": "at",
+                        "args": [
+                          "$descriptor.binding.coins",
+                          "$route.j"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.executionAssets.input",
+                        "erc20"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.executionAssets.input",
+                        "native"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$descriptor.binding.coins",
+                            "$route.i"
+                          ]
+                        },
+                        "$constants.underlyingNative"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.executionAssets.input",
+                        "native"
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$route.executionAssets.input",
+                            "native"
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$descriptor.binding.coins",
+                                "$route.i"
+                              ]
+                            },
+                            "$constants.underlyingWeth"
+                          ]
+                        },
+                        true
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.executionAssets.output",
+                        "erc20"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.executionAssets.output",
+                        "native"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$descriptor.binding.coins",
+                            "$route.j"
+                          ]
+                        },
+                        "$constants.underlyingNative"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.executionAssets.output",
+                        "native"
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$route.executionAssets.output",
+                            "native"
+                          ]
+                        },
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$descriptor.binding.coins",
+                                "$route.j"
+                              ]
+                            },
+                            "$constants.underlyingWeth"
+                          ]
+                        },
+                        true
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "underlying route assets differ from the bound underlying coins"
+      },
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.binding.protectedTokens"
+                  ]
+                },
+                2
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.binding.protectedTokens"
+                  ]
+                },
+                11
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    {
+                      "op": "unique",
+                      "args": [
+                        {
+                          "op": "map",
+                          "args": [
+                            "$descriptor.binding.protectedTokens",
+                            "asset",
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$asset"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$descriptor.binding.protectedTokens"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "every",
+              "args": [
+                {
+                  "op": "concat",
+                  "args": [
+                    "$descriptor.binding.coins",
+                    "$descriptor.binding.directCoins"
+                  ]
+                },
+                "coin",
+                {
+                  "op": "some",
+                  "args": [
+                    "$descriptor.binding.protectedTokens",
+                    "asset",
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$asset",
+                        {
+                          "op": "expression",
+                          "args": [
+                            "underlyingGraphToken",
+                            {
+                              "coin": "$coin"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "underlying protected inventory does not cover its bound topology"
+      }
+    ],
+    "steps": [
+      {
+        "id": "exchange",
+        "approval": {
+          "when": {
+            "op": "not",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "underlyingNativeInput",
+                  {}
+                ]
+              }
+            ]
+          },
+          "token": "$route.tokenIn",
+          "spender": "$descriptor.pool",
+          "mode": "exact-clear",
+          "verifyAllowance": true
+        },
+        "call": {
+          "target": "$descriptor.pool",
+          "signature": {
+            "op": "get",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "underlyingExecutionMode",
+                  {}
+                ]
+              },
+              "signature"
+            ]
+          },
+          "args": {
+            "op": "concat",
+            "args": [
+              [
+                "$route.i",
+                "$route.j",
+                {
+                  "runtime": "amountIn"
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ],
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "expression",
+                        "args": [
+                          "underlyingExecutionMode",
+                          {}
+                        ]
+                      },
+                      "receiver"
+                    ]
+                  },
+                  [
+                    "$executor"
+                  ],
+                  []
+                ]
+              }
+            ]
+          },
+          "value": {
+            "op": "if",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "underlyingNativeInput",
+                  {}
+                ]
+              },
+              {
+                "runtime": "amountIn"
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "effects": [
+      {
+        "op": "concat",
+        "args": [
+          {
+            "op": "map",
+            "args": [
+              {
+                "op": "filter",
+                "args": [
+                  "$descriptor.binding.protectedTokens",
+                  "asset",
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$asset",
+                              "$route.tokenIn"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$asset",
+                              "$route.tokenOut"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "asset",
+              {
+                "kind": "unchanged-token",
+                "token": "$asset",
+                "account": "$executor"
+              }
+            ]
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "or",
+                "args": [
+                  {
+                    "op": "expression",
+                    "args": [
+                      "underlyingNativeInput",
+                      {}
+                    ]
+                  },
+                  {
+                    "op": "expression",
+                    "args": [
+                      "underlyingNativeOutput",
+                      {}
+                    ]
+                  }
+                ]
+              },
+              [],
+              [
+                {
+                  "kind": "unchanged-native"
+                }
+              ]
+            ]
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "underlyingNativeInput",
+                  {}
+                ]
+              },
+              [
+                {
+                  "kind": "debit",
+                  "asset": "native",
+                  "account": "$executor",
+                  "equals": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ],
+              [
+                {
+                  "kind": "debit",
+                  "token": "$route.tokenIn",
+                  "account": "$executor",
+                  "equals": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ]
+            ]
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "expression",
+                "args": [
+                  "underlyingNativeOutput",
+                  {}
+                ]
+              },
+              [
+                {
+                  "kind": "credit",
+                  "asset": "native",
+                  "account": "$executor"
+                }
+              ],
+              [
+                {
+                  "kind": "credit",
+                  "token": "$route.tokenOut",
+                  "account": "$executor"
+                }
+              ]
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

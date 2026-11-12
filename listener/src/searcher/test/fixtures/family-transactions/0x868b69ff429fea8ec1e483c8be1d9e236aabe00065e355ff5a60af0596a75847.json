@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "chainId": 1,
+  "transactionHash": "0x868b69ff429fea8ec1e483c8be1d9e236aabe00065e355ff5a60af0596a75847",
+  "legs": [
+    {
+      "id": "custom-swap:ekubo-router-v1--reference-2-0",
+      "familyId": "custom-swap:ekubo-router-v1",
+      "domain": "swap",
+      "source": {
+        "number": 25943731,
+        "hash": "0x265fd1d8bfa75ca4aa8ae34c486750b62c494be0695dc2893c5e74836aa63e41"
+      },
+      "amountScope": "historical-input-at-pinned-end-state",
+      "actors": {
+        "executor": "0x1000000000000000000000000000000000000002",
+        "owner": "0x1000000000000000000000000000000000000001"
+      },
+      "provenance": [
+        {
+          "file": "docs/research/reports/ekubo-coffee-acceptance-20261010.json",
+          "sha256": "bee7058c03e433623353a13838f1bdfc5dd969117764de3f9444641064c5a1e9",
+          "jsonPointer": "/samples/1/rows/0/original"
+        }
+      ],
+      "referenceMissing": [
+        "current lineage and instance binding",
+        "complete supported direction/amount inputs",
+        "test actor binding"
+      ],
+      "instanceKey": "0x4cbcf9747988eb06d17794c224d3e4a70101c3b70d6c5819069af651cff06b7b",
+      "lineageId": "ekubo:vanilla-core-pool-key-v1",
+      "tokenIn": "0xd9fcd98c322942075a5c3860693e9f4f03aae07b",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "amountIn": "122255691783727626286"
+    }
+  ]
+}
