@@ -145,3 +145,43 @@ test("legacy frame checks factory code and every execution mode checks origin co
     assert.equal(dispatched, 0);
   } finally { await server.close(); }
 });
+
+test("explicit source-owner provisioning marks legacy frame receipts and never replaces source attestation", async () => {
+  const server = await mockNode(async (method) => {
+    if (method === "eth_getBlockByHash") return { number: "0x64", hash: H, parentHash: P, stateRoot: S };
+    if (method === "eth_chainId") return "0x1";
+    if (method === "eth_getCode") return "0x";
+    throw new Error("input preparation must not execute or fund anything");
+  });
+  const runtimeCode = { code: "0x6000", keccak256: keccak256("0x6000") };
+  const request = { rpcUrl: server.url, blockNumber: 100, sourcePin: { blockHash: H, chainId: 1, stateRoot: S },
+    from: A, to: T, data: "0x", callerMode: "impersonated-call-frame" as const, transactionOrigin: O,
+    inputStateOnly: true as const };
+  try {
+    const unprovisioned = new NodeStrictClient({ timeoutMs: 5000, executor: A, executorRuntimeCode: runtimeCode });
+    await assert.rejects(unprovisioned.strictSimulate(request), /differs at source/); await unprovisioned.closeAndDrain();
+    const client = new NodeStrictClient({ timeoutMs: 5000, executor: A, executorRuntimeCode: runtimeCode, allowExecutorCodeOverride: true });
+    const result = await client.strictSimulate(request); await client.closeAndDrain();
+    assert.deepEqual(result.strict!.counterfactualExecutorCode, { address: A, keccak256: runtimeCode.keccak256 });
+    assert.equal(result.sourceAttestation!.blockNumber, 100); assert.equal(result.sourceAttestation!.blockHash, H);
+    assert.equal(result.sourceAttestation!.stateRoot, S);
+  } finally { await server.close(); }
+});
+
+test("historical executor provisioning does not alter genuine top-level requests", async () => {
+  let codeReads = 0;
+  const server = await mockNode(async method => {
+    if (method === "eth_getBlockByHash") return { number: "0x64", hash: H, parentHash: P, stateRoot: S };
+    if (method === "eth_chainId") return "0x1";
+    if (method === "eth_getCode") { codeReads++; return "0x"; }
+    throw new Error("unexpected preparation RPC");
+  });
+  const client = new NodeStrictClient({ timeoutMs: 5000, executor: A,
+    executorRuntimeCode: { code: "0x6000", keccak256: keccak256("0x6000") }, allowExecutorCodeOverride: true });
+  try {
+    const r = await client.strictSimulate({ rpcUrl: server.url, blockNumber: 100, sourcePin: { blockHash: H, chainId: 1, stateRoot: S },
+      from: O, to: T, data: "0x", callerMode: "top-level", inputStateOnly: true });
+    assert.equal(r.strict!.counterfactualExecutorCode, undefined);
+    assert.equal(codeReads, 0, "ordinary top-level preparation must not read or provision the executor");
+  } finally { await client.closeAndDrain(); await server.close(); }
+});

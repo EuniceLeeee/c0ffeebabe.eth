@@ -71,6 +71,8 @@ export interface UniverseRebuildDependencies {
    * attempt identity. Its existing output also binds sealed discovery reuse;
    * an old interrupted run without an input seal cannot acquire this binding. */
   readonly readyReviewInputFingerprint?: () => string;
+  /** Discovery-only binding; proof environment changes must not rescan history. */
+  readonly readyDiscoveryInputFingerprint?: () => string;
   readonly hasExplicitStartupCandidates?: boolean;
   /** Freeze the canonical head, or one explicitly requested historical cutoff. */
   readonly freezeCanonicalHead: (
@@ -472,7 +474,7 @@ export async function rebuildUniverse(
     (incumbentRun === null || incumbentRun.reviewInputFingerprint !== undefined ||
       incumbentRun.currentInputFingerprint !== undefined);
   const discoveryFingerprint = canSealDiscoveryInput
-    ? defaultReview ? review!.inputFingerprint : input.readyReviewInputFingerprint?.()
+    ? input.readyDiscoveryInputFingerprint?.() ?? (defaultReview ? review!.inputFingerprint : input.readyReviewInputFingerprint?.())
     : undefined;
   const discoveryInputBinding: ReadyUniverseGeneration["discoveryInputBinding"] =
     discoveryFingerprint !== undefined && /^[0-9a-f]{64}$/.test(discoveryFingerprint)

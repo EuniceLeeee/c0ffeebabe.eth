@@ -88,6 +88,12 @@ try {
     selection: "previous-and-discovered",
   };
   const ordinary = readyMaintenanceReviewFingerprint(reviewInputs);
+  const testRuntimeHash = "0x" + "f".repeat(64);
+  const provisioned = readyMaintenanceReviewFingerprint({ ...reviewInputs, testRuntimeHash, forceStatuses: ["retryable"] });
+  assert.notEqual(provisioned, readyMaintenanceReviewFingerprint({ ...reviewInputs, forceStatuses: ["retryable"] }),
+    "an interrupted review cannot silently gain a new proof environment");
+  assert.notEqual(provisioned, readyMaintenanceReviewFingerprint({ ...reviewInputs, testRuntimeHash: "0x" + "e".repeat(64), forceStatuses: ["retryable"] }));
+
   const oldFingerprint = (extra: Record<string, unknown> = {}) => createHash("sha256").update(canonicalJson({
     version: 1, parent: [7, "universe", "catalog"], range: reviewInputs.range, source: reviewInputs.source,
     definitions: reviewInputs.definitions, executionIdentity: reviewInputs.executionIdentity,
@@ -147,4 +153,19 @@ try {
     const both = w.dedupeFamilyCandidates([...inputs, asNomination(otherFamily)], new Set([key, w.familyCandidateKey(otherFamily)]));
     assert.deepEqual(both, [selected, otherFamily], "Family ownership remains independent");
   }
+}
+
+{
+  const common = { rpcUrl: "http://127.0.0.1:1", familyIds: ["univ3-standard"],
+    executionIdentity: { executor: "0x" + "1".repeat(40), transactionOrigin: "0x" + "2".repeat(40) } };
+  const plain = createRebuildWiring(common);
+  const { keccak256 } = await import("ethers");
+  const provisioned = createRebuildWiring({ ...common, testExecutorProvisioning: {
+    owner: common.executionIdentity.transactionOrigin, runtimeCode: { code: "0x6000", keccak256: keccak256("0x6000") } } });
+  assert.equal(plain.readyDiscoveryInputFingerprint!(), plain.readyReviewInputFingerprint!(), "unprovisioned discovery keeps its sealed legacy digest");
+  assert.equal(provisioned.readyDiscoveryInputFingerprint!(), plain.readyDiscoveryInputFingerprint!(), "proof context does not change discovery inputs");
+  assert.notEqual(provisioned.readyReviewInputFingerprint!(), plain.readyReviewInputFingerprint!(), "proof context still binds the review");
+  const v1 = createRebuildWiring({ ...common, simulationMethod: "eth_simulateV1" });
+  assert.notEqual(v1.readyDiscoveryInputFingerprint!(), plain.readyDiscoveryInputFingerprint!(), "a changed reverse-binding call environment still invalidates discovery");
+  assert.equal(provisioned.familyDefinitionHash!("univ3-standard"), plain.familyDefinitionHash!("univ3-standard"));
 }

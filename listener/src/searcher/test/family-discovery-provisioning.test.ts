@@ -100,6 +100,7 @@ test("natural production attestation forwards code capability and V1 environment
         sourceAttestation: { kind: "node-attested", chainId: 1, blockNumber: source.number,
           blockHash: source.hash, parentHash: header.parentHash, stateRoot: header.stateRoot },
         strict: { outcome: { kind: "Success", phase: "main", output }, executionGasUsed: "21000",
+          ...(options.allowExecutorCodeOverride ? { counterfactualExecutorCode: { address: options.executor!, keccak256: options.executorRuntimeCode!.keccak256 } } : {}),
           tokenDeltas: req.observeTokenBalances!.map((pair, i) => ({ ...pair, delta: String(deltas[i]) })),
           nativeDeltas: [], totalSupplyDeltas: [], logs: [] } };
     });

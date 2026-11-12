@@ -56,6 +56,7 @@ interface StrictProvider {
 export interface StrictSimulationTransport {
   /** Trusted transport configuration, never supplied by a Family. */
   readonly executorProgramCodeHash?: string;
+  readonly counterfactualExecutorCode?: Readonly<{ address: string; keccak256: string }>;
   /** Standalone execution, not an Exact quote or a profitable-plan verdict. */
   simulateStandalone?(input: {
     readonly source: CanonicalSource;
@@ -695,6 +696,9 @@ async function executeRequest(
     const executorProgram = (request.kind === "effect-delta-simulation" || request.kind === "state-override-simulation") &&
       request.call.executionMode === "executor-program";
     const executorProgramCodeHash = executorProgram ? simulator?.executorProgramCodeHash : undefined;
+    const counterfactualExecutorCode = prefix !== undefined ||
+      (request.kind === "effect-delta-simulation" || request.kind === "state-override-simulation") &&
+      request.call.executionMode === "impersonated-call-frame" ? simulator?.counterfactualExecutorCode : undefined;
     if (executorProgram && (executorProgramCodeHash === undefined || !/^0x[0-9a-f]{64}$/.test(executorProgramCodeHash))) {
       // Capability gap, not an RPC failure: no trusted executor program code is
       // bound in this transport (e.g. a dry-run Ready probe without the
@@ -718,6 +722,7 @@ async function executeRequest(
         provenance: Object.freeze({ kind: "strict-exact-prefix-transport", fingerprint: hashCanonical({
           prefix: { ...prefix }, source: { ...source }, requestFingerprint: physicalAdapterRequestFingerprint(request),
           ...(executorProgramCodeHash === undefined ? {} : { executorProgramCodeHash }),
+          ...(counterfactualExecutorCode === undefined ? {} : { counterfactualExecutorCode }),
           callerAuthority: { ...callerAuthority } as unknown as CanonicalValue, completion: result.completion,
         }) }),
         ...(result.effects === undefined ? {} : { effects: Object.freeze(result.effects) }),
@@ -855,6 +860,7 @@ async function executeRequest(
           id: request.id,
           requestFingerprint,
           ...(executorProgramCodeHash === undefined ? {} : { executorProgramCodeHash }),
+          ...(counterfactualExecutorCode === undefined ? {} : { counterfactualExecutorCode }),
           callerAddresses,
           // Inner ORIGIN is distinct from the symbolic caller. Bind only the
           // sealed authority; never infer it from the executor or another role.

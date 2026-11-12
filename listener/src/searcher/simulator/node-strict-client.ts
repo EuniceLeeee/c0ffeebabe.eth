@@ -125,7 +125,8 @@ export class NodeStrictClient {
       const executor = addr(this.options.executor ?? req.trialPrefix?.executor ?? req.to);
       if (requestedCode && (requestedCode.keccak256 !== executorCode?.keccak256 ||
           addr(req.trialPrefix?.executor ?? req.to) !== executor)) throw new RevmStrictError("validation", "node executor capability mismatch");
-      const proof = requestedCode ? { counterfactualExecutorCode: { address: executor, keccak256: requestedCode.keccak256 } } : {};
+      const proofCode = requestedCode ?? (this.options.allowExecutorCodeOverride && req.callerMode === "impersonated-call-frame" ? executorCode : undefined);
+      const proof = proofCode ? { counterfactualExecutorCode: { address: executor, keccak256: proofCode.keccak256 } } : {};
       if (executorCode && (executorCode.code !== this.verifiedExecutorCode?.code ||
           executorCode.keccak256 !== this.verifiedExecutorCode?.keccak256)) {
         if (keccak256(executorCode.code) !== executorCode.keccak256) throw new RevmStrictError("validation", "node executor hash mismatch");
@@ -134,7 +135,7 @@ export class NodeStrictClient {
       // Code capability is verified at this exact state before funding or any
       // execution. A startup/latest code snapshot never substitutes history.
       const codeOverrides: Record<string, { code: string }> = {};
-      if (executorCode) {
+      if (executorCode && (req.callerMode === "impersonated-call-frame" || requestedCode)) {
         const onChain = await codeAt(executor);
         if (onChain.toLowerCase() !== executorCode.code.toLowerCase()) {
           if (!this.options.allowExecutorCodeOverride) throw new RevmStrictError("validation", "node executor code differs at source");

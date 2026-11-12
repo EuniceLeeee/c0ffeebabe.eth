@@ -3245,6 +3245,18 @@ export function createRebuildWiring(input?: {
     ...(module.plugin.manifest.poolAdapterIds ?? []), ...module.plugin.manifest.ownedActionAdapterIds,
   ]));
   const memoDefinitionHashes = new Map<string, ReadonlySet<string>>();
+  const readyInputFingerprint = (includeProofContext = true): string => {
+    const ids = [...new Set([...sourceCoverageKeys.startup, ...activityPlan.coverageKeys]
+      .map(key => key.slice(0, key.indexOf("|"))))].sort();
+    const hash = createHash("sha256").update(canonicalJson({ policy: "ready-review-v1", planFingerprints,
+      definitions: ids.map(id => [id, familyDefinitionHash(id)]),
+      executionIdentity: input?.executionIdentity ?? null,
+      ...(includeProofContext && provision ? { testExecutorProvisioning: { owner: provision.owner, codeHash: provision.runtimeCode.keccak256 } } : {}),
+      ...(simulationMethod ? { simulationMethod } : {}),
+      explicitPool: input?.startupCandidates !== undefined }));
+    for (const candidate of input?.startupCandidates ?? []) hash.update(canonicalJson(encodeDurableValue(candidate))).update("\n");
+    return hash.digest("hex");
+  };
   const wiring: UniverseRebuildDependencies & {
     readonly candidateFamilyId: (candidate: unknown) => string;
     readonly familyDiscoveryDefinitionHash: (familyId: string) => string;
@@ -3256,18 +3268,8 @@ export function createRebuildWiring(input?: {
       return candidateInScope(row) ? rebuildCandidateCoverage(row) : null;
     },
     hasExplicitStartupCandidates: input?.startupCandidates !== undefined,
-    readyReviewInputFingerprint: () => {
-      const ids = [...new Set([...sourceCoverageKeys.startup, ...activityPlan.coverageKeys]
-        .map(key => key.slice(0, key.indexOf("|"))))].sort();
-      const hash = createHash("sha256").update(canonicalJson({ policy: "ready-review-v1", planFingerprints,
-        definitions: ids.map(id => [id, familyDefinitionHash(id)]),
-        executionIdentity: input?.executionIdentity ?? null,
-        ...(provision ? { testExecutorProvisioning: { owner: provision.owner, codeHash: provision.runtimeCode.keccak256 } } : {}),
-        ...(simulationMethod ? { simulationMethod } : {}),
-        explicitPool: input?.startupCandidates !== undefined }));
-      for (const candidate of input?.startupCandidates ?? []) hash.update(canonicalJson(encodeDurableValue(candidate))).update("\n");
-      return hash.digest("hex");
-    },
+    readyReviewInputFingerprint: readyInputFingerprint,
+    readyDiscoveryInputFingerprint: () => readyInputFingerprint(false),
     familyDefinitionHash,
     familyDiscoveryDefinitionHash,
     isFamilyEnabled: (familyId) => inScope(familyId) && !disabledFamilyIds.has(familyId),

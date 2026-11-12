@@ -14,6 +14,7 @@ export function createNodeStrictSourceSimulation(input:
     simulationMethod?: "debug_traceCall" | "eth_simulateV1";
   }) {
   return createRevmStrictSourceSimulation({ ...input, preserveExecutorCode: !input.allowExecutorCodeOverride,
+    ...(input.allowExecutorCodeOverride && input.executor ? { provisionedExecutor: input.executor } : {}),
     createClient: () => new NodeStrictClient({ timeoutMs: input.timeoutMs, scheduler: input.scheduler,
       executor: input.executor, executorRuntimeCode: input.executorRuntimeCode, allowExecutorCodeOverride: input.allowExecutorCodeOverride,
       simulationMethod: input.simulationMethod, lane: input.lane, fundingCache: input.fundingCache }) });

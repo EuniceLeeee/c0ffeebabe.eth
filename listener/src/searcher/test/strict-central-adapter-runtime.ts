@@ -2508,3 +2508,21 @@ test("shared storage: real Solver controls reuse dependent source reads across a
   assert.deepEqual(candidate.reads, baseline.reads);
   assert.equal(baseline.physical, 72); assert.equal(candidate.physical, 6);
 });
+
+test("prefix eth-call provenance binds an explicit test executor even though the request is not a simulation", async () => {
+  const control = { signal: new AbortController().signal, deadlineAtMs: Date.now() + 60_000 };
+  const fingerprints: string[] = [];
+  for (const codeHash of ["0x" + "a".repeat(64), "0x" + "b".repeat(64)]) {
+    const runtime = createStrictCentralAdapterRuntime({
+      provider: mockProvider(), executor: STETH, transactionOrigin: "0x" + "3".repeat(40), generationFence: { assertCurrent() {} },
+      simulator: { counterfactualExecutorCode: { address: STETH, keccak256: codeHash },
+        async simulate() { assert.fail("not the prefix path"); },
+        async simulatePrefix() { return { data: "0x" + "0".repeat(64), completion: "returned" }; } },
+    });
+    const prefix = runtime.withExactPrefix!({ executor: STETH, calldata: "0x1234", inputToken: WSTETH, inputAmount: 1n }, SOURCE);
+    const [result] = await executeSharedRead(prefix, [{ id: "bound-view", kind: "eth-call", to: WSTETH,
+      data: "0x12345678", caller: { kind: "executor" }, completion: "return-data" }], control);
+    assert(result!.ok); fingerprints.push(result.provenance.fingerprint);
+  }
+  assert.notEqual(fingerprints[0], fingerprints[1], "identical source/request/prefix under a different test runtime is different evidence");
+});

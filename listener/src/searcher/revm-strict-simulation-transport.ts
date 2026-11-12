@@ -34,12 +34,18 @@ export function createRevmStrictSimulationTransport(input: {
   /** Trusted executor bytecode, never supplied by a Family request. */
   readonly executorRuntimeCode?: ExecutorRuntimeCode;
   readonly preserveExecutorCode?: boolean;
+  /** Explicit test context, supplied by the source owner, never by a Family. */
+  readonly provisionedExecutor?: string;
   readonly leaseFor: (source: CanonicalSource) => Promise<RevmStrictSourceLease>;
   readonly onFatal: (reason: RevmFatalReason) => void;
 }): StrictSimulationTransport {
-  record(input, ["rpcUrl", "executionGasLimit", "executorRuntimeCode", "preserveExecutorCode", "leaseFor", "onFatal"]);
+  record(input, ["rpcUrl", "executionGasLimit", "executorRuntimeCode", "preserveExecutorCode", "provisionedExecutor", "leaseFor", "onFatal"]);
   const { rpcUrl, executionGasLimit, leaseFor, onFatal } = input;
   const executorRuntimeCode = input.executorRuntimeCode === undefined ? undefined : codeSnapshot(input.executorRuntimeCode);
+  const provisionedExecutor = input.provisionedExecutor === undefined ? undefined : address(input.provisionedExecutor);
+  if (provisionedExecutor && (!executorRuntimeCode || input.preserveExecutorCode !== false)) invalid();
+  const counterfactualExecutorCode = provisionedExecutor && executorRuntimeCode
+    ? freeze({ address: provisionedExecutor, keccak256: executorRuntimeCode.keccak256 }) : undefined;
   try {
     if (typeof rpcUrl !== "string" || /\s/.test(rpcUrl)) invalid();
     const url = new URL(rpcUrl);
@@ -103,6 +109,7 @@ export function createRevmStrictSimulationTransport(input: {
         ? prefixRequestSnapshot(invocation as Parameters<NonNullable<StrictSimulationTransport["simulatePrefix"]>>[0],
           authority, executionGasLimit, executorRuntimeCode)
         : requestSnapshot(invocation.request, authority, executionGasLimit, executorRuntimeCode);
+      if (counterfactualExecutorCode && wire.callerMode === "impersonated-call-frame" && wire.from !== provisionedExecutor) invalid();
       const reportEffects = invocation.request.kind === "state-override-simulation" || invocation.request.kind === "effect-delta-simulation";
       open(control);
       const lease = await owned(() => leaseFor(source), control);
@@ -117,7 +124,7 @@ export function createRevmStrictSimulationTransport(input: {
       }
       // Validate BEFORE either Success or Revert can become Family evidence.
       // A late integrity fault is not hidden by an expired quote deadline.
-      const checked = responseSnapshot(response, request, source, observe, fatal);
+      const checked = responseSnapshot(response, request, source, observe, fatal, counterfactualExecutorCode);
       open(control);
       return { ...checked, reportEffects };
   }
@@ -128,6 +135,7 @@ export function createRevmStrictSimulationTransport(input: {
   const funding = new Map<string, InputFundingOverrides>();
   return Object.freeze({
     ...(executorRuntimeCode === undefined ? {} : { executorProgramCodeHash: executorRuntimeCode.keccak256 }),
+    ...(counterfactualExecutorCode === undefined ? {} : { counterfactualExecutorCode }),
     async simulateStandalone(invocation: Parameters<NonNullable<StrictSimulationTransport["simulateStandalone"]>>[0]) {
       open();
       const source = sourceSnapshot(invocation.source), control = controlSnapshot(invocation.control);
@@ -336,7 +344,8 @@ function callerSnapshot(value: unknown, authority: CentralCallerAuthority): { ke
 }
 
 function responseSnapshot(value: unknown, request: StrictSimulateRequest, source: CanonicalSource,
-  observe: ReadonlySet<string>, fatal: (reason: RevmFatalReason, stage?: RevmFaultStage) => never): {
+  observe: ReadonlySet<string>, fatal: (reason: RevmFatalReason, stage?: RevmFaultStage) => never,
+  provision?: Readonly<{ address: string; keccak256: string }>): {
     kind: string; data: string; effects: ObservedEffects; failure?: ExactPrefixFailure; funding?: InputFundingOverrides;
   } {
   const bad = (): never => fatal({ kind: "protocol-fault" }, "transport-response");
@@ -361,6 +370,9 @@ function responseSnapshot(value: unknown, request: StrictSimulateRequest, source
     if (code !== undefined) {
       const proof = record(s.counterfactualExecutorCode, ["address", "keccak256"]);
       if (address(proof.address) !== (request.trialPrefix?.executor ?? request.to) || proof.keccak256 !== code.keccak256) invalid();
+    } else if (provision && request.callerMode === "impersonated-call-frame") {
+      const proof = record(s.counterfactualExecutorCode, ["address", "keccak256"]);
+      if (address(proof.address) !== provision.address || proof.keccak256 !== provision.keccak256 || request.from !== provision.address) invalid();
     } else if (s.counterfactualExecutorCode !== undefined) invalid();
     const o = record(s.outcome, ["kind", "phase", "preCallIndex", "output", "reason", "stateOverrides", "nestedHalt"]);
     if (request.inputStateOnly) {

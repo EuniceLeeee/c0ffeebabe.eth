@@ -15,6 +15,7 @@ import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
  * build: --checkpoint PATH --archive DIR --from-block N --to-block N [--families FILE] [--candidates FILE]
  * update: --checkpoint PATH --archive DIR [--families FILE] [--candidates FILE]
  *         [--force-update | --force-retryable | --revalidate-proofs HASH]
+ *         [--test-executor-runtime HASH] (explicit historical test context)
  * Families is the complete desired array of installed Family IDs; omission uses
  * the currently enabled catalog. Candidates is the complete desired array of
  * durable snapshots. Without it, retain the previous pool plus current discovery.
@@ -33,12 +34,16 @@ export async function runReadyFamilyMaintenance(argv: readonly string[]): Promis
       continue;
     }
     const value = argv[++i];
-    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--families", "--candidates", "--expect-update", "--revalidate-proofs"].includes(key) ||
+    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--families", "--candidates", "--expect-update", "--revalidate-proofs", "--test-executor-runtime"].includes(key) ||
       value === undefined || value.startsWith("--") || options.has(key)) throw new Error("invalid Ready maintenance option");
     options.set(key, value);
   }
   if (options.has("--expect-update") && (mode !== "update" || options.get("--expect-update") !== "family-set")) {
     throw new Error("--expect-update family-set requires update mode");
+  }
+  const testRuntimeHash = options.get("--test-executor-runtime");
+  if (testRuntimeHash !== undefined && (mode !== "update" || !/^0x[0-9a-f]{64}$/.test(testRuntimeHash))) {
+    throw new Error("--test-executor-runtime requires update and a lower-case runtime hash");
   }
   const proofRuntimeHash = options.get("--revalidate-proofs");
   if (proofRuntimeHash !== undefined && (mode !== "update" || !/^0x[0-9a-f]{64}$/.test(proofRuntimeHash) || options.has("--expect-update"))) {
@@ -86,7 +91,14 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   const familiesFile = options.get("--families");
   const familyIds = familiesFile === undefined ? undefined :
     parseReadyFamilyIds(JSON.parse(await readFile(resolve(familiesFile), "utf8")));
+  const testRuntimeHash = options.get("--test-executor-runtime");
+  const runtimeCode = testRuntimeHash ? loadBotVmRuntimeCode(transactionOrigin) : undefined;
+  if (runtimeCode && runtimeCode.keccak256 !== testRuntimeHash) {
+    throw new Error("Ready test executor differs from the installed artifact");
+  }
+  const testExecutorProvisioning = runtimeCode ? { owner: transactionOrigin, runtimeCode } : undefined;
   const common = { rpcUrl, executionIdentity: { executor, transactionOrigin },
+    ...(testExecutorProvisioning && { testExecutorProvisioning }),
     ...(familyIds === undefined ? {} : { familyIds }) };
   const store = new UniverseRebuildCheckpointStore({ path: checkpointPath });
   const incumbent = await store.load();
@@ -183,7 +195,8 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     definitions: enabledIds.map(id => [id, familyDefinitionHash(id)] as const),
     executionIdentity: common.executionIdentity, sourcePlans: reviewedWiring.expectedSourcePlanFingerprints(),
     selection: candidateFileFingerprint ?? "previous-and-discovered",
-    ...(proofRuntimeHash && { proofRuntimeHash }), ...(forceUpdate && { forceUpdate }),
+    ...(proofRuntimeHash && { proofRuntimeHash }), ...(testRuntimeHash && { testRuntimeHash }),
+    ...(forceUpdate && { forceUpdate }),
     ...(forceStatuses && { forceStatuses }),
   };
   const inputFingerprint = readyMaintenanceReviewFingerprint(reviewInput);
@@ -209,7 +222,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   }
   log(JSON.stringify({ phase: "update-plan", familyCount: enabledIds.length,
     forceStatuses: forceStatuses ?? (forceUpdate ? ["terminal-rejected", "retryable"] : []),
-    revalidateProofs: !!proofRuntimeHash, throttle: wiring.readyThrottle?.snapshot() }));
+    revalidateProofs: !!proofRuntimeHash, testExecutorRuntimeHash: testRuntimeHash ?? null, throttle: wiring.readyThrottle?.snapshot() }));
   const ready = await rebuildUniverse({ ...reviewedWiring, store, runId: base.inProgressRun?.runId ?? "ready-review-" + inputFingerprint,
     previousReadyReview: { inputFingerprint, candidateKeys: keys,
       ...(replacesInputFingerprint && { replacesInputFingerprint }),
@@ -244,6 +257,7 @@ export function readyMaintenanceReviewFingerprint(input: {
   readonly sourcePlans: { readonly startup: string; readonly activity: string };
   readonly selection: string;
   readonly proofRuntimeHash?: string;
+  readonly testRuntimeHash?: string;
   readonly forceUpdate?: boolean;
   readonly forceStatuses?: readonly ("verified" | "terminal-rejected" | "retryable")[];
 }): string {
@@ -251,6 +265,7 @@ export function readyMaintenanceReviewFingerprint(input: {
     parent: [input.parent.generation, input.parent.universeHash, input.parent.catalogHash],
     range: input.range, source: input.source, definitions: [...input.definitions].sort(([a], [b]) => a.localeCompare(b)),
     ...(input.proofRuntimeHash && { proofRuntimeHash: input.proofRuntimeHash }),
+    ...(input.testRuntimeHash && { testRuntimeHash: input.testRuntimeHash }),
     ...(input.forceUpdate && { forceUpdate: true }),
     ...(input.forceStatuses?.length && { forceStatuses: [...new Set(input.forceStatuses)].sort() }),
     executionIdentity: input.executionIdentity, sourcePlans: input.sourcePlans, selection: input.selection,

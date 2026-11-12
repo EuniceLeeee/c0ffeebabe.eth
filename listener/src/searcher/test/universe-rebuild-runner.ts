@@ -329,6 +329,22 @@ async function main(): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
   try {
     {
+      const f = makeFixture(join(dir, "proof-context-only"));
+      f.failKeys.add("b"); f.terminalKeys.add("c");
+      const bound: RebuildUniverseInput = { ...f.input, runId: "proof-before",
+        dedupeFamilyCandidates: (rows) => f.input.dedupeFamilyCandidates(rows).map(row => ({ ...(row as object), familyId: "univ2" })),
+        readyReviewInputFingerprint: () => "1".repeat(64), readyDiscoveryInputFingerprint: () => "1".repeat(64),
+        familyDefinitionHash: () => "fdh", familyDiscoveryDefinitionHash: () => "d".repeat(64), candidateFamilyId: () => "univ2" };
+      const first = await rebuildUniverse(bound);
+      assert.equal(first.candidateAccounting.verified, 1); assert.equal(first.candidateAccounting.retryable, 1);
+      f.failKeys.clear(); f.attestCalls.clear();
+      const next = await rebuildUniverse({ ...bound, runId: "proof-after", readyReviewInputFingerprint: () => "6".repeat(64),
+        previousReadyReview: { inputFingerprint: "6".repeat(64), forceStatuses: ["retryable"] } });
+      assert.equal(next.candidateAccounting.verified, 2); assert.equal(next.candidateAccounting.terminalRejected, 1);
+      assert.deepEqual([...f.attestCalls], [["b", 1]], "only the failed task executes under the explicit new context");
+      assert.equal(f.scanCalls(), 1, "a changed proof binding must not rescan sealed discovery");
+    }
+    {
       const f = makeFixture(join(dir, "adaptive-recovery"));
       const control = new ReadyRpcThrottle(4, () => {});
       let rateAttempts = 0;

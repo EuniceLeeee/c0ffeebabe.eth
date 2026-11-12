@@ -588,3 +588,30 @@ test("real source owner binds endpoint before dispatch and owns acquisition/drai
   } finally { await owner.shutdown(); }
   assert.equal(drains, 1);
 });
+
+for (const corrupt of ["none", "address", "hash", "missing"] as const) test(`explicit historical frame validates provision receipt: ${corrupt}`, async () => {
+  const code = { code: "0x6000", keccak256: keccak256("0x6000") };
+  const f = fixture(async req => {
+    assert.equal(req.to, TARGET, "legacy frame must still call the protocol");
+    assert.equal(req.executorRuntimeCode, undefined, "do not reinterpret the protocol as the executor");
+    const r = response(req);
+    if (corrupt !== "missing") r.strict!.counterfactualExecutorCode = {
+      address: corrupt === "address" ? TARGET : EXECUTOR,
+      keccak256: corrupt === "hash" ? hash("9") : code.keccak256,
+    };
+    return r;
+  });
+  const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: code,
+    preserveExecutorCode: false, provisionedExecutor: EXECUTOR });
+  assert.deepEqual(t.counterfactualExecutorCode, { address: EXECUTOR, keccak256: code.keccak256 });
+  if (corrupt === "none") assert.equal((await t.simulate(invocation())).data, "0xbeef");
+  else await assert.rejects(t.simulate(invocation()), RevmFatalError);
+});
+test("a Family cannot introduce a counterfactual context or change its executor", async () => {
+  const f = fixture(), code = { code: "0x6000", keccak256: keccak256("0x6000") };
+  assert.throws(() => createRevmStrictSimulationTransport({ ...f.options, provisionedExecutor: EXECUTOR }));
+  assert.throws(() => createRevmStrictSimulationTransport({ ...f.options, provisionedExecutor: EXECUTOR, executorRuntimeCode: code, preserveExecutorCode: true }));
+  const t = createRevmStrictSimulationTransport({ ...f.options, executorRuntimeCode: code, preserveExecutorCode: false, provisionedExecutor: TARGET });
+  await assert.rejects(t.simulate(invocation()), notEvidence);
+  assert.equal(f.calls.length, 0);
+});
