@@ -409,6 +409,11 @@ export class StrictProductionRuntimeRoot {
     Object.freeze(this);
   }
 
+  /** Read-only routing metadata for isolated activity diagnostics. */
+  blockTouchedDependencyAddresses(): readonly string[] {
+    return Object.freeze([...this.#mutationIndexesByDependency.keys()]);
+  }
+
   /** Stable per Ready root: the reader's derived cache cannot cross this binding. */
   readonly resolveBlockTouchedStateKeys: BlockTouchedStateKeyResolver = Object.freeze(Object.assign(
     ((observation, block) => {

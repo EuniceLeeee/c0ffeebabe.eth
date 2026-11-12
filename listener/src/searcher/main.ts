@@ -41,11 +41,14 @@ import {
 import {
   resolveBlockScanSolverSearchConfig,
 } from "./blockscan-solver-search-config.js";
-import { readBlockTouchedStateKeys, readRetainedBlockTouchedStateKeys, type BlockTouchedProvider } from "./blockscan-touched-state.js";
+import { readBlockTouchedStateKeys, readRetainedBlockTouchedStateKeys, type BlockTouchedProvider, type BlockTouchedReadOptions } from "./blockscan-touched-state.js";
 import { StartupActivityCollector, collectIndexedStartupActivity, startupCatchupSource, type ActivityRangeControl } from "./blockscan-startup-catchup.js";
 import { getBigQueryActivityCutoff, readBigQueryTouchedRange, type BigQueryActivityConfig } from "./blockscan-bigquery-activity.js";
 import { collectReorgActivity } from "./blockscan-reorg-activity.js";
 import { BlockScanActivityPrefetch } from "./blockscan-activity-prefetch.js";
+import { resolveBlockScanActivitySettings } from "./blockscan-activity-mode.js";
+import { BlockScanTraceShadow } from "./blockscan-trace-shadow.js";
+import { createWorkerBlockScanShadowTraceReader, resolveShadowTraceProjection } from "./blockscan-trace-shadow-worker.js";
 import { startBlockScanHeadFeed } from "./blockscan-head-feed.js";
 import { isRpcQuotaExhaustedError, isRpcThrottleError, LiveRpcThrottleObservation } from "./rpc-throttle-guard.js";
 import {
@@ -1179,6 +1182,8 @@ export function createLiveSourceSimulationFactory(input: {
 }
 
 export function createBlockScanPriceRuntime(input: {
+  /** Refresh policy is independent of submission; default here retains strict proofs. */
+  activityPolicy?: "strict" | "logs-shadow";
   /** Explicit fixed sampling amount shared by live and historical callers. */
   fixedEffectiveWethInput?: bigint;
   provider: ethers.JsonRpcProvider;
@@ -1498,6 +1503,7 @@ export function createBlockScanPriceRuntime(input: {
       })}`); } catch { /* Diagnostics cannot invalidate an organized publication. */ }
       return organized;
     },
+    input.activityPolicy ?? "strict",
   );
   return { strictSessionFor, currentRuntimeCoordinator, blockScanAmountReference };
 }
@@ -1856,6 +1862,15 @@ async function main(): Promise<void> {
   const validatedParent = await liveSubsetParentProof();
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
+  const enableBlockScan = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1";
+  const blockScanPricingSource = resolveBlockScanPricingSourceMode(
+    process.argv.slice(2), process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK,
+  );
+  const blockScanNMinusOneFallback = blockScanPricingSource.mode === "n-1";
+  const blockScanActivitySettings = resolveBlockScanActivitySettings(process.env, {
+    dryRun: config.dryRun, blockScanSubmit: config.blockScanSubmit, enabled: enableBlockScan,
+    nMinusOne: blockScanNMinusOneFallback, blindProductionAudit, subsetPriceMode,
+  });
   const dryRunBotVmCodeOverride = dryRunBotVmCodeOverrideEnabled(
     process.env.SEARCHER_DRY_RUN_BOTVM_CODE_OVERRIDE, config.dryRun, config.blockScanSubmit,
   );
@@ -1959,13 +1974,6 @@ async function main(): Promise<void> {
   const blockScanMaxHops = Number(
     process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS,
   );
-  const enableBlockScan = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1";
-  const blockScanPricingSource = resolveBlockScanPricingSourceMode(
-    process.argv.slice(2),
-    process.env.SEARCHER_BLOCKSCAN_N_MINUS_ONE_FALLBACK,
-  );
-  const blockScanNMinusOneFallback =
-    blockScanPricingSource.mode === "n-1";
   const blockScanExactRefineEnabled = booleanEnvFlag(
     "SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED",
     process.env.SEARCHER_BLOCKSCAN_EXACT_REFINE_ENABLED,
@@ -2676,6 +2684,7 @@ async function main(): Promise<void> {
       rawExecutionEntry, scheduler: blockScanRethTransportScheduler, requestsPerSecond: 200 }) }) : undefined;
   const priceRuntime = createBlockScanPriceRuntime({
     provider, rpcUrl: config.rpcUrl, ...executionIdentity, strictRuntimeRoot,
+    activityPolicy: blockScanActivitySettings.mode === "logs-shadow" ? "logs-shadow" : "strict",
     fixedEffectiveWethInput: blockScanStageSettings.fixedEffectiveWethInput,
     blockScanRuntimeAbort, blockScanRethTransportScheduler, blockScanCfg,
     recordPricing: publication => {
@@ -2933,8 +2942,55 @@ async function main(): Promise<void> {
     },
   };
   const blockScanActivityProvider = new BlockScanActivityPrefetch(
-    blockScanRawActivityProvider, blockScanRuntimeAbort.signal,
+    blockScanRawActivityProvider, blockScanRuntimeAbort.signal, blockScanActivitySettings.mode,
   );
+  // Shadow owns a physical HTTP transport and deadline independent of the live
+  // scheduler, activityReadFailed and per-pass drain barriers. A quota failure
+  // here is a diagnostic result; it has no authority to abort or dirty live.
+  const blockScanShadowTraceReader = blockScanActivitySettings.mode === "logs-shadow"
+    ? createWorkerBlockScanShadowTraceReader(process.env.SEARCHER_BLOCKSCAN_TRACE_SHADOW_RPC_URL || config.rpcUrl, {
+        knownStateKeys: strictRuntimeRoot.pricingIndex().instanceIndexesByStateKey.keys(),
+        dependencyAddresses: strictRuntimeRoot.blockTouchedDependencyAddresses(),
+      })
+    : undefined;
+  const blockScanTraceShadow = blockScanShadowTraceReader === undefined ? undefined : new BlockScanTraceShadow({
+    chainId: Number(blockScanChainId), rootId: frozenProducerTopology.topologyKey,
+    knownStateKeys: strictRuntimeRoot.pricingIndex().instanceIndexesByStateKey.keys(),
+    perBlockRefreshStateKeys: strictRuntimeRoot.pricingIndex().perBlockRefreshStateKeys,
+    readTrace: blockScanShadowTraceReader,
+    classifyTrace: (raw, number, anchor, signal) => resolveShadowTraceProjection(
+      raw, number, anchor.hash, strictRuntimeRoot.resolveBlockTouchedStateKeys, signal),
+    timeoutMs: blockScanActivitySettings.shadowTimeoutMs,
+    maxConcurrent: blockScanActivitySettings.shadowMaxConcurrent,
+    onResult: event => console.log(`[searcher/activity-shadow] ${JSON.stringify({
+      mode: "logs-shadow", comparison: "refresh-trigger-sets",
+      activityCoverage: "logs-only-unverified", traceAffectsPricing: false, ...event,
+    })}`),
+  });
+  const blockScanTouchedReadOptions: BlockTouchedReadOptions = Object.freeze({
+    mode: blockScanActivitySettings.mode, shadow: blockScanTraceShadow,
+  });
+  let traceShadowClosed = false;
+  const closeTraceShadow = (): void => {
+    if (traceShadowClosed || blockScanTraceShadow === undefined) return;
+    traceShadowClosed = true;
+    blockScanTraceShadow.close();
+    blockScanShadowTraceReader?.close();
+    try { console.log(`[searcher/activity-shadow-summary] ${JSON.stringify({
+      mode: "logs-shadow", activityCoverage: "logs-only-unverified", traceAffectsPricing: false,
+      ...blockScanTraceShadow.snapshot(),
+    })}`); } catch { /* Closing diagnostics never delays live shutdown. */ }
+  };
+  if (blockScanRuntimeAbort.signal.aborted) closeTraceShadow();
+  else blockScanRuntimeAbort.signal.addEventListener("abort", closeTraceShadow, { once: true });
+  if (blockScanTraceShadow !== undefined) console.log(`[searcher/activity-mode] ${JSON.stringify({
+    mode: "logs-shadow", activityCoverage: "logs-only-unverified", traceAffectsPricing: false,
+    submission: !config.dryRun && config.blockScanSubmit, crossBlockExactCache: false, priceContinuation: false,
+    shadowTimeoutMs: blockScanActivitySettings.shadowTimeoutMs,
+    shadowMaxConcurrent: blockScanActivitySettings.shadowMaxConcurrent,
+    separateShadowEndpoint: Boolean(process.env.SEARCHER_BLOCKSCAN_TRACE_SHADOW_RPC_URL),
+    shadowParsing: "isolated-worker", shadowClassification: "cooperative-batches",
+  })}`);
   const continuePrices = liveContinuationEnabled(process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED);
   const continuationCatchupSource = startupCatchupSource(process.env.SEARCHER_BLOCKSCAN_STARTUP_CATCHUP_SOURCE);
   const continuationDirectory = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR;
@@ -3116,6 +3172,7 @@ async function main(): Promise<void> {
       range === undefined ? undefined : { ...range, readHeader: number => requireCoverage
         ? readStartupHeader(number, range) : readContinuationHeader(number, range) },
       strictRuntimeRoot.resolveBlockTouchedStateKeys,
+      blockScanTouchedReadOptions,
     ), range);
   };
   const readRuntimeTouched: BlockScanRuntimeLoopDependencies["readBlockSwapTouched"] = (number, header, range) =>
@@ -3131,6 +3188,7 @@ async function main(): Promise<void> {
   });
   const blockScanRuntimeLoop = new BlockScanRuntimeLoop({
     enabled: enableBlockScan,
+    activityMode: blockScanActivitySettings.mode,
     onPassSettled: () => continuationWriter?.capture(),
     readReorgActivity: async (number, header, range) => {
       if (header.number !== number || header.transactionHashes === undefined) throw new Error("reorg recovery lacks target activity anchor");
@@ -3142,7 +3200,7 @@ async function main(): Promise<void> {
           config.rpcUrl, blockScanChainId, hash, range).catch(activityReadFailed)),
         readTouched: (n, anchor, control) => blockScanActivityProvider.withBlockActivity(anchor.hash,
           () => readRetainedBlockTouchedStateKeys(blockScanActivityProvider, n, ADDR.UNISWAP_V4_POOL_MANAGER,
-            anchor, strictRuntimeRoot.resolveBlockTouchedStateKeys, control), control),
+            anchor, strictRuntimeRoot.resolveBlockTouchedStateKeys, control, blockScanTouchedReadOptions), control),
       });
     },
     ...(restoredContinuation ? { liveContinuation: {
@@ -3759,6 +3817,7 @@ async function main(): Promise<void> {
       console.log("\n[searcher/live] shutting down");
       shuttingDown = true;
       if (!blockScanRuntimeAbort.signal.aborted) blockScanRuntimeAbort.abort(new Error("searcher shutdown"));
+      closeTraceShadow();
       blockScanHeadFeed?.close();
       logStageCounters(counters);
       cancelScheduledWarm();

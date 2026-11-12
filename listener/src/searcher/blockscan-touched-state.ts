@@ -43,6 +43,18 @@ export interface BlockTouchedCanonicalAnchor {
   readonly passiveTouchedAddresses?: readonly string[];
 }
 
+/** Shadow is an observation sink only. Its result can never enter the reader's
+ * live set or completed caches, and no shadow promise is joined here. */
+export interface BlockTouchedReadOptions {
+  readonly mode?: "trace" | "logs-shadow";
+  readonly shadow?: {
+    begin(number: number, anchor: BlockTouchedCanonicalAnchor): {
+      observeLogs(keys: Iterable<string>): void;
+      failLogs(): void;
+    } | undefined;
+  };
+}
+
 export const MAX_ACTIVITY_TRANSITIONS = 256;
 /** A broken range is not by itself proof that its published base was reorged. */
 export class BlockActivityRangeInvalidatedError extends Error {}
@@ -56,6 +68,7 @@ interface CompletedBlockActivity {
 const completedByProvider = new WeakMap<BlockTouchedProvider, {
   readonly poolManager: string;
   readonly resolver: BlockTouchedStateKeyResolver | undefined;
+  readonly mode: "trace" | "logs-shadow";
   readonly blocks: Map<number, CompletedBlockActivity>;
 }>();
 
@@ -63,6 +76,7 @@ interface RetainedBlockActivity extends CompletedBlockActivity { readonly number
 const retainedByProvider = new WeakMap<BlockTouchedProvider, {
   readonly poolManager: string;
   readonly resolver: BlockTouchedStateKeyResolver | undefined;
+  readonly mode: "trace" | "logs-shadow";
   readonly blocks: Map<string, RetainedBlockActivity>;
 }>();
 
@@ -73,6 +87,7 @@ export async function readRetainedBlockTouchedStateKeys(
   provider: BlockTouchedProvider, blockNumber: number, poolManager: string,
   anchor: BlockTouchedCanonicalAnchor, resolver?: BlockTouchedStateKeyResolver,
   control?: { readonly signal?: AbortSignal; readonly deadlineAtMs?: number },
+  options?: BlockTouchedReadOptions,
 ): Promise<ReadonlySet<string>> {
   const pinned = snapshotAnchor(anchor, blockNumber);
   const assertOpen = () => {
@@ -82,14 +97,15 @@ export async function readRetainedBlockTouchedStateKeys(
   };
   assertOpen();
   const memo = retainedByProvider.get(provider);
-  const found = memo?.poolManager === poolManager.toLowerCase() && memo.resolver === resolver
+  const found = memo?.poolManager === poolManager.toLowerCase() && memo.resolver === resolver &&
+    memo.mode === (options?.mode ?? "trace")
     ? memo.blocks.get(pinned.hash) : undefined;
   if (found !== undefined) {
     if (found.number !== blockNumber || !sameAnchor(found.anchor, pinned))
       throw new BlockActivityRangeInvalidatedError("retained activity anchor mismatch");
     return new Set(found.touchedKeys);
   }
-  return readTouchedBlock(provider, blockNumber, poolManager, pinned, assertOpen, resolver);
+  return readTouchedBlock(provider, blockNumber, poolManager, pinned, assertOpen, resolver, options);
 }
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
@@ -120,13 +136,17 @@ export async function readBlockTouchedStateKeys(
     readonly deadlineAtMs?: number;
   },
   resolver?: BlockTouchedStateKeyResolver,
+  options?: BlockTouchedReadOptions,
 ): Promise<ReadonlySet<string>> {
   // Snapshot before either async read; later caller mutation cannot re-anchor it.
   const pinned = anchor === undefined ? undefined : snapshotAnchor(anchor, blockNumber);
   if (resolver !== undefined && pinned === undefined) {
     throw new Error("activity resolver requires a canonical block anchor");
   }
-  if (range === undefined) return readTouchedBlock(provider, blockNumber, uniswapV4PoolManager, pinned, undefined, resolver);
+  if (options?.mode === "logs-shadow" && pinned === undefined) {
+    throw new Error("logs-shadow activity requires a canonical block anchor");
+  }
+  if (range === undefined) return readTouchedBlock(provider, blockNumber, uniswapV4PoolManager, pinned, undefined, resolver, options);
   if (pinned === undefined) throw new Error("activity range requires a canonical target anchor");
   if (!isRecord(range)) throw new Error("malformed activity range");
   const { previousSource, readHeader, signal, deadlineAtMs } = range;
@@ -151,12 +171,13 @@ export async function readBlockTouchedStateKeys(
     return touched;
   }
   const poolManager = uniswapV4PoolManager.toLowerCase();
+  const mode = options?.mode ?? "trace";
   let memo = completedByProvider.get(provider);
-  if (memo === undefined || memo.poolManager !== poolManager || memo.resolver !== resolver) {
+  if (memo === undefined || memo.poolManager !== poolManager || memo.resolver !== resolver || memo.mode !== mode) {
     // Log-to-state-key interpretation is part of the existing reader input.
     // Changing the manager or root/generation interpreter cannot borrow a
     // union derived under different dependency bindings or mutation semantics.
-    memo = { poolManager, resolver, blocks: new Map() };
+    memo = { poolManager, resolver, mode, blocks: new Map() };
     completedByProvider.set(provider, memo);
   }
   const completed = memo.blocks;
@@ -188,7 +209,7 @@ export async function readBlockTouchedStateKeys(
       rejectChain("cached activity block anchor mismatch");
     }
     if (observation === undefined) {
-      const blockTouched = await readTouchedBlock(provider, number, uniswapV4PoolManager, header, assertOpen, resolver);
+      const blockTouched = await readTouchedBlock(provider, number, uniswapV4PoolManager, header, assertOpen, resolver, options);
       assertOpen();
       observation = Object.freeze({ anchor: header, touchedKeys: Object.freeze([...blockTouched]) });
       const concurrent = completed.get(number);
@@ -215,13 +236,43 @@ async function readTouchedBlock(
   pinned?: BlockTouchedCanonicalAnchor,
   assertOpen: () => void = () => {},
   resolver?: BlockTouchedStateKeyResolver,
+  options?: BlockTouchedReadOptions,
+): Promise<ReadonlySet<string>> {
+  assertOpen();
+  const mode = options?.mode ?? "trace";
+  if (mode !== "trace" && mode !== "logs-shadow") throw new Error("invalid block activity mode");
+  let ticket: ReturnType<NonNullable<BlockTouchedReadOptions["shadow"]>["begin"]> = undefined;
+  // Start only after the header/range anchor was checked, before awaiting logs.
+  // A diagnostic callback, including a synchronous throw, has no live authority.
+  if (mode === "logs-shadow" && pinned !== undefined) {
+    try { ticket = options?.shadow?.begin(blockNumber, pinned); } catch { /* Diagnostic only. */ }
+  }
+  try {
+    const touched = await readTouchedBlockActivity(provider, blockNumber, uniswapV4PoolManager,
+      pinned, assertOpen, resolver, mode);
+    try { void Promise.resolve(ticket?.observeLogs(new Set(touched))).catch(() => {}); } catch { /* Diagnostic only. */ }
+    return touched;
+  } catch (error) {
+    try { void Promise.resolve(ticket?.failLogs()).catch(() => {}); } catch { /* Preserve the live error. */ }
+    throw error;
+  }
+}
+
+async function readTouchedBlockActivity(
+  provider: BlockTouchedProvider,
+  blockNumber: number,
+  uniswapV4PoolManager: string,
+  pinned: BlockTouchedCanonicalAnchor | undefined,
+  assertOpen: () => void,
+  resolver: BlockTouchedStateKeyResolver | undefined,
+  mode: "trace" | "logs-shadow",
 ): Promise<ReadonlySet<string>> {
   // Keep hash-bound completed facts independently of the canonical range memo.
   // Invalidating a range must not erase the old branch needed to repair it.
   let retained = pinned === undefined ? undefined : retainedByProvider.get(provider);
   if (pinned !== undefined && (retained === undefined ||
-      retained.poolManager !== uniswapV4PoolManager.toLowerCase() || retained.resolver !== resolver)) {
-    retained = { poolManager: uniswapV4PoolManager.toLowerCase(), resolver, blocks: new Map() };
+      retained.poolManager !== uniswapV4PoolManager.toLowerCase() || retained.resolver !== resolver || retained.mode !== mode)) {
+    retained = { poolManager: uniswapV4PoolManager.toLowerCase(), resolver, mode, blocks: new Map() };
     retainedByProvider.set(provider, retained);
   }
   const traceMethod = pinned === undefined ? "debug_traceBlockByNumber" : "debug_traceBlockByHash";
@@ -231,7 +282,7 @@ async function readTouchedBlock(
       return provider.getLogs(pinned === undefined
         ? { fromBlock: blockNumber, toBlock: blockNumber } : { blockHash: pinned.hash });
     }),
-    Promise.resolve().then(() => {
+    mode === "logs-shadow" ? Promise.resolve(undefined) : Promise.resolve().then(() => {
       assertOpen();
       return provider.send(traceMethod, [
         pinned === undefined ? `0x${blockNumber.toString(16)}` : pinned.hash,
@@ -239,8 +290,8 @@ async function readTouchedBlock(
       ]);
     }),
   ]);
-  // The pass owns both reads. A failed sibling must not leave activity I/O
-  // running after this generation has been settled and its Funding drained.
+  // Strict mode owns both reads. Logs-shadow owns only the log read; its
+  // independent trace is never part of this pass or its drain barrier.
   // Preserve transport-fatal evidence even if its sibling or owner concurrently
   // cancelled this range. The shared classifier retains typed-revert exclusions.
   for (const result of [logsResult, tracesResult]) {
@@ -301,6 +352,61 @@ async function readTouchedBlock(
     }
   }
 
+  if (mode === "trace") {
+    for (const key of collectTraceTouchedStateKeys(traces, blockNumber, pinned, resolver, assertOpen)) touched.add(key);
+  }
+
+  for (const address of pinned?.passiveTouchedAddresses ?? []) touched.add(address);
+  if (pinned?.passiveTouchedAddresses !== undefined && resolver?.passiveStateKeys !== undefined) {
+    assertOpen();
+    const keys = resolver.passiveStateKeys(pinned.passiveTouchedAddresses, { number: blockNumber, hash: pinned.hash });
+    if (!Array.isArray(keys) || keys.some(key => typeof key !== "string" || key.length === 0)) {
+      throw new Error("activity resolver returned malformed passive state keys");
+    }
+    for (const key of keys) touched.add(key.toLowerCase());
+    assertOpen();
+  }
+  assertOpen();
+  if (pinned !== undefined && retained !== undefined && retainedByProvider.get(provider) === retained) {
+    retained.blocks.set(pinned.hash, Object.freeze({ number: blockNumber, anchor: pinned,
+      touchedKeys: Object.freeze([...touched]) }));
+    while (retained.blocks.size > MAX_ACTIVITY_TRANSITIONS)
+      retained.blocks.delete(retained.blocks.keys().next().value!);
+  }
+  return touched;
+}
+
+/** Pure validation/classification for the detached trace observer. No provider,
+ * retained memo, live Set or pricing publication is reachable from this path. */
+export function collectBlockTraceTouchedStateKeys(
+  traces: unknown,
+  blockNumber: number,
+  anchor?: BlockTouchedCanonicalAnchor,
+  resolver?: BlockTouchedStateKeyResolver,
+): ReadonlySet<string> {
+  const pinned = anchor === undefined ? undefined : snapshotAnchor(anchor, blockNumber);
+  if (resolver !== undefined && pinned === undefined) throw new Error("activity resolver requires a canonical block anchor");
+  return collectTraceTouchedStateKeys(traces, blockNumber, pinned, resolver, () => {});
+}
+
+function collectTraceTouchedStateKeys(
+  traces: unknown,
+  blockNumber: number,
+  pinned: BlockTouchedCanonicalAnchor | undefined,
+  resolver: BlockTouchedStateKeyResolver | undefined,
+  assertOpen: () => void,
+): ReadonlySet<string> {
+  const traceMethod = pinned === undefined ? "debug_traceBlockByNumber" : "debug_traceBlockByHash";
+  const touched = new Set<string>();
+  const resolve = resolver === undefined ? undefined : (observation: BlockTouchedObservation): void => {
+    assertOpen();
+    const keys = resolver(observation, { number: blockNumber, hash: pinned!.hash });
+    if (!Array.isArray(keys) || keys.some(key => typeof key !== "string" || key.length === 0)) {
+      throw new Error("activity resolver returned malformed state keys");
+    }
+    for (const key of keys) touched.add(key.toLowerCase());
+    assertOpen();
+  };
   if (!Array.isArray(traces)) {
     throw new Error(`${traceMethod} must return an array`);
   }
@@ -327,23 +433,7 @@ async function readTouchedBlock(
     }
   }
 
-  for (const address of pinned?.passiveTouchedAddresses ?? []) touched.add(address);
-  if (pinned?.passiveTouchedAddresses !== undefined && resolver?.passiveStateKeys !== undefined) {
-    assertOpen();
-    const keys = resolver.passiveStateKeys(pinned.passiveTouchedAddresses, { number: blockNumber, hash: pinned.hash });
-    if (!Array.isArray(keys) || keys.some(key => typeof key !== "string" || key.length === 0)) {
-      throw new Error("activity resolver returned malformed passive state keys");
-    }
-    for (const key of keys) touched.add(key.toLowerCase());
-    assertOpen();
-  }
   assertOpen();
-  if (pinned !== undefined && retained !== undefined && retainedByProvider.get(provider) === retained) {
-    retained.blocks.set(pinned.hash, Object.freeze({ number: blockNumber, anchor: pinned,
-      touchedKeys: Object.freeze([...touched]) }));
-    while (retained.blocks.size > MAX_ACTIVITY_TRANSITIONS)
-      retained.blocks.delete(retained.blocks.keys().next().value!);
-  }
   return touched;
 }
 
