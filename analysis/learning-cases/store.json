@@ -2675,6 +2675,84 @@
       },
       "created_at": "2026-10-20T13:12:23.797127+00:00",
       "updated_at": "2026-10-20T13:12:23.797127+00:00"
+    },
+    {
+      "learning_case_id": "tooling-defect-simulate-v1-revert-envelope-20261112",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [],
+      "trigger": "tooling_defect",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Completed status-zero/code-three revert data in error.data was ignored when returnData was empty.",
+      "our_stage": "verification",
+      "evidence": {
+        "report": "docs/research/reports/family-json-alignment-20261112.md",
+        "artifactDirectory": "/opt/mev-cloud/family-runtime-20261007/logs/jsonall-alignment-20261112",
+        "independentReview": "Eight saved raw revert/trace comparisons and independent mock review; malformed/conflicting data remain rejected."
+      },
+      "tooling_defect": {
+        "tool": "eth_simulateV1 evidence backend",
+        "issue": "Completed status-zero/code-three revert data in error.data was ignored when returnData was empty.",
+        "evidence": "Eight saved raw revert/trace comparisons and independent mock review; malformed/conflicting data remain rejected.",
+        "codify_target": "listener/src/searcher/simulator/node-simulate-v1.ts",
+        "status": "codified",
+        "codify_commit": "047378b349df36777ac91cb1cac84459668d56b4"
+      },
+      "created_at": "2026-11-12T13:59:47.696583+00:00",
+      "updated_at": "2026-11-12T13:59:47.696583+00:00"
+    },
+    {
+      "learning_case_id": "tooling-defect-funding-token-address-case-20261112",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [],
+      "trigger": "tooling_defect",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Funding token addresses were compared with checksum casing, causing a false negative after successful execution.",
+      "our_stage": "verification",
+      "evidence": {
+        "report": "docs/research/reports/family-json-alignment-20261112.md",
+        "artifactDirectory": "/opt/mev-cloud/family-runtime-20261007/logs/jsonall-alignment-20261112",
+        "independentReview": "Saved Ammalgam raw evidence independently decoded; changed token, amount, order, duplicate and extra data remain rejected."
+      },
+      "tooling_defect": {
+        "tool": "Family raw fact verifier",
+        "issue": "Funding token addresses were compared with checksum casing, causing a false negative after successful execution.",
+        "evidence": "Saved Ammalgam raw evidence independently decoded; changed token, amount, order, duplicate and extra data remain rejected.",
+        "codify_target": "listener/src/searcher/test/protocol-json-basic-facts.ts",
+        "status": "codified",
+        "codify_commit": "047378b349df36777ac91cb1cac84459668d56b4"
+      },
+      "created_at": "2026-11-12T13:59:47.696583+00:00",
+      "updated_at": "2026-11-12T13:59:47.696583+00:00"
+    },
+    {
+      "learning_case_id": "tooling-defect-paused-ready-discovery-rescan-20261112",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [],
+      "trigger": "tooling_defect",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Any review fingerprint replacement forced discovery scanning even when discovery receipts matched.",
+      "our_stage": "verification",
+      "evidence": {
+        "report": "docs/research/reports/family-json-alignment-20261112.md",
+        "artifactDirectory": "/opt/mev-cloud/family-runtime-20261007/logs/jsonall-alignment-20261112",
+        "independentReview": "Independent control-flow review; 53 focused tests include no extra scan/reverse-binding and no duplicate completed work after a second pause."
+      },
+      "tooling_defect": {
+        "tool": "Paused Ready update runner",
+        "issue": "Any review fingerprint replacement forced discovery scanning even when discovery receipts matched.",
+        "evidence": "Independent control-flow review; 53 focused tests include no extra scan/reverse-binding and no duplicate completed work after a second pause.",
+        "codify_target": "listener/src/searcher/universe-rebuild-runner.ts",
+        "status": "codified",
+        "codify_commit": "38dc6f1585569ddd0c0d3b26441e84b0526c4118"
+      },
+      "created_at": "2026-11-12T13:59:47.696583+00:00",
+      "updated_at": "2026-11-12T13:59:47.696583+00:00"
     }
   ]
 }

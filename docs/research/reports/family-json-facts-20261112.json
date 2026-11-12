@@ -1,0 +1,438 @@
+{
+  "schemaVersion": 1,
+  "scope": "registered historical transaction legs; not all variants, natural integration, opportunity replay or latency acceptance",
+  "familyCodeCommit": "047378b349df36777ac91cb1cac84459668d56b4",
+  "readyFollowupCommit": "38dc6f1585569ddd0c0d3b26441e84b0526c4118",
+  "sourceStableDuringFacts": true,
+  "sourceFingerprint": "c63a5993d8cfe0a86479fe6363b081529f68eb361971ce444e4e8c6b985108b9",
+  "artifactSha256": "52ce48ef591cae7297c16ca8d103e610ff2abad6fe58f95604fd67c470469a60",
+  "artifactDirectory": "/opt/mev-cloud/family-runtime-20261007/logs/jsonall-alignment-20261112/all-facts",
+  "installedFamilies": 52,
+  "jsonRootRegistrations": 39,
+  "offline": {
+    "tests": 874,
+    "pass": 873,
+    "skip": 1,
+    "fail": 0
+  },
+  "readyFollowupTests": {
+    "tests": 53,
+    "pass": 53
+  },
+  "transactions": {
+    "status": "failed",
+    "transactionFiles": 84,
+    "selectedLegs": 198,
+    "completeInputs": 192,
+    "incompleteInputs": 6,
+    "uninstalledReferences": [
+      "protocol:boring-vault-teller",
+      "protocol:origin-steth-arm",
+      "protocol:olympus",
+      "protocol:origin-ousd",
+      "protocol:default-collateral",
+      "protocol:metafactory",
+      "protocol:arcana-migration"
+    ]
+  },
+  "legResults": {
+    "pass": 98,
+    "failed": 94,
+    "incomplete": 6
+  },
+  "families": [
+    {
+      "familyId": "aqua-swapvm",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 6
+      }
+    },
+    {
+      "familyId": "balancer-v1",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 4
+      }
+    },
+    {
+      "familyId": "balancer-v2",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 2,
+        "pass": 1
+      }
+    },
+    {
+      "familyId": "balancer-v3",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "credit:fluid",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "curve-plain",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "curve-plain-lp",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "curve-underlying",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "custom-swap:ammalgam",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 1
+      }
+    },
+    {
+      "familyId": "custom-swap:angstrom-v4",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "custom-swap:dodo-v2",
+      "registeredInputResult": "failed",
+      "legs": {
+        "incomplete": 1,
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "custom-swap:ekubo-router-v1",
+      "registeredInputResult": "failed",
+      "legs": {
+        "incomplete": 1,
+        "failed": 2
+      }
+    },
+    {
+      "familyId": "custom-swap:oneswap",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 2
+      }
+    },
+    {
+      "familyId": "custom-swap:precision-pool",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 2
+      }
+    },
+    {
+      "familyId": "custom-swap:uniswap-v1",
+      "registeredInputResult": "failed",
+      "legs": {
+        "pass": 1,
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "custom-swap:zero1-curve",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "ella-exchange",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 1
+      }
+    },
+    {
+      "familyId": "flash-loan:balancer-v2",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "flash-loan:morpho",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "fluid-dex",
+      "registeredInputResult": "failed",
+      "legs": {
+        "pass": 2,
+        "failed": 1,
+        "incomplete": 1
+      }
+    },
+    {
+      "familyId": "kyberswap-elastic",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 1
+      }
+    },
+    {
+      "familyId": "mooniswap",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 1
+      }
+    },
+    {
+      "familyId": "protocol:astra-multitoken",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "protocol:badger-sett-withdraw",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 2
+      }
+    },
+    {
+      "familyId": "protocol:compound-ctoken",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 2,
+        "pass": 2
+      }
+    },
+    {
+      "familyId": "protocol:curve-lp",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 2
+      }
+    },
+    {
+      "familyId": "protocol:eigenpie",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "protocol:erc4626",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 32,
+        "pass": 39
+      }
+    },
+    {
+      "familyId": "protocol:erc4626-silo-redeem",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 6
+      }
+    },
+    {
+      "familyId": "protocol:ethertoken-native-redeem",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 2
+      }
+    },
+    {
+      "familyId": "protocol:few-wrapped",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 2
+      }
+    },
+    {
+      "familyId": "protocol:goldx",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 1
+      }
+    },
+    {
+      "familyId": "protocol:metronome-hgusdc",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 1
+      }
+    },
+    {
+      "familyId": "protocol:metronome-synth",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 2
+      }
+    },
+    {
+      "familyId": "protocol:peapods-debond",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 6
+      }
+    },
+    {
+      "familyId": "protocol:psm",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 10
+      }
+    },
+    {
+      "familyId": "protocol:psv",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 8
+      }
+    },
+    {
+      "familyId": "protocol:rocksolid",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "protocol:self-burn-native",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "protocol:set-redemption",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 4
+      }
+    },
+    {
+      "familyId": "protocol:staked-usdat",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "protocol:token-conversion",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 4,
+        "pass": 4
+      }
+    },
+    {
+      "familyId": "protocol:token-migration",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 2
+      }
+    },
+    {
+      "familyId": "protocol:wsteth",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 2,
+        "incomplete": 1
+      }
+    },
+    {
+      "familyId": "protocol:yearn-auction",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 1
+      }
+    },
+    {
+      "familyId": "protocol:yieldbasis-lt",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 2
+      }
+    },
+    {
+      "familyId": "swap:algebra-integral",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 3,
+        "pass": 3
+      }
+    },
+    {
+      "familyId": "univ2-standard",
+      "registeredInputResult": "pass",
+      "legs": {
+        "pass": 1
+      }
+    },
+    {
+      "familyId": "univ3-standard",
+      "registeredInputResult": "failed",
+      "legs": {
+        "pass": 2,
+        "failed": 1
+      }
+    },
+    {
+      "familyId": "univ4",
+      "registeredInputResult": "incomplete",
+      "legs": {
+        "pass": 1,
+        "incomplete": 1
+      }
+    },
+    {
+      "familyId": "univ4-fee-hook",
+      "registeredInputResult": "incomplete",
+      "legs": {
+        "pass": 1,
+        "incomplete": 1
+      }
+    },
+    {
+      "familyId": "vault-spot",
+      "registeredInputResult": "failed",
+      "legs": {
+        "failed": 1
+      }
+    }
+  ],
+  "diagnosedLimits": [
+    {
+      "family": "custom-swap:precision-pool",
+      "transactionHash": "0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554",
+      "block": 26129175,
+      "attempts": 12,
+      "reason": "node input funding unsupported balance layout",
+      "executionReached": false,
+      "artifact": "/opt/mev-cloud/family-runtime-20261007/logs/jsonall-alignment-20261112/strict-failure-details.jsonl",
+      "claim": "unverified execution; neither a successful swap nor an adapter rejection"
+    }
+  ],
+  "simulationContext": "node eth_simulateV1: fixed state at source N with explicit virtual N+1 environment for quote reads and execution; no historical transaction replay claim",
+  "noBroadcast": true,
+  "noLocalRevm": true
+}
