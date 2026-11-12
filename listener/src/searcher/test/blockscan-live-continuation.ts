@@ -153,6 +153,10 @@ test("compiler and execution boundary changes invalidate continuation identity",
   try {
     await cp(new URL("../../", import.meta.url), root, { recursive: true });
     const context = { chainId: "1", topology: "fixture" };
+    const logsIdentity = liveContinuationIdentity({ ...context, activityMode: "logs-shadow" }, root);
+    assert.equal(logsIdentity, liveContinuationIdentity({ ...context, activityMode: "logs-shadow" }, root));
+    assert.notEqual(logsIdentity, liveContinuationIdentity({ ...context, activityMode: "trace" }, root),
+      "the existing context hash binds the selected touched reader");
     let previous = liveContinuationIdentity(context, root);
     for (const file of ["compiler.ts", "encoder.ts", "searcher/execution-asset-boundary.ts", "searcher/exact-prefix-plan.ts", "searcher/main.ts"]) {
       await writeFile(join(root, file), (await readFile(join(root, file), "utf8")) + "\n// changed fixture\n");
