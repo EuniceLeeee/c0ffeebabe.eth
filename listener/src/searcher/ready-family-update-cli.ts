@@ -1,22 +1,25 @@
 import { loadBotVmRuntimeCode } from "../shared/executor/botvm-executor.js";
 import { createHash } from "node:crypto";
-import { constants } from "node:fs";
-import { copyFile, mkdir, open, readFile, unlink } from "node:fs/promises";
+import { mkdir, open, readFile, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReadyActivityArchive } from "./ready-activity-archive.js";
 import { UniverseRebuildCheckpointStore, activeReadyMemos, canonicalJson, canonicalJsonFingerprint } from "./universe-rebuild-checkpoint.js";
-import type { ReadyFamilyPartition } from "./universe-rebuild-checkpoint.js";
-import { rebuildUniverse, updateReadyFamilies } from "./universe-rebuild-runner.js";
+import type { ReadyFamilyPartition, ReadyUniverseGeneration } from "./universe-rebuild-checkpoint.js";
+import { rebuildUniverse } from "./universe-rebuild-runner.js";
 import { createRebuildWiring, familyDefinitionHash } from "./universe-rebuild-production.js";
 import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 
-/** One authoritative checkpoint. Scratch supplements are never live inputs.
+/** One authoritative checkpoint and one complete-input review path.
  * Configuration/credentials use the normal process environment; no signing.
- * build: --checkpoint PATH --archive DIR --from-block N --to-block N
- * update: --checkpoint PATH --archive DIR [--candidates FILE] [--force-update]
- * FILE is an exact array of durable Family candidate snapshots, including new
- * nominations as needed. Without it, use the previous pool plus current discovery.
+ * build: --checkpoint PATH --archive DIR --from-block N --to-block N [--families FILE] [--candidates FILE]
+ * update: --checkpoint PATH --archive DIR [--families FILE] [--candidates FILE]
+ *         [--force-update | --force-retryable | --revalidate-proofs HASH]
+ * Families is the complete desired array of installed Family IDs; omission uses
+ * the currently enabled catalog. Candidates is the complete desired array of
+ * durable snapshots. Without it, retain the previous pool plus current discovery.
+ * Force flags select work inside that same review; they never create a second
+ * checkpoint or supplemental-Family execution path.
  */
 export async function runReadyFamilyMaintenance(argv: readonly string[]): Promise<void> {
   const mode = argv[0];
@@ -24,14 +27,14 @@ export async function runReadyFamilyMaintenance(argv: readonly string[]): Promis
   const options = new Map<string, string>();
   for (let i = 1; i < argv.length; i++) {
     const key = argv[i]!;
-    if (key === "--force-update") {
+    if (key === "--force-update" || key === "--force-retryable") {
       if (options.has(key)) throw new Error("invalid Ready maintenance option");
       options.set(key, "true");
       continue;
     }
     const value = argv[++i];
-    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--candidates", "--expect-update", "--revalidate-proofs"].includes(key) ||
-      value === undefined || value === "--force-update" || options.has(key)) throw new Error("invalid Ready maintenance option");
+    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--families", "--candidates", "--expect-update", "--revalidate-proofs"].includes(key) ||
+      value === undefined || value.startsWith("--") || options.has(key)) throw new Error("invalid Ready maintenance option");
     options.set(key, value);
   }
   if (options.has("--expect-update") && (mode !== "update" || options.get("--expect-update") !== "family-set")) {
@@ -44,7 +47,10 @@ export async function runReadyFamilyMaintenance(argv: readonly string[]): Promis
   if (options.has("--force-update") && (mode !== "update" || options.has("--expect-update") || proofRuntimeHash !== undefined)) {
     throw new Error("--force-update requires update mode and cannot be combined with --expect-update or --revalidate-proofs");
   }
-  if (mode === "build" && options.has("--candidates")) throw new Error("--candidates applies to Ready updates");
+  if (options.has("--force-retryable") && (mode !== "update" || options.has("--force-update") ||
+      options.has("--expect-update") || proofRuntimeHash !== undefined)) {
+    throw new Error("--force-retryable requires update mode and cannot be combined with --force-update, --expect-update or --revalidate-proofs");
+  }
   if (!options.has("--checkpoint") || !options.has("--archive")) throw new Error("checkpoint and archive paths required");
   const checkpointPath = resolve(options.get("--checkpoint")!);
   const archiveDirectory = resolve(options.get("--archive")!);
@@ -73,13 +79,37 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 1024) throw new Error("invalid attestation concurrency");
   const proofRuntimeHash = options.get("--revalidate-proofs");
   const forceUpdate = options.has("--force-update");
+  const forceStatuses = options.has("--force-retryable") ? ["retryable"] as const : undefined;
   if (proofRuntimeHash && loadBotVmRuntimeCode(transactionOrigin).keccak256 !== proofRuntimeHash) {
     throw new Error("Ready proof runtime differs from the installed executor artifact");
   }
-  const common = { rpcUrl, executionIdentity: { executor, transactionOrigin } };
+  const familiesFile = options.get("--families");
+  const familyIds = familiesFile === undefined ? undefined :
+    parseReadyFamilyIds(JSON.parse(await readFile(resolve(familiesFile), "utf8")));
+  const common = { rpcUrl, executionIdentity: { executor, transactionOrigin },
+    ...(familyIds === undefined ? {} : { familyIds }) };
   const store = new UniverseRebuildCheckpointStore({ path: checkpointPath });
   const incumbent = await store.load();
   const discovery = createRebuildWiring(common);
+  const enabledIds = familyIds ?? [...new Set(discovery.requiredSourceCoverageKeys().map(key => key.slice(0, key.indexOf("|"))))].sort();
+  const selectedFile = options.get("--candidates");
+  const candidateFile = selectedFile === undefined ? null : await readFile(resolve(selectedFile));
+  const candidateFileFingerprint = candidateFile === null ? undefined : createHash("sha256").update(candidateFile).digest("hex");
+  const explicit: unknown = candidateFile ? JSON.parse(candidateFile.toString("utf8")) : null;
+  if (candidateFile && !Array.isArray(explicit)) throw new Error("expected an array of durable Family candidate snapshots");
+  const snapshots = Array.isArray(explicit) ? explicit : [];
+  const decode = (s: unknown) => discovery.decodeCandidateSnapshot!(s) as Readonly<Record<string, unknown>>;
+  const startupCandidates = snapshots.map(decode);
+  const keys = candidateFile ? new Set(startupCandidates.map(discovery.familyCandidateKey)) : undefined;
+  if (keys && keys.size !== startupCandidates.length) throw new Error("duplicate candidate in explicit Ready scope");
+  const selected = new Map<string, Record<string, unknown>>();
+  if (candidateFile) for (const [index, candidate] of startupCandidates.entries()) {
+    const id = discovery.candidateFamilyId(candidate);
+    if (!enabledIds.includes(id)) throw new Error("candidate selection contains a disabled Family: " + id);
+    let rows = selected.get(id);
+    if (!rows) { rows = {}; selected.set(id, rows); }
+    rows[discovery.familyCandidateKey(candidate)] = snapshots[index];
+  }
   const log = (message: string) => console.log("[ready-maintenance] " + message);
   let source;
   let range;
@@ -92,6 +122,9 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     source = await discovery.freezeCanonicalHead(toBlock);
     if (incumbent?.inProgressRun && (canonicalJson(incumbent.inProgressRun.cutoff) !== canonicalJson(source) ||
       incumbent.inProgressRun.fromBlock !== fromBlock)) throw new Error("baseline resume source mismatch");
+    if (incumbent?.inProgressRun && incumbent.inProgressRun.currentInputFingerprint !== candidateFileFingerprint) {
+      throw new Error("baseline resume input mismatch");
+    }
   } else {
     if (options.has("--from-block") || options.has("--to-block")) throw new Error("update cannot move the Ready source");
     if (!incumbent) throw new Error("update requires a completed baseline");
@@ -104,18 +137,26 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   const archive = new ReadyActivityArchive({ directory: archiveDirectory, chainId: 1,
     ...range, cutoffHash: source.hash });
   const verifyArchivedInputs = async () => {
+    const pending = incumbent?.inProgressRun;
+    // An explicitly empty sealed scope has no raw inputs to archive. The
+    // runner still checks its complete input, source and resume bindings.
+    if (discovery.requiredSourceCoverageKeys().length === 0 && pending?.candidateCount === 0 &&
+        pending.sourceReceipts.length === 0) return;
     const method = await archive.readTrace({ blockNumber: source.number, method: "trace_block" }) !== null
       ? "trace_block" : "debug_traceBlockByNumber";
     log("verifying complete compressed inputs before resuming admission");
     return archive.assertComplete({ method });
   };
-  const wiring = createRebuildWiring({ ...common, activityArchive: archive, readyThrottle: discovery.readyThrottle });
+  const wiring = createRebuildWiring({ ...common, activityArchive: archive, readyThrottle: discovery.readyThrottle,
+    ...(candidateFile === null ? {} : { startupCandidates }) });
   if (mode === "build") {
     // In-progress admission means the source scan is already sealed. Recheck
     // durable inputs before reusing it; fresh scans verify before sealing.
     if (incumbent?.inProgressRun) await verifyArchivedInputs();
     const ready = await rebuildUniverse({ ...wiring, store,
-      runId: incumbent?.inProgressRun?.runId ?? `archived-baseline-${source.number}-${source.hash.slice(2, 14)}`,
+      runId: incumbent?.inProgressRun?.runId ?? `archived-baseline-${source.number}-${source.hash.slice(2, 14)}` +
+        (candidateFileFingerprint === undefined ? "" : "-candidates-" + candidateFileFingerprint),
+      ...(candidateFileFingerprint === undefined ? {} : { currentInputFingerprint: candidateFileFingerprint, currentCandidateKeys: keys }),
       observationRange: range, attestationConcurrency: concurrency, log });
     resolveStrictReadyRuntime(ready);
     log(JSON.stringify({ status: "baseline-ready", generation: ready.generation, range,
@@ -124,102 +165,78 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   }
   const base = incumbent!;
   const partitions = base.readyGeneration!.familyPartitions!;
-  const enabledIds = [...new Set(wiring.requiredSourceCoverageKeys().map(key => key.slice(0, key.indexOf("|"))))].sort();
-  const selectedFile = options.get("--candidates");
-  const candidateFile = selectedFile === undefined ? null : await readFile(resolve(selectedFile));
-  const explicit: unknown = candidateFile ? JSON.parse(candidateFile.toString("utf8")) : null;
-  if (candidateFile && !Array.isArray(explicit)) throw new Error("expected an array of durable Family candidate snapshots");
-  const snapshots = Array.isArray(explicit) ? explicit : [];
-  const decode = (s: unknown) => wiring.decodeCandidateSnapshot!(s) as Readonly<Record<string, unknown>>;
-  const startupCandidates = snapshots.map(decode);
-  const keys = candidateFile ? new Set(startupCandidates.map(wiring.familyCandidateKey)) : undefined;
-  if (keys && keys.size !== startupCandidates.length) throw new Error("duplicate candidate in explicit Ready scope");
-  const selected = new Map<string, Record<string, unknown>>();
-  if (candidateFile) for (const [index, candidate] of startupCandidates.entries()) {
-    const id = wiring.candidateFamilyId(candidate);
-    if (!enabledIds.includes(id)) throw new Error("candidate selection contains a disabled Family: " + id);
-    let rows = selected.get(id);
-    if (!rows) { rows = {}; selected.set(id, rows); }
-    rows[wiring.familyCandidateKey(candidate)] = snapshots[index];
-  }
-  const needed = enabledIds.filter(id => readyFamilyNeedsSupplement({ partition: partitions[id],
-    discoveryDefinitionHash: wiring.familyDiscoveryDefinitionHash!(id), familyDefinitionHash: familyDefinitionHash(id),
-    isVerifiedMemoCurrent: key => !!base.verifiedMemos[key] && wiring.isReadyMemoDefinitionCurrent!(base.verifiedMemos[key]!) }));
-  const activationOnly = !forceUpdate && !proofRuntimeHash && isFamilySetOnlyReadyUpdate(partitions, enabledIds, needed, candidateFile ? selected : undefined);
-  if (options.has("--expect-update") && !activationOnly) {
-    throw new Error("requested Family-set update also changes rules or retained candidates; full review not started");
-  }
-  // Finish an already sealed review under its original input fingerprint.
-  // A fresh activation edit only scans and attests the supplementary Families.
-  log(JSON.stringify({ phase: "update-plan", activationOnly, forceUpdate, retainedFamilies: enabledIds.filter(id => partitions[id]?.enabled).length,
-    newlyEnabled: enabledIds.filter(id => !partitions[id]?.enabled), throttle: wiring.readyThrottle?.snapshot() }));
-  if (base.inProgressRun || !activationOnly) {
-    const reviewedWiring = createRebuildWiring({ ...common, activityArchive: archive,
-      readyThrottle: wiring.readyThrottle, startupCandidates: candidateFile ? startupCandidates :
-        enabledIds.flatMap(id => Object.values(partitions[id]?.candidatesByKey ?? {}).map(decode)) });
-    const inputFingerprint = createHash("sha256").update(canonicalJson({ version: 1,
-      parent: [base.readyGeneration!.generation, base.readyGeneration!.universeHash, base.readyGeneration!.catalogHash],
-      range, source, definitions: enabledIds.map(id => [id, familyDefinitionHash(id)]),
-      ...(proofRuntimeHash && { proofRuntimeHash }), ...(forceUpdate && { forceUpdate }), executionIdentity: common.executionIdentity, sourcePlans: reviewedWiring.expectedSourcePlanFingerprints(),
-      selection: candidateFile ? createHash("sha256").update(candidateFile).digest("hex") : "previous-and-discovered",
-    })).digest("hex");
-    if (base.inProgressRun) {
-      if (base.inProgressRun.reviewInputFingerprint !== inputFingerprint) throw new Error("cannot resume Ready review with changed inputs");
-      await verifyArchivedInputs();
+  if (options.has("--expect-update")) {
+    // Compatibility assertion only: it does not choose a separate update path,
+    // and it never rechecks every verified memo in an unchanged partition.
+    const changed = enabledIds.filter(id => !partitions[id] ||
+      partitions[id]!.familyDefinitionHash !== familyDefinitionHash(id) ||
+      partitions[id]!.discoveryDefinitionHash !== wiring.familyDiscoveryDefinitionHash!(id));
+    if (!isFamilySetOnlyReadyUpdate(partitions, enabledIds, changed, candidateFile ? selected : undefined)) {
+      throw new Error("requested Family-set update also changes rules or retained candidates; full review not started");
     }
-    const ready = await rebuildUniverse({ ...reviewedWiring, store, runId: "ready-review-" + inputFingerprint,
-      previousReadyReview: { inputFingerprint, candidateKeys: keys, ...(proofRuntimeHash && { revalidateParentProofs: true }),
-        ...(forceUpdate && { retryNegativeOutcomes: true }),
-        ...(activationOnly && { retainedFamilyIds: new Set(enabledIds.filter(id => partitions[id]?.enabled)) }) }, resumeCompletedOutcomes: !!base.inProgressRun,
-      observationRange: range, attestationConcurrency: concurrency, log });
-    resolveStrictReadyRuntime(ready);
-    log(JSON.stringify({ status: "reviewed-ready", generation: ready.generation,
-      accounting: ready.candidateAccounting, activeInstances: ready.activeInstanceKeys.length, broadcast: false }));
-    return;
   }
-  const supplements = [];
-  if (needed.length > 0) {
-    const supplementIds = new Set(needed);
-    const seeds = candidateFile ? startupCandidates.filter(c => supplementIds.has(wiring.candidateFamilyId(c))) : [];
-    const exactKeys = candidateFile ? new Set(seeds.map(wiring.familyCandidateKey)) : undefined;
-    const identity = createHash("sha256").update(canonicalJson({ parent: base.checkpointFingerprint,
-      ...(candidateFile && { selection: createHash("sha256").update(candidateFile).digest("hex") }),
-      definitions: needed.map(id => [id, familyDefinitionHash(id)]) })).digest("hex");
-    const stagingDir = resolve(dirname(checkpointPath), ".ready-family-updates", identity);
-    await mkdir(stagingDir, { recursive: true, mode: 0o700 });
-    const manifest = canonicalJson({ schema: "ready-family-supplement/v1", identity,
-      parentCheckpointFingerprint: base.checkpointFingerprint, parentRevision: base.revision,
-      range, source, familyIds: needed, sourcePlan: createRebuildWiring({ ...common, familyIds: needed }).expectedSourcePlanFingerprints(),
-      definitions: needed.map(id => [id, familyDefinitionHash(id)]) });
-    await assertReadyStageManifest(resolve(stagingDir, "parent.json"), manifest);
-    const stagePath = resolve(stagingDir, "checkpoint.json");
-    try { await copyFile(checkpointPath, stagePath, constants.COPYFILE_EXCL); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-    if ((await store.load())?.checkpointFingerprint !== base.checkpointFingerprint) throw new Error("Ready changed while preparing scoped update");
-    const scoped = createRebuildWiring({ ...common, familyIds: needed, startupCandidates: seeds, activityArchive: archive, readyThrottle: wiring.readyThrottle });
-    const stageStore = new UniverseRebuildCheckpointStore({ path: stagePath });
-    const stage = await stageStore.load();
-    if (!stage) throw new Error("scoped checkpoint absent");
-    if (stage.inProgressRun) await verifyArchivedInputs();
-    const familyUpdateScope = { parentCheckpointFingerprint: base.checkpointFingerprint, familyIds: needed };
-    const completed = stage.checkpointFingerprint !== base.checkpointFingerprint && stage.inProgressRun === null &&
-      canonicalJson(stage.readyGeneration?.familyUpdateScope ?? null) === canonicalJson(familyUpdateScope);
-    // A copied base or the deterministic same-run resume is the only input.
-    if (stage.checkpointFingerprint !== base.checkpointFingerprint &&
-      stage.inProgressRun?.runId !== `family-update-${identity}` &&
-      !completed) {
-      throw new Error("scoped checkpoint lineage mismatch");
-    }
-    if (completed) activeReadyMemos(stage);
-    const ready = completed ? stage.readyGeneration! : await rebuildUniverse({ ...scoped, store: stageStore, runId: `family-update-${identity}`,
-      familyUpdateScope, scopedCandidateKeys: exactKeys, observationRange: range, attestationConcurrency: concurrency, log });
-    resolveStrictReadyRuntime(ready);
-    supplements.push({ familyIds: needed, checkpoint: (await stageStore.load())! });
+  const reviewedWiring = createRebuildWiring({ ...common, activityArchive: archive,
+    readyThrottle: wiring.readyThrottle, startupCandidates: candidateFile ? startupCandidates :
+      enabledIds.flatMap(id => Object.values(partitions[id]?.candidatesByKey ?? {}).map(decode)) });
+  const inputFingerprint = readyMaintenanceReviewFingerprint({
+    parent: base.readyGeneration!, range, source,
+    definitions: enabledIds.map(id => [id, familyDefinitionHash(id)] as const),
+    executionIdentity: common.executionIdentity, sourcePlans: reviewedWiring.expectedSourcePlanFingerprints(),
+    selection: candidateFileFingerprint ?? "previous-and-discovered",
+    ...(proofRuntimeHash && { proofRuntimeHash }), ...(forceUpdate && { forceUpdate }),
+    ...(forceStatuses && { forceStatuses }),
+  });
+  if (base.inProgressRun) {
+    if (base.inProgressRun.reviewInputFingerprint !== inputFingerprint) throw new Error("cannot resume Ready review with changed inputs");
+    await verifyArchivedInputs();
   }
-  const ready = await updateReadyFamilies({ ...wiring, store, expectedRevision: base.revision, supplements, log });
+  log(JSON.stringify({ phase: "update-plan", familyCount: enabledIds.length,
+    forceStatuses: forceStatuses ?? (forceUpdate ? ["terminal-rejected", "retryable"] : []),
+    revalidateProofs: !!proofRuntimeHash, throttle: wiring.readyThrottle?.snapshot() }));
+  const ready = await rebuildUniverse({ ...reviewedWiring, store, runId: "ready-review-" + inputFingerprint,
+    previousReadyReview: { inputFingerprint, candidateKeys: keys,
+      ...(proofRuntimeHash && { revalidateParentProofs: true }),
+      ...(forceUpdate && { retryNegativeOutcomes: true }), ...(forceStatuses && { forceStatuses }) },
+    resumeCompletedOutcomes: !!base.inProgressRun,
+    observationRange: range, attestationConcurrency: concurrency, log });
   resolveStrictReadyRuntime(ready);
-  log(JSON.stringify({ status: "updated-ready", generation: ready.generation,
-    supplementalFamilies: needed, activeInstances: ready.activeInstanceKeys.length, broadcast: false }));
+  log(JSON.stringify({ status: "reviewed-ready", generation: ready.generation,
+    accounting: ready.candidateAccounting, activeInstances: ready.activeInstanceKeys.length, broadcast: false }));
+}
+
+/** Complete desired membership, not an add/remove command. Catalog validation
+ * remains in createRebuildWiring; an empty array means no enabled Families. */
+export function parseReadyFamilyIds(value: unknown): readonly string[] {
+  if (!Array.isArray(value) || value.some(id => typeof id !== "string" || !id || id.trim() !== id)) {
+    throw new Error("expected an array of Family IDs");
+  }
+  if (new Set(value).size !== value.length) throw new Error("duplicate Family ID in Ready family table");
+  return Object.freeze([...(value as string[])].sort());
+}
+
+/** Keep the legacy review identity for existing options. A status-targeted
+ * force adds its selection to that identity, so it cannot silently change on
+ * crash resume. Progress and the shrinking pending list are never inputs. */
+export function readyMaintenanceReviewFingerprint(input: {
+  readonly parent: Pick<ReadyUniverseGeneration, "generation" | "universeHash" | "catalogHash">;
+  readonly range: { readonly fromBlock: number; readonly toBlock: number };
+  readonly source: ReadyUniverseGeneration["cutoff"];
+  readonly definitions: readonly (readonly [string, string])[];
+  readonly executionIdentity: { readonly executor: string; readonly transactionOrigin: string };
+  readonly sourcePlans: { readonly startup: string; readonly activity: string };
+  readonly selection: string;
+  readonly proofRuntimeHash?: string;
+  readonly forceUpdate?: boolean;
+  readonly forceStatuses?: readonly ("verified" | "terminal-rejected" | "retryable")[];
+}): string {
+  return createHash("sha256").update(canonicalJson({ version: 1,
+    parent: [input.parent.generation, input.parent.universeHash, input.parent.catalogHash],
+    range: input.range, source: input.source, definitions: [...input.definitions].sort(([a], [b]) => a.localeCompare(b)),
+    ...(input.proofRuntimeHash && { proofRuntimeHash: input.proofRuntimeHash }),
+    ...(input.forceUpdate && { forceUpdate: true }),
+    ...(input.forceStatuses?.length && { forceStatuses: [...new Set(input.forceStatuses)].sort() }),
+    executionIdentity: input.executionIdentity, sourcePlans: input.sourcePlans, selection: input.selection,
+  })).digest("hex");
 }
 
 export async function assertReadyStageManifest(path: string, manifest: string): Promise<void> {

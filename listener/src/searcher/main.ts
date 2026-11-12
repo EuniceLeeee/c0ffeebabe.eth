@@ -111,13 +111,13 @@ import type {
   PoolIdentityFailureReason,
   RejectedPoolIdentity,
 } from "./venues/identity.js";
-import { activeReadyMemos as sealedReadyMemos, canonicalJson, UniverseRebuildCheckpointStore } from
+import { activeReadyMemos as sealedReadyMemos, canonicalJson, UniverseRebuildCheckpointStore, type StartupCheckpointEnvelope } from
   "./universe-rebuild-checkpoint.js";
 import {
   UniverseRunIncomplete,
   assertReadyFamilyActivation,
   rebuildUniverse,
-  refreshReadyInstances,
+  type RebuildUniverseInput,
 } from "./universe-rebuild-runner.js";
 import { createRebuildWiring } from "./universe-rebuild-production.js";
 import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
@@ -1502,6 +1502,28 @@ export function createBlockScanPriceRuntime(input: {
   return { strictSessionFor, currentRuntimeCoordinator, blockScanAmountReference };
 }
 
+/** Ready reuse reviews the complete current inputs at the sealed parent's
+ * historical source. Progress changes neither that input nor its time range. */
+export function readyStartupReviewPlan(
+  checkpoint: Pick<StartupCheckpointEnvelope, "readyGeneration" | "inProgressRun"> | null,
+  requestedRunId?: string,
+) {
+  const ready = checkpoint?.readyGeneration;
+  if (!ready) throw new Error("Ready reuse requires one complete Ready checkpoint");
+  const pending = checkpoint!.inProgressRun;
+  if (ready.universeRange.toBlock !== ready.cutoff.number ||
+      (pending && (pending.fromBlock !== ready.universeRange.fromBlock ||
+        canonicalJson(pending.cutoff) !== canonicalJson(ready.cutoff)))) {
+    throw new Error("Ready reuse must resume the sealed parent source and range");
+  }
+  return Object.freeze({
+    runId: pending?.runId ?? requestedRunId ?? "strict-startup-ready-review",
+    cutoff: Object.freeze({ ...ready.cutoff }),
+    observationRange: Object.freeze({ ...ready.universeRange }),
+    resumeCompletedOutcomes: pending !== null,
+  });
+}
+
 /** Keep checkpoint ownership inside startup; producers retain only runtime projections. */
 export async function initializeReadyProducer({
   universeRebuildCheckpointPath, rpcUrl, startupCandidates, executionIdentity,
@@ -1539,7 +1561,7 @@ export async function initializeReadyProducer({
   });
   let rebuildEnvelope = await rebuildStore.load();
   let readyUniverse;
-  if (blindUseIncumbentReady || useReadyGeneration) {
+  if (blindUseIncumbentReady || liveSubset) {
     if (
       rebuildEnvelope === null ||
       rebuildEnvelope.readyGeneration === null ||
@@ -1551,40 +1573,30 @@ export async function initializeReadyProducer({
       );
     }
     readyUniverse = rebuildEnvelope.readyGeneration;
-    if (useReadyGeneration && !blindUseIncumbentReady && !liveSubset) {
-      readyUniverse = await refreshReadyInstances({
-        ...rebuildWiring,
-        store: rebuildStore,
-        log: (message) => console.log("[searcher/startup] " + message),
-      });
-      rebuildEnvelope = await rebuildStore.load();
-      if (rebuildEnvelope === null) {
-        throw new Error("strict startup readyGeneration failed root verification");
-      }
-    }
-    console.log(
-      "[searcher/startup] " +
-        (blindUseIncumbentReady ? "blind replay" : "Ready reuse") +
-        " uses incumbent readyGeneration=" +
-        readyUniverse.generation + " cutoff=" + readyUniverse.cutoff.number +
-        " activeInstances=" + readyUniverse.activeInstanceKeys.length +
-        " retryableQueue=" +
-        Object.keys(rebuildEnvelope.retryableAttemptsByCandidateKey).length,
-    );
   } else {
+    let options: Pick<RebuildUniverseInput, "runId" | "observationRange" | "observationWindowBlocks" |
+      "resumeCompletedOutcomes"> & Partial<Pick<RebuildUniverseInput, "freezeCanonicalHead">>;
+    if (useReadyGeneration) {
+      const { cutoff, ...reviewPlan } = readyStartupReviewPlan(rebuildEnvelope,
+        process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID);
+      options = { ...reviewPlan, freezeCanonicalHead: async (requestedBlock) => {
+        if (requestedBlock !== cutoff.number) throw new Error("Ready reuse cannot move its sealed cutoff");
+        await rebuildWiring.assertCanonicalHead(cutoff);
+        return cutoff;
+      } };
+    } else {
+      options = {
+        runId: process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID ?? "strict-startup-rebuild",
+        ...(process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS === undefined ? {} : {
+          observationWindowBlocks: Number(process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS),
+        }),
+      };
+    }
     try {
       readyUniverse = await rebuildUniverse({
         ...rebuildWiring,
         store: rebuildStore,
-        runId: process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID ??
-          "strict-startup-rebuild",
-        ...(process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS === undefined
-          ? {}
-          : {
-              observationWindowBlocks: Number(
-                process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS,
-              ),
-            }),
+        ...options,
         log: (message) => console.log("[searcher/startup] " + message),
       });
     } catch (error) {
@@ -1605,6 +1617,17 @@ export async function initializeReadyProducer({
     rebuildEnvelope.readyGeneration.generation !== readyUniverse.generation
   ) {
     throw new Error("strict startup readyGeneration failed root verification");
+  }
+  if (blindUseIncumbentReady || useReadyGeneration) {
+    console.log(
+      "[searcher/startup] " +
+        (blindUseIncumbentReady ? "blind replay" : liveSubset ? "Ready subset" : "Ready input review") +
+        " uses readyGeneration=" +
+        readyUniverse.generation + " cutoff=" + readyUniverse.cutoff.number +
+        " activeInstances=" + readyUniverse.activeInstanceKeys.length +
+        " retryableQueue=" +
+        Object.keys(rebuildEnvelope.retryableAttemptsByCandidateKey).length,
+    );
   }
   const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
   const liveFamilyIds = liveSubset

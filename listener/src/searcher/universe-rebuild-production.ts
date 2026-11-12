@@ -62,6 +62,7 @@ import type { FamilyCapabilityIdentitySet } from
   "./venues/family-capability-catalog.js";
 import { FamilyCapabilityCatalog, capabilityManifestHash, isPricedFamily } from "./venues/family-capability-catalog.js";
 import type { FamilyId } from "./venues/adapter-family-identifiers.js";
+import { projectCandidatePoolIdentity } from "./venues/candidate-pool-identity.js";
 
 /**
  * Production wiring for the durable universe rebuild (audit §6/§9). The
@@ -76,11 +77,11 @@ function digest(seed: string): string {
   return createHash("sha256").update(seed).digest("hex");
 }
 
-/** Explicit scratch scope: a nonempty set of currently registered, enabled IDs. */
+/** An explicit full scope may be empty; omitted scope retains the catalog default. */
 function normalizeRebuildFamilyIds(familyIds?: readonly string[]): readonly string[] | undefined {
   if (familyIds === undefined) return undefined;
-  if (!Array.isArray(familyIds) || familyIds.length === 0) {
-    throw new Error("rebuild familyIds scope must be a nonempty array");
+  if (!Array.isArray(familyIds)) {
+    throw new Error("rebuild familyIds scope must be an array");
   }
   const enabled = new Set(PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
     .listAll().map(family => String(family.plugin.manifest.familyId)));
@@ -2107,25 +2108,38 @@ export function rebuildFamilyCandidateKey(
 
 const coverageDefinitionFingerprints = new Map<string, string>();
 
-/** Pure scheduling evidence. Families own replacement semantics; neither an
- * address match nor a candidate/memo hash can invent cross-Family coverage. */
+/** Pure scheduling evidence. Physical pool identity is shared across ordinary
+ * swap Families. Additive capabilities retain their Family-owned scope; no
+ * publication or identity proof is fabricated for a covered candidate. */
 export function rebuildCandidateCoverage(
   candidate: Readonly<Record<string, unknown>>,
 ): CandidateCoverageBinding | null {
   const familyId = candidateFamilyId(candidate);
   const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
     .forStrictFamily(familyId as never);
-  const project = family.plugin.discovery.candidateCoverageKey;
-  if (project === undefined) return null;
-  const localKey = project(candidate);
-  if (localKey === null) return null;
-  if (typeof localKey !== "string" || localKey.trim().length === 0) {
-    throw new Error("Family candidate coverage key must be a nonempty string or null");
+  const discovery = family.plugin.discovery;
+  if (discovery.candidateCoverageScope === null) return null;
+  // A protocol target or funding vault can expose independent actions. The
+  // default pool task applies only to the existing generic Swap domain.
+  const poolIdentity = family.plugin.manifest.domain === "swap"
+    ? projectCandidatePoolIdentity(discovery, candidate) : null;
+  let key: string;
+  if (poolIdentity !== null) {
+    key = digest("ready-pool-coverage-key-v2:" + canonicalJson({
+      // This production wiring pins its providers to Ethereum mainnet.
+      chainId: 1, domain: family.plugin.manifest.domain,
+      scope: discovery.candidateCoverageScope ?? "pool-swap-v1", poolIdentity,
+    }));
+  } else {
+    const localKey = discovery.candidateCoverageKey?.(candidate);
+    if (localKey === undefined || localKey === null) return null;
+    if (typeof localKey !== "string" || localKey.trim().length === 0) {
+      throw new Error("Family candidate coverage key must be a nonempty string or null");
+    }
+    key = digest("ready-coverage-key-v1:" + canonicalJson({
+      chainId: 1, domain: family.plugin.manifest.domain, key: localKey,
+    }));
   }
-  const key = digest("ready-coverage-key-v1:" + canonicalJson({
-    // This production wiring pins its providers to Ethereum mainnet.
-    chainId: 1, domain: family.plugin.manifest.domain, key: localKey,
-  }));
   const fingerprint = candidateFingerprint(candidate);
   // The loaded catalog is immutable for this process. Do not re-hash every
   // capability for every pool in a large retained Ready set.
@@ -3195,6 +3209,9 @@ export function createRebuildWiring(input?: {
     },
     scanSwapWindow: async (scanInput) => {
       assertOpen();
+      if (sourceCoverageKeys.startup.length === 0 && activityPlan.coverageKeys.length === 0) {
+        return Object.freeze({ observations: Object.freeze([]), sourceReceipts: Object.freeze([]) });
+      }
       const startupCandidates = familyIds === undefined ? input?.startupCandidates ?? []
         : (input?.startupCandidates ?? []).filter(candidateInScope);
       await activityArchive?.assertScope({ chainId: 1, fromBlock: scanInput.fromBlock,

@@ -9,6 +9,7 @@ import { createTxEvidenceNomination, matchAllCalls } from "./tx-evidence-nominat
 import { compileDeclarativeValues, validateDeclarativeValue } from "./declarative-values.js";
 import type { DeclarativeReadFlow, ReadFlowValues } from "./declarative-read-flow.js";
 import { compileDeclarativeNominationReadFlow } from "./declarative-nomination.js";
+import { normalizeCandidatePoolIdentity, type CandidatePoolIdentity } from "./candidate-pool-identity.js";
 
 interface AddressDiscoveryDefinition {
   readonly version?: 1;
@@ -63,8 +64,18 @@ export interface DeclarativeMappedDiscovery {
     readonly durableKey?: { readonly addresses: readonly string[]; readonly evidence?: readonly string[] };
     /** Pre-partition nomination grouping; evidence candidate keys stay distinct. */
     readonly instanceKey?: readonly string[];
-    /** Families sharing a group promise interchangeable complete capabilities
-     * for the same key. A shared address alone is not that promise. */
+    /** Overrides an ambiguous instance projection, e.g. a router candidate
+     * whose physical pool belongs to a separately declared singleton. */
+    readonly poolIdentity?:
+      | { readonly kind: "address-pool"; readonly addressField: string }
+      | { readonly kind: "singleton-pool"; readonly namespace: { readonly field: string } | { readonly address: string };
+          readonly poolIdField: string }
+      | null;
+    /** Additive pool capabilities use a distinct scope. Ordinary pool swaps
+     * share the default and do not need to opt into a replacement group. */
+    readonly coverageScope?: string | null;
+    /** Legacy grouping for candidates without a physical pool projection.
+     * New ordinary pool declarations do not need this opt-in. */
     readonly coverage?: { readonly group: string; readonly key: readonly string[] };
   };
   readonly calls: readonly MappedPattern[];
@@ -109,6 +120,13 @@ export function compileDeclarativeDiscovery<C extends FamilyCandidate>(definitio
     logPatterns: d.events.map(e => ({ ...e, topic: id(e.signature) as `0x${string}` })),
     addressSurfaces: [{ ...d.surface, kind: "interface" }],
     candidate: address => ({ candidateKind: d.candidate.kind, [d.candidate.addressField]: address } as unknown as C),
+    candidatePoolIdentity(value) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+      const row = value as Record<string, unknown>;
+      if (row.candidateKind !== undefined && row.candidateKind !== d.candidate.kind) return null;
+      return normalizeCandidatePoolIdentity({ kind: "address-pool",
+        address: (row[d.candidate.addressField] ?? row.address) as string });
+    },
     candidateKey: candidate => getAddress((candidate as unknown as Record<string, string>)[d.candidate.addressField]).toLowerCase(),
     nominate: createAddressSurfaceNomination({ opaqueLabels: d.labels, interfaceFingerprints: [d.surface.fingerprint] }),
     reverseBinding: explicitReverseBindingUnsupported("no reverse-binding registry declared (explicit unsupported)"),
@@ -142,7 +160,7 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
   validateDeclarativeValue(raw);
   const d = JSON.parse(JSON.stringify(raw)) as DeclarativeMappedDiscovery;
   shape(d, ["version", "sources", "candidateSources", "candidate", "calls", "events", "labels", "nomination"], ["surface", "nominationReadFlow", "txSeedNominations", "recentCallNomination", "reverseBinding", "reverseBindingTraceFallback"], "mapping");
-  shape(d.candidate, ["kind", "addressField", "fields", "key"], ["optionalFields", "nullableFields", "instanceKey", "durableKey", "coverage"], "candidate");
+  shape(d.candidate, ["kind", "addressField", "fields", "key"], ["optionalFields", "nullableFields", "instanceKey", "durableKey", "coverage", "poolIdentity", "coverageScope"], "candidate");
   if (typeof d.candidate.kind !== "string" || !d.candidate.kind || !["tx-evidence", "address-surface"].includes(d.nomination))
     throw new Error("invalid discovery candidate or nomination kind");
   for (const [field, types] of [["sources", ["factory-log", "landed-log", "observed-call", "address-surface"]],
@@ -173,6 +191,42 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
     new Set(d.candidate.instanceKey).size !== d.candidate.instanceKey.length || !d.candidate.instanceKey.includes(d.candidate.addressField) ||
     d.candidate.instanceKey.some(key => !fields.includes(key) || optional.has(key) || nullable.has(key))))
     throw new Error("invalid discovery instance key");
+  if (d.candidate.coverageScope !== undefined && d.candidate.coverageScope !== null &&
+      (typeof d.candidate.coverageScope !== "string" || !/^[a-z][a-z0-9:._-]*$/.test(d.candidate.coverageScope))) {
+    throw new Error("invalid discovery candidate coverage scope");
+  }
+  const declaredPoolIdentity = d.candidate.poolIdentity;
+  const requiredField = (field: string, type: FieldType): boolean =>
+    d.candidate.fields[field] === type && !optional.has(field) && !nullable.has(field);
+  if (declaredPoolIdentity !== undefined && declaredPoolIdentity !== null) {
+    if (declaredPoolIdentity.kind === "address-pool") {
+      shape(declaredPoolIdentity, ["kind", "addressField"], [], "candidate pool identity");
+      if (!requiredField(declaredPoolIdentity.addressField, "address")) throw new Error("invalid discovery candidate pool identity address");
+    } else if (declaredPoolIdentity.kind === "singleton-pool") {
+      shape(declaredPoolIdentity, ["kind", "namespace", "poolIdField"], [], "candidate pool identity");
+      const namespace = declaredPoolIdentity.namespace;
+      if (namespace && typeof namespace === "object" && "field" in namespace) {
+        shape(namespace, ["field"], [], "candidate pool identity namespace");
+        if (!requiredField(namespace.field, "address")) throw new Error("invalid discovery candidate pool identity namespace");
+      } else {
+        shape(namespace, ["address"], [], "candidate pool identity namespace");
+        try { getAddress(namespace.address); } catch { throw new Error("invalid discovery candidate pool identity namespace"); }
+      }
+      if (!requiredField(declaredPoolIdentity.poolIdField, "bytes32")) throw new Error("invalid discovery candidate pool identity ID");
+    } else throw new Error("invalid discovery candidate pool identity kind");
+  }
+  // Existing stable instance declarations already specify the physical key.
+  // Only the unambiguous address and address+bytes32 shapes get a default.
+  const instanceFields = d.candidate.instanceKey ?? d.candidate.key;
+  const instanceAddresses = instanceFields.filter(field => requiredField(field, "address"));
+  const instanceIds = instanceFields.filter(field => requiredField(field, "bytes32"));
+  const automaticPoolIdentity: DeclarativeMappedDiscovery["candidate"]["poolIdentity"] =
+    instanceFields.length === 1 && instanceAddresses.length === 1
+      ? { kind: "address-pool", addressField: instanceAddresses[0]! }
+      : instanceFields.length === 2 && instanceAddresses.length === 1 && instanceIds.length === 1
+        ? { kind: "singleton-pool", namespace: { field: instanceAddresses[0]! }, poolIdField: instanceIds[0]! }
+        : null;
+  const poolIdentity = declaredPoolIdentity === undefined ? automaticPoolIdentity : declaredPoolIdentity;
   const coverage = d.candidate.coverage;
   if (coverage !== undefined) {
     shape(coverage, ["group", "key"], [], "candidate coverage");
@@ -544,6 +598,21 @@ function compileMappedDiscovery<C extends FamilyCandidate>(raw: DeclarativeMappe
       },
     } : explicitReverseBindingUnsupported("no reverse-binding registry declared (explicit unsupported)"),
     decodeCandidate,
+    ...(d.candidate.coverageScope === undefined ? {} : { candidateCoverageScope: d.candidate.coverageScope }),
+    candidatePoolIdentity(value: unknown): CandidatePoolIdentity | null {
+      if (poolIdentity === null || !value || typeof value !== "object" || Array.isArray(value)) return null;
+      const row = value as Readonly<Record<string, unknown>>;
+      if (row.candidateKind !== undefined && row.candidateKind !== d.candidate.kind) return null;
+      // An envelope address can fill only the Family's declared address field.
+      // It cannot replace a distinct manager/core/vault field with a router.
+      const address = (field: string): string => (row[field] ??
+        (field === d.candidate.addressField ? row.address : undefined)) as string;
+      return normalizeCandidatePoolIdentity(poolIdentity.kind === "address-pool"
+        ? { kind: "address-pool", address: address(poolIdentity.addressField) }
+        : { kind: "singleton-pool", namespace: "field" in poolIdentity.namespace
+            ? address(poolIdentity.namespace.field) : poolIdentity.namespace.address,
+          poolId: row[poolIdentity.poolIdField] as string });
+    },
     ...(coverage === undefined ? {} : {
       candidateCoverageKey(value: unknown): string | null {
         // A partial/legacy nomination remains ordinary work. It cannot cover

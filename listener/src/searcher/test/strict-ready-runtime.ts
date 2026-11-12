@@ -113,6 +113,49 @@ assert.doesNotThrow(() =>
   assertProducerGenerationPublicationAllowed(false)
 );
 
+// Complete scope removal may publish an explicitly empty Ready. It must not
+// make a missing source-coverage record acceptable for any nonempty runtime.
+const emptyGraph = Object.freeze({ format: "strict-rebuild-graph-v1", edges: Object.freeze([]) });
+const emptyCatalog = Object.freeze({ format: "strict-rebuild-catalog-v1", instances: Object.freeze([]) });
+const emptyReady: ReadyUniverseGeneration = Object.freeze({
+  ...ready(),
+  familyPartitions: Object.freeze({}),
+  sourceCoverage: Object.freeze([]),
+  activeInstanceKeys: Object.freeze([]),
+  candidateAccounting: Object.freeze({ total: 0, verified: 0, terminalRejected: 0, retryable: 0,
+    remainingUnaccounted: 0 as const }),
+  graphSnapshot: emptyGraph,
+  graphHash: hashReadyGraphSnapshot(emptyGraph),
+  catalogSnapshot: emptyCatalog,
+  catalogHash: hashReadyCatalogSnapshot(emptyCatalog),
+  publicationSetHash: hashReadyPublicationSet(emptyCatalog),
+});
+assert.deepEqual(resolveStrictReadyRuntime(emptyReady).graph, []);
+const disabledPartition = {
+  enabled: false, candidatesByKey: {}, outcomesByCandidateKey: {}, candidateSetHash: "empty",
+  discoveryDefinitionHash: "historical", sourceReceipts: [],
+};
+assert.deepEqual(resolveStrictReadyRuntime({ ...emptyReady,
+  familyPartitions: { removed: disabledPartition } }).graph, [], "disabled history is outside the current scope");
+for (const mutation of [
+  { familyPartitions: undefined },
+  { familyPartitions: { active: { ...disabledPartition, enabled: true } } },
+  { familyUpdateScope: { parentCheckpointFingerprint: "parent", familyIds: ["active"] } },
+  { activeInstanceKeys: ["unpublished-active-memo"] },
+  { candidateAccounting: { ...emptyReady.candidateAccounting, total: 1, retryable: 1 } },
+  { candidateAccounting: { ...emptyReady.candidateAccounting, verified: 1 } },
+  { candidateAccounting: { ...emptyReady.candidateAccounting, terminalRejected: 1 } },
+  { candidateAccounting: { ...emptyReady.candidateAccounting, covered: 1 } },
+  { candidateAccounting: { ...emptyReady.candidateAccounting, activationExcluded: 1 } },
+  { graphSnapshot: ready().graphSnapshot, graphHash: ready().graphHash },
+  { catalogSnapshot: ready().catalogSnapshot, catalogHash: ready().catalogHash,
+    publicationSetHash: ready().publicationSetHash },
+  { observedThrough: { ...emptyReady.observedThrough, number: SOURCE.number - 1 } },
+]) assert.throws(() => resolveStrictReadyRuntime({ ...emptyReady, ...mutation }), /source coverage is incomplete/,
+  "only an explicit, internally empty scope may have no source coverage");
+assert.throws(() => resolveStrictReadyRuntime({ ...emptyReady, graphHash: "tampered" }), /root mismatch/,
+  "empty publications still require their exact original roots");
+
 const mainSource = await readFile(new URL("../main.ts", import.meta.url), "utf8");
 for (const forbidden of [
   "buildTokenGraphWithResults",

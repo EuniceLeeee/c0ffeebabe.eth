@@ -45,6 +45,7 @@
    "candidate": {
     "kind": "curve-plain-lp-pool",
     "addressField": "pool",
+    "coverageScope": "lp-cycle-pool-swap-v1",
     "fields": {
      "pool": "address"
     },

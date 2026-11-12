@@ -31,11 +31,14 @@ import { strictEdgeCollectionFromBlock } from
   "./strict-edge-collection-policy.js";
 import type { ReadyRpcThrottle } from "./ready-rpc-throttle.js";
 import { assertCurrentCandidateCoverage, createCandidateRevalidation } from "./ready-candidate-processing.js";
+import { normalizeForcedReadyStatuses, reconcileReadyInputs, retainReadyResultHistory,
+  type ForcedReadyStatus } from "./ready-input-reconciliation.js";
 
 /**
  * Durable universe rebuild runner (adversarial audit §5-§6). Every rebuild
- * scans exactly the latest production edge window at a frozen canonical cutoff,
- * restores the fixed-cutoff run by durable candidate key, verifies only the
+ * obtains the complete discovery partition at a frozen canonical cutoff,
+ * using a scan or an exactly bound sealed input, restores the fixed-cutoff run
+ * by durable candidate key, verifies only the
  * diff (new / invalidated / failed candidates), persists outcomes through
  * the serial writer, and - only when every candidate is accounted as
  * verified, covered, terminal-rejected, or retryable - seals the ready generation
@@ -64,8 +67,9 @@ export class UniverseRunIncomplete extends Error {
 
 export interface UniverseRebuildDependencies {
   readonly readyThrottle?: ReadyRpcThrottle;
-  /** Production update identity, evaluated only for a new/reviewing Ready.
-   * An old interrupted run continues under its originally sealed policy. */
+  /** Stable complete caller discovery-input identity, separate from force or
+   * attempt identity. Its existing output also binds sealed discovery reuse;
+   * an old interrupted run without an input seal cannot acquire this binding. */
   readonly readyReviewInputFingerprint?: () => string;
   readonly hasExplicitStartupCandidates?: boolean;
   /** Freeze the canonical head, or one explicitly requested historical cutoff. */
@@ -241,6 +245,10 @@ export interface UniverseRebuildDependencies {
 }
 
 export interface RebuildUniverseInput extends UniverseRebuildDependencies {
+  /** Optional exact complete nomination input, including a first build. */
+  readonly currentCandidateKeys?: ReadonlySet<string>;
+  /** Existing caller input identity for an explicit first-build pool file. */
+  readonly currentInputFingerprint?: string;
   /** Current nominated universe. Only these inputs and newly discovered candidates are eligible.
    * An optional exact selection is keyed by the normal Family+instance candidate key. */
   readonly previousReadyReview?: {
@@ -251,6 +259,9 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
     readonly retryNegativeOutcomes?: boolean;
     /** Fresh proof context. Only outcomes sealed by this exact review may resume. */
     readonly revalidateParentProofs?: boolean;
+    /** Override only these historical result states; completed attempts in
+     * the same sealed run still resume without being attempted twice. */
+    readonly forceStatuses?: readonly ForcedReadyStatus[];
   };
   /** Explicit copied-parent scope; persists across scratch resume and promotion. */
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
@@ -272,9 +283,9 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
   };
   /** Bounded identity/materialization workers; defaults to 24. */
   readonly attestationConcurrency?: number;
-  /** Same sealed unfinished run only: retain completed negative/retryable
-   * outcomes without another attempt. Verified memos still require reuse
-   * validation, and candidates without an outcome still run strict. */
+  /** Legacy completion policy. New runs also seal their Family definitions,
+   * so unchanged completed partitions resume without per-memo validation.
+   * Missing or changed evidence still follows the original admission rules. */
   readonly resumeCompletedOutcomes?: boolean;
   /** Optional progress logging. */
   readonly log?: (message: string) => void;
@@ -283,6 +294,12 @@ export interface RebuildUniverseInput extends UniverseRebuildDependencies {
 export async function rebuildUniverse(
   input: RebuildUniverseInput,
 ): Promise<ReadyUniverseGeneration> {
+  const definitionHash = input.familyDefinitionHash;
+  const definitions = new Map<string, string>();
+  if (definitionHash) input = { ...input, familyDefinitionHash: (id: string): string => {
+    if (!definitions.has(id)) definitions.set(id, definitionHash(id));
+    return definitions.get(id)!;
+  } };
   const familyUpdateScope = input.familyUpdateScope === undefined ? undefined : immutableReadyValue(input.familyUpdateScope);
   const log = input.log ?? ((): void => undefined);
   if (
@@ -350,7 +367,8 @@ export async function rebuildUniverse(
     for (const memo of Object.values(checkpoint.verifiedMemos) as readonly (
       DurableVerifiedMemo | LegacyDurableVerifiedMemo
     )[]) {
-      assertDurableVerifiedMemoFingerprint(memo);
+      // The checkpoint store authenticates persisted data. Definition/proof
+      // eligibility is decided by the complete Family partition below.
       if (input.isFamilyEnabled?.(memo.familyId) === false) continue;
       if (!hasDurableCandidateSnapshot(memo)) {
         throw new Error(
@@ -368,13 +386,28 @@ export async function rebuildUniverse(
     (!incumbentRun || incumbentRun.reviewInputFingerprint) && input.readyReviewInputFingerprint;
   const review: RebuildUniverseInput["previousReadyReview"] = input.previousReadyReview ??
     (defaultReview ? { inputFingerprint: defaultReview() } : undefined);
-  const selected = review?.candidateKeys ?? input.scopedCandidateKeys;
+  const explicitForcedStatuses = normalizeForcedReadyStatuses(review?.forceStatuses);
+  const forcedStatuses = new Set<ForcedReadyStatus>(explicitForcedStatuses ?? []);
+  if (review?.retryNegativeOutcomes) { forcedStatuses.add("terminal-rejected"); forcedStatuses.add("retryable"); }
+  if (review?.revalidateParentProofs) {
+    forcedStatuses.add("verified"); forcedStatuses.add("terminal-rejected"); forcedStatuses.add("retryable");
+  }
+  // Old unfinished reviews already bind legacy flags in their original
+  // review fingerprint. New runs additionally seal the effective selection.
+  const legacyForcedReview = incumbentRun?.reviewInputFingerprint !== undefined &&
+    incumbentRun.familyDefinitionHashes === undefined && incumbentRun.forcedOutcomeStatuses === undefined &&
+    explicitForcedStatuses === undefined;
+  const forcedOutcomeStatuses = legacyForcedReview ? undefined : normalizeForcedReadyStatuses([...forcedStatuses]);
+  const selected = review?.candidateKeys ?? input.currentCandidateKeys ?? input.scopedCandidateKeys;
   if (review && (!checkpoint?.readyGeneration?.familyPartitions || familyUpdateScope ||
       !/^[0-9a-f]{64}$/.test(review.inputFingerprint))) {
     throw new Error("Ready review requires a partitioned parent and bound current input");
   }
   if (incumbentRun && incumbentRun.reviewInputFingerprint !== review?.inputFingerprint) {
     throw new Error("Ready review input differs from the unfinished run");
+  }
+  if (incumbentRun && incumbentRun.currentInputFingerprint !== input.currentInputFingerprint) {
+    throw new Error("Ready complete candidate input differs from the unfinished run");
   }
   if (input.resumeCompletedOutcomes && incumbentRun === null) {
     throw new Error("universe rebuild: completed-outcome resume requires an unfinished run");
@@ -412,14 +445,30 @@ export async function rebuildUniverse(
   // 2. Discovery plan drift (a new/changed discovery surface since the run
   //    sealed its receipts) only decides whether the SAME fixed range must be
   //    re-scanned with the current catalog; it never changes the run.
-  // 3. Per-candidate verification reuses memos via findReusableMemo: a valid
-  //    memo skips the lifecycle, anything else is attested.
+  // 3. Matching sealed Family inputs inherit outcomes as a batch. Remaining
+  //    work keeps the original memo/source checks and strict lifecycle.
   let discoveryPlanChanged = false;
   let cutoff: CanonicalSource;
   let fromBlock: number;
   let observations: readonly unknown[];
   let candidates: readonly unknown[];
   let sourceReceipts: readonly DurableSourceReceipt[];
+  // A resumed legacy run may contain a different original startup list even
+  // when its source plan still matches. Only a fresh scan or an already-sealed
+  // complete input can bind the current caller fingerprint to its discoveries.
+  // Implicit historical additions are not part of that raw caller binding;
+  // preserve their existing scan/retention policy rather than caching a union.
+  const canSealDiscoveryInput = retainedCandidateInputs.length === 0 &&
+    (incumbentRun === null || incumbentRun.reviewInputFingerprint !== undefined ||
+      incumbentRun.currentInputFingerprint !== undefined);
+  const discoveryFingerprint = canSealDiscoveryInput
+    ? defaultReview ? review!.inputFingerprint : input.readyReviewInputFingerprint?.()
+    : undefined;
+  const discoveryInputBinding: ReadyUniverseGeneration["discoveryInputBinding"] =
+    discoveryFingerprint !== undefined && /^[0-9a-f]{64}$/.test(discoveryFingerprint)
+      ? Object.freeze({ inputFingerprint: discoveryFingerprint,
+          selectedCandidateSetHash: selected === undefined ? null : hashCandidateSet([...selected], value => value as string) })
+      : undefined;
   if (incumbentRun !== null) {
     if (review && !receiptsMatchCurrentSourcePlan(incumbentRun.sourceReceipts, input.expectedSourcePlanFingerprints())) {
       throw new Error("Ready review discovery plan differs from the unfinished run");
@@ -529,43 +578,83 @@ export async function rebuildUniverse(
       cutoff.number,
       input.observationWindowBlocks,
     );
-    // A crash before this scan is sealed may rescan; after beginOrResumeRun,
-    // the compact exact partition is durable and no scan is repeated.
-    const scanned = await input.scanSwapWindow({ fromBlock, cutoff });
-    observations = Object.freeze([...scanned.observations]);
-    sourceReceipts = scanned.sourceReceipts;
-    candidates = input.dedupeFamilyCandidates(Object.freeze([
-      ...observations,
-      ...retainedCandidateInputs,
-    ]), selected);
-    if (input.reverseBindOpaqueCandidates !== undefined) {
-      // Retain-channel candidates: opaque observations (e.g. univ4 swap
-      // logs carrying only a poolId) are resolved to complete candidates
-      // through each Family plugin's declared reverseBinding, then merged
-      // with the event-window partition. The wiring owns the driver; the
-      // plugin owns the chain lookups.
-      const reverseBound = await input.reverseBindOpaqueCandidates({
-        observations,
-        cutoff,
-        knownCandidates: candidates,
-      });
-      if (reverseBound.length > 0) {
-        // Merge through the shared alias-collapsing dedupe
-        // (rebuildFamilyInstanceDedupeKey) instead of familyCandidateKey:
-        // a retained startup-universe entry spells a univ4 pool as
-        // address+poolId while the reverse-bound candidate spells it as
-        // manager+poolId, and familyCandidateKey keeps those spellings
-        // distinct. Two memos for one instance would then duplicate the
-        // instance key set and the ready promotion fails closed ("ready
-        // generation is not bound to completed run").
-        candidates = input.dedupeFamilyCandidates(Object.freeze([
-          ...observations,
-          ...retainedCandidateInputs,
-          ...reverseBound.map((candidate) => Object.freeze({
-            kind: "startup-candidate",
-            candidate,
-          })),
-        ]), selected);
+    const restoredDiscovery = (() => {
+      const parent = checkpoint?.readyGeneration;
+      if (!discoveryInputBinding || !parent?.discoveryInputBinding || !parent.familyPartitions ||
+          parent.familyUpdate !== undefined || parent.familyUpdateScope !== undefined || parent.activationRestriction !== undefined ||
+          familyUpdateScope !== undefined || canonicalJson(parent.discoveryInputBinding) !== canonicalJson(discoveryInputBinding) ||
+          canonicalJson(parent.cutoff) !== canonicalJson(cutoff) ||
+          parent.universeRange.fromBlock !== fromBlock || parent.universeRange.toBlock !== cutoff.number) return null;
+      try {
+        const required = input.requiredSourceCoverageKeys();
+        const entries = Object.entries(parent.familyPartitions).sort(([a], [b]) => a.localeCompare(b));
+        if (entries.some(([, partition]) => !partition.enabled) ||
+            canonicalJson(entries.map(([id]) => id)) !== canonicalJson(readyCoverageFamilyIds(required)) ||
+            canonicalJson(parent.sourceCoverage.map(row => row.familyId + "|" + row.sourceId).sort()) !== canonicalJson([...required].sort()) ||
+            parent.sourceCoverage.some(row => row.completeThroughBlock !== cutoff.number || row.completeThroughHash !== cutoff.hash)) return null;
+        const receipts = entries[0]?.[1].sourceReceipts ?? Object.freeze([]);
+        const sealedReceipts = canonicalJson(receipts);
+        if (entries.some(([, partition]) => canonicalJson(partition.sourceReceipts) !== sealedReceipts)) return null;
+        assertExactSourceCoverageSet(receipts, required);
+        if (!receiptsMatchCurrentSourcePlan(receipts, input.expectedSourcePlanFingerprints())) return null;
+        if (input.preAttestationRetryable) {
+          for (const [id, partition] of entries) {
+            const inheritsDefinition = partition.familyDefinitionHash !== undefined &&
+              partition.familyDefinitionHash === input.familyDefinitionHash?.(id);
+            if (inheritsDefinition && !forcedStatuses.has("retryable")) continue;
+            // Unresolved nominations need discovery/reverse binding to obtain
+            // their missing inputs. Keep an unchanged retryable batch intact,
+            // but do not freeze its old marker when this round must retry it.
+            if (Object.values(partition.candidatesByKey).some(snapshot =>
+              input.preAttestationRetryable!(decodeCandidate(snapshot)) !== null)) return null;
+          }
+        }
+        const rows = entries.flatMap(([, partition]) => Object.entries(partition.candidatesByKey))
+          .sort(([a], [b]) => a.localeCompare(b));
+        const restored = rows.map(([key, snapshot]) => {
+          const candidate = decodeCandidate(snapshot);
+          if (input.familyCandidateKey(candidate) !== key) throw new Error("sealed discovery candidate key changed");
+          return candidate;
+        });
+        return { candidates: Object.freeze(restored), sourceReceipts: receipts };
+      } catch {
+        // Any missing proof of equality takes the original discovery path.
+        return null;
+      }
+    })();
+    if (restoredDiscovery !== null) {
+      observations = Object.freeze([]);
+      candidates = restoredDiscovery.candidates;
+      sourceReceipts = restoredDiscovery.sourceReceipts;
+      log("universe rebuild restored sealed discovery: candidates=" + candidates.length + " sourceReceipts=" + sourceReceipts.length);
+    } else {
+      // A crash before this scan is sealed may rescan; after beginOrResumeRun,
+      // the compact exact partition is durable and no scan is repeated.
+      const scanned = await input.scanSwapWindow({ fromBlock, cutoff });
+      observations = Object.freeze([...scanned.observations]);
+      sourceReceipts = scanned.sourceReceipts;
+      candidates = input.dedupeFamilyCandidates(Object.freeze([
+        ...observations,
+        ...retainedCandidateInputs,
+      ]), selected);
+      if (input.reverseBindOpaqueCandidates !== undefined) {
+        // Opaque observations use the same Family-owned reverse binding as
+        // before; a restored complete partition already contains its output.
+        const reverseBound = await input.reverseBindOpaqueCandidates({
+          observations,
+          cutoff,
+          knownCandidates: candidates,
+        });
+        if (reverseBound.length > 0) {
+          candidates = input.dedupeFamilyCandidates(Object.freeze([
+            ...observations,
+            ...retainedCandidateInputs,
+            ...reverseBound.map((candidate) => Object.freeze({
+              kind: "startup-candidate",
+              candidate,
+            })),
+          ]), selected);
+        }
       }
     }
   }
@@ -597,6 +686,20 @@ export async function rebuildUniverse(
       "universe rebuild: dedupe produced duplicate FamilyCandidateKey entries",
     );
   }
+  const candidateFamilyIds: Record<string, string> = {};
+  const candidatesByFamily = new Map<string, Record<string, unknown>>();
+  for (const id of readyCoverageFamilyIds(input.requiredSourceCoverageKeys())) candidatesByFamily.set(id, {});
+  if (input.candidateFamilyId) for (const candidate of candidates) {
+    const key = input.familyCandidateKey(candidate), id = input.candidateFamilyId(candidate);
+    candidateFamilyIds[key] = id;
+    if (!candidatesByFamily.has(id)) throw new Error("Ready candidate Family lacks source coverage: " + id);
+    candidatesByFamily.get(id)![key] = candidatesByKey[key];
+  }
+  const familyDefinitionHashes = input.familyDefinitionHash && input.candidateFamilyId
+    ? Object.freeze(Object.fromEntries([...candidatesByFamily.keys()].sort().map(id => [id, input.familyDefinitionHash!(id)])))
+    : undefined;
+  const definitionInputChanged = incumbentRun !== null && !review && familyDefinitionHashes !== undefined &&
+    canonicalJson(incumbentRun.familyDefinitionHashes ?? null) !== canonicalJson(familyDefinitionHashes);
   assertExactSourceCoverageSet(
     sourceReceipts,
     input.requiredSourceCoverageKeys(),
@@ -608,8 +711,9 @@ export async function rebuildUniverse(
 
   // 2. Create or resume the same fixed-cutoff run; a discovery plan change
   // reconciles the SAME run's partition/receipts (time identity immutable).
-  checkpoint = discoveryPlanChanged
+  checkpoint = discoveryPlanChanged || definitionInputChanged
     ? await input.store.reconcileFixedRunPlan({
+        ...(familyDefinitionHashes === undefined ? {} : { familyDefinitionHashes, candidateFamilyIds }),
         expectedRevision: checkpoint?.revision ?? 0,
         runId: input.runId,
         cutoff,
@@ -625,7 +729,10 @@ export async function rebuildUniverse(
         sourceReceipts,
       })
     : await input.store.beginOrResumeRun({
+        ...(input.currentInputFingerprint === undefined ? {} : { currentInputFingerprint: input.currentInputFingerprint }),
         ...(review && { reviewInputFingerprint: review.inputFingerprint }),
+        ...(familyDefinitionHashes === undefined ? {} : { familyDefinitionHashes }),
+        ...(forcedOutcomeStatuses === undefined ? {} : { forcedOutcomeStatuses }),
         ...(familyUpdateScope === undefined ? {} : { familyUpdateScope }),
         expectedRevision: checkpoint?.revision ?? 0,
         runId: input.runId,
@@ -653,6 +760,51 @@ export async function rebuildUniverse(
     await input.assertCanonicalHead(cutoff);
   }
   const attestationCheckpoint = checkpoint;
+  const parent = checkpoint.readyGeneration;
+  const history = parent ? retainReadyResultHistory(parent, {}, parent.cutoff) : undefined;
+  const previousOutcomes = new Map<string, RunOutcome>();
+  for (const partition of history ?? []) {
+    for (const [key, row] of Object.entries(partition.outcomesByCandidateKey)) previousOutcomes.set(key, row);
+  }
+  for (const partition of Object.values(parent?.familyPartitions ?? {})) {
+    for (const [key, row] of Object.entries(partition.outcomesByCandidateKey)) previousOutcomes.set(key, row);
+  }
+  const reconciliation = familyDefinitionHashes === undefined ? undefined : reconcileReadyInputs({
+    candidatesByFamily, familyDefinitionHashes, previousPartitions: parent?.familyPartitions,
+    history, cutoff, sameProofSource: parent !== null && canonicalJson(parent.cutoff) === canonicalJson(cutoff),
+    forcedStatuses,
+  });
+  const inheritedOutcomes = new Map(reconciliation?.inheritedOutcomes ?? []);
+  // The independent probe queue can advance after a Ready was published.
+  // Never roll its newer attempt back or resurrect a completed queue entry
+  // merely because the parent still contains its historical retryable row.
+  for (const [key, row] of previousOutcomes) {
+    if (row.status !== "retryable") continue;
+    const queued = checkpoint.retryableAttemptsByCandidateKey[key];
+    if (queued === undefined) {
+      inheritedOutcomes.delete(key);
+      previousOutcomes.delete(key);
+      continue;
+    }
+    const { runId: _probeRunId, cutoff: probeSource, ...attempt } = queued;
+    previousOutcomes.set(key, attempt);
+    if (inheritedOutcomes.has(key)) {
+      if (canonicalJson(probeSource) === canonicalJson(cutoff) &&
+          canonicalJson(attempt.candidateSnapshot) === canonicalJson(candidatesByKey[key])) inheritedOutcomes.set(key, attempt);
+      else inheritedOutcomes.delete(key);
+    }
+  }
+  const historicalVerifiedKeys = new Set([
+    ...Object.keys(checkpoint.verifiedMemos).filter(key =>
+      !previousOutcomes.has(key) || previousOutcomes.get(key)!.status === "verified"),
+    ...[...previousOutcomes].filter(([, row]) => row.status === "verified").map(([key]) => key),
+  ]);
+  const forcedKeys = new Set<string>();
+  for (const candidate of candidates) {
+    const key = input.familyCandidateKey(candidate), row = previousOutcomes.get(key);
+    const status = row?.status ?? (checkpoint.verifiedMemos[key] ? "verified" : undefined);
+    if (status && status !== "covered" && forcedStatuses.has(status)) forcedKeys.add(key);
+  }
 
   // 3. Restore by durable key; verify only the diff.
   const writer = new AttestationCheckpointWriter({
@@ -676,7 +828,7 @@ export async function rebuildUniverse(
   for (const [candidateKey, outcome] of Object.entries(
     run.outcomesByCandidateKey,
   ).sort(([left], [right]) => left.localeCompare(right))) {
-    if (outcome.status !== "verified" || review) continue;
+    if (outcome.status !== "verified" || review || familyDefinitionHashes !== undefined) continue;
     const first = seenInstanceKeys.get(outcome.familyInstanceKey);
     if (first !== undefined) {
       const memo = checkpoint.verifiedMemos[candidateKey];
@@ -741,13 +893,11 @@ export async function rebuildUniverse(
     dependencies: input, candidates, cutoff,
     // History orders work only. A memo becomes a winner only when the
     // original reuse/retention/attestation path accepts it in this run.
-    historicalVerifiedKeys: new Set(Object.keys(attestationCheckpoint.verifiedMemos)),
+    historicalVerifiedKeys,
   });
-  // By default every non-verified candidate gets a fresh attempt per resume.
-  // Explicit same-run completion may retain their existing outcomes; neither
-  // terminal-rejected nor retryable can supply an admitted Graph instance.
-  // Valid verified memos still skip attestation below; a fresh retryable result
-  // is accounted once and does not block publishing the verified Graph.
+  // Completed outcomes inherit only under their sealed input/source binding.
+  // Legacy runs retain their original explicit completion/retry policy.
+  // Negative and covered rows never fabricate a verified Graph instance.
   const attestationCounts: Record<RunOutcome["status"], number> = {
     verified: 0,
     "terminal-rejected": 0,
@@ -779,17 +929,34 @@ export async function rebuildUniverse(
     }
   };
   type Phase = "ordinary" | "review" | "strict";
+  // Equal pool tasks serialize within each phase: once one succeeds, queued
+  // competitors observe its coverage before doing an RPC. Different pools
+  // retain the existing global concurrency/throttle policy.
+  const poolTails = new Map<string, Promise<void>>();
+  const inPool = async <T>(candidate: unknown, work: () => Promise<T>): Promise<T> => {
+    const key = revalidation.poolTaskKey(candidate);
+    const previous = poolTails.get(key) ?? Promise.resolve();
+    const next = previous.then(work, work);
+    const tail = next.then(() => undefined, () => undefined);
+    poolTails.set(key, tail);
+    try { return await next; }
+    finally { if (poolTails.get(key) === tail) poolTails.delete(key); }
+  };
   const processCandidate = async (
     candidate: unknown, phase: Phase, deferStrict = false,
   ): Promise<RunOutcome["status"] | "needs-strict"> => {
     const candidateKey = input.familyCandidateKey(candidate);
-    const oldOutcome = run.outcomesByCandidateKey[candidateKey];
-    if (input.resumeCompletedOutcomes && oldOutcome !== undefined &&
-        oldOutcome.status !== "verified" && oldOutcome.status !== "covered") {
-      return oldOutcome.status;
+    const completedOutcome = run.outcomesByCandidateKey[candidateKey];
+    const oldOutcome = completedOutcome ?? previousOutcomes.get(candidateKey);
+    const forced = forcedKeys.has(candidateKey) && !(incumbentRun !== null && completedOutcome !== undefined);
+    if (input.resumeCompletedOutcomes && completedOutcome !== undefined &&
+        completedOutcome.status !== "verified" && completedOutcome.status !== "covered") {
+      return completedOutcome.status;
     }
     let reusableMemo: DurableVerifiedMemo | null = null;
-    if (phase !== "strict" && (oldOutcome === undefined || oldOutcome.status === "verified")) {
+    if (!forced && phase !== "strict" && (!review || historicalVerifiedKeys.has(candidateKey)) &&
+        (oldOutcome === undefined || oldOutcome.status === "verified") &&
+        (familyDefinitionHashes === undefined || attestationCheckpoint.verifiedMemos[candidateKey] !== undefined)) {
       try {
         reusableMemo = await input.findReusableMemo({
           candidate,
@@ -815,9 +982,9 @@ export async function rebuildUniverse(
         return "terminal-rejected";
       }
       if (
-        oldOutcome?.status === "verified" &&
-        oldOutcome.familyInstanceKey === reusableMemo.familyInstanceKey &&
-        oldOutcome.memoFingerprint === reusableMemo.memoFingerprint
+        completedOutcome?.status === "verified" &&
+        completedOutcome.familyInstanceKey === reusableMemo.familyInstanceKey &&
+        completedOutcome.memoFingerprint === reusableMemo.memoFingerprint
       ) {
         revalidation.confirmVerified(candidate, reusableMemo);
         return "verified";
@@ -832,104 +999,105 @@ export async function rebuildUniverse(
       return "verified";
     }
     if (phase === "review" || deferStrict) return "needs-strict";
-    const covered = revalidation.coveredOutcome(candidate);
-    if (covered !== null) {
-      writer.record(covered);
-      return "covered";
-    }
-    const sourceRetryable = input.preAttestationRetryable?.(candidate) ?? null;
-    if (sourceRetryable !== null) {
+    return await inPool(candidate, async () => {
+      const covered = forced ? null : revalidation.coveredOutcome(candidate);
+      if (covered !== null) {
+        writer.record(covered);
+        return "covered";
+      }
+      const sourceRetryable = input.preAttestationRetryable?.(candidate) ?? null;
+      if (sourceRetryable !== null) {
+        const attemptCount = oldOutcome?.status === "retryable"
+          ? oldOutcome.attemptCount
+          : 0;
+        writer.record(Object.freeze({
+          ...sourceRetryable,
+          status: "retryable" as const,
+          familyCandidateKey: candidateKey,
+          familyId: String((candidate as { familyId?: unknown }).familyId ?? ""),
+          attemptCount: attemptCount + 1,
+          lastAttemptAt: new Date().toISOString(),
+        }));
+        return "retryable";
+      }
+      const evidenceRef = oldOutcome?.status === "retryable"
+        ? oldOutcome.evidenceRef
+        : input.candidateEvidenceRef?.(candidate);
       const attemptCount = oldOutcome?.status === "retryable"
         ? oldOutcome.attemptCount
         : 0;
+      const result = await input.attestFamilyInstanceOnce({
+        candidate,
+        cutoff,
+        ...(evidenceRef === undefined ? {} : { evidenceRef }),
+      });
+      input.readyThrottle?.assertOpen();
+      if (result.status === "verified") {
+        const memo = input.sealDurableVerifiedMemo({
+          candidate,
+          result: result.result,
+          proofSource: cutoff,
+          familyCandidateKey: candidateKey,
+        });
+        const duplicateOf = await claimInstanceKey(
+          memo.familyInstanceKey,
+          candidateKey,
+        );
+        if (duplicateOf !== undefined) {
+          recordDuplicateInstance(candidateKey, memo, duplicateOf);
+          return "terminal-rejected";
+        }
+        writer.record(Object.freeze({
+          status: "verified",
+          familyCandidateKey: candidateKey,
+          familyInstanceKey: memo.familyInstanceKey,
+          memoFingerprint: memo.memoFingerprint,
+        }), memo);
+        revalidation.confirmVerified(candidate, memo);
+        return "verified";
+      }
+      if (result.status === "terminal-rejected") {
+        writer.record(Object.freeze({
+          status: "terminal-rejected",
+          familyCandidateKey: candidateKey,
+          reasonCode: result.reasonCode,
+          familyDefinitionHash: result.binding.familyDefinitionHash,
+          requestFingerprint: result.binding.requestFingerprint,
+          trustedResultsFingerprint: result.binding.trustedResultsFingerprint,
+          authorityFingerprint: result.binding.authorityFingerprint,
+          candidateFingerprint: result.binding.candidateFingerprint,
+          cutoff: Object.freeze({
+            number: result.binding.cutoff.number,
+            hash: result.binding.cutoff.hash,
+          }),
+        }));
+        return "terminal-rejected";
+      }
       writer.record(Object.freeze({
-        ...sourceRetryable,
-        status: "retryable" as const,
+        status: "retryable",
         familyCandidateKey: candidateKey,
         familyId: String((candidate as { familyId?: unknown }).familyId ?? ""),
+        candidateSnapshot: result.candidateSnapshot,
+        ...(result.evidenceRef === undefined
+          ? {}
+          : { evidenceRef: Object.freeze(result.evidenceRef) }),
+        stage: result.stage,
+        failureCode: result.failureCode,
+        ...(result.requestFingerprint === undefined
+          ? {}
+          : { requestFingerprint: result.requestFingerprint }),
+        reasonCode: result.reasonCode,
         attemptCount: attemptCount + 1,
         lastAttemptAt: new Date().toISOString(),
       }));
       return "retryable";
-    }
-    const evidenceRef = oldOutcome?.status === "retryable"
-      ? oldOutcome.evidenceRef
-      : input.candidateEvidenceRef?.(candidate);
-    const attemptCount = oldOutcome?.status === "retryable"
-      ? oldOutcome.attemptCount
-      : 0;
-    const result = await input.attestFamilyInstanceOnce({
-      candidate,
-      cutoff,
-      ...(evidenceRef === undefined ? {} : { evidenceRef }),
     });
-    input.readyThrottle?.assertOpen();
-    if (result.status === "verified") {
-      const memo = input.sealDurableVerifiedMemo({
-        candidate,
-        result: result.result,
-        proofSource: cutoff,
-        familyCandidateKey: candidateKey,
-      });
-      const duplicateOf = await claimInstanceKey(
-        memo.familyInstanceKey,
-        candidateKey,
-      );
-      if (duplicateOf !== undefined) {
-        recordDuplicateInstance(candidateKey, memo, duplicateOf);
-        return "terminal-rejected";
-      }
-      writer.record(Object.freeze({
-        status: "verified",
-        familyCandidateKey: candidateKey,
-        familyInstanceKey: memo.familyInstanceKey,
-        memoFingerprint: memo.memoFingerprint,
-      }), memo);
-      revalidation.confirmVerified(candidate, memo);
-      return "verified";
-    }
-    if (result.status === "terminal-rejected") {
-      writer.record(Object.freeze({
-        status: "terminal-rejected",
-        familyCandidateKey: candidateKey,
-        reasonCode: result.reasonCode,
-        familyDefinitionHash: result.binding.familyDefinitionHash,
-        requestFingerprint: result.binding.requestFingerprint,
-        trustedResultsFingerprint: result.binding.trustedResultsFingerprint,
-        authorityFingerprint: result.binding.authorityFingerprint,
-        candidateFingerprint: result.binding.candidateFingerprint,
-        cutoff: Object.freeze({
-          number: result.binding.cutoff.number,
-          hash: result.binding.cutoff.hash,
-        }),
-      }));
-      return "terminal-rejected";
-    }
-    writer.record(Object.freeze({
-      status: "retryable",
-      familyCandidateKey: candidateKey,
-      familyId: String((candidate as { familyId?: unknown }).familyId ?? ""),
-      candidateSnapshot: result.candidateSnapshot,
-      ...(result.evidenceRef === undefined
-        ? {}
-        : { evidenceRef: Object.freeze(result.evidenceRef) }),
-      stage: result.stage,
-      failureCode: result.failureCode,
-      ...(result.requestFingerprint === undefined
-        ? {}
-        : { requestFingerprint: result.requestFingerprint }),
-      reasonCode: result.reasonCode,
-      attemptCount: attemptCount + 1,
-      lastAttemptAt: new Date().toISOString(),
-    }));
-    return "retryable";
   };
   const requestedConcurrency = input.attestationConcurrency ?? 24;
   if (!Number.isSafeInteger(requestedConcurrency) || requestedConcurrency < 1) {
     throw new Error("universe rebuild attestation concurrency is invalid");
   }
   input.readyThrottle?.limitConcurrency(requestedConcurrency);
-  let addedProgress: { completed: number; total: number } | undefined;
   const reviewedCounts = { reusedPrevious: 0, restoredVerified: 0, newlyVerified: 0 };
   const runBatch = async (items: readonly unknown[], phase: Phase, deferred?: unknown[]) => {
     const work = async (candidate: unknown) => {
@@ -948,12 +1116,6 @@ export async function rebuildUniverse(
           else reviewedCounts.reusedPrevious++;
         }
         recordAttestationProgress(status);
-        if (addedProgress) {
-          addedProgress.completed++;
-          if (addedProgress.completed % 100 === 0 || addedProgress.completed === addedProgress.total) {
-            log("Ready newly enabled Families: processed=" + addedProgress.completed + "/" + addedProgress.total);
-          }
-        }
       }
     };
     if (input.readyThrottle) {
@@ -986,144 +1148,97 @@ export async function rebuildUniverse(
     }
   };
   try {
-    if (review) {
-      const survivors = review.retainedFamilyIds;
-      const retainedSeen = new Map<string, number>();
-      const parent = attestationCheckpoint.readyGeneration!;
-      if (survivors && (!incumbentRun || !input.resumeCompletedOutcomes || !input.candidateFamilyId ||
-          !input.isReadyMemoDefinitionCurrent || !input.familyDefinitionHash ||
-          canonicalJson(parent.cutoff) !== canonicalJson(cutoff) || parent.universeRange.fromBlock !== fromBlock)) {
-        throw new Error("retained Family outcomes require a bound fixed-source review resume");
+    // All callers submit a complete scope. The same reconciliation admits
+    // unchanged partitions, then sends only unresolved tasks to one processor.
+    const inherited = new Map(inheritedOutcomes);
+    if (incumbentRun !== null) {
+      for (const [key, row] of Object.entries(run.outcomesByCandidateKey)) {
+        const id = candidateFamilyIds[key];
+        const sameDefinition = id !== undefined && familyDefinitionHashes !== undefined &&
+          run.familyDefinitionHashes?.[id] === familyDefinitionHashes[id];
+        if (!sameDefinition) continue;
+        // This attempt belongs to this exact sealed run, including its force
+        // policy. A completed failed attempt also overrides a parent's success.
+        inherited.delete(key);
+        if (row.status !== "covered") inherited.set(key, row);
       }
-      const previous = new Set<string>();
-      for (const partition of Object.values(attestationCheckpoint.readyGeneration!.familyPartitions!)) {
-        if (!partition.enabled) continue;
-        for (const row of Object.values(partition.outcomesByCandidateKey)) {
-          if (row.status === "verified") previous.add(row.familyCandidateKey);
-        }
-      }
-      const recheck: unknown[] = [], strictPrevious: unknown[] = [], remaining: unknown[] = [];
-      if (survivors && review.revalidateParentProofs) throw new Error("cannot retain parent outcomes under a new proof context");
-      if (survivors && review.retryNegativeOutcomes) throw new Error("cannot retain entire Family outcomes while retrying negative outcomes");
-      let retained = 0, alreadyHandled = 0;
-      if (survivors) {
-        for (const id of survivors) {
-          const p = parent.familyPartitions![id];
-          if (!p?.enabled || p.familyDefinitionHash !== input.familyDefinitionHash!(id) ||
-              p.discoveryDefinitionHash !== input.familyDiscoveryDefinitionHash!(id)) throw new Error("retained Family definition mismatch: " + id);
-        }
-      }
-      for (const candidate of candidates) {
-        const key = input.familyCandidateKey(candidate);
-        if (survivors) {
-          const id = input.candidateFamilyId!(candidate);
-          const current = run.outcomesByCandidateKey[key];
-          const partition = survivors.has(id) ? parent.familyPartitions![id] : undefined;
-          const inherited = partition?.outcomesByCandidateKey[key];
-          if (partition && !inherited) throw new Error("retained Family candidate is absent from the parent");
-          // The sealed parent owns surviving partitions. Completed attempts in
-          // newly enabled Families belong to this fixed run and can also resume.
-          const row = inherited ?? current;
-          if (row) {
-            if (partition && canonicalJson(partition.candidatesByKey[key]) !== canonicalJson(run.candidatesByKey[key])) {
-              throw new Error("retained Family nomination differs from the sealed run: " + key);
-            }
-            if (row.status === "covered") {
-              // Derived skips are rebound to this run's accepted winner. All
-              // original verified and negative retention rules stay below.
-              if (partition) retainedSeen.set(id, (retainedSeen.get(id) ?? 0) + 1);
-              remaining.push(candidate);
-              continue;
-            }
-            if (row.status === "verified") {
-              const memo = attestationCheckpoint.verifiedMemos[key];
-              if (!memo || memo.familyId !== id || memo.familyInstanceKey !== row.familyInstanceKey ||
-                  memo.memoFingerprint !== row.memoFingerprint || !input.isReadyMemoDefinitionCurrent!(memo) ||
-                  await claimInstanceKey(memo.familyInstanceKey, key) !== undefined) {
-                throw new Error("retained or resumed verified proof differs: " + key);
-              }
-            }
-            if (partition) {
-              retainedSeen.set(id, (retainedSeen.get(id) ?? 0) + 1);
-              if (!current || canonicalJson(current) !== canonicalJson(row)) writer.record(row);
-              retained++;
-            } else {
-              alreadyHandled++;
-            }
-            if (row.status === "verified") {
-              revalidation.confirmVerified(candidate, attestationCheckpoint.verifiedMemos[key]!);
-            }
-            recordAttestationProgress(row.status);
-            continue;
-          }
-        }
-        if (review.revalidateParentProofs && previous.has(key) && !run.outcomesByCandidateKey[key]) {
-          strictPrevious.push(candidate);
-        } else if (previous.has(key) || run.outcomesByCandidateKey[key]?.status === "verified") {
-          recheck.push(candidate);
-        } else {
-          remaining.push(candidate);
-        }
-      }
-      for (const id of survivors ?? []) {
-        if ((retainedSeen.get(id) ?? 0) !== Object.keys(parent.familyPartitions![id]!.candidatesByKey).length) {
-          throw new Error("retained Family membership changed: " + id);
-        }
-      }
-      if (survivors) {
-        addedProgress = { completed: alreadyHandled, total: candidates.length - retained };
-        log("Ready activation resume: retained=" + retained + " addedAlreadyHandled=" +
-          alreadyHandled + " addedRemaining=" + (recheck.length + remaining.length));
-      }
-      await runPhase(recheck, "review", remaining);
-      if (strictPrevious.length) await runPhase(strictPrevious, "strict");
-      // Scope edits can reuse negative outcomes for unchanged nominations. A
-      // different cutoff, rule or proof context still gets a fresh attempt.
-      const unchangedPartitions = new Map<string, ReadyFamilyPartition>();
-      if (!survivors && !review.revalidateParentProofs && !review.retryNegativeOutcomes && input.candidateFamilyId &&
-          input.familyDefinitionHash && input.familyDiscoveryDefinitionHash &&
-          canonicalJson(parent.cutoff) === canonicalJson(cutoff)) {
-        for (const [id, partition] of Object.entries(parent.familyPartitions!)) {
-          if (partition.enabled && input.isFamilyEnabled?.(id) !== false &&
-              partition.familyDefinitionHash === input.familyDefinitionHash(id) &&
-              partition.discoveryDefinitionHash === input.familyDiscoveryDefinitionHash(id)) {
-            unchangedPartitions.set(id, partition);
-          }
-        }
-      }
-      let retainedNegative = 0;
-      const pending = unchangedPartitions.size === 0 ? remaining : remaining.filter(candidate => {
-        const key = input.familyCandidateKey(candidate);
-        if (run.outcomesByCandidateKey[key] !== undefined) return true;
-        const partition = unchangedPartitions.get(input.candidateFamilyId!(candidate));
-        if (!partition) return true;
-        const row = partition.outcomesByCandidateKey[key];
-        if (!row || row.status === "verified" || row.status === "covered" ||
-            canonicalJson(partition.candidatesByKey[key]) !== canonicalJson(run.candidatesByKey[key])) return true;
-        if (row.status === "terminal-rejected") {
-          if (row.cutoff.number !== cutoff.number || row.cutoff.hash !== cutoff.hash) return true;
-          if (row.reasonCode === "duplicate-instance") {
-            const winner = row.requestFingerprint.slice("duplicate-instance:".length);
-            const memo = attestationCheckpoint.verifiedMemos[winner];
-            if (!row.requestFingerprint.startsWith("duplicate-instance:") || !memo ||
-                seenInstanceKeys.get(memo.familyInstanceKey) !== winner) return true;
-          } else if (row.familyDefinitionHash !== partition.familyDefinitionHash) return true;
-        }
-        writer.record(row);
-        recordAttestationProgress(row.status);
-        retainedNegative++;
-        return false;
-      });
-      log("Ready review: prior/current proofs checked=" + (recheck.length + strictPrevious.length) +
-        " completed=" + completedPending + " retainedNegative=" + retainedNegative + " remaining=" + pending.length);
-      await runPhase(pending, "strict");
-      log("Ready review results " + JSON.stringify({ ...reviewedCounts, terminalRejected: attestationCounts["terminal-rejected"],
-        retryable: attestationCounts.retryable, covered: attestationCounts.covered }));
-    } else {
-      const pending: unknown[] = [];
-      await runPhase(candidates, "ordinary", pending);
-      await runPhase(pending, "strict");
     }
+    // Legacy activation callers can still assert their retained set; it has
+    // no separate processing branch or authority to bypass input comparison.
+    for (const id of review?.retainedFamilyIds ?? []) {
+      const partition = parent?.familyPartitions?.[id];
+      if (!incumbentRun || !input.resumeCompletedOutcomes || !partition ||
+          partition.familyDefinitionHash !== familyDefinitionHashes?.[id] ||
+          canonicalJson(partition.candidatesByKey) !== canonicalJson(candidatesByFamily.get(id) ?? {}) ||
+          canonicalJson(parent!.cutoff) !== canonicalJson(cutoff) || forcedStatuses.size !== 0) {
+        throw new Error("retained Family inputs differ from the sealed parent: " + id);
+      }
+    }
+    const accepted = new Set<string>();
+    const inheritedWrites: { readonly outcome: RunOutcome }[] = [];
+    const currentCandidates = new Map(candidates.map(candidate => [input.familyCandidateKey(candidate), candidate] as const));
+    const admit = (key: string, row: RunOutcome): void => {
+      accepted.add(key);
+      if (canonicalJson(run.outcomesByCandidateKey[key] ?? null) !== canonicalJson(row)) inheritedWrites.push({ outcome: row });
+      attestationCounts[row.status]++;
+      completedPending++;
+    };
+    // Register every accepted winner before any pending nomination can claim
+    // coverage. This indexes sealed results; it does not recheck their proof.
+    for (const [key, row] of [...inherited].sort(([a], [b]) => a.localeCompare(b))) {
+      if (row.status !== "verified" || !currentCandidates.has(key)) continue;
+      const memo = attestationCheckpoint.verifiedMemos[key];
+      if (!memo || memo.familyInstanceKey !== row.familyInstanceKey || memo.memoFingerprint !== row.memoFingerprint) {
+        const parentRow = parent?.familyPartitions?.[candidateFamilyIds[key] ?? ""]?.outcomesByCandidateKey[key];
+        if (parentRow?.status === "verified") throw new Error("inherited verified outcome lost its sealed memo: " + key);
+        // Compatibility operations may have evicted an inactive historical
+        // memo. An index entry without its evidence returns to normal work.
+        inherited.delete(key);
+        continue;
+      }
+      const duplicateOf = await claimInstanceKey(memo.familyInstanceKey, key);
+      if (duplicateOf !== undefined) {
+        recordDuplicateInstance(key, memo, duplicateOf);
+        accepted.add(key); attestationCounts["terminal-rejected"]++; completedPending++;
+        continue;
+      }
+      revalidation.inheritVerified(currentCandidates.get(key)!, memo);
+      admit(key, row);
+    }
+    for (const [key, row] of inherited) {
+      if (row.status === "verified" || row.status === "covered" || !currentCandidates.has(key)) continue;
+      if (row.status === "terminal-rejected" && row.reasonCode === "duplicate-instance") {
+        const winnerKey = row.requestFingerprint.slice("duplicate-instance:".length);
+        const winner = attestationCheckpoint.verifiedMemos[winnerKey];
+        if (!row.requestFingerprint.startsWith("duplicate-instance:") || !winner ||
+            seenInstanceKeys.get(winner.familyInstanceKey) !== winnerKey) continue;
+      }
+      admit(key, row);
+    }
+    writer.recordBatch(inheritedWrites);
+    if (accepted.size > 0) logAttestationProgress("progress");
+    const pending = candidates.filter(candidate => !accepted.has(input.familyCandidateKey(candidate)));
+    const priorVerified = pending.filter(candidate => historicalVerifiedKeys.has(input.familyCandidateKey(candidate)));
+    const ordinary = pending.filter(candidate => !historicalVerifiedKeys.has(input.familyCandidateKey(candidate)));
+    const sameSealedInput = incumbentRun !== null && !discoveryPlanChanged && !definitionInputChanged &&
+      familyDefinitionHashes !== undefined &&
+      canonicalJson(incumbentRun.familyDefinitionHashes ?? null) === canonicalJson(familyDefinitionHashes);
+    log("Ready input reconciliation " + JSON.stringify({
+      // Resume compares the sealed COMPLETE input, never the pending list.
+      classes: sameSealedInput ? { A: candidates.length, B: 0, C: 0, D: 0 } : reconciliation?.classes ?? null,
+      removed: sameSealedInput ? 0 : reconciliation?.removed ?? 0,
+      inherited: accepted.size, priorVerified: priorVerified.length, remaining: ordinary.length,
+      forced: forcedKeys.size,
+    }));
+    const strictPrevious: unknown[] = [];
+    await runPhase(priorVerified, "review", strictPrevious);
+    await runPhase(strictPrevious, "strict");
+    const strictRemaining: unknown[] = [];
+    await runPhase(ordinary, "ordinary", strictRemaining);
+    await runPhase(strictRemaining, "strict");
+    if (review) log("Ready review results " + JSON.stringify({ ...reviewedCounts,
+      terminalRejected: attestationCounts["terminal-rejected"], retryable: attestationCounts.retryable,
+      covered: attestationCounts.covered }));
   } catch (error) {
     log("universe rebuild attestation stopped: processed=" + completedPending +
       "/" + candidates.length + " pending=" + (candidates.length - completedPending) +
@@ -1187,8 +1302,10 @@ export async function rebuildUniverse(
   input.assertReadyGraphSnapshot?.({ publications, graphSnapshot, cutoff });
   const catalogSnapshot = buildReadyCatalogSnapshot(activeMemos);
   const familyPartitions = buildReadyFamilyPartitions(input, currentRun);
+  const resultHistory = retainReadyResultHistory(checkpoint.readyGeneration, familyPartitions, cutoff);
   const ready = Object.freeze({
     ...(currentRun.familyUpdateScope === undefined ? {} : { familyUpdateScope: currentRun.familyUpdateScope }),
+    ...(discoveryInputBinding === undefined ? {} : { discoveryInputBinding }),
     generation: (checkpoint.readyGeneration?.generation ?? 0) + 1,
     cutoff: Object.freeze({ ...cutoff }),
     universeRange: Object.freeze({
@@ -1212,6 +1329,7 @@ export async function rebuildUniverse(
     graphHash: hashReadyGraphSnapshot(graphSnapshot),
     catalogSnapshot,
     ...(familyPartitions === undefined ? {} : { familyPartitions }),
+    ...(resultHistory === undefined ? {} : { resultHistory }),
   }) as ReadyUniverseGeneration;
 
   // 7. Final single CAS: Graph, coverage and cutoff become ready together.
@@ -1314,11 +1432,21 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
   const revalidation = createCandidateRevalidation({
     dependencies: input, candidates: [...currentCandidates.values(), ...coveredCandidates], cutoff,
     historicalVerifiedKeys: new Set(oldMemos.map(memo => memo.familyCandidateKey)),
+    preserveHistoricalVerified: true,
   });
+  const inheritedFamilies = currentReadyDefinitionFamilies(input, ready.familyPartitions);
   let next = 0;
   let completed = 0;
   let refreshed = 0;
   let stop = false;
+  const pendingIndexes: number[] = [];
+  for (let index = 0; index < oldMemos.length; index++) {
+    const old = oldMemos[index]!;
+    if (!inheritedFamilies.has(old.familyId)) { pendingIndexes.push(index); continue; }
+    memos[index] = old;
+    if (oldCovered.size !== 0) revalidation.inheritVerified(currentCandidates.get(old.familyCandidateKey)!, old);
+    completed++;
+  }
   const refreshOne = async (index: number): Promise<void> => {
       input.readyThrottle?.assertOpen();
       const old = oldMemos[index]!;
@@ -1368,15 +1496,15 @@ export async function refreshReadyInstances(input: UniverseRebuildDependencies &
   };
   if (input.readyThrottle) {
     input.readyThrottle.limitConcurrency(concurrency);
-    await input.readyThrottle.runCandidates(oldMemos.map((_, index) => index), refreshOne, () => {});
+    await input.readyThrottle.runCandidates(pendingIndexes, refreshOne, () => {});
   } else {
-    const workers = await Promise.allSettled(Array.from({ length: Math.min(concurrency, oldMemos.length) }, async () => {
+    const workers = await Promise.allSettled(Array.from({ length: Math.min(concurrency, pendingIndexes.length) }, async () => {
       try {
         for (;;) {
           if (stop) return;
-          const index = next++;
-          if (index >= oldMemos.length) return;
-          await refreshOne(index);
+          const position = next++;
+          if (position >= pendingIndexes.length) return;
+          await refreshOne(pendingIndexes[position]!);
         }
       } catch (error) { stop = true; throw error; }
     }));
@@ -1436,7 +1564,9 @@ export async function restrictReadyFamilies(input: UniverseRebuildDependencies &
   if (input.requiredSourceCoverageKeys().some(key => !oldCoverage.has(key))) {
     throw new Error("Ready restriction cannot expand historical source coverage; rebuild required");
   }
+  const inheritedFamilies = currentReadyDefinitionFamilies(input, ready.familyPartitions);
   for (const memo of retained) {
+    if (inheritedFamilies.has(memo.familyId)) continue;
     if (input.isReadyMemoDefinitionCurrent(memo) !== true) {
       throw new Error("Ready restriction retained definition is stale: " + memo.familyCandidateKey);
     }
@@ -1500,7 +1630,9 @@ export async function updateReadyFamilies(input: UniverseRebuildDependencies & {
       throw new Error("Ready Family discovery definition is stale; scoped rebuild required: " + id);
     }
   }
+  const inheritedFamilies = currentReadyDefinitionFamilies(input, plan.familyPartitions);
   for (const memo of plan.activeMemos) {
+    if (inheritedFamilies.has(memo.familyId)) continue;
     if (input.isReadyMemoDefinitionCurrent(memo) !== true) {
       throw new Error("Ready Family retained definition is stale; scoped rebuild required: " + memo.familyId);
     }
@@ -1524,6 +1656,13 @@ export async function updateReadyFamilies(input: UniverseRebuildDependencies & {
   input.log?.(`Ready Family update: generation=${next.readyGeneration!.generation} ` +
     `active=${plan.activeMemos.length} excluded=${plan.excludedMemos.length} replaced=${plan.replacedFamilyIds.join(",")}`);
   return next.readyGeneration!;
+}
+
+function currentReadyDefinitionFamilies(input: UniverseRebuildDependencies,
+  partitions: Readonly<Record<string, ReadyFamilyPartition>> | undefined): ReadonlySet<string> {
+  return new Set(input.familyDefinitionHash === undefined ? [] : Object.entries(partitions ?? {})
+    .filter(([id, partition]) => input.isFamilyEnabled?.(id) !== false && partition.familyDefinitionHash !== undefined &&
+      partition.familyDefinitionHash === input.familyDefinitionHash!(id)).map(([id]) => id));
 }
 
 function assertReadyCoverageCurrent(
@@ -1679,7 +1818,7 @@ export function assertExactSourceCoverageSet(
   const required = new Set(requiredKeys);
   const completed = new Set(receipts.flatMap((receipt) => receipt.coverageKeys));
   if (
-    required.size === 0 ||
+    (required.size === 0 && receipts.length !== 0) ||
     required.size !== requiredKeys.length ||
     completed.size !== required.size ||
     [...required].some((key) => !completed.has(key))

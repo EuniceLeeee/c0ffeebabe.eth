@@ -39,6 +39,8 @@ const recipientCalls = [CURVE_UNDERLYING_I128_RECEIVER_INTERFACE, CURVE_UNDERLYI
 
 export const curveUnderlyingDiscovery = {
   evidenceChannel: "nominate" as const,
+  // Underlying-token routes add a distinct capability to the direct-coin pool.
+  candidateCoverageScope: "underlying-pool-swap-v1",
   txSeedNominations: true,
   sources: ["landed-log", "observed-call"],
   canonicalIntakeTargets: [

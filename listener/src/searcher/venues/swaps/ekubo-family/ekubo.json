@@ -50,6 +50,11 @@
       "candidate": {
         "kind": "ekubo-pool-key",
         "addressField": "subject",
+        "poolIdentity": {
+          "kind": "singleton-pool",
+          "namespace": { "address": "0x00000000000014aa86c5d3c41765bb24e11bd701" },
+          "poolIdField": "poolId"
+        },
         "fields": {
           "subject": "address",
           "token0": "address",

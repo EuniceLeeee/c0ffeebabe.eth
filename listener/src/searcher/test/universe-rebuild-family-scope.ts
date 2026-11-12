@@ -122,7 +122,13 @@ function checkPlans(): void {
   }
 
   assert(load.disabledPlugins.length > 0, "disabled registry fixture required");
-  const invalidScopes = [[], [logId, logId], ["unknown:family"], [""], [" " + logId],
+  assert.deepEqual(strictCatalogSourceCoverageKeys([]), { startup: [], activity: [] });
+  assert.deepEqual(strictFamilyDefinitionHashes([]), []);
+  assert.deepEqual(strictFamilyDiscoveryDefinitionHashes([]), []);
+  assert.deepEqual(candidatesFromLog(log, []), []);
+  assert.deepEqual(candidatesFromCall(call, []), []);
+  assert.deepEqual(createRebuildWiring({ ...options, familyIds: [] }).requiredSourceCoverageKeys(), []);
+  const invalidScopes = [[logId, logId], ["unknown:family"], [""], [" " + logId],
     ...load.disabledPlugins.map(module => [String(module.familyId)])];
   const helpers = [strictCatalogActivityPlan, strictCatalogLogTopics, strictCatalogCallPatterns,
     strictCatalogSourceCoverageKeys, strictFamilyDefinitionHashes, strictFamilyDiscoveryDefinitionHashes,

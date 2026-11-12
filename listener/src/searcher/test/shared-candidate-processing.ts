@@ -206,8 +206,8 @@ for (const mode of ["ordinary", "review"] as const) {
       const ready = await f.run(mode === "review"
         ? { previousReadyReview: { inputFingerprint: digest("review-priority") } } : {});
       assert.deepEqual(f.calls, ["X"], "stale historical X is reattested; Y and Z never enter a lifecycle");
-      assert.deepEqual(f.revalidationCalls, mode === "ordinary" ? ["Y", "Z", "X"] : ["X"],
-        "the hook preserves every original memo lookup and never adds a review remaining-candidate lookup");
+      assert.deepEqual(f.revalidationCalls, ["X"],
+        "only the changed historical winner has an old memo to reconsider; new same-pool nominations await its result");
       assert.equal(ready.candidateAccounting.verified, 1);
       assert.equal(ready.candidateAccounting.covered, 2);
       assert.equal(ready.candidateAccounting.terminalRejected, 0, "coverage is not a chain-proven rejection");
@@ -270,7 +270,7 @@ test("a failed historical strict callback cannot authorize coverage or start the
   } finally { await f.dispose(); }
 });
 
-for (const mode of ["ordinary", "review"] as const) test(`${mode}: a same-cutoff winner preserves the original lookup eligibility`, async () => {
+for (const mode of ["ordinary", "review"] as const) test(`${mode}: a same-cutoff winner is inherited by family without per-memo checks`, async () => {
   const x = candidate("X"), y = candidate("Y");
   const f = await fixture([x]);
   try {
@@ -286,7 +286,7 @@ for (const mode of ["ordinary", "review"] as const) test(`${mode}: a same-cutoff
       return f.input.findReusableMemo(args);
     } });
     assert.deepEqual(f.calls, []);
-    assert.deepEqual(localChecks, mode === "ordinary" ? ["Y", "X"] : ["X"]);
+    assert.deepEqual(localChecks, [], "the matching sealed family partition supplies the winner without per-memo lookup");
     assert.deepEqual(f.revalidationCalls, localChecks);
     assert.equal(ready.candidateAccounting.covered, 1);
   } finally { await f.dispose(); }
@@ -472,7 +472,8 @@ test("a fresh proof context cannot resurrect a historical memo behind a previous
   try {
     await f.run();
     f.retryable.add("X");
-    await f.run({ findReusableMemo: async () => null });
+    await f.run({ previousReadyReview: { inputFingerprint: digest("setup-retryable-before-proof-context"),
+      forceStatuses: ["verified"] } });
     const parent = (await f.store.load())!;
     assert(parent.verifiedMemos[key(x)], "historical proof bytes survive a retryable outcome for later checking");
     assert.equal(parent.readyGeneration!.familyPartitions![x.familyId]!.outcomesByCandidateKey[key(x)]!.status,
@@ -497,7 +498,8 @@ test("force retry of prior negative outcomes performs the requested retry instea
   try {
     await f.run();
     f.retryable.add("X");
-    await f.run({ findReusableMemo: async () => null });
+    await f.run({ previousReadyReview: { inputFingerprint: digest("setup-retryable-before-force-negative"),
+      forceStatuses: ["verified"] } });
     f.retryable.clear();
     f.rejected.add("X");
     f.setCandidates([y, x]);
@@ -505,7 +507,7 @@ test("force retry of prior negative outcomes performs the requested retry instea
     const ready = await f.run({ previousReadyReview: { inputFingerprint: digest("force-retry-negative"),
       retryNegativeOutcomes: true } });
     assert.deepEqual(f.revalidationCalls, [], "the original negative-retry strict path never revives old memos");
-    assert.deepEqual(f.calls, ["X", "Y"], "force-update must not shortcut the explicitly requested X retry");
+    assert.deepEqual([...f.calls].sort(), ["X", "Y"], "force-update must not shortcut the explicitly requested X retry");
     assert.equal(ready.familyPartitions![x.familyId]!.outcomesByCandidateKey[key(x)]!.status, "terminal-rejected");
     assert.equal(ready.familyPartitions![y.familyId]!.outcomesByCandidateKey[key(y)]!.status, "verified");
   } finally { await f.dispose(); }
@@ -517,7 +519,8 @@ test("a retained negative does not seed coverage from a historical memo that the
   try {
     await f.run();
     f.retryable.add("X");
-    await f.run({ findReusableMemo: async () => null });
+    await f.run({ previousReadyReview: { inputFingerprint: digest("setup-retryable-before-negative-retention"),
+      forceStatuses: ["verified"] } });
     const parent = (await f.store.load())!;
     const negative = parent.readyGeneration!.familyPartitions![x.familyId]!.outcomesByCandidateKey[key(x)]!;
     assert.equal(negative.status, "retryable");
@@ -549,7 +552,7 @@ test("scope-only edits retain valid old positive and negative outcomes before co
     f.setCandidates([z, y, x, d]);
     f.clearCalls();
     const ready = await f.run({ previousReadyReview: { inputFingerprint: digest("add-candidates-only") } });
-    assert.deepEqual(f.revalidationCalls, ["X"], "only the original prior-verified set is eligible for memo checks");
+    assert.deepEqual(f.revalidationCalls, [], "unchanged positive and negative family partitions inherit without per-memo checks");
     assert.deepEqual(f.calls, ["D"], "unchanged X/Y reuse their valid conclusions; new Z is covered; only new D attests");
     assert.deepEqual(ready.familyPartitions![y.familyId]!.outcomesByCandidateKey[key(y)], oldNegative,
       "coverage must not overwrite an unchanged chain-proven rejection");
@@ -561,7 +564,7 @@ test("scope-only edits retain valid old positive and negative outcomes before co
     f.clearCalls();
     const reduced = await f.run({ previousReadyReview: { inputFingerprint: digest("remove-candidates-only"),
       candidateKeys: new Set([key(x), key(y)]) } });
-    assert.deepEqual(f.revalidationCalls, ["X"]);
+    assert.deepEqual(f.revalidationCalls, []);
     assert.deepEqual(f.calls, [], "removing candidates does not reattest unchanged survivors");
     assert.deepEqual(reduced.familyPartitions![y.familyId]!.outcomesByCandidateKey[key(y)], oldNegative);
     assert.deepEqual(activeReadyMemos((await f.store.load())!).map(memo => memo.familyId), [x.familyId]);
@@ -629,7 +632,7 @@ test("refresh rebinds covered outcomes to the refreshed winner without admitting
   } finally { await f.dispose(); }
 });
 
-test("refresh propagates an original memo lookup error without a fallback attestation", async () => {
+test("refresh with a changed definition propagates an original memo lookup error without a fallback attestation", async () => {
   const f = await fixture([candidate("X")]);
   try {
     await f.run();
@@ -637,6 +640,7 @@ test("refresh propagates an original memo lookup error without a fallback attest
     const scans = f.scans();
     const failure = new Error("memo lookup transport failed");
     let lookups = 0;
+    f.changeDefinition("fixture:x");
     f.clearCalls();
     await assert.rejects(refreshReadyInstances({ ...f.input,
       isReadyMemoDefinitionCurrent: undefined,
@@ -649,7 +653,7 @@ test("refresh propagates an original memo lookup error without a fallback attest
   } finally { await f.dispose(); }
 });
 
-test("refresh without covered outcomes decodes the existing memo exactly once and does not attest", async () => {
+test("refresh with a matching sealed family skips per-memo decoding and attestation", async () => {
   const f = await fixture([candidate("X")]);
   try {
     await f.run();
@@ -660,7 +664,26 @@ test("refresh without covered outcomes decodes the existing memo exactly once an
     const ready = await refreshReadyInstances({ ...f.input,
       decodeCandidateSnapshot: snapshot => { decodes++; return f.input.decodeCandidateSnapshot!(snapshot); },
     });
-    assert.equal(decodes, 1, "the original refresh worker remains the only decoder without coverage bookkeeping");
+    assert.equal(decodes, 0, "the matching family partition is inherited without decoding each candidate");
+    assert.deepEqual(f.calls, []);
+    assert.deepEqual(f.revalidationCalls, []);
+    assert.deepEqual(ready, before.readyGeneration);
+    assert.deepEqual(await f.store.load(), before);
+  } finally { await f.dispose(); }
+});
+
+test("legacy refresh without batch definition metadata still decodes once through its original worker", async () => {
+  const f = await fixture([candidate("X")]);
+  try {
+    await f.run();
+    const before = (await f.store.load())!;
+    let decodes = 0;
+    f.clearCalls();
+    const ready = await refreshReadyInstances({ ...f.input,
+      familyDefinitionHash: undefined,
+      decodeCandidateSnapshot: snapshot => { decodes++; return f.input.decodeCandidateSnapshot!(snapshot); },
+    });
+    assert.equal(decodes, 1);
     assert.deepEqual(f.calls, []);
     assert.deepEqual(f.revalidationCalls, []);
     assert.deepEqual(ready, before.readyGeneration);

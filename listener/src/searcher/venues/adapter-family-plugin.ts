@@ -468,8 +468,16 @@ export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
    * level without any central per-family branch.
    */
   readonly instanceNominationKey?: (candidate: unknown) => string;
+  /** Family-owned physical pool projection. Declarative discovery derives it
+   * from address/instance fields; handwritten address instances need no hook. */
+  readonly candidatePoolIdentity?: (candidate: unknown) =>
+    import("./candidate-pool-identity.js").CandidatePoolIdentity | null;
+  /** Ordinary pool swaps share the default scope. Additive capabilities on
+   * the same pool declare another scope; null disables cross-Family coverage. */
+  readonly candidateCoverageScope?: string | null;
   /**
-   * Optional cross-Family replacement group for this candidate. Equal keys
+   * Legacy fallback replacement group for candidates without a physical pool
+   * projection. Ordinary Swap pools use candidatePoolIdentity and scope. Equal keys
    * declare the same logical subject and the same complete capability, so a
    * currently verified member can cover the other nominations in one Ready
    * run. Independent capabilities must use different keys (or return null).
@@ -3471,6 +3479,8 @@ function validateDiscovery(
       "candidateSources",
       "candidateKey",
       "candidateCoverageKey",
+      "candidatePoolIdentity",
+      "candidateCoverageScope",
       "decodeCandidate",
       "evidenceChannel",
       "instanceNominationKey",
@@ -3490,6 +3500,15 @@ function validateDiscovery(
   if (discovery.candidateCoverageKey !== undefined &&
       typeof discovery.candidateCoverageKey !== "function") {
     throw new Error("discovery.candidateCoverageKey must be a function");
+  }
+  if (discovery.candidatePoolIdentity !== undefined &&
+      typeof discovery.candidatePoolIdentity !== "function") {
+    throw new Error("discovery.candidatePoolIdentity must be a function");
+  }
+  if (discovery.candidateCoverageScope !== undefined && discovery.candidateCoverageScope !== null &&
+      (typeof discovery.candidateCoverageScope !== "string" ||
+       !/^[a-z][a-z0-9:._-]*$/.test(discovery.candidateCoverageScope))) {
+    throw new Error("discovery.candidateCoverageScope must be a canonical scope or null");
   }
   validateAddressList(
     discovery.canonicalIntakeTargets,

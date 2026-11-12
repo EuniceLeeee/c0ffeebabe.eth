@@ -17,8 +17,11 @@ export function createCandidateRevalidation(input: {
   readonly candidates: readonly unknown[];
   readonly cutoff: CanonicalSource;
   readonly historicalVerifiedKeys: ReadonlySet<string>;
+  readonly preserveHistoricalVerified?: boolean;
 }): {
   readonly confirmVerified: (candidate: unknown, memo: DurableVerifiedMemo) => void;
+  readonly inheritVerified: (candidate: unknown, memo: DurableVerifiedMemo) => void;
+  readonly poolTaskKey: (candidate: unknown) => string;
   readonly batches: (redoCandidates: readonly unknown[]) => readonly (readonly unknown[])[];
   readonly coveredOutcome: (candidate: unknown) => CoveredCandidateOutcome | null;
 } {
@@ -42,9 +45,7 @@ export function createCandidateRevalidation(input: {
     readonly memo: DurableVerifiedMemo;
     readonly binding: CandidateCoverageBinding;
   }>();
-
-  return Object.freeze({
-    confirmVerified(candidate: unknown, memo: DurableVerifiedMemo): void {
+  const register = (candidate: unknown, memo: DurableVerifiedMemo, sealedPartition: boolean): void => {
       const key = deps.familyCandidateKey(candidate);
       // Historical memos outside this run are scheduling hints, never winners.
       if (!candidatesByKey.has(key)) return;
@@ -52,12 +53,18 @@ export function createCandidateRevalidation(input: {
       if (!binding || binding.candidateFingerprint !== memo.candidateFingerprint) return;
       // Additional checks apply only to the new authority to cover another
       // candidate. They do not change ordinary memo acceptance or validity.
-      assertDurableVerifiedMemoFingerprint(memo);
+      if (!sealedPartition) assertDurableVerifiedMemoFingerprint(memo);
       if (memo.familyCandidateKey !== key || deps.candidateFamilyId!(candidate) !== memo.familyId) {
         throw new Error("Ready candidate coverage winner binding differs: " + key);
       }
       if (!confirmed.has(binding.key)) confirmed.set(binding.key, { candidateKey: key, memo, binding });
-    },
+  };
+  return Object.freeze({
+    confirmVerified: (candidate: unknown, memo: DurableVerifiedMemo): void => register(candidate, memo, false),
+    // The runner accepted this sealed partition as a whole. Registering its
+    // pool index must not repeat each memo's definition/proof validation.
+    inheritVerified: (candidate: unknown, memo: DurableVerifiedMemo): void => register(candidate, memo, true),
+    poolTaskKey: (candidate: unknown): string => coverage(candidate)?.key ?? deps.familyCandidateKey(candidate),
     batches(redoCandidates: readonly unknown[]): readonly (readonly unknown[])[] {
       const historical: unknown[] = [], remaining: unknown[] = [];
       for (const candidate of redoCandidates) {
@@ -72,7 +79,7 @@ export function createCandidateRevalidation(input: {
       const key = deps.familyCandidateKey(candidate);
       // Existing independent verified instances retain their own proof. This
       // also preserves the exact-set contract of refreshReadyInstances.
-      if (input.historicalVerifiedKeys.has(key) || !candidatesByKey.has(key)) return null;
+      if ((input.preserveHistoricalVerified && input.historicalVerifiedKeys.has(key)) || !candidatesByKey.has(key)) return null;
       const binding = coverage(candidate);
       if (!binding) return null;
       const winner = confirmed.get(binding.key);

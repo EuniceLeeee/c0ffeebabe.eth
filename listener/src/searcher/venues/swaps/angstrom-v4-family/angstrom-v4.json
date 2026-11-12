@@ -47,6 +47,12 @@
       "candidate": {
         "kind": "angstrom-v4-pool-key",
         "addressField": "adapter",
+        "poolIdentity": {
+          "kind": "singleton-pool",
+          "namespace": { "field": "manager" },
+          "poolIdField": "poolId"
+        },
+        "coverageScope": "signed-pool-swap-v1",
         "fields": {
           "adapter": "address",
           "manager": "address",

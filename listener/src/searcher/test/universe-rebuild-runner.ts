@@ -31,6 +31,7 @@ import { strictEdgeCollectionFromBlock } from
   "../strict-edge-collection-policy.js";
 import { ReadyRpcRateError, ReadyRpcThrottle } from "../ready-rpc-throttle.js";
 import { RevmFatalError } from "../revm-sim-client.js";
+import ts from "typescript";
 
 const SOURCE = Object.freeze({
   number: 25_750_000,
@@ -85,8 +86,9 @@ interface Fixture {
   readonly input: RebuildUniverseInput;
 }
 
-// Execute the actual main startup selection/root-check statements with the
-// existing refresh fixture, without importing main's runtime or invoking RPC.
+// Execute main's caller/root-check boundary with an injected reconciler.
+// This legacy exact-refresh fixture exercises commit/reload and failure handling;
+// startup-ready-input-review.ts verifies the new complete-input runner contract.
 async function startupReadyFromMain(
   wiring: RebuildUniverseInput,
   flags: { readonly blind: boolean; readonly useReadyGeneration: boolean },
@@ -96,14 +98,21 @@ async function startupReadyFromMain(
   const start = source.indexOf("  let rebuildEnvelope = await rebuildStore.load();");
   const end = source.indexOf("  const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);", start);
   assert(start >= 0 && end > start, "main Ready selection/root-check boundary must exist");
+  const parsed = ts.createSourceFile("main.ts", source, ts.ScriptTarget.ES2022, true);
+  const plan = parsed.statements.find((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === "readyStartupReviewPlan");
+  assert(plan, "the production source-binding planner exists");
+  const body = ts.transpileModule(plan.getText(parsed).replace(/^export /, "") +
+    `\nreturn (async () => { ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
   const run = new Function(
-    "rebuildStore", "rebuildWiring", "refreshReadyInstances", "rebuildUniverse",
-    "UniverseRunIncomplete", "blindUseIncumbentReady", "useReadyGeneration", "liveSubset", "console", "process",
-    `return (async () => { ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
+    "rebuildStore", "rebuildWiring", "rebuildUniverse", "canonicalJson",
+    "UniverseRunIncomplete", "blindUseIncumbentReady", "useReadyGeneration", "liveSubset", "console", "process", body,
   );
-  return run(wiring.store, wiring, refresh,
-    async () => { throw new Error("Ready reuse must not start discovery/rebuild"); },
-    UniverseRunIncomplete, flags.blind, flags.useReadyGeneration, false,
+  return run(wiring.store, wiring, async (input: RebuildUniverseInput) => {
+    if (flags.useReadyGeneration && !flags.blind) return refresh(input);
+    throw new Error("default startup entered discovery/rebuild");
+  }, canonicalJson, UniverseRunIncomplete, flags.blind, flags.useReadyGeneration, false,
     { log(message: string) { wiring.log?.(message); } }, { env: {} });
 }
 
@@ -1698,7 +1707,11 @@ async function main(): Promise<void> {
         assert.deepEqual(finished.familyPartitions!["fixture:b"]!.outcomesByCandidateKey,
           baseline.familyPartitions!["fixture:b"]!.outcomesByCandidateKey);
         assert.deepEqual(finished.activeInstanceKeys, ["inst:b","inst:d","inst:d2"]);
-        assert(notes.some(s => s.includes("retained=2 addedAlreadyHandled=1 addedRemaining=1")));
+        const reconciliation = notes.find(s => s.startsWith("Ready input reconciliation "));
+        assert(reconciliation, "resume uses the complete-input reconciliation path");
+        const progress = JSON.parse(reconciliation.slice("Ready input reconciliation ".length));
+        assert.equal(progress.inherited, 3, "two parent results and one completed new result are inherited");
+        assert.equal(progress.remaining, 1);
       }
       const base = make(updateDir, ["a", "b", "c"], () => enabled);
       // Give a retryable outcome its actual owning Family in this fixture.
@@ -1937,8 +1950,8 @@ async function main(): Promise<void> {
         expectedSourcePlanFingerprints: () => { throw new Error("do not relabel old discovery"); },
       };
       await assert.rejects(startupReadyFromMain({ ...refreshInput,
-        store: { load: async () => ({ ...prior, inProgressRun: {} }) } as unknown as UniverseRebuildCheckpointStore,
-      }, { blind: false, useReadyGeneration: true }), /requires one complete Ready checkpoint/);
+        store: { load: async () => ({ ...prior, inProgressRun: { cutoff: { ...SOURCE, number: SOURCE.number + 1 }, fromBlock: prior.readyGeneration!.universeRange.fromBlock } }) } as unknown as UniverseRebuildCheckpointStore,
+      }, { blind: false, useReadyGeneration: true }), /source|range/);
       let startupRefreshes = 0;
       const countRefresh: typeof refreshReadyInstances = async (input) => {
         startupRefreshes++;
@@ -1954,10 +1967,10 @@ async function main(): Promise<void> {
       assert.equal(startupRefreshes, 0);
       await assert.rejects(startupReadyFromMain(refreshInput,
         { blind: false, useReadyGeneration: false }, countRefresh),
-      /Ready reuse must not start discovery\/rebuild/,
+      /default startup entered discovery\/rebuild/,
       "without explicit reuse main keeps its default discovery path");
       const unchangedStartup = await startupReadyFromMain(refreshInput, { blind: false, useReadyGeneration: true }, countRefresh);
-      assert.equal(startupRefreshes, 1, "explicit reuse invokes the existing selective refresh exactly once");
+      assert.equal(startupRefreshes, 1, "explicit reuse invokes its injected common reconciler exactly once");
       const unchanged = unchangedStartup.readyUniverse;
       assert.equal(unchanged.generation, priorReady.generation);
       assert.equal((await refresh.store.load())!.revision, prior.revision);
@@ -2007,7 +2020,7 @@ async function main(): Promise<void> {
       }
       const after = (await refresh.store.load())!;
       assert.deepEqual(revisedStartup.rebuildEnvelope, after,
-        "main reloads the committed envelope: runtime memo rehydration cannot use pre-refresh memos");
+        "main reloads the committed envelope before runtime memo rehydration");
       assert.notDeepEqual(revisedStartup.rebuildEnvelope.verifiedMemos["cand:a"], prior.verifiedMemos["cand:a"]);
       assert.deepEqual(after.retryableAttemptsByCandidateKey, prior.retryableAttemptsByCandidateKey);
       assert.deepEqual(after.verifiedMemos["cand:b"], prior.verifiedMemos["cand:b"]);
