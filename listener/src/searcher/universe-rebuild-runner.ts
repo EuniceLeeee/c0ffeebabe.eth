@@ -504,7 +504,7 @@ export async function rebuildUniverse(
     // ★ The unfinished run's time world never changes.
     cutoff = incumbentRun.cutoff;
     fromBlock = incumbentRun.fromBlock;
-    if (!replacingReview && receiptsMatchCurrentSourcePlan(
+    if (receiptsMatchCurrentSourcePlan(
       incumbentRun.sourceReceipts,
       input.expectedSourcePlanFingerprints(),
     )) {
@@ -721,7 +721,7 @@ export async function rebuildUniverse(
 
   // 2. Create or resume the same fixed-cutoff run; a discovery plan change
   // reconciles the SAME run's partition/receipts (time identity immutable).
-  checkpoint = discoveryPlanChanged || definitionInputChanged
+  checkpoint = discoveryPlanChanged || definitionInputChanged || replacingReview
     ? await input.store.reconcileFixedRunPlan({
         ...(replacingReview && { reviewReplacement: {
           previous: review!.replacesInputFingerprint!, next: review!.inputFingerprint,

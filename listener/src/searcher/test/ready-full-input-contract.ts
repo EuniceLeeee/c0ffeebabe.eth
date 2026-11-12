@@ -950,3 +950,36 @@ test("paused review update preserves unchanged completed work and revalidates ch
   assert.deepEqual(ready.cutoff, SOURCE);
   assert.equal((await f.store.load())!.inProgressRun, null);
 });
+
+
+test("paused definition-only update does not rescan and resumes its newly completed work", async t => {
+  const a = candidate("family:a", "a"), b = candidate("family:b", "b"), c = candidate("family:c", "c");
+  const f = await fixture([a, b, c]); t.after(f.dispose);
+  await f.run();
+  for (const item of [a, b, c]) f.changeDefinition(item.familyId);
+  f.onAttest(async item => { if (key(item) === key(c)) throw new Error("pause pending c"); });
+  await assert.rejects(f.run({ overrides: { attestationConcurrency: 1 } }), /pause pending c/);
+  const firstPause = (await f.store.load())!;
+  const scans = f.scans(), reverseReads = f.reverseReads();
+  f.changeDefinition(b.familyId); f.clearCalls();
+  const fingerprint = digest("definition-only-review-update");
+  const review = { inputFingerprint: fingerprint, candidateKeys: new Set([a, b, c].map(key)) };
+  await assert.rejects(f.run({ overrides: { attestationConcurrency: 1,
+    previousReadyReview: { ...review, replacesInputFingerprint: firstPause.inProgressRun!.reviewInputFingerprint! },
+  } }), /pause pending c/);
+  assert.equal(f.scans(), scans, "unchanged discovery must not be scanned again");
+  assert.equal(f.reverseReads(), reverseReads, "unchanged reverse binding must not run again");
+  assert.deepEqual(f.calls, [key(b), key(c)]);
+  assert(!f.memoLookups.includes(key(a)));
+  const secondPause = (await f.store.load())!;
+  assert.equal(secondPause.inProgressRun!.reviewInputFingerprint, fingerprint);
+  assert.deepEqual(secondPause.inProgressRun!.sourceReceipts, firstPause.inProgressRun!.sourceReceipts);
+  for (const item of [a, b]) assert.equal(secondPause.inProgressRun!.outcomesByCandidateKey[key(item)]?.status, "verified");
+  f.onAttest(); f.clearCalls();
+  const ready = await f.run({ overrides: { attestationConcurrency: 1, previousReadyReview: review } });
+  assert.deepEqual(f.calls, [key(c)]);
+  assert(!f.memoLookups.includes(key(a)) && !f.memoLookups.includes(key(b)));
+  assert.equal(f.scans(), scans); assert.equal(f.reverseReads(), reverseReads);
+  assert.equal(ready.candidateAccounting.verified, 3);
+  assert.deepEqual(ready.cutoff, SOURCE);
+});
