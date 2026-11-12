@@ -40,3 +40,21 @@ A discovery receipt match reuses the sealed candidate discovery; a definition-on
 - The machine-readable summary is `docs/research/reports/family-json-facts-20261112.json`.
 
 The full factual artifacts are under `logs/jsonall-alignment-20261112/all-facts/`; earlier failures and control runs remain alongside them. Raw logs and receipts are not committed. Ready18's original checkpoint, journal, source range and historical generation 17 are preserved. No live process or deployment was started by this integration.
+
+## Historical executor context follow-up
+
+Code: `bbe345c8843d0226999f8aad4beafd915765085e`.
+
+Ready18's source block 26222895 predates the current executor deployment. At that block the executor address has no code. An explicit `update --test-executor-runtime HASH` option now provisions the operator-selected, hash-checked runtime for historical identity tests. It is independent of `--revalidate-proofs`: retryable-only updates can preserve earlier verified and terminal results. Ordinary updates remain unchanged.
+
+The transport authenticates the executor address and runtime hash and includes that counterfactual context in result provenance, including prefixed calls. Genuine top-level calls do not receive an executor code override. A missing or mismatched receipt marker fails. Discovery reuse excludes only this executor provisioning context; it still binds the simulation method, source, candidate scope and discovery definitions. A pending run cannot silently change its proof context.
+
+A same-state PSM control at source 26222895 / `0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c` used candidate `0xf6e72db5454dd049d0788e411b06cfaf16853042`. Without the executor code, identity was retryable; with the explicit runtime it verified. The later nomination transaction is only candidate provenance, not the proof source. The chosen runtime hash is `0xaa678ef6a03701bac0255d4fd9d0ce93f680752776f97dac4ee4415550e1c57b`, matching the current deployed executor. Four actual node simulation receipts retain the same state attestation and the explicit counterfactual code marker. This proves the identity-environment correction, not full original-transaction replay or all-family execution acceptance.
+
+The actual production maintenance CLI also reproduced the flip in an isolated one-candidate checkpoint: generation 1 had one retryable; the retryable-only update produced generation 2 with one verified instance. It restored sealed discovery, inherited the existing archive, and made no changes to the main Ready18 store. See `psm-cli-provision/result.json`, `psm-context-comparison.json` and `psm-context-receipts.json` under the artifact directory above. Independent non-author review checked the implementation and actual receipt bindings.
+
+Validation: 342 focused tests passed. The final installed-JSON offline suite ran 876 tests: 875 passed, one skipped, no failures. The first full run exposed an old NodeStrict test double that omitted the newly required receipt marker; that failed result remains preserved, and the double now derives its marker from the supplied trusted context. Production build and generated catalog check passed against an unchanged source snapshot; the catalog hashes did not change. These are framework checks, not a replacement for the earlier per-family factual failures.
+
+Canonical reconciliation used capability query `family,json,verification`, selected `listener:test:family-json`, manifest `logs/jsonall-alignment-20261112/executor-context-tool-manifest.json`, SHA-256 `9f6a108669ce51cde4ba9d2c1df52078270444009be1fe9df584c6b63f87b60a`. The final recorded execution passed. The original Ready18 process continues under its original loaded code; explicit historical-context retry supplementation is a subsequent normal update after it finishes.
+
+The ignored production BotVM artifact was restored from the preceding launch release and its owner-bound runtime checked against the current deployment. The counterfactual artifact used for the earlier factual suite is preserved separately; those earlier reports keep their original source/artifact identity.
