@@ -1,0 +1,147 @@
+{
+  "createdAt": "2026-11-13T10:07:08.061357+00:00",
+  "base": "d7459b569bda44239ce1edba033a690a3d799faa",
+  "codify_commit": "bf52363ff6d45067c4b708f4004797f18c12f63d",
+  "scope": "Shared node observation wrapper and funding acceptance diagnostics only; no deployment or live restart",
+  "rootCauses": [
+    "Runtime observation self-call installed a no-callback sentinel around legacy scripts; legacy SET_FIELD2 preserved it, rejecting the actual lender callback.",
+    "Verifier authenticated positive probes as returned even when actual completed execution reverted; CLI marked raw failures pass before calling pass-only verifier."
+  ],
+  "callerFinding": "Both symbolic caller references resolve to executor. Lender is a literal balance observation account already bound in physical request fingerprint. Caller array was correct and is unchanged.",
+  "changes": [
+    "Canonical non-runtime self subscript uses original legacy CALL between independently measured runtime snapshots.",
+    "External calls, noncanonical calls and single runtime programs retain runtime guards; contract code unchanged.",
+    "Authenticate observed completion, then independently enforce successful principal receipt and repayment; preserve execution failures in CLI."
+  ],
+  "checks": {
+    "offline": {
+      "tests": 916,
+      "passed": 915,
+      "failed": 0,
+      "skipped": 1,
+      "sourceStable": true
+    },
+    "targeted": {
+      "tests": 59,
+      "passed": 59
+    },
+    "independentReview": {
+      "targetedPassed": 25,
+      "emptySnapshotPrefixPersistentPassed": 4,
+      "verdict": "pass"
+    },
+    "buildLive": "pass",
+    "oldReports": "Rechecked offline: remain failed on completion/effects, no provenance mismatch"
+  },
+  "cases": [
+    {
+      "familyId": "flash-loan:morpho",
+      "transactionHash": "0xf88b498b835279ec9de597c7360ca21b7e8803053b442a04c5fc664e04e39970",
+      "legId": "flash-loan:morpho--1",
+      "source": {
+        "number": 24710788,
+        "hash": "0x363e14a675e6c4faf10e17ba79dabe60fc4e9237a606ffa24bc00d4e608de9a5",
+        "generation": 24710788
+      },
+      "sourceFingerprint": "c9ccf1c6b53681f44835e8fd8786f421e71120208fcfa40abb0a13fb97f75c24",
+      "executorCodeHash": "0x53b18fdd4c63f1ebbb37172eaef9f8b1e126351adcc21e6c68daa9547c55fc8f",
+      "before": {
+        "result": "failed",
+        "completion": "reverted-as-declared",
+        "underlyingError": "runtime callback sender",
+        "misleadingError": "Funding result provenance is not bound to its program/source/actors"
+      },
+      "after": {
+        "result": "pass",
+        "actualBorrowed": "3533486761808775726594",
+        "actualRepaid": "3533486761808775726594",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "artifacts": {
+        "report.json": {
+          "path": "logs/funding-provenance-20261113/final-morpho/report.json",
+          "sha256": "e799f07573cb80b22d3a7ca42eeaedcc1e121f514d5da8290dcc8edc584ae629"
+        },
+        "acceptance.json": {
+          "path": "logs/funding-provenance-20261113/final-morpho/acceptance.json",
+          "sha256": "76d50bcff0a2bcf4be4c4df439ed28ff0bd173763172926f32e77a601d433436"
+        },
+        "ready.json": {
+          "path": "logs/funding-provenance-20261113/final-morpho/ready.json",
+          "sha256": "f7eff3046e7fe99f6d2ae7514d6d25d60b1ebd1a4c2587514146c936972dbdfe"
+        }
+      }
+    },
+    {
+      "familyId": "flash-loan:balancer-v2",
+      "transactionHash": "0x7ce631b94570e8ebcaea60e93ccfb808327087405e6f0561450d4bb7f69b3c87",
+      "legId": "flash-loan:balancer-v2--4",
+      "source": {
+        "number": 25535037,
+        "hash": "0x561033a7f7b382e8c7565abf20930f9fac837d97f7e1c47e0c50c9faee6c154e",
+        "generation": 25535037
+      },
+      "sourceFingerprint": "c9ccf1c6b53681f44835e8fd8786f421e71120208fcfa40abb0a13fb97f75c24",
+      "executorCodeHash": "0x53b18fdd4c63f1ebbb37172eaef9f8b1e126351adcc21e6c68daa9547c55fc8f",
+      "before": {
+        "result": "failed",
+        "completion": "reverted-as-declared",
+        "underlyingError": "runtime callback sender",
+        "misleadingError": "Funding result provenance is not bound to its program/source/actors"
+      },
+      "after": {
+        "result": "pass",
+        "actualBorrowed": "777530305867301711",
+        "actualRepaid": "777530305867301711",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "artifacts": {
+        "report.json": {
+          "path": "logs/funding-provenance-20261113/final-balancer/report.json",
+          "sha256": "265efdc0306ea0e5e0b960fb438550604fb4ce63dd46425a890b62e70509e70a"
+        },
+        "acceptance.json": {
+          "path": "logs/funding-provenance-20261113/final-balancer/acceptance.json",
+          "sha256": "239da03153eb3fa5ce7412573faa06575786ca00240e74f0f8fab598a41f3646"
+        },
+        "ready.json": {
+          "path": "logs/funding-provenance-20261113/final-balancer/ready.json",
+          "sha256": "aba6708c967a5ccaed35cc204cfed07eeda656e55a6b51b95a3db036445d6666"
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "Two registered funding cases only; no blanket all-samples/families chain acceptance claim.",
+    "eth_simulateV1 legacy callback plus nonempty return-word capture retains its prior limitation; return-word path unchanged. Current funding cases return empty.",
+    "Frozen live release not updated or restarted. Its supervisor ended prior run at 2026-11-13T09:46:33.260Z with observer_failed; this repair did not stop it. Fact-test Anvil 8556 preserved."
+  ],
+  "tool_reconciliation": {
+    "capabilities": [
+      "test"
+    ],
+    "executedTool": "listener:test",
+    "arguments": [
+      "--offline"
+    ],
+    "manifest": "logs/funding-provenance-20261113/tool-selection.json",
+    "manifestSha256": "7b3d972caf23f4fae4e32059d9d47f9786d9236a4a5f0aa54f60adec151fbf89"
+  },
+  "tooling_defect": {
+    "learning_case_id": "funding-node-observation-callback-provenance-20261113",
+    "tool": "node-program-quote + family-funding-acceptance + family-transaction-facts",
+    "status": "codified",
+    "codify_commit": "bf52363ff6d45067c4b708f4004797f18c12f63d",
+    "evidence": "Both saved failures independently verified; narrow historical node simulations flipped to pass under unchanged executor code; negative controls remain mandatory."
+  }
+}
