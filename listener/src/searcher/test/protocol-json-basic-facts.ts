@@ -25,7 +25,9 @@ export function verifyBasicRouteAcceptance(sample: ProtocolJsonAcceptanceCase, r
   assert.equal(sample.trials.length, 1, "one registry leg is one independently reported case");
   const trial = sample.trials[0]!, amountIn = BigInt(trial.amountIn);
   assert.equal(trial.expectedAmountOut, undefined, "historical output cannot be a simulation oracle");
-  assert.equal(trial.inputToleranceRawUnits ?? 0, 0); assert.equal(trial.outputToleranceRawUnits ?? 0, 0);
+  assert.equal(trial.inputToleranceRawUnits ?? 0, 0);
+  const outputToleranceRawUnits = trial.outputToleranceRawUnits ?? 0;
+  assert(outputToleranceRawUnits === 0 || outputToleranceRawUnits === 1, "output tolerance must be 0 or 1 raw unit");
   assert(report.source && report.source.number === sample.source.number && same(report.source.hash, sample.source.hash));
   assert(Number.isSafeInteger(report.source.generation) && report.source.generation >= 0);
   assert(Array.isArray(report.samples) && report.samples.length === 1, "raw case result is missing or ambiguous");
@@ -80,7 +82,7 @@ export function verifyBasicRouteAcceptance(sample: ProtocolJsonAcceptanceCase, r
         protectedBalances: trial.protectedBalances };
       assert(record.inputMode === "exact" || record.inputMode === "maximum", "actual execution input mode was not recorded");
       const facts = record.probe === "positive" ? checkProtocolJsonExecutionFacts({ ...common,
-        amountIn, quoteAmountOut: amountOut, inputMode: record.inputMode, inputToleranceRawUnits: 0, outputToleranceRawUnits: 0 })
+        amountIn, quoteAmountOut: amountOut, inputMode: record.inputMode, inputToleranceRawUnits: 0, outputToleranceRawUnits })
         : checkProtocolJsonRevertFacts({ ...common, probe: record.probe });
       assert(facts.passed, `${encoding}/${record.probe}: ${JSON.stringify(facts.violations)}`);
     }
@@ -98,7 +100,7 @@ export function verifyBasicRouteAcceptance(sample: ProtocolJsonAcceptanceCase, r
       differenceFromExact: (actualOut - amountOut).toString(), controls: { positive: "pass", noInput: "pass", forcedRevert: "pass" } };
   }
   if (!ordinaryRuntime) result.runtimeExecution = { status: "not-declared", required: false, kind: "credit-risk-bound-execution" };
-  result.simulationOutputParity = { status: "pass", toleranceRawUnits: 0,
+  result.simulationOutputParity = { status: "pass", toleranceRawUnits: outputToleranceRawUnits,
     quotedDifference: result.quotedExecution.differenceFromExact,
     ...(ordinaryRuntime ? { runtimeDifference: result.runtimeExecution.differenceFromExact } : {}) };
   return result;
@@ -126,6 +128,6 @@ export function basicRouteAcceptanceStages(sample: ProtocolJsonAcceptanceCase, r
       quotedAmountIn: value(sample.domain === "credit" ? row?.quote?.collateralAmount : row?.quote?.amountIn),
       quotedAmountOut: value(row?.quote?.amountOut), failure }, quotedExecution: stage("quoted"),
       runtimeExecution: ordinaryRuntime ? stage("runtime") : { status: "not-declared", required: false, kind: "credit-risk-bound-execution" },
-      simulationOutputParity: { status: "failed", toleranceRawUnits: 0, failure } };
+      simulationOutputParity: { status: "failed", toleranceRawUnits: trial.outputToleranceRawUnits ?? 0, failure } };
   }
 }

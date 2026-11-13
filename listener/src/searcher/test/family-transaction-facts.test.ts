@@ -52,6 +52,49 @@ test("historical output is reference-only; current quote and independent simulat
   assert.deepEqual(stages.quotedExecution, { status: "pass", required: true, actualAmountIn: "17", actualAmountOut: "34",
     differenceFromExact: "0", controls: { positive: "pass", noInput: "pass", forcedRevert: "pass" } });
   assert.equal(stages.runtimeExecution.differenceFromExact, "0");
+  assert.equal(sample.trials[0]!.inputToleranceRawUnits, 0);
+  assert.equal(stages.simulationOutputParity.toleranceRawUnits, 1);
+});
+
+test("quoted/runtime allow exactly one output raw unit, keep signed differences, and reject two", () => {
+  for (const encoding of ["quoted", "runtime"]) for (const difference of [-2n, -1n, 0n, 1n, 2n]) {
+    const { sample, report } = fixture();
+    const positive = report.samples[0].executions.find((e: any) => e.encoding === encoding && e.probe === "positive");
+    positive.resultEvidence.effects.tokenDeltas[1].delta += difference;
+    if (difference < -1n || difference > 1n) {
+      assert.throws(() => verifyBasicRouteAcceptance(sample, report, true), /output-shortfall|output-excess/);
+      assert.equal(basicRouteAcceptanceStages(sample, report, true).simulationOutputParity.toleranceRawUnits, 1);
+    } else {
+      const stages = verifyBasicRouteAcceptance(sample, report, true);
+      assert.equal(stages[encoding === "quoted" ? "quotedExecution" : "runtimeExecution"].differenceFromExact, difference.toString());
+      assert.equal(stages.exact.requestedAmountIn, "17"); assert.equal(stages.exact.quotedAmountOut, "34");
+    }
+  }
+});
+
+test("explicit zero stays strict; invalid tolerances and input debit/inventory violations remain rejected", () => {
+  const { sample, report } = fixture();
+  const zero = { ...sample, trials: sample.trials.map(t => ({ ...t, outputToleranceRawUnits: 0 as const })) };
+  assert.equal(verifyBasicRouteAcceptance(zero, report, true).simulationOutputParity.toleranceRawUnits, 0);
+  report.samples[0].executions[0].resultEvidence.effects.tokenDeltas[1].delta = 33n;
+  assert.throws(() => verifyBasicRouteAcceptance(zero, report, true), /output-shortfall/);
+  for (const field of ["outputToleranceRawUnits", "inputToleranceRawUnits"]) {
+    const invalid: any = { ...sample, trials: sample.trials.map(t => ({ ...t, [field]: field === "inputToleranceRawUnits" ? 1 : 2 })) };
+    assert.throws(() => verifyBasicRouteAcceptance(invalid, report, true));
+  }
+  for (const encoding of ["quoted", "runtime"]) for (const debit of [0n, -16n, -18n]) {
+    const f = fixture();
+    f.report.samples[0].executions.find((e: any) => e.encoding === encoding && e.probe === "positive").resultEvidence.effects.tokenDeltas[0].delta = debit;
+    assert.throws(() => verifyBasicRouteAcceptance(f.sample, f.report, true), /nonpositive-debit|input-underdebit|input-overdebit/);
+  }
+  for (const mutate of [
+    (e: any) => { e.tokenDeltas[1].delta = 0n; },
+    (e: any) => { e.nativeDeltas[0].delta = -1n; },
+    (e: any) => { e.tokenDeltas.push({ token: address(99), account: address(1), delta: -1n }); },
+  ]) {
+    const f = fixture(); mutate(f.report.samples[0].executions[0].resultEvidence.effects);
+    assert.throws(() => verifyBasicRouteAcceptance(f.sample, f.report, true), /nonpositive-credit|native-inventory|protected-token-inventory/);
+  }
 });
 
 test("funding controls compare address identity while preserving amounts and exact fields", () => {
@@ -72,9 +115,9 @@ test("funding controls compare address identity while preserving amounts and exa
   }
 });
 
-test("wrong requested quote input and one-unit output discrepancy cannot pass via stored result labels", () => {
+test("wrong requested quote input and two-unit output discrepancy cannot pass via stored result labels", () => {
   for (const mutate of [(r: any) => { r.samples[0].quote.amountIn = 18n; },
-    (r: any) => { r.samples[0].executions[0].resultEvidence.effects.tokenDeltas[1].delta = 35n; }]) {
+    (r: any) => { r.samples[0].executions[0].resultEvidence.effects.tokenDeltas[1].delta = 36n; }]) {
     const { sample, report } = fixture(); mutate(report);
     assert.throws(() => verifyBasicRouteAcceptance(sample, report, true));
     assert.equal(basicRouteAcceptanceStages(sample, report, true).simulationOutputParity.status, "failed");

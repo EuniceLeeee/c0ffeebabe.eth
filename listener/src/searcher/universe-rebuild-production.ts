@@ -2786,6 +2786,49 @@ async function callsFromTraceBlock(input: {
   })));
 }
 
+/** TX-input transport adapter; all selector/log decoding stays identical to the
+ * block scanner. A successful receipt is provenance, never Family admission. */
+export function observationsFromSelectedTransaction(
+  evidence: import("./ready-transaction-input.js").ReadyTransactionEvidence,
+  topics: readonly string[], selectors: ReadonlySet<string>,
+): { logs: readonly RebuildScanObservation[]; calls: readonly RebuildCallObservation[] } {
+  const { receipt, rawTrace, method } = evidence;
+  const range = { fromBlock: receipt.blockNumber, toBlock: receipt.blockNumber };
+  const logs = archivedActivityLogs(receipt.logs, topics, range);
+  for (const log of logs) {
+    if (log.transactionHash !== receipt.transactionHash || log.blockHash !== receipt.blockHash)
+      throw new Error("selected transaction log escaped its receipt");
+  }
+  let calls: readonly RebuildCallObservation[];
+  let reverted: boolean;
+  if (method === "trace_transaction") {
+    if (!Array.isArray(rawTrace) || rawTrace.length === 0) throw new Error("incomplete selected transaction trace");
+    const bound = rawTrace.map(value => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid selected transaction trace schema");
+      const row = value as Record<string, unknown>;
+      if ((row.transactionHash !== undefined && row.transactionHash !== receipt.transactionHash) ||
+          (row.blockHash !== undefined && row.blockHash !== receipt.blockHash) ||
+          (row.blockNumber !== undefined && rpcNumber(row.blockNumber) !== receipt.blockNumber))
+        throw new Error("selected transaction trace escaped its receipt");
+      return { ...row, transactionHash: receipt.transactionHash, blockHash: receipt.blockHash, blockNumber: receipt.blockNumber };
+    });
+    assertArchivedTraceSchema(bound, "trace_block", receipt.blockNumber);
+    const roots = bound.filter(row => Array.isArray((row as any).traceAddress) && (row as any).traceAddress.length === 0);
+    if (roots.length !== 1) throw new Error("incomplete selected transaction root");
+    reverted = typeof (roots[0] as any).error === "string";
+    calls = callsFromParityTrace(bound, receipt.blockNumber, selectors);
+  } else if (method === "debug_traceTransaction") {
+    assertArchivedTraceSchema([{ txHash: receipt.transactionHash, result: rawTrace }], "debug_traceBlockByNumber", receipt.blockNumber);
+    reverted = typeof (rawTrace as Record<string, unknown>).error === "string";
+    const pending: Omit<RebuildCallObservation, "blockHash">[] = [];
+    collectDebugCallFrames({ raw: rawTrace, txHash: receipt.transactionHash, blockNumber: receipt.blockNumber,
+      selectors, traceAddress: [], out: pending });
+    calls = pending.map(row => ({ ...row, blockHash: receipt.blockHash }));
+  } else throw new Error("unsupported selected transaction trace method");
+  if (reverted !== (receipt.status === 0)) throw new Error("selected transaction trace/receipt status mismatch");
+  return { logs, calls };
+}
+
 function callsFromParityTrace(
   raw: readonly unknown[],
   expectedBlockNumber: number,

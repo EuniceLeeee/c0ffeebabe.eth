@@ -10,6 +10,7 @@ import { acceptanceFamilyDomain, type AcceptanceFamilyDomain } from "./protocol-
 import type { PreparedFamilyInstance } from "../venues/adapter-family-runtime.js";
 import { createNodeSimulateV1Rpc, nodeSimulateV1Environment, type NodeSimulateV1Header } from "../simulator/node-simulate-v1.js";
 import type { PinnedNodeRpc } from "../simulator/node-input-funding.js";
+import { cachedFamilySimulation, familyFactCacheDirectory } from "./family-transaction-cache.js";
 
 const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const hash = (value: Buffer | string) => createHash("sha256").update(value).digest("hex");
@@ -324,11 +325,16 @@ export async function openFamilyAcceptanceRuntimeContext(input: FamilyAcceptance
           allowExecutorCodeOverride: input.allowExecutorCodeOverride, simulationMethod: input.simulationMethod });
         const strict = client.strictSimulate.bind(client);
         client.strictSimulate = async (...args) => { try {
-          const result = await strict(...args);
+          const cached = await cachedFamilySimulation({ directory: familyFactCacheDirectory(),
+            context: { executor, owner, executorCodeHash: runtimeCode.keccak256,
+              executorArtifactSha256: evidence.executorArtifactSha256, sourceTreeSha256,
+              executorProvisioning: evidence.executorProvisioning, executionEnvironment: evidence.executionEnvironment },
+            request: args[0], control: args[1], execute: request => strict(request, args[1]) });
+          const result = cached.response;
           if (input.simulationMethod === "eth_simulateV1") assert.deepEqual((result as any).executionObservation, evidence.executionEnvironment,
             "quote and execution virtual environments differ");
           const { rpcUrl: _url, ...request } = args[0];
-          evidence.simulations.push({ request, response: result });
+          evidence.simulations.push({ request, response: result, cache: cached.cache });
           return result;
         } catch (error) { simulationErrors.push(redact(error)); throw error; } };
         return client;
@@ -354,7 +360,9 @@ export async function openFamilyAcceptanceRuntimeContext(input: FamilyAcceptance
       finally { clearTimeout(timer); abort.abort(new Error("acceptance context settled")); await simulation!.closeAndDrain(); }
     })();
     return Object.freeze({ catalog, family, instance, memo, ready, graph, source, executor, owner, header, runtime, control, evidence,
-      counters: () => ({ ...rpc!.counters(), simulationErrors: [...simulationErrors] }), assertUnchanged, close });
+      counters: () => ({ ...rpc!.counters(), simulationErrors: [...simulationErrors],
+        simulationsExecuted: evidence.simulations.filter((row: any) => row.cache.status === "executed").length,
+        simulationsReused: evidence.simulations.filter((row: any) => row.cache.status === "reused").length }), assertUnchanged, close });
   } catch (error) {
     clearTimeout(timer); abort.abort(new Error("acceptance context failed"));
     try { await simulation?.closeAndDrain(); } catch (drain) { simulationErrors.push(redact(drain)); }

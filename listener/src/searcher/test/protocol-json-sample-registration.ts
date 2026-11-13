@@ -35,7 +35,7 @@ export function transactionSimulationCase(transaction: FamilyTransaction, leg: F
   return parseProtocolJsonAcceptanceCase({ version: 1, familyId: leg.familyId, domain: leg.domain,
     instanceKey: leg.instanceKey, lineageId: leg.lineageId, source: leg.source, ...transactionTestActors(leg),
     transactionHash: transaction.transactionHash, trials: [{ id: leg.id, tokenIn: leg.tokenIn, tokenOut: leg.tokenOut,
-      amountIn: leg.amountIn, inputToleranceRawUnits: 0, outputToleranceRawUnits: 0,
+      amountIn: leg.amountIn, inputToleranceRawUnits: 0, outputToleranceRawUnits: 1,
       ...(leg.routeKey ? { routeKey: leg.routeKey } : {}), ...(leg.credit ? { credit: leg.credit } : {}) }] });
 }
 

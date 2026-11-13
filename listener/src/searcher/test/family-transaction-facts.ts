@@ -57,7 +57,7 @@ function evidenceFile(reportPath: string, evidence: any): string {
 
 function verifyContextEvidence(raw: any, transaction: FamilyTransaction, leg: FamilyTransactionLeg, execution: any) {
   const e = raw.evidence, actors = transactionTestActors(leg), source = leg.source!;
-  assert(e && e.simulator === "node-rpc", "fresh node execution evidence is missing");
+  assert(e && e.simulator === "node-rpc", "recorded node execution evidence is missing");
   assert(execution && ["deployed", "counterfactual"].includes(execution.executorCodeMode) &&
     ["debug_traceCall", "eth_simulateV1"].includes(execution.simulationMethod), "execution mode identity missing");
   assert.equal(e.executionEnvironment?.method, execution.simulationMethod, "reported simulation method differs from the actual environment");
@@ -143,11 +143,13 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
   }
   const args = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
-    assert(["--transaction", "--leg", "--rpc-file", "--out", "--ready", "--executor-code-mode", "--simulation-method"].includes(argv[i]!) &&
+    assert(["--transaction", "--leg", "--rpc-file", "--out", "--ready", "--executor-code-mode", "--simulation-method", "--stage"].includes(argv[i]!) &&
       !args.has(argv[i]!) && argv[i + 1] && !argv[i + 1]!.startsWith("--"), "invalid transaction facts option");
     args.set(argv[i]!, argv[i + 1]!);
   }
   for (const key of ["--transaction", "--leg", "--rpc-file", "--out"]) assert(args.has(key), `missing ${key}`);
+  const requestedStage = args.get("--stage") ?? "all";
+  assert(["all", "ready"].includes(requestedStage), "--stage must be all or ready");
   const out = resolve(args.get("--out")!); mkdirSync(dirname(out), { recursive: true }); mkdirSync(out);
   const reportPath = resolve(out, "report.json"), rawPath = resolve(out, "acceptance.json"), readyPath = resolve(out, "ready.json");
   const report: any = { format: "family-transaction-facts-v1", scope: "same-state-simulation", result: "failed",
@@ -177,8 +179,19 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     const envelope = args.has("--ready") ? (copyFileSync(realpathSync(resolve(args.get("--ready")!)), readyPath),
       await new UniverseRebuildCheckpointStore({ path: readyPath }).load())
       : await prepareFamilyReady({ familyId: leg.familyId, domain: leg.domain, source: leg.source!, ...actors, rpcFile, out: readyPath,
+        target: { transactionHash: transaction.transactionHash, instanceKey: leg.instanceKey! },
         executorCodeMode: mode as "deployed" | "counterfactual", simulationMethod: method as "debug_traceCall" | "eth_simulateV1" });
     assert(envelope, "Ready checkpoint unavailable");
+    if (requestedStage === "ready") {
+      const target = leg.domain === "funding"
+        ? await assertFundingTransactionReady({ envelope, sample: transactionFundingCase(transaction, leg) })
+        : await assertAcceptanceReadyTarget(envelope, transactionSimulationCase(transaction, leg));
+      report.stages.discoveryCheckpoint = { status: "pass", ...target };
+      report.evidence = { ready: fileEvidence(readyPath) };
+      report.result = "ready-only"; checkpoint();
+      console.log(json({ result: report.result, familyId: leg.familyId, legId: leg.id, report: reportPath }));
+      return { exitCode: 0, reportPath, report };
+    }
     const input = { readyPath, rpcFile, familyId: leg.familyId, domain: leg.domain, instanceKey: leg.instanceKey!, source: leg.source!,
       ...actors, chainId: transaction.chainId, allowExecutorCodeOverride: mode === "counterfactual",
       simulationMethod: method as "debug_traceCall" | "eth_simulateV1", inputPaths: [transactionPath] };

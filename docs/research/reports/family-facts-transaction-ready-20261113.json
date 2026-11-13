@@ -1,0 +1,68 @@
+{
+  "format": "family-facts-ready-wiring-review-v1",
+  "baseCommit": "e4d037dace92b064c87d3f727400ecfed950839d",
+  "scope": "fact-test TX discovery and cache wiring; not full Family acceptance",
+  "entry": "listener/src/searcher/test/family-transaction-facts.ts",
+  "readyOnlyOption": "--stage ready",
+  "defaultStage": "all",
+  "changes": [
+    "Use ReadyTransactionReader for registered TX receipt and trace inputs",
+    "Decode all recognized TX pools with production discovery; attest the tested Family candidates through production Ready",
+    "Require the requested Family instance and direction in the production Graph, not every TX pool",
+    "Reuse canonical block activity, identical Ready inputs and source/executor-bound simulation requests",
+    "Allow output delta of at most one raw unit; input debit and inventory checks remain strict",
+    "Keep cache writer locks separate from production checkpoint locks"
+  ],
+  "validation": {
+    "build": "tsc -p tsconfig.live.json --noEmit: pass",
+    "offline": {
+      "tests": 887,
+      "pass": 886,
+      "fail": 0,
+      "skip": 1
+    },
+    "historical": {
+      "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+      "familyId": "protocol:psm",
+      "blockNumber": 26029876,
+      "blockHash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a",
+      "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+      "amountIn": "5494762",
+      "mode": "counterfactual executor; node eth_simulateV1; source N with shared virtual execution environment",
+      "result": "pass",
+      "quotedDifferenceFromExact": "0",
+      "runtimeDifferenceFromExact": "0",
+      "readyOnlyResult": "ready-only (not factual acceptance)",
+      "cacheRerun": {
+        "ready": "reused",
+        "simulationsExecuted": 0,
+        "simulationsReused": 12
+      }
+    }
+  },
+  "limitations": [
+    "Earlier 48 missing-target reports have not all been rerun; genuine identity/transport failures remain failures",
+    "This change does not add an effective-table publication stage or prove equality to original historical transaction output",
+    "No live run, broadcast or global Ready rebuild was started"
+  ],
+  "retainedFailures": [
+    {
+      "artifact": "logs/family-facts-cache-20261113/psm-target-all/report.json",
+      "reason": "Test cache lock collided with the production Ready store lock; repaired and independently exercised by real store-lock regression"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "logs/family-facts-cache-20261113/psm-target-all-r2/report.json",
+      "sha256": "ab98549e3434daeb332db22d0527ee7704d1e398f41cf751aaa1bd5405373415"
+    },
+    {
+      "path": "logs/family-facts-cache-20261113/psm-target-ready-only/report.json",
+      "sha256": "b979351455351c7baa371673671008c5bf71f863abd192c0d53088cf5a13b6eb"
+    },
+    {
+      "path": "logs/family-facts-cache-20261113/psm-target-cache-reuse/report.json",
+      "sha256": "b0bf30821b2845a37288f1ed71f86f55e2b4b0dde30858bc3cb888f3b7987be8"
+    }
+  ]
+}
