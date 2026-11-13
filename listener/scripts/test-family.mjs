@@ -121,6 +121,7 @@ export async function familyTestMain(argv = process.argv.slice(2), hooks = {}) {
           const child = JSON.parse(bytes);
           assert.deepEqual(child.execution, report.execution, "case execution mode differs from requested main run");
           row.evidenceSha256 = digest(bytes); row.stages = child.stages;
+          row.originalTransactionInput = child.originalTransactionInput;
         }
       } catch (error) { row.evidenceVerified = false; row.status = "failed"; row.error = safe(error); }
       // Failure diagnostics never inherit verified passing-stage status.
@@ -149,6 +150,7 @@ export async function familyTestMain(argv = process.argv.slice(2), hooks = {}) {
     const stages = row.stages ?? row.reportedStages ?? {};
     const status = key => stages[key] && (row.evidenceVerified ? stages[key].status : `unverified:${stages[key].status}`);
     return { case: row.evidence?.split("/")[0], family: row.familyId, status: row.status, verified: row.evidenceVerified,
+      txReference: status("transactionBinding"),
       discovery: status("discoveryCheckpoint"), exact: status("exact"),
       quoted: status("quotedExecution"), runtime: status("runtimeExecution"), parity: status("simulationOutputParity"),
       inputRaw: stages.exact?.requestedAmountIn, quoteRaw: stages.exact?.quotedAmountOut,

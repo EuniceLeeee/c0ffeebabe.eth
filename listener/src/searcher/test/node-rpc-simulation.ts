@@ -114,21 +114,61 @@ test("trace discovery rejects shared scalars and does not fund a foreign storage
     assert.equal(r.writes.length, 0); assert.equal(r.calls, 2); assert.equal(r.traces, 2);
   }
 });
-test("trace proof rejects packed and nonlinear balances instead of treating storage words as token amounts", async () => {
+test("trace proof learns packed low-bit balances and preserves source flags and zero balances", async () => {
   const target = slot(9000), witness = slot(9001);
-  for (const kind of ["packed", "nonlinear"] as const) {
-    const stored = kind === "packed" ? 77n : 154n;
+  for (const width of [255n, 128n]) for (const starting of [0n, 77n]) for (const flagged of [false, true]) {
+    const mask = (1n << width) - 1n, flags = flagged ? 1n << width : 0n;
+    const word = flags | starting, witnessWord = (1n << 255n) | 19n;
+    const r = fundingRpc({
+      storage: account => ({ [account === A ? target : witness]: toBeHex(account === A ? word : witnessWord, 32) }),
+      balance: (account, writes) => BigInt(writes[account === A ? target : witness] ?? (account === A ? word : witnessWord)) & mask,
+    });
+    const completed = new Map(), f = new NodeInputFunding(r.rpc, PIN, createNodeFundingCache(), completed);
+    const prepared = await f.prepare([{ token: T, to: A, amount: "100" }]);
+    assert.deepEqual(prepared.overrides, { [T]: { stateDiff: { [target]: toBeHex(flags | (starting + 100n), 32) } } });
+    assert.equal(prepared.expected[0]!.balance, starting + 100n);
+    assert.deepEqual(completed.get(`${T}:${A}`), { slot: target, balance: starting, mask, word });
+    assert.equal(r.calls, flagged ? 7 : 8); assert.equal(r.traces, 2);
+    const calls = r.calls;
+    const boundary = await f.prepare([{ token: T, to: A, amount: (mask - starting).toString() }]);
+    assert.equal(boundary.overrides[T]!.stateDiff[target], toBeHex(flags | mask, 32));
+    await assert.rejects(f.prepare([{ token: T, to: A, amount: (mask - starting + 1n).toString() }]), /funding overflow/);
+    assert.equal(r.calls, calls, "same-source amount changes reuse the complete field proof");
+    assert.equal(r.traces, 2);
+  }
+});
+test("packed balance proofs retain masks across same-source reuse and reprove source layout changes", async () => {
+  let width = 255n, flags = 0n, index = 9100;
+  const key = (account: string) => keccak256(ABI.encode(["address", "uint256"], [account, index]));
+  const r = fundingRpc({
+    storage: account => ({ [key(account)]: toBeHex(account === A ? flags | 77n : 19n, 32) }),
+    balance: (account, writes) => BigInt(writes[key(account)] ?? (account === A ? flags | 77n : 19n)) & ((1n << width) - 1n),
+  });
+  const cache = createNodeFundingCache(), completed = new Map();
+  const first = await new NodeInputFunding(r.rpc, PIN, cache, completed).prepare([{ token: T, to: A, amount: "100" }]);
+  assert.equal(first.overrides[T]!.stateDiff[key(A)], toBeHex(177, 32));
+  assert.equal(r.calls, 8); assert.equal(r.traces, 2);
+  const reused = await new NodeInputFunding(r.rpc, PIN, cache, completed).prepare([{ token: T, to: A, amount: "20" }]);
+  assert.equal(reused.expected[0]!.balance, 97n); assert.equal(r.calls, 8); assert.equal(r.traces, 2);
+  width = 128n; flags = 0x55n << 128n; index = 9101;
+  const changed = await new NodeInputFunding(r.rpc, PIN, cache).prepare([{ token: T, to: A, amount: "20" }]);
+  assert.equal(changed.overrides[T]!.stateDiff[key(A)], toBeHex(flags | 97n, 32));
+  assert.equal(cache.slots.get(`${T}:${A}`), key(A));
+  assert.equal(r.calls, 15); assert.equal(r.traces, 4);
+});
+test("trace proof rejects scaled, shifted and noncontiguous fields instead of treating storage as token amounts", async () => {
+  const target = slot(9000), witness = slot(9001);
+  for (const kind of ["scaled", "shifted", "noncontiguous"] as const) for (const starting of [0n, 77n]) {
+    const stored = kind === "scaled" ? starting * 2n : kind === "shifted" ? starting << 8n : starting;
     const r = fundingRpc({
       storage: account => ({ [account === A ? target : witness]: toBeHex(account === A ? stored : 19n, 32) }),
       balance: (account, writes) => {
         if (account === T) return BigInt(writes[witness] ?? 19n);
         const value = BigInt(writes[target] ?? stored);
-        return kind === "packed" ? value & ((1n << 248n) - 1n) : value / 2n;
+        return kind === "scaled" ? value / 2n : kind === "shifted" ? value >> 8n : value & ((1n << 255n) | 0xffffn);
       },
     });
     await assert.rejects(new NodeInputFunding(r.rpc, PIN).prepare([{ token: T, to: A, amount: "1" }]), /unsupported balance layout/);
-    if (kind === "packed") assert(r.writes.some(w => BigInt(Object.values(w.stateDiff)[0]!) >> 255n === 1n));
-    else assert.equal(r.writes.length, 0, "raw shares differing from observed balance are not direct balance candidates");
   }
 });
 test("an isolated candidate must preserve the distinct witness balance", async () => {
@@ -148,6 +188,30 @@ test("two independently passing balance slots remain ambiguous even with a cache
     balance: (account, writes) => account === T ? 19n : BigInt(writes[first] ?? 77) + BigInt(writes[second] ?? 77) - 77n,
   });
   await assert.rejects(new NodeInputFunding(r.rpc, PIN, cache).prepare([{ token: T, to: A, amount: "1" }]), /ambiguous balance layout/);
+  assert.equal(cache.slots.size, 0);
+});
+test("two independently passing packed slots are not collapsed into one funding proof", async () => {
+  const first = slot(8000), second = slot(8001), witness = slot(8002), mask = (1n << 128n) - 1n;
+  const r = fundingRpc({
+    storage: account => account === A ? { [first]: toBeHex(0, 32), [second]: toBeHex(0, 32) } : { [witness]: toBeHex(19, 32) },
+    balance: (account, writes) => account === T ? 19n : (BigInt(writes[first] ?? 0) & mask) + (BigInt(writes[second] ?? 0) & mask),
+  });
+  const cache = createNodeFundingCache();
+  await assert.rejects(new NodeInputFunding(r.rpc, PIN, cache).prepare([{ token: T, to: A, amount: "1" }]), /ambiguous balance layout/);
+  assert.equal(cache.slots.size, 0);
+});
+test("packed-field discovery propagates failed RPC without retaining a slot hint", async () => {
+  const target = slot(9000), witness = slot(9001), mask = (1n << 255n) - 1n;
+  const r = fundingRpc({
+    storage: account => ({ [account === A ? target : witness]: toBeHex(0, 32) }),
+    balance: (account, writes) => BigInt(writes[account === A ? target : witness] ?? 0) & mask,
+  });
+  const cache = createNodeFundingCache(), failure = new Error("masked proof cancelled");
+  const rpc = async (method: string, params: readonly any[]) => {
+    if (method === "eth_call" && params[2]?.[T]?.stateDiff?.[target] === toBeHex((1n << 256n) - 1n, 32)) throw failure;
+    return r.rpc(method, params);
+  };
+  await assert.rejects(new NodeInputFunding(rpc, PIN, cache).prepare([{ token: T, to: A, amount: "1" }]), error => error === failure);
   assert.equal(cache.slots.size, 0);
 });
 test("invalid and oversized prestate responses cannot nominate a balance slot", async () => {

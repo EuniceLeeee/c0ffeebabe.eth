@@ -207,6 +207,33 @@ test("input funding traces both accounts and proves isolated writes using the sa
   assert.deepEqual(funded.overrides, { [T]: { stateDiff: { [slot(A)]: toBeHex(87, 32) } } });
 });
 
+test("V1 funds a zero low-bit balance while preserving packed metadata and the virtual source", async () => {
+  const mask = (1n << 255n) - 1n, flag = 1n << 255n;
+  const slot = (account: string) => keccak256(ABI.encode(["address", "uint256"], [account, 9000]));
+  const accountOf = (data: string) => String(ABI.decode(["address"], "0x" + data.slice(10))[0]).toLowerCase();
+  let traces = 0, simulations = 0;
+  const rpc = createNodeSimulateV1Rpc(async (method, params: readonly any[]) => {
+    if (method === "eth_getBlockByNumber") { assert.deepEqual(params, ["0x64", false]); return header; }
+    if (method === "debug_traceCall") {
+      traces++; assert.deepEqual(params[1], pin); assert.deepEqual(params[2].blockOverrides, env.blockOverrides);
+      const account = accountOf(params[0].data);
+      return { [T]: { storage: { [slot(account)]: toBeHex(account === A ? 0n : flag | 19n, 32) } } };
+    }
+    assert.equal(method, "eth_simulateV1"); simulations++;
+    assert.equal(params[1], "0x64");
+    const b = params[0].blockStateCalls[0];
+    assert.deepEqual(b.blockOverrides, env.blockOverrides); assert.equal(b.calls.length, 1);
+    const account = accountOf(b.calls[0].data), writes = b.stateOverrides[T]?.stateDiff;
+    if (writes) assert.deepEqual(Object.keys(writes), [slot(A)]);
+    const stored = BigInt(writes?.[slot(account)] ?? (account === A ? 0n : flag | 19n));
+    return block([success(toBeHex(stored & mask, 32))]);
+  }, header);
+  const funded = await new NodeInputFunding(rpc, pin).prepare([{ token: T, to: A, amount: "100" }]);
+  assert.equal(funded.expected[0]!.balance, 100n);
+  assert.deepEqual(funded.overrides, { [T]: { stateDiff: { [slot(A)]: toBeHex(100n, 32) } } });
+  assert.equal(traces, 2); assert(simulations > 0);
+});
+
 test("a source change during funding trace prevents any counterfactual balance write", async () => {
   const slot = keccak256(ABI.encode(["address", "uint256"], [A, 9000]));
   let changed = false, calls = 0, traces = 0;

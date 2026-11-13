@@ -4,6 +4,7 @@ import type { InputFundingOverrides } from "../revm-sim-client.js";
 export type PinnedNodeRpc = (method: string, params: readonly unknown[]) => Promise<any>;
 const ERC20 = new Interface(["function balanceOf(address) view returns(uint256)"]);
 const UINT = 1n << 256n;
+const FULL_WORD = UINT - 1n;
 const SENTINEL = (1n << 255n) | 0x314159265358979323846264338327950288419716939937510n;
 const CACHE_LIMIT = 4096;
 // Bounds on observed trace data, not guesses about storage layout. The supplied
@@ -39,7 +40,7 @@ function tracedSlots(trace: unknown, token: string): ReadonlyMap<string, bigint>
   }
   return slots;
 }
-export type NodeFundingProof = { slot: string; balance: bigint };
+export type NodeFundingProof = { slot: string; balance: bigint; mask: bigint; word: bigint };
 export type NodeFundingProofResolver = (key: string,
   prove: (rpc: PinnedNodeRpc) => Promise<NodeFundingProof>) => Promise<NodeFundingProof>;
 export interface NodeFundingCache {
@@ -55,8 +56,9 @@ function uint(data: unknown): bigint {
 /** No transfers from pools/holders, allowance writes, code replacement or local
  * EVM. Only a proven direct balance slot is changed in the isolated RPC call.
  * Trace the actual funded account, never transplant a historical pool's slot.
- * Only a single full-word balance with an independent account witness is supported;
- * packed, shared, external-ledger and nonlinear layouts are not guessed.
+ * Supports a full word or a proven contiguous low-bit balance field. Other bits
+ * retain their source values. Shared, shifted, external-ledger and nonlinear
+ * layouts are not guessed; the independent execution observation still applies.
  * Existing input inventory is retained: initialization adds the requested input.
  */
 export class NodeInputFunding {
@@ -82,13 +84,14 @@ export class NodeInputFunding {
         this.proofs.set(key, proof);
         void proof.catch(() => { if (this.proofs.get(key) === proof) this.proofs.delete(key); });
       }
-      const { slot, balance } = await proof;
-      this.completed.set(key, { slot, balance });
+      const proved = await proof;
+      const { slot, balance, mask, word } = proved;
+      this.completed.set(key, proved);
       const funded = balance + amount;
-      if (funded >= UINT) throw new Error("node input funding overflow");
+      if (funded > mask) throw new Error("node input funding overflow");
       const row = writes[token] ??= { stateDiff: {} };
       if (row.stateDiff[slot] !== undefined) throw new Error("duplicate node input funding slot");
-      row.stateDiff[slot] = toBeHex(funded, 32);
+      row.stateDiff[slot] = toBeHex((word & ~mask) | funded, 32);
       expected.push({ token, account, balance: funded });
     }
     return { overrides: writes as InputFundingOverrides, expected };
@@ -109,28 +112,43 @@ export class NodeInputFunding {
     this.cache.slots.delete(key);
     const balance = await read(account), witnessBalance = await read(witness);
     const accessed = await trace(account), shared = await trace(witness);
-    const slots = [...accessed].filter(([slot, value]) => value === balance && !shared.has(slot)).map(([slot]) => slot);
+    // A packed word can contain flags above the observed balance. Its field is
+    // learned below, never supplied by a token-specific slot or width hint.
+    const slots = [...accessed].filter(([slot, word]) => word >= balance && !shared.has(slot)).map(([slot]) => slot);
     if (hint && slots.includes(hint)) slots.splice(0, 0, ...slots.splice(slots.indexOf(hint), 1));
-    const verify = async (slot: string) => {
+    const verify = async (slot: string, mask: bigint, word: bigint) => {
       // Isolated writes only: changing all traced keys together can corrupt a
-      // proxy or a global parameter. Bit 255 also rejects narrower packed fields.
-      for (const value of [SENTINEL, SENTINEL + 0x123456789abcdefn]) {
-        const stateDiff = { [slot]: toBeHex(value, 32) };
+      // proxy or a global parameter. The odd difference keeps the two values
+      // distinct for every nonzero contiguous low-bit mask, including one bit.
+      for (const probe of [SENTINEL, SENTINEL + 0x123456789abcdefn]) {
+        const value = probe & mask;
+        const stateDiff = { [slot]: toBeHex((word & ~mask) | value, 32) };
         if (await read(account, stateDiff) !== value || await read(witness, stateDiff) !== witnessBalance) return false;
       }
       return true;
     };
-    const proven: string[] = [];
+    const proven: NodeFundingProof[] = [];
     for (const slot of slots) {
       // RPC failures, cancellations and reverts remain failures of this proof;
       // they are never swallowed or converted into guessed storage candidates.
-      if (await verify(slot)) proven.push(slot);
+      const word = accessed.get(slot)!;
+      if (word === balance && await verify(slot, FULL_WORD, word)) {
+        proven.push({ slot, balance, mask: FULL_WORD, word });
+      } else {
+        // All ones discovers a candidate field width, not a proof by itself.
+        // Re-read two distinct values with source flags preserved before using
+        // the field. A failed full-word proof cannot be rescued as full-word.
+        const mask = await read(account, { [slot]: toBeHex(FULL_WORD, 32) });
+        if (mask > 0n && mask < FULL_WORD && (mask & (mask + 1n)) === 0n &&
+            (word & mask) === balance && await verify(slot, mask, word))
+          proven.push({ slot, balance, mask, word });
+      }
       if (proven.length > 1) throw new Error("node input funding ambiguous balance layout");
     }
     if (proven.length !== 1) throw new Error("node input funding unsupported balance layout");
-    const slot = proven[0]!;
-    this.cache.slots.set(key, slot);
+    const proof = proven[0]!;
+    this.cache.slots.set(key, proof.slot);
     if (this.cache.slots.size > CACHE_LIMIT) this.cache.slots.delete(this.cache.slots.keys().next().value!);
-    return { slot, balance };
+    return proof;
   }
 }

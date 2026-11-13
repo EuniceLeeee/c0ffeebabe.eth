@@ -3,15 +3,23 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { getAddress, toBeHex } from "ethers";
+import { getAddress, JsonRpcProvider, toBeHex } from "ethers";
 import { RuntimeAmountProgram, runtimeProgramScript } from "../../adapters/runtime-amount-program.js";
 import { concatBytes } from "../../encoder.js";
 import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
-import { parseFamilyTransaction } from "./family-transaction-registry.js";
+import { parseFamilyTransaction, readFamilyTransaction } from "./family-transaction-registry.js";
 import { assertRegisteredAcceptanceSample, registerTransactionAcceptanceSample, transactionSimulationCase } from "./protocol-json-sample-registration.js";
 import { basicRouteAcceptanceStages, verifyBasicRouteAcceptance } from "./protocol-json-basic-facts.js";
 import { assertUniqueAcceptanceGraphEdge } from "./family-json-ready.js";
+import { familyTransactionFactsMain, verifyFamilyTransactionBindingReport, verifyFamilyTransactionFactsReport } from "./family-transaction-facts.js";
+import { buildReadyCatalogSnapshot, durableVerifiedMemoFingerprint, UniverseRebuildCheckpointStore } from "../universe-rebuild-checkpoint.js";
+import { hashReadyCatalogSnapshot, hashReadyGraphSnapshot, hashReadyPublicationSet } from "../universe-rebuild-runner.js";
+import { familyMemoDefinitionHash } from "../universe-rebuild-production.js";
+import { buildFamilyRouteGraphView } from "../adapter-family-graph-runtime.js";
+import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../venues/production-family-composition.js";
+import { runUniv2Lifecycle, UNIV2_FIXTURE_FACTORY } from "../architecture-migration-fixture-replay.js";
 
 const address = (n: number) => toBeHex(n, 20), blockHash = toBeHex(100, 32);
 function fixture(tokenIn = address(4), tokenOut = address(5)) {
@@ -188,4 +196,141 @@ test("checkpoint comparison requires exactly one complete target edge, not a non
     const changed = { ...edge }; delete changed[property];
     assert.throws(() => assertUniqueAcceptanceGraphEdge([changed], edge), /differs/);
   }
+});
+
+/** Offline orchestration fixture: the existing lifecycle issues the descriptor
+ * and routes. Only RPC/checkpoint I/O is substituted; the real matcher, target
+ * Graph gate, report writer and raw verifiers execute without an acceptance hook.
+ * The registered TX is a seed here, not a claim about its on-chain trace. */
+async function withFactsMainFixture(run: (input: any) => Promise<void>) {
+  const directory = mkdtempSync(join(tmpdir(), "family-facts-main-"));
+  const transactionPath = fileURLToPath(new URL("./fixtures/family-transactions/0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b.json", import.meta.url));
+  const transaction = readFamilyTransaction(transactionPath), leg = transaction.legs[0]!;
+  const source = { ...leg.source!, generation: leg.source!.number };
+  const publication = await runUniv2Lifecycle(source, { pool: getAddress(leg.instanceKey!), factory: UNIV2_FIXTURE_FACTORY,
+    token0: getAddress(leg.tokenIn!), token1: getAddress(leg.tokenOut!),
+    reserves: { reserve0: 1_000_000_000n, reserve1: 2_000_000_000n, blockTimestampLast: 1 } });
+  const instance = publication.instances[0]!, family = catalog.forFamily(publication.familyId);
+  const encode = (value: unknown) => JSON.parse(JSON.stringify(value, (_key, item) => typeof item === "bigint"
+    ? { $durableType: "bigint", value: item.toString() }
+    : item && typeof item.entries === "function" && typeof item.get === "function"
+      ? { $durableType: "map", entries: [...item.entries()] } : item));
+  const memo: any = { familyCandidateKey: "offline-fixture-candidate", familyInstanceKey: "offline-fixture-instance",
+    familyId: leg.familyId, candidateKey: instance.candidateKey, instanceKey: instance.instanceKey,
+    candidateFingerprint: "offline-fixture", familyDefinitionHash: familyMemoDefinitionHash(leg.familyId),
+    validity: { policy: "immutable-code", authorityFingerprint: "offline-fixture", proofSource: leg.source },
+    verifiedIdentity: { lineageId: instance.lineageId }, compiledDescriptor: encode(instance.descriptor),
+    staticProjection: encode({ routes: instance.routes, pricingInstances: instance.pricingInstances,
+      staticBindingFingerprint: instance.staticBindingFingerprint, staticEvidenceFingerprint: instance.staticEvidenceFingerprint,
+      evidenceRefs: instance.evidenceRefs }), evidenceFingerprint: instance.staticEvidenceFingerprint,
+    candidateSnapshot: { familyId: leg.familyId, address: leg.instanceKey }, memoFingerprint: "" };
+  memo.memoFingerprint = durableVerifiedMemoFingerprint(memo);
+  const edges = buildFamilyRouteGraphView({ routes: instance.routes.map((route, index) => ({
+    family, descriptor: instance.descriptor, route, handle: instance.routeHandles[index]!,
+  })) }).edges;
+  const checkpoint = (admitted: boolean) => {
+    const memos = admitted ? [memo] : [], catalogSnapshot = buildReadyCatalogSnapshot(memos);
+    const graphSnapshot = { format: "strict-rebuild-graph-v1", edges: admitted ? edges : [] };
+    return { revision: 1, verifiedMemos: Object.fromEntries(memos.map(m => [m.familyCandidateKey, m])),
+      inProgressRun: null, retryableAttemptsByCandidateKey: {}, checkpointFingerprint: "offline-fixture",
+      readyGeneration: { generation: source.generation, cutoff: source,
+        universeRange: { fromBlock: source.number, toBlock: source.number }, universeHash: "offline-fixture",
+        catalogSnapshot, catalogHash: hashReadyCatalogSnapshot(catalogSnapshot),
+        publicationSetHash: hashReadyPublicationSet(catalogSnapshot), activeInstanceKeys: memos.map(m => m.familyInstanceKey),
+        graphSnapshot, graphHash: hashReadyGraphSnapshot(graphSnapshot),
+        candidateAccounting: { total: memos.length, verified: memos.length, terminalRejected: 0, retryable: 0, remainingUnaccounted: 0 },
+        observedThrough: leg.source, appliedThrough: leg.source,
+        sourceCoverage: [{ familyId: leg.familyId, sourceId: "offline-fixture", completeThroughBlock: source.number, completeThroughHash: source.hash }] } };
+  };
+  const readyPath = join(directory, "ready.json"), rpcFile = join(directory, "rpc.json");
+  writeFileSync(readyPath, "offline fixture checkpoint bytes\n");
+  writeFileSync(rpcFile, JSON.stringify({ MAINNET_RPC_URL: "http://127.0.0.1:1" }));
+  const originalLoad = UniverseRebuildCheckpointStore.prototype.load, originalSend = JsonRpcProvider.prototype.send;
+  const originalCache = process.env.SEARCHER_FAMILY_FACT_CACHE_DIR;
+  let admitted = true, sequence = 0;
+  UniverseRebuildCheckpointStore.prototype.load = async () => checkpoint(admitted) as any;
+  JsonRpcProvider.prototype.send = async (method: string) => {
+    if (method === "eth_chainId") return "0x1";
+    if (method === "eth_getBlockByNumber") return { number: toBeHex(source.number), hash: source.hash };
+    if (method === "eth_getTransactionReceipt") return { transactionHash: transaction.transactionHash,
+      blockNumber: toBeHex(source.number), blockHash: source.hash, transactionIndex: "0x0", status: "0x1", logs: [] };
+    if (method === "trace_transaction") return [{ type: "call", traceAddress: [], subtraces: 0,
+      transactionHash: transaction.transactionHash, blockNumber: source.number, blockHash: source.hash,
+      action: { from: address(80), to: leg.instanceKey, input: "0x12345678", callType: "call", gas: "0xffff", value: "0x0" },
+      result: { output: "0x", gasUsed: "0x1" } }];
+    throw new Error("offline fixture execution boundary: " + method);
+  };
+  process.env.SEARCHER_FAMILY_FACT_CACHE_DIR = join(directory, "cache");
+  try {
+    await run({ directory, transaction, leg, transactionPath,
+      execute: (stage = "all", hasReady = true) => {
+        admitted = hasReady;
+        return familyTransactionFactsMain(["--transaction", transactionPath, "--leg", leg.id,
+          "--rpc-file", rpcFile, "--ready", readyPath, "--out", join(directory, `case-${sequence++}`), "--stage", stage]);
+      } });
+  } finally {
+    UniverseRebuildCheckpointStore.prototype.load = originalLoad; JsonRpcProvider.prototype.send = originalSend;
+    if (originalCache === undefined) delete process.env.SEARCHER_FAMILY_FACT_CACHE_DIR;
+    else process.env.SEARCHER_FAMILY_FACT_CACHE_DIR = originalCache;
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+test("actual facts runner keeps historical mismatch as reference and reaches execution only through current Ready", async () => {
+  await withFactsMainFixture(async ({ execute }) => {
+    const normal = await execute();
+    assert(normal.report.stages.transactionBinding, JSON.stringify(normal.report.failure));
+    assert.deepEqual(normal.report.originalTransactionInput, { status: "reference-only", required: false });
+    assert.equal(normal.report.stages.transactionBinding.status, "action-not-observed");
+    assert.equal(normal.report.stages.discoveryCheckpoint.status, "pass");
+    assert.equal(normal.report.failure.stage, "execution", "current admitted route must get past historical matching");
+    assert.equal(normal.report.result, "failed", "the fixture does not supply execution proof");
+    assert.equal(normal.report.stages.exact.status, "not-run");
+    const missing = await execute("all", false);
+    assert.equal(missing.report.stages.transactionBinding.status, "direction-not-admitted");
+    assert.equal(missing.report.failure.stage, "discoveryCheckpoint");
+    assert.match(missing.report.failure.reason, /one admitted Ready identity/);
+    assert.equal(missing.report.stages.discoveryCheckpoint.status, "failed");
+  });
+});
+
+test("match-only remains strict and retained reference evidence cannot be forged", async () => {
+  await withFactsMainFixture(async ({ execute, transaction, leg, directory }) => {
+    const matched = await execute("match"), reportPath = matched.reportPath;
+    assert(matched.report.stages.transactionBinding, JSON.stringify(matched.report.failure));
+    assert.equal(matched.report.result, "incomplete"); assert.equal(matched.report.failure.stage, "transactionBinding");
+    assert.equal(matched.report.stages.transactionBinding.status, "action-not-observed");
+    const binding = await verifyFamilyTransactionBindingReport(reportPath, transaction, leg);
+    assert.equal(binding.status, "action-not-observed");
+    const original = readFileSync(reportPath, "utf8");
+    for (const mutate of [
+      (r: any) => { r.originalTransactionInput.required = true; },
+      (r: any) => { delete r.originalTransactionInput; },
+      (r: any) => { r.stages.transactionBinding.status = "matched"; },
+    ]) {
+      const changed = JSON.parse(original); mutate(changed); writeFileSync(reportPath, JSON.stringify(changed));
+      await assert.rejects(verifyFamilyTransactionBindingReport(reportPath, transaction, leg), /reference-only|differs from raw evidence/);
+    }
+    writeFileSync(reportPath, original);
+    const rawPath = join(directory, "case-0", matched.report.evidence.transaction.file);
+    const raw = JSON.parse(readFileSync(rawPath, "utf8")); raw.receipt.transactionHash = toBeHex(999, 32);
+    writeFileSync(rawPath, JSON.stringify(raw));
+    const changed = JSON.parse(original);
+    changed.evidence.transaction.sha256 = createHash("sha256").update(readFileSync(rawPath)).digest("hex");
+    writeFileSync(reportPath, JSON.stringify(changed));
+    await assert.rejects(verifyFamilyTransactionBindingReport(reportPath, transaction, leg), /matching TX differs/);
+  });
+});
+
+test("full pass verifier permits an honestly unmatched reference but still rejects missing execution evidence", async () => {
+  await withFactsMainFixture(async ({ execute, transaction, leg, directory }) => {
+    const result = await execute();
+    assert(result.report.stages.transactionBinding, JSON.stringify(result.report.failure));
+    assert.equal(result.report.stages.discoveryCheckpoint.status, "pass");
+    const rawPath = join(directory, "case-0", "acceptance.json"); writeFileSync(rawPath, "{}\n");
+    const report = JSON.parse(readFileSync(result.reportPath, "utf8")); report.result = "pass";
+    report.evidence.acceptance = { file: "acceptance.json", sha256: createHash("sha256").update(readFileSync(rawPath)).digest("hex") };
+    writeFileSync(result.reportPath, JSON.stringify(report));
+    await assert.rejects(verifyFamilyTransactionFactsReport(result.reportPath, transaction, leg), /recorded node execution evidence is missing/);
+  });
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { familyTestMain, parseFamilyTestArguments, summarizeFamilyTransactionResults } from "../../../scripts/test-family.mjs";
@@ -140,5 +140,43 @@ test("TX direction/input conflict becomes incomplete only after independent raw 
     assert.equal(leg.status, verificationExit === 0 ? "incomplete" : "failed");
     assert.equal(leg.evidenceVerified, false); assert.equal(result.report.families[0].passedLegs, 0);
     assert.equal(result.report.families[0].result, verificationExit === 0 ? "incomplete" : "failed");
+  }
+});
+
+test("main acceptance retains historical reference conflicts and still requires independent simulation verification", async () => {
+  for (const referenceStatus of ["input-conflict", "action-conflict"]) for (const verificationExit of [0, 1]) {
+    let verifications = 0;
+    const result = await round(["--rpc-file", "rpc.json"], { verify: undefined,
+      execute: async (args: string[]) => {
+        if (args[0] === "scripts/test-protocol-json.mjs") return { exitCode: 0 };
+        if (args.includes("--verify-report")) {
+          verifications++;
+          const report = JSON.parse(readFileSync(args[args.indexOf("--verify-report") + 1]!, "utf8"));
+          assert.equal(report.stages.transactionBinding.status, referenceStatus);
+          assert.equal(report.stages.exact.requestedAmountIn, "34");
+          assert.equal(report.stages.quotedExecution.actualAmountIn, "34");
+          return { exitCode: verificationExit };
+        }
+        assert(!args.includes("--verify-binding"), "reference diagnostics cannot substitute for execution verification");
+        const out = args[args.indexOf("--out") + 1]!; mkdirSync(out);
+        writeFileSync(resolve(out, "report.json"), JSON.stringify({ result: "pass", scope: "same-state-simulation",
+          execution: { executorCodeMode: "counterfactual", simulationMethod: "eth_simulateV1" },
+          originalTransactionInput: { status: "reference-only", required: false },
+          stages: { transactionBinding: { status: referenceStatus },
+            exact: { status: "pass", requestedAmountIn: "34", quotedAmountOut: "68" },
+            quotedExecution: { status: "pass", actualAmountIn: "34", actualAmountOut: "68" } } }));
+        return { exitCode: 0 };
+      },
+    });
+    const leg = result.report.families[0].legs[0];
+    assert.equal(verifications, 1); assert.equal(result.exitCode, verificationExit);
+    assert.equal(leg.status, verificationExit === 0 ? "pass" : "failed");
+    assert.equal(leg.evidenceVerified, verificationExit === 0);
+    if (verificationExit === 0) {
+      assert.deepEqual(leg.originalTransactionInput, { status: "reference-only", required: false });
+      assert.equal(leg.stages.transactionBinding.status, referenceStatus);
+      assert.equal(leg.stages.exact.requestedAmountIn, "34");
+      assert.equal(result.report.families[0].passedLegs, 1);
+    } else assert.equal(leg.stages, undefined, "unverified child stages cannot become passing evidence");
   }
 });

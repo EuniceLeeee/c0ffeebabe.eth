@@ -24,6 +24,23 @@ type ExactPrefixFailure = Readonly<{
 }>;
 const UINT256 = 1n << 256n;
 const EFFECTS = ["return-data", "revert-data", "token-delta", "native-delta", "total-supply-delta", "logs"];
+// Node funding failures are local, static diagnostics. Keep this finite and
+// exact: arbitrary RPC text, suffixes, error data and causes may carry secrets
+// or impersonate completed EVM reverts and must never cross this boundary.
+const SAFE_NODE_FUNDING_ERRORS = new Set([
+  "node input funding unsupported balance layout",
+  "node input funding ambiguous balance layout",
+  "node input funding overflow",
+  "node input balance unavailable",
+  "node input funding trace account limit",
+  "node input funding trace slot limit",
+  "invalid node input funding prestate trace",
+  "invalid node input funding prestate account",
+  "invalid node input funding prestate storage",
+  "invalid node input funding prestate slot",
+  "invalid node input funding",
+  "duplicate node input funding slot",
+]);
 
 /** Source admission/retirement belongs to the resolver's owner, never a quote.
  * No implicit endpoint, caller authority, source lease or daemon fallback.
@@ -78,6 +95,7 @@ export function createRevmStrictSimulationTransport(input: {
       const message = error instanceof Error ? error.message : undefined;
       const safeMessage = message === "revm-sim request deadline timed out" ? "strict simulation deadline reached"
         : message === "revm-sim request aborted" ? "strict simulation cancelled"
+        : message !== undefined && SAFE_NODE_FUNDING_ERRORS.has(message) ? message
         : "strict simulation transport failed";
       throw new RevmStrictError(error instanceof RevmStrictError ? error.kind : "execution",
         safeMessage);

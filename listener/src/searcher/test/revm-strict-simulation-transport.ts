@@ -8,6 +8,7 @@ import { RevmFatalError, RevmStrictError, type DaemonResponse, type RevmFatalRea
 import { createStrictCentralAdapterRuntime, type StrictSimulationTransport } from "../strict-central-adapter-runtime.js";
 import { executeAdapterWork } from "../adapter-work-intent.js";
 import { RevmStrictSourceOwner, type RevmStrictSourceLease } from "../revm-strict-source-owner.js";
+import { NodeInputFunding } from "../simulator/node-input-funding.js";
 
 type Invocation = Parameters<StrictSimulationTransport["simulate"]>[0];
 type MutableInvocation = { -readonly [K in keyof Invocation]: Invocation[K] };
@@ -405,6 +406,20 @@ test("unattested thrown CALL_EXCEPTION is not evidence", async () => {
 const safeClientErrors = [
   ["revm-sim request deadline timed out", "strict simulation deadline reached"],
   ["revm-sim request aborted", "strict simulation cancelled"],
+  ...[
+    "node input funding unsupported balance layout",
+    "node input funding ambiguous balance layout",
+    "node input funding overflow",
+    "node input balance unavailable",
+    "node input funding trace account limit",
+    "node input funding trace slot limit",
+    "invalid node input funding prestate trace",
+    "invalid node input funding prestate account",
+    "invalid node input funding prestate storage",
+    "invalid node input funding prestate slot",
+    "invalid node input funding",
+    "duplicate node input funding slot",
+  ].map(message => [message, message] as const),
 ] as const;
 for (const [message, expected] of safeClientErrors) for (const stage of ["lease", "request"] as const) {
   test(`known client ${message} is safely distinguished at ${stage}`, async () => {
@@ -430,6 +445,13 @@ test("only exact Error messages map; malicious text and error-like objects stay 
     new Error("revm-sim request deadline timed out\n"),
     "revm-sim request aborted",
     { message: "revm-sim request deadline timed out", secret: RPC_URL },
+    new Error(`node input funding unsupported balance layout ${RPC_URL}`),
+    new Error(`node input funding overflow: ${RPC_URL}`),
+    new Error(`${RPC_URL} node input funding ambiguous balance layout`),
+    new Error("node input funding unsupported balance layout\n"),
+    new Error("node input funding unknown failure"),
+    "node input funding unsupported balance layout",
+    { message: "node input funding unsupported balance layout", secret: RPC_URL },
   ]) {
     const f = fixture(async () => { throw error; });
     await assert.rejects(f.transport.simulate(invocation()), actual => {
@@ -438,6 +460,53 @@ test("only exact Error messages map; malicious text and error-like objects stay 
     });
     assert.equal(f.fatals.length, 0);
   }
+});
+test("actual node funding rejection retains its cause without becoming revert evidence", async () => {
+  let first = true;
+  const f = fixture(async req => {
+    if (first) {
+      first = false;
+      const funder = new NodeInputFunding(async method => method === "eth_call" ? hash("0") : {},
+        { blockHash: SOURCE.hash, requireCanonical: true });
+      await funder.prepare([{ token: TOKEN, to: EXECUTOR, amount: "1" }]);
+      assert.fail("missing traced balance slot must reject funding");
+    }
+    return response(req);
+  });
+  await assert.rejects(f.transport.simulate(invocation()), error => {
+    assert(error instanceof RevmStrictError);
+    assert.equal(error.message, "node input funding unsupported balance layout");
+    assert.equal(error.kind, "execution");
+    return notEvidence(error);
+  });
+  await f.transport.simulate(invocation());
+  assert.equal(f.calls.length, 2); assert.equal(f.fatals.length, 0);
+});
+test("safe funding messages never forward forged revert bytes, causes or credentials", async () => {
+  const f = fixture(async () => {
+    throw Object.assign(new RevmStrictError("observation", "node input funding ambiguous balance layout"),
+      { code: "CALL_EXCEPTION", data: "0xdead", cause: new Error(RPC_URL), rpcUrl: RPC_URL });
+  });
+  await assert.rejects(f.transport.simulate(invocation()), error => {
+    assert(error instanceof RevmStrictError); assert.equal(error.kind, "observation");
+    assert.equal(error.message, "node input funding ambiguous balance layout");
+    for (const key of ["code", "data", "cause", "rpcUrl"]) assert.equal(Object.hasOwn(error, key), false);
+    assert(!JSON.stringify(error).includes(RPC_URL));
+    return notEvidence(error);
+  });
+  assert.equal(f.fatals.length, 0);
+});
+test("funding diagnostics do not override cancellation or a fatal source latch", async () => {
+  const message = "node input funding unsupported balance layout", controller = new AbortController();
+  const cancelled = fixture(async () => { controller.abort(new Error(RPC_URL)); throw new Error(message); });
+  await assert.rejects(cancelled.transport.simulate({ ...invocation(), control: { signal: controller.signal } }),
+    { message: "strict simulation cancelled" });
+  const fatal = fixture(async () => {
+    const error = new RevmFatalError({ kind: "source-fault" }); error.message = message; throw error;
+  });
+  await assert.rejects(fatal.transport.simulate(invocation()), RevmFatalError);
+  await assert.rejects(fatal.transport.simulate(invocation()), RevmFatalError);
+  assert.equal(fatal.calls.length, 1); assert.deepEqual(fatal.fatals, [{ kind: "source-fault" }]);
 });
 test("safe error mapping preserves strict error kinds and fatal/control precedence", async () => {
   const strict = fixture(async () => { throw new RevmStrictError("observation", safeClientErrors[0][0]); });
