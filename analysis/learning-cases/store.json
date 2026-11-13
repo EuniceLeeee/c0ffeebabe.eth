@@ -2814,6 +2814,34 @@
       },
       "created_at": "2026-11-13T10:27:25.459Z",
       "updated_at": "2026-11-13T10:31:52.705Z"
+    },
+    {
+      "learning_case_id": "tooldef-20261113-action-facts-route-coverage",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap",
+        "protocol"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Selected execution facts incorrectly inherited whole-instance route and settlement coverage verdict",
+      "evidence": {
+        "report": "docs/research/reports/family-action-facts-20261113.json",
+        "case": "0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b",
+        "verdict": "selected leg failed to pass with identical amounts and independently checked receipts; other action gaps remain visible"
+      },
+      "tooling_defect": {
+        "tool": "family-transaction-facts.ts / protocol-json-acceptance.ts / scripts/test-family.mjs",
+        "issue": "Whole-route enumeration blocked an independently valid selected action; missing sample completeness was conflated with execution failure.",
+        "evidence": "/opt/mev-cloud/family-runtime-20261007/logs/action-coverage-univ2-final-20261113/report.json",
+        "codify_target": "selected-action raw verifier; non-gating unsampled-route inventory; known-action gaps and all registered failures retained; three-state summary and nonzero incomplete exit",
+        "codify_commit": "c940f643c1604e24682d11e791b5e61b792ef696",
+        "status": "codified"
+      },
+      "created_at": "2026-11-13T11:02:38.265104+00:00",
+      "updated_at": "2026-11-13T11:02:38.265115+00:00"
     }
   ]
 }

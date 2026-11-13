@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "scope": "fact acceptance tooling; selected execution action, not all token directions",
+  "codeCommit": "c940f643c1604e24682d11e791b5e61b792ef696",
+  "baseline": "20daf49f",
+  "policy": {
+    "selectedCase": "independent source, Graph, Exact, debit/credit, quoted/runtime and negative-control verification",
+    "knownActionSamples": "production edge action adapters; missing samples are incomplete, never execution failure",
+    "inventoryIsExhaustive": false,
+    "registeredCaseOutsideImplementedInventory": "retained; missing admitted action or failed execution remains failure",
+    "incompleteExitCode": 1
+  },
+  "regression": {
+    "tests": 921,
+    "passed": 920,
+    "failed": 0,
+    "skipped": 1,
+    "buildLive": "pass",
+    "independentReview": "facts_source_review; exit-code finding fixed and regression passed"
+  },
+  "case": {
+    "transactionHash": "0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b",
+    "legId": "univ2-standard--reference-0-0",
+    "before": "failed: whole-instance route/settlement aggregation used as a selected-leg prerequisite",
+    "after": "pass",
+    "rawEvidenceVerification": "pass",
+    "stages": {
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "requestedAmountIn": "270190",
+        "quotedAmountIn": "270190",
+        "quotedAmountOut": "152671485064250"
+      },
+      "quotedExecution": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "270190",
+        "actualAmountOut": "152671485064250",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtimeExecution": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "270190",
+        "actualAmountOut": "152671485064250",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "simulationOutputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      }
+    },
+    "diagnostics": {
+      "directRpcReads": 7,
+      "failures": [],
+      "nodeSimulationRpcReads": "not counted by direct provider",
+      "simulationErrors": [],
+      "simulationsExecuted": 0,
+      "simulationsReused": 14
+    },
+    "broaderSettlementGaps": [
+      {
+        "trial": "univ2-standard--reference-0-0",
+        "routeKey": "univ2-standard\u001f0x6d74748b7089409cd7c52dcb2cbcc3b204360296\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "missingDeclaration": [],
+        "unverified": [
+          "deferred-input",
+          "deferred-debt-input",
+          "settle-output"
+        ]
+      }
+    ],
+    "unsampledRoutes": [
+      {
+        "routeKey": "univ2-standard\u001f0x6d74748b7089409cd7c52dcb2cbcc3b204360296\u001f0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2\u001f0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        "tokenIn": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      }
+    ]
+  },
+  "artifacts": {
+    "before": "/tmp/univ2-latest/report.json",
+    "after": "/opt/mev-cloud/family-runtime-20261007/logs/action-coverage-univ2-final-20261113/report.json",
+    "reportSha256": "9d5efb8063a9e28c523422c4be8046d6add230623d50ec8e6b06b38af29479dc"
+  },
+  "reconciliation": {
+    "query": [
+      "family",
+      "json",
+      "verification"
+    ],
+    "tool": "listener:test:family-json",
+    "manifest": "/tmp/action-coverage-regression-tools.json",
+    "sha256": "5f8352bc8cb9fbc267f9b27f535cd6cfb8306f06ac9b3d89ce59f580fd6bf0f4",
+    "exitCode": 0,
+    "outcome": "agrees; installed shared regressions include the defect and missing-action controls"
+  },
+  "limitations": [
+    "Not all Family chain cases rerun; all installed shared offline tests rerun.",
+    "No original transaction replay, whole-family variant/settlement completion or performance claim.",
+    "Vault Spot dual evidence/execution-source work remains separate and unfinished.",
+    "No production Family, Ready, live process, wallet or deployment modified."
+  ]
+}
