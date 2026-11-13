@@ -275,11 +275,15 @@ export function verifyFundingAcceptanceReport(raw: FundingAcceptanceCase, report
     const rows = report.executions.filter((row: any) => row.probe === probe); assert.equal(rows.length, 1);
     const row = rows[0]; assert.equal(row.scriptSha256, hash(programs[probe]));
     assert.deepEqual(row.request, executionRequest(sample, lender, probe, programs[probe]), "Funding script/baseline/actors or input preparation changed");
+    assert(row.resultEvidence.completion === "returned" || row.resultEvidence.completion === "reverted-as-declared",
+      "Funding simulation did not complete");
     assert.deepEqual(row.resultEvidence.provenance, { kind: "strict-simulation-transport", fingerprint: hashCanonical({
       id: row.request.id, requestFingerprint: physicalAdapterRequestFingerprint(row.request),
       executorProgramCodeHash: report.evidence.executorCodeHash,
       callerAddresses: [sample.executor.toLowerCase(), sample.executor.toLowerCase()], transactionOrigin: sample.owner.toLowerCase(),
-      completion: probe === "positive" ? "returned" : "reverted-as-declared",
+      // Authenticate what the transport observed, then check below whether
+      // that outcome satisfies the probe. A real revert is not a bad hash.
+      completion: row.resultEvidence.completion,
       source: { number: source.number, hash: source.hash.toLowerCase(), generation: source.generation },
     }) }, "Funding result provenance is not bound to its program/source/actors");
     const facts = probe === "positive" ? checkFundingPositiveFacts({ sample, source, result: row.resultEvidence, requestId: row.request.id, lender, fee: offer.fee })

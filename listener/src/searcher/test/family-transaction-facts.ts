@@ -283,6 +283,7 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     assert.equal(report.sourceFingerprint, familyTestSourceFingerprint(ROOT), "source changed while facts ran");
     assert.equal(report.inputFingerprint, familyTransactionInputFingerprint(readFamilyTransaction(transactionPath), leg), "transaction seed changed");
     report.evidence = { ...report.evidence, ready: fileEvidence(readyPath), acceptance: fileEvidence(rawPath) };
+    assert.equal(raw.result, "pass", JSON.stringify({ failure: raw.failure, stages: report.stages }));
     report.result = "pass"; checkpoint(); stage = "evidenceVerification";
     await verifyFamilyTransactionFactsReport(reportPath, transaction, leg);
   } catch (error) {

@@ -150,8 +150,19 @@ test("raw verifier reconstructs offer, baseline, actor, source and callback byte
     (r: any) => { const row = r.executions[0], changed = Uint8Array.of(5);
       row.request.call.data = buildSubscriptCalldata(changed); row.scriptSha256 = sha(changed); },
     (r: any) => { r.executions[0].resultEvidence.provenance.fingerprint = "unrelated-program"; },
+    (r: any) => { r.executions[0].resultEvidence.completion = "reverted-as-declared"; },
     (r: any) => { r.discovery.memo.candidateSnapshot.asset = owner; },
   ]) { const report = structuredClone(f.report); change(report); assert.throws(() => verifyFundingAcceptanceReport(f.sample, report, f.family)); }
   for (const key of ["familyId", "instanceKey", "lineageId"] as const)
     assert.throws(() => assertFundingReadyPublication(f.family, f.context.memo, source, { ...f.sample, [key]: "wrong" }));
+});
+
+test("a genuine positive revert retains valid provenance but fails execution facts", async () => {
+  for (const family of ["flash-loan:morpho", "flash-loan:balancer-v2"]) {
+    const f = await fixture(family, { noPrincipal: true });
+    assert.equal(f.report.result, "failed");
+    assert.equal(f.report.executions[0].resultEvidence.completion, "reverted-as-declared");
+    assert.throws(() => verifyFundingAcceptanceReport(f.sample, f.report, f.family), error =>
+      error instanceof Error && error.message.includes('"completion"') && !error.message.includes("provenance"));
+  }
 });

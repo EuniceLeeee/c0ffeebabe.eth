@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createServer } from "node:http";
-import { AbiCoder, Interface, keccak256, toBeHex } from "ethers";
+import { AbiCoder, Interface, getBytes, hexlify, keccak256, toBeHex } from "ethers";
+import { concatBytes, encodeCall, encodeClearState, encodeSetField2 } from "../../encoder.js";
 import { NodeInputFunding, createNodeFundingCache } from "../simulator/node-input-funding.js";
 import { NodeStrictClient } from "../simulator/node-strict-client.js";
 import { applyNodeStateDiff, nodeNestedHalt } from "../simulator/node-trace-simulation.js";
@@ -272,6 +273,40 @@ test("terminal receipts require exact tag, owner-generated key, target, flow and
   assert.throws(() => q.decode(error.encodeErrorResult("RuntimeHopFailed", [0n, T, q.flowHash, reason, proof])), /authentication/);
   assert.throws(() => q.decode(data + "00"), /receipt/);
   assert.throws(() => q.read(reason.slice(0, -64)), /shape/);
+});
+
+test("node observations preserve legacy self-script callback entry without weakening external runtime calls", () => {
+  const script = concatBytes(encodeSetField2(100), encodeCall(T, getBytes("0x12345678")), encodeClearState());
+  const data = buildSubscriptCalldata(script), call = { to: A, data };
+  const split = (data: string) => {
+    const script = getBytes(ABI.decode(["bytes"], "0x" + data.slice(10))[0]);
+    const parts: { opcode: number; bytes: string }[] = [];
+    for (let at = 0; at < script.length;) {
+      const op = script[at], lengthAt = at + (op === 14 ? 33 : 21);
+      assert(op === 14 || op === 0);
+      const length = script[lengthAt]! * 65536 + script[lengthAt + 1]! * 256 + script[lengthAt + 2]!;
+      const end = lengthAt + 3 + length;
+      parts.push({ opcode: op, bytes: hexlify(script.slice(at, end)) }); at = end;
+    }
+    return parts;
+  };
+  for (const baselineAfterPrefix of [false, true]) for (const persistent of [false, true]) {
+    const q = buildNodeProgramQuote({ executor: A, calls: [call, call], observations: [{ kind: "token", token: T, account: A }],
+      baselineAfterPrefix, persistent, terminalRevert: false });
+    const parts = split(q.data);
+    assert.equal(parts.filter(p => p.opcode === 0).length, 2);
+    for (const p of parts.filter(p => p.opcode === 0)) assert.equal(p.bytes, hexlify(encodeCall(A, getBytes(data))));
+    assert.equal(parts[0]!.opcode, baselineAfterPrefix ? 0 : 14);
+    assert.equal(parts.at(-1)!.opcode, 14);
+  }
+  const options = { executor: A, observations: [], terminalRevert: false };
+  for (const call of [{ to: T, data }, { to: A, data: "0x12345678" },
+    { to: A, data: buildSubscriptCalldata(runtimeProgramScript(new RuntimeAmountProgram().constant(0, 1n).bytes())) }]) {
+    assert.deepEqual(split(buildNodeProgramQuote({ ...options, calls: [call] }).data).map(p => p.opcode), [14]);
+  }
+  const returning = { to: A, data: buildSubscriptCalldata(getBytes("0x03000020" + "00".repeat(31) + "07")) };
+  assert.deepEqual(split(buildNodeProgramQuote({ ...options, calls: [returning], persistent: true, outputWords: 1 }).data)
+    .map(p => p.opcode), [14], "existing return-word capture must retain its runtime return buffer");
 });
 
 async function mockNode(handle: (method: string, params: any[]) => Promise<any>) {

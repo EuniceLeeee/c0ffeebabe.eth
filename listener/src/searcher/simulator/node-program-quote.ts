@@ -1,5 +1,6 @@
 import { AbiCoder, Interface, getBytes, hexlify, keccak256, randomBytes, toUtf8Bytes } from "ethers";
 import { RuntimeAmountProgram, runtimeProgramScript } from "../../adapters/runtime-amount-program.js";
+import { concatBytes, encodeCall } from "../../encoder.js";
 import { buildExecuteCalldata } from "../../shared/executor/botvm-executor.js";
 import { assertSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
 import { HOP_DIAGNOSTIC_SLOT } from "./direct-revert-hop.js";
@@ -74,7 +75,14 @@ export function buildNodeProgramQuote(input: {
   const key = hexlify(randomBytes(32));
   const flowHash = keccak256(toUtf8Bytes(JSON.stringify(input.calls)));
   const recorder = `0x${keccak256(toUtf8Bytes(`node-program-quote:${input.executor}:${key}`)).slice(-40)}`;
-  const program = new RuntimeAmountProgram();
+  const segments: Uint8Array[] = [];
+  let program = new RuntimeAmountProgram();
+  let pending = false;
+  const flush = () => {
+    if (pending) segments.push(runtimeProgramScript(program.bytes()));
+    program = new RuntimeAmountProgram();
+    pending = false;
+  };
   const snapshot = (after: boolean) => {
     for (let first = 0; first < input.observations.length; first += 16) {
       const part = new RuntimeAmountProgram();
@@ -90,11 +98,28 @@ export function buildNodeProgramQuote(input: {
         part.call(recorder, SAVE + WORD(i + (after ? input.observations.length + outputWords : 0)) + WORD(0), { patches: [{ offset: 36, reg: 1 }] });
       }
       program.run(part.bytes());
+      pending = true;
     }
   };
   if (!input.baselineAfterPrefix) snapshot(false);
   input.calls.forEach((call, i) => {
-    program.call(call.to, call.data);
+    // A trusted legacy BotVM script must enter with its original callback
+    // state. A runtime CALL installs a no-callback sentinel, which would make
+    // legacy SET_FIELD2 reject its lender/router's callback. Only canonical
+    // self-entry bytes use this path; external calls retain runtime guards.
+    let legacySelf = false;
+    // Explicit return-word capture keeps the existing runtime buffer path.
+    // ABI-void legacy scripts may still use the VM RETURN opcode; do not
+    // reject or invent those bytes. Callback + return-word capture remains a
+    // separate capability (callTracer can already read its actual returndata).
+    if (!(i === input.calls.length - 1 && outputWords) &&
+        call.to.toLowerCase() === input.executor.toLowerCase() && !isCanonicalNodeRuntimeCall(call.data)) {
+      try { assertSubscriptCalldata(call.data); legacySelf = true; } catch { /* Ordinary call. */ }
+    }
+    if (legacySelf) {
+      flush();
+      segments.push(encodeCall(call.to, getBytes(call.data)));
+    } else { program.call(call.to, call.data); pending = true; }
     if (i === 0 && input.baselineAfterPrefix) snapshot(false);
     if (i === input.calls.length - 1 && outputWords) {
       // Load every word BEFORE calling the recorder, whose return overwrites
@@ -107,6 +132,8 @@ export function buildNodeProgramQuote(input: {
   snapshot(true);
   // Inner scripts may set diagnostic context; reset it only for our recorder.
   program.diagnosticHop(0, flowHash).call(recorder, END);
+  pending = true;
+  flush();
   const read = (reason: string) => {
     const result = getBytes(reason), n = input.observations.length;
     if (result.length !== 32 + n * 64 + outputWords * 32 || hexlify(result.slice(0, 32)) !== TAG) throw new Error("node receipt shape");
@@ -115,7 +142,7 @@ export function buildNodeProgramQuote(input: {
       ...(input.outputWords === undefined ? {} : { output: hexlify(result.slice(32 + n * 32, 32 + (n + outputWords) * 32)) }) };
   };
   return { recorder, code: recorderCode(input.executor, input.observations.length * 2 + outputWords, input.terminalRevert, input.persistent), key, flowHash,
-    diagnosticSlot: HOP_DIAGNOSTIC_SLOT, data: buildExecuteCalldata(runtimeProgramScript(program.bytes())),
+    diagnosticSlot: HOP_DIAGNOSTIC_SLOT, data: buildExecuteCalldata(concatBytes(...segments)),
     read,
     decode(data: string) {
       const decoded = ERROR.parseError(data);
