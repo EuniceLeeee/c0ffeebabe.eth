@@ -21,6 +21,25 @@ test("incomplete references remain separate and cannot substitute for a complete
   assert.equal(result.references, 2); assert.equal(result.completeInputs, 1); assert.equal(result.passedLegs, 1);
   assert.equal(result.incompleteInputs, 1); assert.equal(result.result, "incomplete");
 });
+test("missing implemented actions are incomplete samples, not failures or token-direction requirements", () => {
+  const conversion = { ...family, domain: "protocol", executionActions: [
+    { adapterId: "deposit", action: "deposit" }, { adapterId: "redeem", action: "redeem" },
+  ] };
+  const proved = (adapterId: string, tokenIn: string, tokenOut: string) => ({ ...row(),
+    stages: { discoveryCheckpoint: { edges: [{ adapterId, tokenIn, tokenOut }] } } });
+  const deposit = proved("deposit", "asset", "share"), redeem = proved("redeem", "share", "asset");
+  const partial = summarizeFamilyTransactionResults(conversion, [deposit], true);
+  assert.equal(partial.result, "incomplete"); assert.equal(partial.passedLegs, 1);
+  assert.deepEqual(partial.missingActions, ["redeem"]);
+  assert.equal(summarizeFamilyTransactionResults(conversion, [deposit, redeem], true).result, "pass");
+  const swap = { ...family, executionActions: [{ adapterId: "swap", action: "swap" }] };
+  assert.equal(summarizeFamilyTransactionResults(swap, [proved("swap", "A", "B")], true).result, "pass");
+  assert.equal(summarizeFamilyTransactionResults(swap, [proved("swap", "B", "A")], true).result, "pass");
+  assert.deepEqual(summarizeFamilyTransactionResults(conversion,
+    [deposit, { ...redeem, evidenceVerified: false }], true).missingActions, ["redeem"]);
+  assert.equal(summarizeFamilyTransactionResults(conversion, [deposit, { ...redeem, status: "failed" }], true).result, "failed");
+});
+
 test("CLI rejects accidental reduced scopes, malformed modes and duplicated options", () => {
   assert.equal(parseFamilyTestArguments([]).offline, false);
   assert.equal(parseFamilyTestArguments(["--offline"]).offline, true);
@@ -66,6 +85,27 @@ test("verified process results pass only while the test and input source remains
   const changed = await round(["--rpc-file", "rpc.json"], { fingerprint: () => ++reads === 1 ? "before" : "after" });
   assert.equal(changed.exitCode, 1); assert.equal(changed.report.sourceStable, false);
 });
+test("main retains missing action samples as incomplete, not execution failure", async () => {
+  const result = await round(["--rpc-file", "rpc.json"], { getFamilies: async () => [{ ...family,
+    executionActions: [{ adapterId: "redeem", action: "redeem" }] }] });
+  assert.equal(result.exitCode, 1, "incomplete evidence cannot open the acceptance gate");
+  assert.equal(result.report.result, "incomplete");
+  assert.equal(result.report.transactions.status, "incomplete");
+  assert.equal(result.report.families[0].passedLegs, 1);
+  assert.deepEqual(result.report.families[0].missingActions, ["redeem"]);
+});
+
+test("an admitted instance with an unimplemented TX action remains a failure outside the implemented action inventory", () => {
+  const f = { ...family, executionActions: [{ adapterId: "deposit", action: "deposit" }] };
+  const deposit = { ...row(), stages: { discoveryCheckpoint: { edges: [{ adapterId: "deposit" }] } } };
+  const unsupported = { ...row(), status: "failed", evidenceVerified: false,
+    legId: "real-tx-unsupported-action", failure: { stage: "discoveryCheckpoint", reason: "case direction/route is absent or ambiguous in admitted instance" } };
+  const result = summarizeFamilyTransactionResults(f, [deposit, unsupported], true);
+  assert.deepEqual(result.missingActions, [], "implemented action sample exists");
+  assert.equal(result.result, "failed", "implemented inventory must not hide a real TX action gap");
+  assert.equal(result.legs.length, 2); assert.equal(result.legs[1].failure, unsupported.failure);
+});
+
 test("a failed leg does not hide the next result; only verified child stages enter passing evidence", async () => {
   const secondFamily = { ...family, familyId: "second" }; let attempts = 0, verifications = 0;
   const result = await round(["--rpc-file", "rpc.json"], {

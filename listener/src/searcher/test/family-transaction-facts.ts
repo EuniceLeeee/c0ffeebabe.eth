@@ -283,7 +283,10 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     assert.equal(report.sourceFingerprint, familyTestSourceFingerprint(ROOT), "source changed while facts ran");
     assert.equal(report.inputFingerprint, familyTransactionInputFingerprint(readFamilyTransaction(transactionPath), leg), "transaction seed changed");
     report.evidence = { ...report.evidence, ready: fileEvidence(readyPath), acceptance: fileEvidence(rawPath) };
-    assert.equal(raw.result, "pass", JSON.stringify({ failure: raw.failure, stages: report.stages }));
+    // This entry verifies one selected action. Broader settlement/route coverage
+    // remains in acceptance.json; it is not evidence of failure of this action.
+    if (leg.domain === "funding") assert.equal(raw.result, "pass", JSON.stringify({ failure: raw.failure, stages: report.stages }));
+    else verifyBasicRouteAcceptance(transactionSimulationCase(transaction, leg), raw, installed.ordinaryRuntimeLeg);
     report.result = "pass"; checkpoint(); stage = "evidenceVerification";
     await verifyFamilyTransactionFactsReport(reportPath, transaction, leg);
   } catch (error) {

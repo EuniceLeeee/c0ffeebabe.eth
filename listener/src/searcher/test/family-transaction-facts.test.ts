@@ -64,6 +64,18 @@ test("historical output is reference-only; current quote and independent simulat
   assert.equal(stages.simulationOutputParity.toleranceRawUnits, 1);
 });
 
+test("single-action facts ignore broader coverage labels but still independently verify every safety control", () => {
+  const { sample, report } = fixture();
+  report.result = "incomplete-or-failed";
+  report.coverage = { unsampledRoutes: [{ tokenIn: sample.trials[0]!.tokenOut, tokenOut: sample.trials[0]!.tokenIn }],
+    settlementGaps: [{ unverified: ["deferred-input"] }] };
+  report.samples[0].result = "partial";
+  assert.equal(verifyBasicRouteAcceptance(sample, report, true).runtimeExecution.status, "pass");
+  assert.equal(report.result, "incomplete-or-failed", "broader coverage evidence must remain unchanged");
+  report.samples[0].executions[1].resultEvidence.effects.tokenDeltas[0].delta = -1n;
+  assert.throws(() => verifyBasicRouteAcceptance(sample, report, true), /no-input|rollback|delta|revert/);
+});
+
 test("quoted/runtime allow exactly one output raw unit, keep signed differences, and reject two", () => {
   for (const encoding of ["quoted", "runtime"]) for (const difference of [-2n, -1n, 0n, 1n, 2n]) {
     const { sample, report } = fixture();

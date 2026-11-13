@@ -108,6 +108,10 @@ export async function getInstalledTransactionFamilies() {
     familyId: String(familyId), domain: plugin.manifest.domain as FamilyTransactionDomain,
     enabled: activation.enabled, envKey: activation.envKey, sourceFile,
     lineages: [...plugin.manifest.supportedLineages],
+    // Owned execution actions, not every token-pair direction in the Graph.
+    executionActions: plugin.actionAdapters.filter(action => plugin.manifest.edgeAdapterIds?.includes(action.id)).map(action => ({
+      adapterId: String(action.id), action: action.descriptor.action,
+    })).sort((a, b) => a.adapterId.localeCompare(b.adapterId)),
     ordinaryRuntimeLeg: "execution" in plugin && typeof plugin.execution.buildRuntimeLeg === "function",
   })).sort((a, b) => a.familyId.localeCompare(b.familyId));
   assert(families.length > 0 && new Set(families.map(row => row.familyId)).size === families.length, "empty/duplicate installed Family catalog");

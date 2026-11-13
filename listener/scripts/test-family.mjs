@@ -39,9 +39,20 @@ export function parseFamilyTestArguments(argv) {
 export function summarizeFamilyTransactionResults(family, legs, offlinePassed) {
   const rows = legs.filter(row => row.familyId === family.familyId), complete = rows.filter(row => row.inputComplete);
   const passed = complete.filter(row => row.status === "pass" && row.evidenceVerified === true);
-  return { ...family, references: rows.length, completeInputs: complete.length, incompleteInputs: rows.length - complete.length, passedLegs: passed.length,
+  const actionCoverage = family.domain === "funding" ? undefined : {
+    unit: "family-owned-route-action",
+    exhaustive: false,
+    boundary: "Known implemented actions only; every registered TX case remains independently required, including actions absent from this inventory.",
+    actions: (family.executionActions ?? []).map(action => {
+      const samples = passed.filter(row => row.stages?.discoveryCheckpoint?.edges?.some(edge => edge.adapterId === action.adapterId));
+      return { ...action, status: samples.length ? "pass" : "sample-missing",
+        samples: samples.map(row => ({ transactionHash: row.transactionHash, legId: row.legId })) };
+    }),
+  };
+  const missingActions = actionCoverage?.actions.filter(action => action.status === "sample-missing").map(action => action.adapterId) ?? [];
+  return { ...family, ...(actionCoverage ? { actionCoverage, missingActions } : {}), references: rows.length, completeInputs: complete.length, incompleteInputs: rows.length - complete.length, passedLegs: passed.length,
     result: !offlinePassed || complete.some(row => row.status === "failed") ? "failed"
-      : complete.length === 0 || complete.length !== rows.length || passed.length !== complete.length ? "incomplete" : "pass",
+      : complete.length === 0 || complete.length !== rows.length || passed.length !== complete.length || missingActions.length > 0 ? "incomplete" : "pass",
     ...(rows.length === 0 ? { missing: ["no registered historical transaction"] } : {}), legs: rows };
 }
 const execute = (args, root, env) => {
@@ -142,9 +153,11 @@ export async function familyTestMain(argv = process.argv.slice(2), hooks = {}) {
     }
   report.sourceStable = fingerprint(root) === sourceFingerprint;
   report.finished = true; report.finishedAt = new Date().toISOString(); save();
-  if (!offline) report.transactions.status = report.families.every(family => family.result === "pass") ? "pass" : "failed";
+  if (!offline) report.transactions.status = report.families.some(family => family.result === "failed") ? "failed"
+    : report.families.some(family => family.result !== "pass") ? "incomplete" : "pass";
   report.result = report.sourceStable && report.offline.status === "pass" && (offline || report.transactions.status === "pass")
-    ? offline ? "offline-contracts-pass" : "pass" : "failed";
+    ? offline ? "offline-contracts-pass" : "pass"
+    : report.sourceStable && report.offline.status === "pass" && report.transactions.status === "incomplete" ? "incomplete" : "failed";
   save();
   const cases = rows.filter(row => row.process).map(row => {
     const stages = row.stages ?? row.reportedStages ?? {};
@@ -159,7 +172,7 @@ export async function familyTestMain(argv = process.argv.slice(2), hooks = {}) {
   if (cases.length) console.table(cases);
   console.table(report.families.map(({ familyId, result, references, completeInputs, passedLegs }) => ({ familyId, result, references, completeInputs, passedLegs })));
   console.log(JSON.stringify({ result: report.result, sourceStable: report.sourceStable, report: resolve(out, "report.json") }));
-  return { exitCode: report.result === "failed" ? 1 : 0, report, reportPath: resolve(out, "report.json") };
+  return { exitCode: ["pass", "offline-contracts-pass"].includes(report.result) ? 0 : 1, report, reportPath: resolve(out, "report.json") };
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   familyTestMain().then(result => { process.exitCode = result.exitCode; }, error => { console.error(safe(error)); process.exitCode = 1; });

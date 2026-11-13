@@ -346,16 +346,26 @@ test("real issuer and central runtime feed quote and both encodings into indepen
     ["executed-as-quoted", "observed-revert", "observed-revert", "executed-as-quoted", "observed-revert", "observed-revert"]);
 });
 
-test("common runner retains effect failures and never promotes missing runtime or direction coverage", async () => {
-  for (const options of [{ fault: "zero-debit" }, { fault: "short-credit" }, { fault: "old-inventory" }, { missingRuntime: true }, { unsampledRoute: true }] as const) {
+test("common runner retains effect failures and never promotes missing runtime", async () => {
+  for (const options of [{ fault: "zero-debit" }, { fault: "short-credit" }, { fault: "old-inventory" }, { missingRuntime: true }] as const) {
     const fixture = await issuedFixture(options), report: any = {};
     await runProtocolJsonAcceptance(fixture.sample, fixture.context, report);
     assert.equal(report.result, "incomplete-or-failed", JSON.stringify(options));
     if ("missingRuntime" in options) { assert.equal(fixture.simulations.length, 0); assert.equal(report.runtimeConstruction.exact, 0); }
-    if ("unsampledRoute" in options) { assert.equal(report.samples[0].result, "pass"); assert.equal(report.coverage.unsampledRoutes.length, 1); }
     if ("fault" in options) { assert.equal(report.samples[0].executions[0].facts.passed, false); assert(report.samples[0].error);
       assert.equal(report.coverage.sampledRoutes, 1); assert.equal(report.coverage.executedRoutes, 0); }
   }
+});
+
+test("a passing action does not require a synthetic reverse-token sample", async () => {
+  const fixture = await issuedFixture({ unsampledRoute: true }), report: any = {};
+  await runProtocolJsonAcceptance(fixture.sample, fixture.context, report);
+  assert.equal(report.result, "pass");
+  assert.equal(report.coverage.routeEnumerationRequired, false);
+  assert.equal(report.coverage.admittedRoutes, 2);
+  assert.equal(report.coverage.sampledRoutes, 1);
+  assert.equal(report.coverage.unsampledRoutes.length, 1);
+  assert.equal(fixture.simulations.length, 6, "only the selected action and its safety controls execute");
 });
 
 test("case source, actor and identity must agree before execution; copying a handle does not forge issuer authority", async () => {
