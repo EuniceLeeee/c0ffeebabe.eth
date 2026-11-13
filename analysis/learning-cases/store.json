@@ -2842,6 +2842,33 @@
       },
       "created_at": "2026-11-13T11:02:38.265104+00:00",
       "updated_at": "2026-11-13T11:02:38.265115+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261113-facts-execution-source",
+      "status": "manual_required",
+      "strategy_kind": "unknown",
+      "edge_kinds": [
+        "swap"
+      ],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "Fact runner conflated immutable transaction observation with selected execution state, preventing explicit parent-state comparison.",
+      "evidence": {
+        "report": "docs/research/reports/family-facts-dual-source-curve-lp-20261113.json",
+        "case": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+        "verdict": "explicit parent source passes Ready, Exact and both executions with zero raw-unit difference; N rejection retained"
+      },
+      "tooling_defect": {
+        "tool": "family-transaction-facts.ts / family-json-ready.ts / strict-identity-attestation.ts",
+        "issue": "One source constrained discovery and execution; later cache binding omitted changed preparation implementation.",
+        "evidence": "/opt/mev-cloud/family-runtime-20261007/logs/dual-vault-parent-verified-20261113/report.json",
+        "codify_target": "Separate source anchors and providers; raw TX nomination guard; independent receipts; proof-context and preparation cache pins",
+        "codify_commit": "31a723ed5e07e579835c56e5663857495503d12b",
+        "status": "codified"
+      },
+      "created_at": "2026-11-13T11:39:58.760182+00:00",
+      "updated_at": "2026-11-13T11:39:58.760196+00:00"
     }
   ]
 }

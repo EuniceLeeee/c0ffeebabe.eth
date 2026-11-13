@@ -1,0 +1,368 @@
+{
+  "version": 1,
+  "scope": "Explicit same-state fact acceptance; Curve plain LP JSON synchronization",
+  "baseline": "f98eac04f9fea971e4470c4789d9d0ee035a1beb",
+  "codeCommit": "31a723ed5e07e579835c56e5663857495503d12b",
+  "policy": {
+    "defaultExecutionSource": "transaction block N",
+    "optionalExecutionSource": "parent N-1; explicitly selected by --execution-source parent",
+    "transactionEvidence": "immutable TX receipt/trace at N; original output is reference only",
+    "executionProof": "Ready identity/Graph, Exact, quoted and runtime all bind one selected execution source",
+    "nomination": "only selected-TX raw call/log can move processing context; occurrence coordinates remain N; state-derived/factory evidence cannot be relabelled",
+    "sourceIsolation": "separate source-bound nomination provider; reverse binding and identity use execution provider",
+    "cache": "Ready binds preparation implementation and explicit proof context; raw TX remains shared; simulation binds source, request, executor, actors and implementation",
+    "automaticFallback": false,
+    "outputToleranceRawUnits": 1,
+    "inputDebitToleranceRawUnits": 0
+  },
+  "curveSynchronization": {
+    "workspace": "/opt/mev-cloud/work/json-all-20261107",
+    "head": "551a9b5d",
+    "sourceWasDirty": true,
+    "file": "listener/src/searcher/venues/swaps/curve-plain-lp-family/curve-plain-lp.json",
+    "sha256": "fb5eb19ed36fbae58cfb81b388c5fdac153328c8702fa3e77908fcc3d597b37d",
+    "change": "Normalize filtered registry handlers and coins to ordinary arrays via concat; no identity predicate or math change"
+  },
+  "regression": {
+    "installedSharedTests": 925,
+    "passed": 924,
+    "failed": 0,
+    "skipped": 1,
+    "buildLive": "pass",
+    "catalogCheck": "pass",
+    "strictIdentityRegression": "pass; default fail-closed paths plus separate provider routing and raw-TX-only source normalization negatives",
+    "independentReview": "facts_source_review; parent receipt verifier, independent provider and state-derived evidence findings addressed"
+  },
+  "cases": [
+    {
+      "transactionHash": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+      "legId": "vault-spot--0",
+      "familyId": "vault-spot",
+      "domain": "swap",
+      "result": "pass",
+      "sourceFingerprint": "b9748ffec620c9f260d4eea0dae730d93e3ae89b649e47cd1715a05914197086",
+      "stateSelection": {
+        "mode": "parent",
+        "evidenceSource": {
+          "number": 26182689,
+          "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c"
+        },
+        "executionSource": {
+          "number": 26182688,
+          "hash": "0x7e0f19531125fe111e576140a23420692fb40a531487c236f3b3fa4eb1687b84"
+        },
+        "evidenceHeader": {
+          "number": "0x18f8421",
+          "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c",
+          "parentHash": "0x7e0f19531125fe111e576140a23420692fb40a531487c236f3b3fa4eb1687b84"
+        }
+      },
+      "seed": {
+        "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "71854376210288490340",
+        "amountScope": "historical-input-at-pinned-end-state"
+      },
+      "stages": {
+        "exact": {
+          "status": "pass",
+          "tokenIn": "0x4d224452801ACEd8B2F0aebE155379bb5D594381",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "requestedAmountIn": "71854376210288490340",
+          "quotedAmountIn": "71854376210288490340",
+          "quotedAmountOut": "4430934597103818"
+        },
+        "quotedExecution": {
+          "status": "pass",
+          "required": true,
+          "actualAmountIn": "71854376210288490340",
+          "actualAmountOut": "4430934597103818",
+          "differenceFromExact": "0",
+          "controls": {
+            "positive": "pass",
+            "noInput": "pass",
+            "forcedRevert": "pass"
+          }
+        },
+        "runtimeExecution": {
+          "status": "pass",
+          "required": true,
+          "actualAmountIn": "71854376210288490340",
+          "actualAmountOut": "4430934597103818",
+          "differenceFromExact": "0",
+          "controls": {
+            "positive": "pass",
+            "noInput": "pass",
+            "forcedRevert": "pass"
+          }
+        },
+        "simulationOutputParity": {
+          "status": "pass",
+          "toleranceRawUnits": 1,
+          "quotedDifference": "0",
+          "runtimeDifference": "0"
+        }
+      },
+      "ready": {
+        "status": "pass",
+        "familyId": "vault-spot",
+        "instanceKey": "0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "lineageId": "vault-spot:gmx-v1-abi",
+        "source": {
+          "number": 26182688,
+          "hash": "0x7e0f19531125fe111e576140a23420692fb40a531487c236f3b3fa4eb1687b84",
+          "generation": 26182688
+        },
+        "memoFingerprint": "42c652929f16297232f7d660c81d1fb31c96fbec6c7abd273a26b80c0afa15c6",
+        "graphHash": "c30ede54424afa1cba9e348688e7054646a0e452ad42784bd4bbc4a09edc6b10"
+      },
+      "rawEvidenceVerification": "pass",
+      "diagnostics": {
+        "directRpcReads": 28,
+        "failures": [],
+        "nodeSimulationRpcReads": "not counted by direct provider",
+        "transactionEvidenceReads": {
+          "directRpcReads": 3,
+          "failures": [],
+          "nodeSimulationRpcReads": "not counted by direct provider"
+        },
+        "simulationErrors": [],
+        "simulationsExecuted": 10,
+        "simulationsReused": 3
+      },
+      "broaderCoverage": "sample evidence only; combine current variant coverage, interface review and production performance evidence",
+      "reportPath": "/opt/mev-cloud/family-runtime-20261007/logs/dual-vault-parent-verified-20261113/report.json",
+      "reportSha256": "ce0ae4aa6d2d3c981330cbd84751b56a22b98b042e13ce9e0505e447c68b2436",
+      "readySha256": "c792798c7e20ee3c5c1f2cdbe0707852188d27f7fd21b53a849a46f73ce7d74d",
+      "acceptanceSha256": "d38b4d81faa2027ca97b86c863e2b8820765234f36cc00b93ca3dd449fca2a7f"
+    },
+    {
+      "transactionHash": "0x818167c4c61e14c0a9f86512a52ab1fb37b4d026e47216c833a1f251b498a5c2",
+      "legId": "curve-plain-lp--0",
+      "familyId": "curve-plain-lp",
+      "domain": "swap",
+      "result": "pass",
+      "sourceFingerprint": "b9748ffec620c9f260d4eea0dae730d93e3ae89b649e47cd1715a05914197086",
+      "stateSelection": {
+        "mode": "transaction",
+        "evidenceSource": {
+          "number": 26373824,
+          "hash": "0x74a1b653943cd2fef59d940c4cb372f139e52e7d5236d255f47a8d3491919e37"
+        },
+        "executionSource": {
+          "number": 26373824,
+          "hash": "0x74a1b653943cd2fef59d940c4cb372f139e52e7d5236d255f47a8d3491919e37"
+        }
+      },
+      "seed": {
+        "tokenIn": "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e",
+        "tokenOut": "0x40d16fc0246ad3160ccc09b8d0d3a2cd28ae6c2f",
+        "amountIn": "13841602413681833810310",
+        "amountScope": "transaction-block-component-control-crvUSD-to-GHO"
+      },
+      "stages": {
+        "exact": {
+          "status": "pass",
+          "tokenIn": "0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E",
+          "tokenOut": "0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f",
+          "requestedAmountIn": "13841602413681833810310",
+          "quotedAmountIn": "13841602413681833810310",
+          "quotedAmountOut": "13793795290676947890183"
+        },
+        "quotedExecution": {
+          "status": "pass",
+          "required": true,
+          "actualAmountIn": "13841602413681833810310",
+          "actualAmountOut": "13793795290676947890183",
+          "differenceFromExact": "0",
+          "controls": {
+            "positive": "pass",
+            "noInput": "pass",
+            "forcedRevert": "pass"
+          }
+        },
+        "runtimeExecution": {
+          "status": "pass",
+          "required": true,
+          "actualAmountIn": "13841602413681833810310",
+          "actualAmountOut": "13793795290676947890183",
+          "differenceFromExact": "0",
+          "controls": {
+            "positive": "pass",
+            "noInput": "pass",
+            "forcedRevert": "pass"
+          }
+        },
+        "simulationOutputParity": {
+          "status": "pass",
+          "toleranceRawUnits": 1,
+          "quotedDifference": "0",
+          "runtimeDifference": "0"
+        }
+      },
+      "ready": {
+        "status": "pass",
+        "familyId": "curve-plain-lp",
+        "instanceKey": "0x635ef0056a597d13863b73825cca297236578595",
+        "lineageId": "curve-plain-lp:ng-stableswap-2coin",
+        "source": {
+          "number": 26373824,
+          "hash": "0x74a1b653943cd2fef59d940c4cb372f139e52e7d5236d255f47a8d3491919e37",
+          "generation": 26373824
+        },
+        "memoFingerprint": "e0c84d77e6b4e64ce2670fab1829543fddaf37e666146d8d872f6e7cd9ca2375",
+        "graphHash": "6262536c206169af62e09446449e461e13b73e88b003476078db61ae42e8e29d"
+      },
+      "rawEvidenceVerification": "pass",
+      "diagnostics": {
+        "directRpcReads": 5,
+        "failures": [],
+        "nodeSimulationRpcReads": "not counted by direct provider",
+        "simulationErrors": [],
+        "simulationsExecuted": 7,
+        "simulationsReused": 0
+      },
+      "broaderCoverage": "sample evidence only; combine current variant coverage, interface review and production performance evidence",
+      "reportPath": "/opt/mev-cloud/family-runtime-20261007/logs/dual-curve-lp-verified-20261113/report.json",
+      "reportSha256": "044ed5814a4aca31156b1e34e23eb8a720e463403aaeb37762bd658b221784dc",
+      "readySha256": "de139e0a907f560171e1658fcfa6ef3b554eac44a2c58e6f57fc0d8a10e8fa7a",
+      "acceptanceSha256": "b2bf93c3ef7d1e84f5fe9c34853cb71cbc0acfbbf901b46b253a234894dc2e0c"
+    },
+    {
+      "transactionHash": "0xc191d9dfd0897d17351e8e699b22aba475a04fccb74508a4b06a7b630b733058",
+      "legId": "vault-spot--0",
+      "familyId": "vault-spot",
+      "domain": "swap",
+      "result": "failed",
+      "sourceFingerprint": "b9748ffec620c9f260d4eea0dae730d93e3ae89b649e47cd1715a05914197086",
+      "stateSelection": {
+        "mode": "transaction",
+        "evidenceSource": {
+          "number": 26182689,
+          "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c"
+        },
+        "executionSource": {
+          "number": 26182689,
+          "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c"
+        }
+      },
+      "seed": {
+        "tokenIn": "0x4d224452801aced8b2f0aebe155379bb5d594381",
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "amountIn": "71854376210288490340",
+        "amountScope": "historical-input-at-pinned-end-state"
+      },
+      "stages": {
+        "exact": {
+          "status": "failed",
+          "requestedAmountIn": "71854376210288490340",
+          "quotedAmountIn": null,
+          "quotedAmountOut": null,
+          "failure": "current amount quote unavailable\n+ actual - expected\n\n+ 'failed'\n- 'resolved'\n"
+        },
+        "quotedExecution": {
+          "status": "not-run",
+          "required": true,
+          "actualAmountIn": null,
+          "actualAmountOut": null,
+          "differenceFromExact": null,
+          "controls": [],
+          "failure": "current amount quote unavailable\n+ actual - expected\n\n+ 'failed'\n- 'resolved'\n"
+        },
+        "runtimeExecution": {
+          "status": "not-run",
+          "required": true,
+          "actualAmountIn": null,
+          "actualAmountOut": null,
+          "differenceFromExact": null,
+          "controls": [],
+          "failure": "current amount quote unavailable\n+ actual - expected\n\n+ 'failed'\n- 'resolved'\n"
+        },
+        "simulationOutputParity": {
+          "status": "failed",
+          "toleranceRawUnits": 1,
+          "failure": "current amount quote unavailable\n+ actual - expected\n\n+ 'failed'\n- 'resolved'\n"
+        }
+      },
+      "ready": {
+        "status": "pass",
+        "familyId": "vault-spot",
+        "instanceKey": "0x2d0aff409bde00451334011d55c141aff2103744:0x4d224452801aced8b2f0aebe155379bb5d594381:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "lineageId": "vault-spot:gmx-v1-abi",
+        "source": {
+          "number": 26182689,
+          "hash": "0xeb0d092ce871b19f4071115a4816a282864c7adf6e6d9c1971e30c61596aa09c",
+          "generation": 26182689
+        },
+        "memoFingerprint": "bc43dc5483068d3bc5b22cd4a3f45059b1e518f4deda5ba22e67a4526c296995",
+        "graphHash": "c30ede54424afa1cba9e348688e7054646a0e452ad42784bd4bbc4a09edc6b10"
+      },
+      "rawEvidenceVerification": "not-applicable: rejected execution",
+      "diagnostics": {
+        "directRpcReads": 29,
+        "failures": [],
+        "nodeSimulationRpcReads": "not counted by direct provider",
+        "simulationErrors": [],
+        "simulationsExecuted": 1,
+        "simulationsReused": 0
+      },
+      "broaderCoverage": "sample evidence only; combine current variant coverage, interface review and production performance evidence",
+      "reportPath": "/opt/mev-cloud/family-runtime-20261007/logs/dual-vault-N-control-20261113/report.json",
+      "reportSha256": "5007075548b801d058020e324c01c0424f686e18091d51964791810b5650954b",
+      "readySha256": "797ceae311cabdb7013632e7669c47806f8f8c9a57be19d007356bcfff65c9dd",
+      "acceptanceSha256": "6e8fee4de099c5bf71d00cd97ede7fbdb9ddc8e8fc8421a23b5fca796f231c1b"
+    }
+  ],
+  "cacheReplay": {
+    "result": "pass",
+    "ready": {
+      "status": "reused",
+      "key": "bfe9eb54ef1fe4c828bd673f5babc92112daff07638183c70c6ef31552a842b5",
+      "recordedAt": "2026-11-13T11:32:51.453Z"
+    },
+    "transactionEvidence": {
+      "receipt": "reused",
+      "trace": "reused",
+      "canonicalRpcReads": 1
+    },
+    "diagnostics": {
+      "directRpcReads": 28,
+      "failures": [],
+      "nodeSimulationRpcReads": "not counted by direct provider",
+      "transactionEvidenceReads": {
+        "directRpcReads": 3,
+        "failures": [],
+        "nodeSimulationRpcReads": "not counted by direct provider"
+      },
+      "simulationErrors": [],
+      "simulationsExecuted": 0,
+      "simulationsReused": 13
+    },
+    "reportPath": "/opt/mev-cloud/family-runtime-20261007/logs/dual-vault-cache-verified-20261113/report.json",
+    "reportSha256": "883e01b915108c052344838640bde7539e84a432c147a42a8c0c879ec8b62517"
+  },
+  "retainedDevelopmentFailures": [
+    "logs/dual-source-vault-parent-20261113: no_catalog_match",
+    "logs/dual-source-vault-parent-wired-20261113: lifecycle source mismatch",
+    "logs/dual-source-vault-parent-bound-20261113: reused pre-fix cached rejection"
+  ],
+  "reconciliation": {
+    "query": [
+      "family",
+      "json",
+      "verification"
+    ],
+    "tool": "listener:test:family-json",
+    "manifest": "/tmp/dual-source-tool-manifest.json",
+    "sha256": "066e517ff2793b94a161c9acc2151bf63babdb1677ea1f7d610872682e76bc07",
+    "exitCode": 0,
+    "outcome": "agrees; shared installed regression and direct trusted fact runner verify the new source boundary"
+  },
+  "limitations": [
+    "N-1 is parent-block end, not original transaction pre-call state; no original output replay claim.",
+    "N rejection is preserved; N-1 success does not identify which original transaction changed reserves.",
+    "Results cover the selected registered cases, not every variant, execution action or settlement capability.",
+    "No representative performance experiment or live run; no deployed contract or live settings changed.",
+    "No global Ready rebuild; only bounded test Ready for the selected instances."
+  ]
+}
