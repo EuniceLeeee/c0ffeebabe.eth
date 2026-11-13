@@ -559,7 +559,9 @@ async function supervise(options, profile, release) {
       counting: 'source heights beginning after first state-ready single-transition pass; gaps count',
       createdAt: new Date(now).toISOString() });
     const env = { PATH: '/usr/local/bin:/usr/bin:/bin', ...config, MAINNET_RPC_URL: check.endpoint,
-      OWNER_PRIVATE_KEY: secret, SEARCHER_RUNTIME_COMMIT: release.head };
+      OWNER_PRIVATE_KEY: secret, SEARCHER_RUNTIME_COMMIT: release.head,
+      SEARCHER_PREPARED_READY_GENERATION: String(runReady.generation),
+      SEARCHER_PREPARED_READY_SHA256: runReady.readySha256 };
     child = spawn(profile.node, ['--max-old-space-size=11264', '--import', 'tsx', 'src/searcher/main.ts'],
       { cwd: join(profile.release, 'runtime/listener'), env, stdio: ['ignore', 'pipe', 'pipe'] });
     record('process', { pid: child.pid, unit: UNIT, startedAt: new Date().toISOString() });
@@ -573,7 +575,13 @@ async function supervise(options, profile, release) {
           const observed = window.observe(line, runReady.generation);
           if (observed?.activated) { writeAtomic(permitPath, window.permit); record('window', observed); }
           if (observed?.completed) stop('completed_source_window');
-        } catch { stop('observer_failed'); }
+        } catch (error) {
+          stopDetails = { ...failureEvidence(error, 'observe_searcher_output'),
+            expectedReadyGeneration: runReady.generation,
+            observedReadyGeneration: /strict ready catalog loaded: generation=(\d+)/.exec(line)?.[1] ?? null,
+            lineSha256: sha(redact(line)) };
+          stop('observer_failed');
+        }
       });
     }
     // Sequential renewal; the independent expiry timer stops the run even if an RPC never settles.

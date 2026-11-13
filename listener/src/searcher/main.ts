@@ -2,7 +2,7 @@ import { NodeStrictClient } from "./simulator/node-strict-client.js";
 import { createNodeFundingCache } from "./simulator/node-input-funding.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { BlockScanStartupCache, startupCacheNamespace } from "./blockscan-startup-cache.js";
 import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveReadySubsetPriceMode, liveContinuationIdentity, compatibleLiveContinuationIdentities, liveContinuationPointer, reconcileLiveContinuationFamilies, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
@@ -1527,11 +1527,23 @@ export function readyStartupReviewPlan(
   });
 }
 
+/** The launcher seals its activation preflight output; ordinary Ready updates have no seal. */
+export function readPreparedReadySeal(env: NodeJS.ProcessEnv) {
+  const generation = env.SEARCHER_PREPARED_READY_GENERATION;
+  const sha256 = env.SEARCHER_PREPARED_READY_SHA256;
+  if (generation === undefined && sha256 === undefined) return undefined;
+  if (!generation || !/^[1-9][0-9]*$/.test(generation) ||
+      !Number.isSafeInteger(Number(generation)) || !sha256 || !/^[a-f0-9]{64}$/.test(sha256)) {
+    throw new Error("prepared Ready requires a generation and checkpoint SHA256");
+  }
+  return Object.freeze({ generation: Number(generation), sha256 });
+}
+
 /** Keep checkpoint ownership inside startup; producers retain only runtime projections. */
 export async function initializeReadyProducer({
   universeRebuildCheckpointPath, rpcUrl, startupCandidates, executionIdentity,
   onSimulationFatal, blindUseIncumbentReady, useReadyGeneration, currentHead,
-  boundedLiveReadyResume = false,
+  boundedLiveReadyResume = false, preparedReady,
 }: {
   readonly universeRebuildCheckpointPath: string;
   readonly rpcUrl: string;
@@ -1542,6 +1554,7 @@ export async function initializeReadyProducer({
   readonly useReadyGeneration: boolean;
   readonly currentHead: number;
   readonly boundedLiveReadyResume?: boolean;
+  readonly preparedReady?: ReturnType<typeof readPreparedReadySeal>;
 }) {
   const subsetPriceMode = liveReadySubsetPriceMode(process.env);
   const liveSubset = subsetPriceMode !== undefined;
@@ -1552,6 +1565,17 @@ export async function initializeReadyProducer({
       (!drySubset && !liveResume) ||
       process.env.SEARCHER_ENABLE_BACKRUN !== "0" || process.env.SEARCHER_ENABLE_MEMPOOL !== "0")) {
     throw new Error("Ready subset requires a sealed dry-run or a bounded live resume");
+  }
+  if (preparedReady) {
+    if (!useReadyGeneration || blindUseIncumbentReady) {
+      throw new Error("prepared Ready requires explicit Ready consumption");
+    }
+    if (existsSync(universeRebuildCheckpointPath + ".attestation-journal")) {
+      throw new Error("prepared Ready cannot consume an unsealed attestation journal");
+    }
+    const hash = createHash("sha256");
+    for await (const chunk of createReadStream(universeRebuildCheckpointPath)) hash.update(chunk);
+    if (hash.digest("hex") !== preparedReady.sha256) throw new Error("prepared Ready checkpoint hash changed");
   }
   const rebuildStore = new UniverseRebuildCheckpointStore({
     path: universeRebuildCheckpointPath,
@@ -1564,7 +1588,7 @@ export async function initializeReadyProducer({
   });
   let rebuildEnvelope = await rebuildStore.load();
   let readyUniverse;
-  if (blindUseIncumbentReady || liveSubset) {
+  if (blindUseIncumbentReady || liveSubset || preparedReady) {
     if (
       rebuildEnvelope === null ||
       rebuildEnvelope.readyGeneration === null ||
@@ -1621,10 +1645,18 @@ export async function initializeReadyProducer({
   ) {
     throw new Error("strict startup readyGeneration failed root verification");
   }
+  if (preparedReady) {
+    if (readyUniverse.generation !== preparedReady.generation) throw new Error("prepared Ready generation changed");
+    await rebuildWiring.assertCanonicalHead(readyUniverse.cutoff);
+    const coverage = new Set(readyUniverse.sourceCoverage.map(row => row.familyId + "|" + row.sourceId));
+    if (!rebuildWiring.requiredSourceCoverageKeys().every(key => coverage.has(key))) {
+      throw new Error("prepared Ready lacks active Family source coverage; update Ready first");
+    }
+  }
   if (blindUseIncumbentReady || useReadyGeneration) {
     console.log(
       "[searcher/startup] " +
-        (blindUseIncumbentReady ? "blind replay" : liveSubset ? "Ready subset" : "Ready input review") +
+        (blindUseIncumbentReady ? "blind replay" : liveSubset ? "Ready subset" : preparedReady ? "Prepared Ready" : "Ready input review") +
         " uses readyGeneration=" +
         readyUniverse.generation + " cutoff=" + readyUniverse.cutoff.number +
         " activeInstances=" + readyUniverse.activeInstanceKeys.length +
@@ -1649,7 +1681,7 @@ export async function initializeReadyProducer({
   const activeReadyMemos = liveIds
     ? sealedMemos.filter(memo => liveIds.has(memo.familyId))
     : sealedMemos;
-  if (liveIds && activeReadyMemos.some(memo => !rebuildWiring.isReadyMemoDefinitionCurrent!(memo))) {
+  if ((liveIds || preparedReady) && activeReadyMemos.some(memo => !rebuildWiring.isReadyMemoDefinitionCurrent!(memo))) {
     throw new Error("retained live Family proof changed; update Ready before resuming");
   }
   assertReadyFamilyActivation(activeReadyMemos, rebuildWiring.isFamilyEnabled);
@@ -1686,6 +1718,11 @@ export async function initializeReadyProducer({
     throw new Error(
       "strict startup readyGeneration lost an active memo/instance",
     );
+  }
+  if (preparedReady && !liveIds) {
+    const publications = rebuildWiring.aggregateOnceByFamily([...readyInstances, ...fundingReadyEntries]);
+    rebuildWiring.assertReadyGraphSnapshot!({ publications, graphSnapshot: readyUniverse.graphSnapshot,
+      cutoff: readyUniverse.cutoff });
   }
   const flashTokens = Object.freeze([...new Set(fundingReadyEntries.map(
     (entry) => ethers.getAddress(entry.asset).toLowerCase(),
@@ -2511,6 +2548,7 @@ async function main(): Promise<void> {
     universeRebuildCheckpointPath, rpcUrl: config.rpcUrl, startupCandidates,
     executionIdentity, onSimulationFatal, blindUseIncumbentReady,
     useReadyGeneration, currentHead: discoveryToBlock, boundedLiveReadyResume,
+    preparedReady: readPreparedReadySeal(process.env),
   });
   // Transition-only pool views remain useful for detector metadata, but no
   // longer grant identity or Graph admission. readyGeneration is the sole

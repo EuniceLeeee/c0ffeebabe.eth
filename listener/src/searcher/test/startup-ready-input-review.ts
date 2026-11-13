@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { createHash } from "node:crypto";
 import ts from "typescript";
 import { canonicalJson } from "../universe-rebuild-checkpoint.js";
 
@@ -16,10 +17,12 @@ function functionSource(name: string): string {
   return fn.getText(parsed).replace(/^export /, "");
 }
 const dependencies = ["liveReadySubsetPriceMode", "UniverseRebuildCheckpointStore", "createRebuildWiring",
-  "rebuildUniverse", "UniverseRunIncomplete", "resolveStrictReadyRuntime", "canonicalJson", "console", "process"];
+  "rebuildUniverse", "UniverseRunIncomplete", "resolveStrictReadyRuntime", "canonicalJson", "console", "process", "createReadStream", "createHash", "existsSync",
+  "sealedReadyMemos", "assertReadyFamilyActivation", "PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG",
+  "ethers", "StrictProductionRuntimeRoot", "StrictReadyGraphViewCoordinator", "resolveProducerBaseline"];
 const factory = new Function(...dependencies, ts.transpileModule(
-  functionSource("readyStartupReviewPlan") + "\n" + functionSource("initializeReadyProducer") +
-    "\nreturn { initializeReadyProducer, readyStartupReviewPlan };",
+  functionSource("readPreparedReadySeal") + "\n" + functionSource("readyStartupReviewPlan") + "\n" + functionSource("initializeReadyProducer") +
+    "\nreturn { initializeReadyProducer, readyStartupReviewPlan, readPreparedReadySeal };",
   { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } },
 ).outputText);
 
@@ -32,14 +35,16 @@ const completeCandidates = Object.freeze([
 const identity = Object.freeze({ executor: "0x" + "33".repeat(20), transactionOrigin: "0x" + "44".repeat(20) });
 function checkpoint(partitioned = true): any {
   return { revision: 1, readyGeneration: { generation: 4, cutoff, universeRange: range,
-    activeInstanceKeys: ["verified:a"], ...(partitioned ? { familyPartitions: {} } : {}) },
+    activeInstanceKeys: ["verified:a", "verified:funding"],
+    sourceCoverage: [{familyId:"fixture:a",sourceId:"startup"},{familyId:"fixture:b",sourceId:"startup"}],
+    graphSnapshot: {edges:[{canonicalEdgeId:"edge:a"}]}, appliedThrough: cutoff, ...(partitioned ? { familyPartitions: {} } : {}) },
     inProgressRun: null, retryableAttemptsByCandidateKey: {} };
 }
 class Incomplete extends Error {
   constructor(readonly runId: string, readonly remainingUnaccounted: number) { super("incomplete"); }
 }
 
-function harness(initial = checkpoint(), env: Record<string, string> = {}, fail?: Error) {
+function harness(initial = checkpoint(), env: Record<string, string> = {}, fail?: Error, assemble = false) {
   const reachedRuntime = new Error("selection completed; stop before runtime assembly");
   const calls: any[] = [], wiringInputs: any[] = [], canonicalChecks: unknown[] = [];
   const projections: unknown[] = [];
@@ -48,8 +53,14 @@ function harness(initial = checkpoint(), env: Record<string, string> = {}, fail?
     constructor(readonly options: unknown) {}
     async load() { return envelope; }
   }
+  const checks: string[] = [];
   const wiring = {
     completeInputMarker: completeCandidates,
+    isReadyMemoDefinitionCurrent: (_memo: unknown) => { checks.push("definition"); return true; },
+    isFamilyEnabled: (_id: string) => true,
+    rehydrateVerifiedInstance: ({memo}: any) => { checks.push("rehydrate"); return memo; },
+    aggregateOnceByFamily: (instances: unknown[]) => instances,
+    assertReadyGraphSnapshot: (_input: unknown) => { checks.push("graph"); },
     readyReviewInputFingerprint: () => "f".repeat(64),
     familyDefinitionHash: (id: string) => id + ":current",
     requiredSourceCoverageKeys: () => ["fixture:a|startup", "fixture:b|startup"],
@@ -70,10 +81,17 @@ function harness(initial = checkpoint(), env: Record<string, string> = {}, fail?
       return ready;
     },
     Incomplete,
-    (ready: unknown) => { projections.push(ready); throw reachedRuntime; },
+    (ready: any) => { projections.push(ready); if (!assemble) throw reachedRuntime; return {graph:ready.graphSnapshot.edges}; },
     canonicalJson,
     { log: () => {} },
     { env },
+    async function* () { yield Buffer.from("sealed checkpoint"); }, createHash, () => env.TEST_JOURNAL === "1",
+    () => [{familyId:"fixture:a",instanceKey:"verified:a"},
+      {familyId:"fixture:funding",instanceKey:"verified:funding",asset:identity.executor}],
+    (memos: any[], enabled: (id: string)=>boolean) => { checks.push("activation"); assert(memos.every(m=>enabled(m.familyId)), "disabled Family"); },
+    {forStrictFamily: (id: string) => ({plugin:{manifest:{domain:id==="fixture:funding"?"funding":"protocol"}}})},
+    {getAddress:(address:string)=>address}, class {}, class {},
+    ({ready}: any) => ({ready, activeInstanceKeys:new Set(ready.activeInstanceKeys), observationScanFrom:101}),
   );
   const invoke = (overrides: Record<string, unknown> = {}) => functions.initializeReadyProducer({
     universeRebuildCheckpointPath: "/offline/checkpoint.json", rpcUrl: "http://offline.invalid",
@@ -82,7 +100,7 @@ function harness(initial = checkpoint(), env: Record<string, string> = {}, fail?
   });
   const selected = (overrides?: Record<string, unknown>) =>
     assert.rejects(invoke(overrides), (error: unknown) => error === reachedRuntime);
-  return { ...functions, calls, wiringInputs, canonicalChecks, projections, wiring, invoke, selected,
+  return { ...functions, calls, wiringInputs, canonicalChecks, projections, wiring, invoke, selected, checks,
     rollingFreezes: () => rollingFreezes };
 }
 
@@ -184,4 +202,60 @@ test("reuse still requires a sealed parent and reports unfinished runner work as
   const h = harness(checkpoint(), {}, new Incomplete("sealed-review", 2));
   await assert.rejects(h.invoke(), /run=sealed-review remainingUnaccounted=2.*resume the durable run/);
   assert.equal(h.projections.length, 0);
+});
+
+const preparedSeal = Object.freeze({generation:4,sha256:createHash("sha256").update("sealed checkpoint").digest("hex")});
+test("prepared Ready consumes the sealed graph through production assembly without discovery or attestation", async () => {
+  const h = harness(checkpoint(), {}, undefined, true);
+  const result = await h.invoke({preparedReady:preparedSeal});
+  assert.equal(result.lineage.generation,4);
+  assert.equal(result.instanceCount,1);
+  assert.equal(result.graph.length,1);
+  assert.equal(h.calls.length,0);
+  assert.deepEqual(h.canonicalChecks,[cutoff]);
+  assert.deepEqual(h.checks,["definition","definition","activation","rehydrate","rehydrate","graph"]);
+});
+
+test("prepared Ready fails closed on changed bytes/generation, incomplete inputs and missing coverage", async () => {
+  for (const [state, seal, error] of [
+    [checkpoint(), {...preparedSeal,sha256:"0".repeat(64)}, /checkpoint hash changed/],
+    [checkpoint(), {...preparedSeal,generation:5}, /generation changed/],
+    [{...checkpoint(),inProgressRun:{runId:"pending"}},preparedSeal,/complete Ready checkpoint/],
+    [null,preparedSeal,/complete Ready checkpoint/],
+    [{...checkpoint(),readyGeneration:{...checkpoint().readyGeneration,sourceCoverage:[]}},preparedSeal,/source coverage/],
+  ] as const) {
+    const h=harness(state,{},undefined,true);
+    await assert.rejects(h.invoke({preparedReady:seal}),error);
+    assert.equal(h.calls.length,0);
+  }
+  const h=harness();
+  await assert.rejects(h.invoke({preparedReady:preparedSeal,useReadyGeneration:false}),/explicit Ready consumption/);
+});
+
+test("prepared Ready rejects an unsealed side journal before loading", async () => {
+  const h=harness(checkpoint(),{TEST_JOURNAL:"1"},undefined,true);
+  await assert.rejects(h.invoke({preparedReady:preparedSeal}),/unsealed attestation journal/);
+  assert.equal(h.calls.length,0);
+  assert.equal(h.projections.length,0);
+});
+
+test("prepared Ready preserves canonical, definition, activation and Graph rejection", async () => {
+  for (const stage of ["canonical","definition","activation","graph"]) {
+    const h=harness(checkpoint(),{},undefined,true);
+    if(stage==="canonical")h.wiring.assertCanonicalHead=async()=>{throw new Error("canonical mismatch");};
+    if(stage==="definition")h.wiring.isReadyMemoDefinitionCurrent=()=>false;
+    if(stage==="activation")h.wiring.isFamilyEnabled=()=>false;
+    if(stage==="graph")h.wiring.assertReadyGraphSnapshot=()=>{throw new Error("graph mismatch");};
+    await assert.rejects(h.invoke({preparedReady:preparedSeal}),/canonical mismatch|proof changed|disabled Family|graph mismatch/);
+    assert.equal(h.calls.length,0);
+  }
+});
+
+test("prepared seal is optional but never accepts an incomplete or malformed launcher binding",()=>{
+  const h=harness();
+  assert.equal(h.readPreparedReadySeal({}),undefined);
+  assert.deepEqual(h.readPreparedReadySeal({SEARCHER_PREPARED_READY_GENERATION:"4",SEARCHER_PREPARED_READY_SHA256:preparedSeal.sha256}),preparedSeal);
+  for(const env of [{SEARCHER_PREPARED_READY_GENERATION:"4"},{SEARCHER_PREPARED_READY_SHA256:preparedSeal.sha256},
+    {SEARCHER_PREPARED_READY_GENERATION:"4junk",SEARCHER_PREPARED_READY_SHA256:preparedSeal.sha256},
+    {SEARCHER_PREPARED_READY_GENERATION:"4",SEARCHER_PREPARED_READY_SHA256:"invalid"}])assert.throws(()=>h.readPreparedReadySeal(env),/generation and checkpoint SHA256/);
 });

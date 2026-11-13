@@ -19,6 +19,7 @@ const base = {
   SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT: '0.02', SEARCHER_BLOCKSCAN_MAX_CANDIDATES: '10',
   SEARCHER_BLOCKSCAN_REFINE_CANDIDATES: '512', SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED: '1',
   SEARCHER_BLOCKSCAN_POOL_REVERT_FILTER: '1',
+  SEARCHER_PREPARED_READY_GENERATION: '999', SEARCHER_PREPARED_READY_SHA256: 'untrusted-old-config',
 };
 const bind = (body, deps) => new Function(...Object.keys(deps), `return (${body});`)(...Object.values(deps));
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
@@ -37,6 +38,7 @@ async function lifecycle(scenario) {
   const files = new Map([[options.profile, 'profile'], [join(run, 'request.json'), request],
     [join(run, 'config.json'), config], [credential, { OWNER_PRIVATE_KEY: 'mock-not-a-key' }],
     [config.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH, 'ready']]);
+  const lines = [];
   const events = [], timers = new Map(); let timerId = 0, spawnCount = 0, closeScheduled = false, oom = false;
   let now = 100000, resolveRpc, rejectRpc, rpcCalls = 0;
   const deadlines = [], renewals = [];
@@ -111,7 +113,12 @@ async function lifecycle(scenario) {
       if (scenario === 'revoke-and-unlink-failure' && file === join(run, 'permit.json')) throw new Error('mock unlink failure');
       events.push('unlink:' + file + ':closed=' + child.closed); files.delete(file);
     },
-    spawn(command, args) { spawnCount++; assert.equal(command, profile.node); assert(args.includes('--max-old-space-size=11264')); return child; }, createInterface() { return new EventEmitter(); },
+    spawn(command, args, options) {
+      spawnCount++; assert.equal(command, profile.node); assert(args.includes('--max-old-space-size=11264'));
+      assert.equal(options.env.SEARCHER_PREPARED_READY_GENERATION, '7');
+      assert.equal(options.env.SEARCHER_PREPARED_READY_SHA256, release.readySha256);
+      return child;
+    }, createInterface() { const line = new EventEmitter(); lines.push(line); return line; },
     statfsSync() { return { bavail: 10, bsize: 1024 ** 3 }; },
     setTimeout(fn, ms) { const id = ++timerId; timers.set(id, { fn: () => { timers.delete(id); return fn(); }, ms }); return id; },
     clearTimeout(id) { timers.delete(id); },
@@ -181,6 +188,16 @@ async function lifecycle(scenario) {
     assert(![...timers.values()].some(t => t.ms === 1000), 'a permanent failure must not schedule a retry');
     assert.equal(files.get(join(run, 'stop-reason.json')).details.code, 'HTTP_401');
     const kill = [...timers.values()].find(t => t.ms === 60000); assert(kill); kill.fn();
+  } else if (scenario === 'observer-generation') {
+    expectedReason = 'observer_failed';
+    lines[0].emit('line', '[searcher/live] strict ready catalog loaded: generation=8 cutoff=100');
+    const details = files.get(join(run, 'stop-reason.json')).details;
+    assert.equal(details.phase, 'observe_searcher_output');
+    assert.equal(details.expectedReadyGeneration, 7);
+    assert.equal(details.observedReadyGeneration, '8');
+    assert.match(details.lineSha256, /^[a-f0-9]{64}$/);
+    assert(!JSON.stringify(details).includes('mock-not-a-key'));
+    const kill = [...timers.values()].find(t => t.ms === 60000); assert(kill); kill.fn();
   } else if (scenario === 'oom-signal') {
     expectedReason = 'memory_oom_kill'; oom = true; proc.emit('SIGTERM', 'SIGTERM');
     const kill = [...timers.values()].find(t => t.ms === 60000); assert(kill); kill.fn();
@@ -216,7 +233,7 @@ async function lifecycle(scenario) {
   if (scenario === 'revoke-write-failure') assert.equal(files.has(join(run, 'permit.json')), false);
   if (scenario.startsWith('revoke-')) assert.equal(events.find(e => e.startsWith('signal:')), 'signal:SIGKILL');
 }
-for (const scenario of ['activation-failure', 'record-failure', 'renewal-failure', 'renewal-permanent', 'revoke-write-failure', 'revoke-and-unlink-failure', 'child-error', 'oom-signal',
+for (const scenario of ['observer-generation', 'activation-failure', 'record-failure', 'renewal-failure', 'renewal-permanent', 'revoke-write-failure', 'revoke-and-unlink-failure', 'child-error', 'oom-signal',
   'slow-renewal', 'renewal-timeout', 'expired-renewal', 'expired-rejection', 'delayed-expiry-callback']) {
   test('supervisor cleanup: ' + scenario, { timeout: 1000 }, () => lifecycle(scenario));
 }
