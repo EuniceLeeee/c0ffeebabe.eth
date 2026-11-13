@@ -18,6 +18,42 @@ export interface TransactionReadyTarget {
   instanceKey: string;
 }
 
+/** Shared production TX transport/cache, also used after a Ready cache hit. */
+export async function readFamilyTransactionEvidence(input: {
+  rpcUrl: string; directory: string; transactionHash: string;
+  source: { number: number; hash: string; generation: number };
+  traceSend?: (method: string, params: readonly unknown[]) => Promise<unknown>;
+}) {
+  const { ReadyTransactionReader, parseReadyTransactionInput } = await import("../ready-transaction-input.js");
+  const provider = new JsonRpcProvider(input.rpcUrl, 1, { staticNetwork: true });
+  const reads = { receipt: 0, trace: 0, canonical: 0 };
+  const send = (method: string, params: readonly unknown[]) => {
+    if (method === "eth_getTransactionReceipt") reads.receipt++;
+    if (method === "eth_getBlockByNumber") reads.canonical++;
+    return provider.send(method, [...params]);
+  };
+  const { observationsFromSelectedTransaction } = await import("../universe-rebuild-production.js");
+  const reader = new ReadyTransactionReader({
+    selection: parseReadyTransactionInput(`transaction_hash,block_number,block_hash\n${input.transactionHash},${input.source.number},${input.source.hash}`),
+    cacheDir: resolve(input.directory, "transactions", input.source.hash),
+    concurrency: 1, attempts: 1, send, traceSend: (method, params) => {
+      reads.trace++; return (input.traceSend ?? send)(method, params);
+    },
+  });
+  let result: import("../ready-transaction-input.js").ReadyTransactionEvidence | undefined;
+  try {
+    assert.deepEqual(await reader.prepare(), { fromBlock: input.source.number, toBlock: input.source.number });
+    await reader.scan(input.source, async evidence => {
+      assert(!result, "multiple selected TXs");
+      observationsFromSelectedTransaction(evidence, [], new Set()); // Validate before the reader seals its cache.
+      result = evidence;
+    });
+    assert(result, "selected TX evidence unavailable");
+    return { ...result, cache: { receipt: reads.receipt ? "read" : "reused", trace: reads.trace ? "read" : "reused",
+      canonicalRpcReads: reads.canonical } };
+  } finally { provider.destroy(); }
+}
+
 /** TX receipt/trace transport is the existing Ready reader. Decode with the
  * production Catalog, then submit its candidates to normal Ready attestation.
  * No address, descriptor, graph edge or successful identity is synthesized. */
@@ -31,23 +67,15 @@ export async function discoverTransactionReadyInput(input: {
   source: { number: number; hash: string; generation: number };
 }) {
   const { wiring, source, target, familyId, activityArchive, directory } = input;
-  const [{ ReadyTransactionReader, parseReadyTransactionInput }, discovery] = await Promise.all([
-    import("../ready-transaction-input.js"), import("../universe-rebuild-production.js"),
-  ]);
+  const discovery = await import("../universe-rebuild-production.js");
   // One canonical block archive shared by every tested Family. This is also
   // the source used by the normal Ready scanner, not another trace RPC path.
   await withFamilyFactCacheLock(resolve(directory, "activity", familyFactCacheKey(source)), async () => {
     await wiring.scanSwapWindow({ fromBlock: source.number, cutoff: source });
   });
-  const provider = new JsonRpcProvider(input.rpcUrl, 1, { staticNetwork: true });
-  const selection = parseReadyTransactionInput(
-    `transaction_hash,block_number,block_hash\n${target.transactionHash},${source.number},${source.hash}`,
-  );
   const observations: unknown[] = [];
-  let status: 0 | 1 | undefined;
-  const reader = new ReadyTransactionReader({ selection,
-    cacheDir: resolve(directory, "transactions", source.hash), concurrency: 1, attempts: 1,
-    send: (method, params) => provider.send(method, [...params]),
+  const evidence = await readFamilyTransactionEvidence({ rpcUrl: input.rpcUrl, directory,
+    transactionHash: target.transactionHash, source,
     traceSend: async (method, params) => {
       assert.equal(params[0], target.transactionHash);
       if (method === "trace_transaction") {
@@ -62,17 +90,10 @@ export async function discoverTransactionReadyInput(input: {
       return (matches[0] as any).result;
     },
   });
-  try {
-    const range = await reader.prepare();
-    assert.deepEqual(range, { fromBlock: source.number, toBlock: source.number });
-    await reader.scan(source, async evidence => {
-      status = evidence.receipt.status;
-      const decoded = discovery.observationsFromSelectedTransaction(evidence,
-        discovery.strictCatalogLogTopics(), new Set(discovery.strictCatalogCallPatterns().map(pattern => pattern.selector.toLowerCase())));
-      observations.push(...decoded.logs, ...decoded.calls);
-    });
-  } finally { provider.destroy(); }
-  assert.equal(status, 1, "registered sample TX reverted on chain");
+  assert.equal(evidence.receipt.status, 1, "registered sample TX reverted on chain");
+  const decoded = discovery.observationsFromSelectedTransaction(evidence,
+    discovery.strictCatalogLogTopics(), new Set(discovery.strictCatalogCallPatterns().map(pattern => pattern.selector.toLowerCase())));
+  observations.push(...decoded.logs, ...decoded.calls);
   // Other installed Families may recognize other pools in this TX. Their
   // absence/rejection is not a failure of the Family under acceptance.
   const all = observations.flatMap(raw => (raw as any).kind === "call"
@@ -164,6 +185,43 @@ export async function assertAcceptanceReadyTarget(envelope: StartupCheckpointEnv
   });
   return { familyId: sample.familyId, instanceKey: sample.instanceKey, lineageId: sample.lineageId,
     source: ready.cutoff, memoFingerprint: memo.memoFingerprint, graphHash: ready.graphHash, edges };
+}
+
+/** Enumerate proven production routes, never classify a TX in the test layer. */
+export async function transactionReadyRoutes(envelope: StartupCheckpointEnvelope, input: {
+  source: { number: number; hash: string }; executor: string; owner: string;
+}): Promise<import("./family-transaction-matching.js").ObservedReadyRoute[]> {
+  const [{ activeReadyMemos }, { resolveStrictReadyRuntime }, { createRebuildWiring },
+    { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog }, { projectFamilyRouteGraph }] = await Promise.all([
+    import("../universe-rebuild-checkpoint.js"), import("../strict-ready-runtime.js"),
+    import("../universe-rebuild-production.js"), import("../venues/production-family-composition.js"),
+    import("../adapter-family-graph-runtime.js"),
+  ]);
+  assert.equal(envelope.inProgressRun, null, "matching requires a committed checkpoint");
+  const { ready, graph } = resolveStrictReadyRuntime(envelope.readyGeneration);
+  assert.equal(ready.cutoff.number, input.source.number);
+  assert.equal(ready.cutoff.hash.toLowerCase(), input.source.hash.toLowerCase());
+  const memos = activeReadyMemos(envelope);
+  const wiring = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1", familyIds: [...new Set(memos.map(m => m.familyId))],
+    executionIdentity: { executor: input.executor, transactionOrigin: input.owner } });
+  const result: import("./family-transaction-matching.js").ObservedReadyRoute[] = [];
+  for (const memo of memos) {
+    assert(wiring.isReadyMemoDefinitionCurrent?.(memo), "matching Ready definition is stale");
+    const family = catalog.forStrictFamily(memo.familyId as never);
+    if (family.plugin.manifest.domain !== "protocol" && family.plugin.manifest.domain !== "swap") continue;
+    const instance = wiring.rehydrateVerifiedInstance({ memo, cutoff: ready.cutoff }) as import("../venues/adapter-family-runtime.js").PreparedFamilyInstance;
+    for (const route of instance.routes) {
+      const handle = instance.routeHandles.find(h => h.routeKey === route.routeKey); assert(handle);
+      const edge = projectFamilyRouteGraph({ family: family as import("../venues/family-capability-catalog.js").LoadedFamilyPlugin,
+        descriptor: instance.descriptor, route, handle }).edge;
+      assertUniqueAcceptanceGraphEdge(graph, edge);
+      const action = family.plugin.actionAdapters.find(a => a.id === edge.adapterId); assert(action, "route action missing");
+      result.push({ familyId: memo.familyId, instanceKey: instance.instanceKey, lineageId: instance.descriptor.lineageId,
+        routeKey: route.routeKey, adapterId: edge.adapterId!, target: edge.target!, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut,
+        direction: action.descriptor.action, executionAssets: route.executionAssets, matchTrace: (target, selector) => action.matchTrace(target, selector) });
+    }
+  }
+  return result;
 }
 
 export interface FamilyReadyInput {

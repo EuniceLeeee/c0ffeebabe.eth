@@ -121,3 +121,24 @@ test("disabled-family raw verification uses a fresh process with identical activ
     assert.equal(leg.verificationProcess.exitCode, verificationExit);
   }
 });
+
+test("TX direction/input conflict becomes incomplete only after independent raw binding verification", async () => {
+  for (const verificationExit of [0, 1]) {
+    let verifications = 0;
+    const result = await round(["--rpc-file", "rpc.json"], { verify: undefined,
+      execute: async (args: string[]) => {
+        if (args[0] === "scripts/test-protocol-json.mjs") return { exitCode: 0 };
+        if (args.includes("--verify-binding")) { verifications++; return { exitCode: verificationExit }; }
+        const out = args[args.indexOf("--out") + 1]!; mkdirSync(out);
+        writeFileSync(resolve(out, "report.json"), JSON.stringify({ result: "incomplete",
+          failure: { stage: "transactionBinding" }, stages: { transactionBinding: { status: "direction-not-admitted" } } }));
+        return { exitCode: 1 };
+      },
+    });
+    const leg = result.report.families[0].legs[0];
+    assert.equal(verifications, 1); assert.equal(result.exitCode, 1, "input diagnostic never passes acceptance");
+    assert.equal(leg.status, verificationExit === 0 ? "incomplete" : "failed");
+    assert.equal(leg.evidenceVerified, false); assert.equal(result.report.families[0].passedLegs, 0);
+    assert.equal(result.report.families[0].result, verificationExit === 0 ? "incomplete" : "failed");
+  }
+});

@@ -13,6 +13,7 @@ const H = "0x" + "aa".repeat(32), H2 = "0x" + "dd".repeat(32);
 const S = "0x" + "bb".repeat(32), P = "0x" + "cc".repeat(32);
 const CODE = { code: "0x6000", keccak256: keccak256("0x6000") };
 const slot = keccak256(ABI.encode(["address", "uint256"], [A, 3]));
+const witnessSlot = keccak256(ABI.encode(["address", "uint256"], [T, 3]));
 function deferred() { let resolve!: () => void; const promise = new Promise<void>(r => { resolve = r; }); return { promise, resolve }; }
 
 async function mockNode(before?: (method: string, params: any[], count: number) => Promise<void>) {
@@ -31,10 +32,18 @@ async function mockNode(before?: (method: string, params: any[], count: number) 
       else if (method === "eth_getCode") {
         result = failCode ? "0x0" : code;
         failCode = false;
-      } else if (method === "eth_call") {
+      } else if (method === "eth_call" || method === "debug_traceCall") {
         assert.equal(params[0].to, T);
         assert.equal(params[1].requireCanonical, true);
-        result = params[2]?.[T]?.stateDiff?.[slot] ?? toBeHex(balance, 32);
+        assert.equal(params[0].data.slice(0, 10), "0x70a08231");
+        const account = String(ABI.decode(["address"], "0x" + params[0].data.slice(10))[0]).toLowerCase();
+        assert(account === A || account === T);
+        const key = account === A ? slot : witnessSlot, value = account === A ? balance : 19n;
+        if (method === "debug_traceCall") {
+          assert.deepEqual(params[2], { tracer: "prestateTracer",
+            tracerConfig: { diffMode: false, disableCode: true, disableStorage: false }, timeout: "5s" });
+          result = { [T]: { storage: { [key]: toBeHex(value, 32) } } };
+        } else result = params[2]?.[T]?.stateDiff?.[key] ?? toBeHex(value, 32);
       } else throw new Error(`unexpected ${method}`);
       if (!res.destroyed) res.end(JSON.stringify({ jsonrpc: "2.0", id: q.id, result }));
     } catch { if (!res.destroyed) { res.statusCode = 500; res.end("{}"); } }
@@ -66,12 +75,12 @@ test("same-source parallel amounts share one header, code and funding proof whil
         [T]: { stateDiff: { [slot]: toBeHex(78n + BigInt(i), 32) } },
       });
     });
-    assert.deepEqual(server.counts, { eth_getBlockByHash: 1, eth_chainId: 1, eth_getCode: 1, eth_call: 4 });
+    assert.deepEqual(server.counts, { eth_getBlockByHash: 1, eth_chainId: 1, eth_getCode: 1, eth_call: 6, debug_traceCall: 2 });
     t.diagnostic(`32 concurrent inputs: ${JSON.stringify(server.counts)}`);
   } finally { await c.closeAndDrain(); await server.close(); }
 });
 
-for (const heldMethod of ["eth_getBlockByHash", "eth_getCode", "eth_call"]) {
+for (const heldMethod of ["eth_getBlockByHash", "eth_getCode", "eth_call", "debug_traceCall"]) {
   test(`one cancelled waiter does not cancel another quote's ${heldMethod}`, async () => {
     const entered = deferred(), release = deferred();
     const server = await mockNode(async (method, _params, count) => {
@@ -87,7 +96,7 @@ for (const heldMethod of ["eth_getBlockByHash", "eth_getCode", "eth_call"]) {
       abort.abort(new Error("first cancelled")); await failed;
       release.resolve();
       assert.equal((await second).strict?.outcome.kind, "InputPrepared");
-      assert.deepEqual(server.counts, { eth_getBlockByHash: 1, eth_chainId: 1, eth_getCode: 1, eth_call: 4 });
+      assert.deepEqual(server.counts, { eth_getBlockByHash: 1, eth_chainId: 1, eth_getCode: 1, eth_call: 6, debug_traceCall: 2 });
     } finally { release.resolve(); await c.closeAndDrain(); await server.close(); }
   });
 }
@@ -132,10 +141,11 @@ test("a later waiter keeps its full default timeout after the original quote exp
   } finally { release.resolve(); await c.closeAndDrain(); await server.close(); }
 });
 
-test("all waiters cancelling removes the abandoned read and permits a clean same-source retry", async () => {
+for (const heldMethod of ["eth_getBlockByHash", "debug_traceCall"]) {
+test(`all waiters cancelling removes abandoned ${heldMethod} and permits a clean same-source retry`, async () => {
   const entered = deferred(), release = deferred();
   const server = await mockNode(async (method, _params, count) => {
-    if (method === "eth_getBlockByHash" && count === 1) { entered.resolve(); await release.promise; }
+    if (method === heldMethod && count === 1) { entered.resolve(); await release.promise; }
   });
   const c = client(), a = new AbortController(), b = new AbortController();
   try {
@@ -146,10 +156,12 @@ test("all waiters cancelling removes the abandoned read and permits a clean same
     assert((await settled).every(result => result.status === "rejected"));
     assert.equal((await c.strictSimulate(request(server.url))).strict?.outcome.kind, "InputPrepared");
     release.resolve();
-    assert.equal(server.counts.eth_getBlockByHash, 2);
-    assert.equal(server.counts.eth_call, 4);
+    assert.equal(server.counts.eth_getBlockByHash, heldMethod === "eth_getBlockByHash" ? 2 : 1);
+    assert.equal(server.counts.eth_call, heldMethod === "eth_getBlockByHash" ? 6 : 8);
+    assert.equal(server.counts.debug_traceCall, heldMethod === "eth_getBlockByHash" ? 2 : 3);
   } finally { release.resolve(); await c.closeAndDrain(); await server.close(); }
 });
+}
 
 test("failed proofs do not poison retries and changing the source never reuses its proved balance", async () => {
   const server = await mockNode(), cache = createNodeFundingCache();
@@ -164,13 +176,14 @@ test("failed proofs do not poison retries and changing the source never reuses i
     server.balance(900n);
     const next = client({ fundingCache: cache });
     try {
-      const priorCalls = server.counts.eth_call;
+      const priorCalls = server.counts.eth_call, priorTraces = server.counts.debug_traceCall;
       const outcome = (await next.strictSimulate(request(server.url, 5, H2))).strict!.outcome;
       assert.equal(outcome.kind, "InputPrepared");
       if (outcome.kind === "InputPrepared") assert.deepEqual(outcome.stateOverrides, {
         [T]: { stateDiff: { [slot]: toBeHex(905n, 32) } },
       });
-      assert.equal(server.counts.eth_call - priorCalls, 3, "new source re-proves both sentinels despite a slot hint");
+      assert.equal(server.counts.eth_call - priorCalls, 6, "new source re-proves both sentinels and witness despite a slot hint");
+      assert.equal(server.counts.debug_traceCall - priorTraces, 2, "new source retraces both target and witness despite a slot hint");
     } finally { await next.closeAndDrain(); }
   } finally { await first.closeAndDrain(); await server.close(); }
 });
@@ -190,10 +203,11 @@ test("executor code cache compares primitive values instead of trusting mutable 
   } finally { await c.closeAndDrain(); await server.close(); }
 });
 
-test("closing drains shared work and prevents new RPC dispatch", async () => {
+for (const heldMethod of ["eth_call", "debug_traceCall"]) {
+test(`closing drains shared ${heldMethod} work and prevents new RPC dispatch`, async () => {
   const entered = deferred(), release = deferred();
   const server = await mockNode(async method => {
-    if (method === "eth_call") { entered.resolve(); await release.promise; }
+    if (method === heldMethod) { entered.resolve(); await release.promise; }
   });
   const scheduler = new RethTransportScheduler({ capacity: 8, producerReserved: 1 }), c = client({ scheduler });
   try {
@@ -209,3 +223,4 @@ test("closing drains shared work and prevents new RPC dispatch", async () => {
     assert.deepEqual(server.counts, before);
   } finally { release.resolve(); await c.closeAndDrain(); await server.close(); }
 });
+}

@@ -1,0 +1,978 @@
+{
+  "version": 1,
+  "baseCommit": "17f84565f6289ecede2bb2ab940ae889a70e40a2",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "scope": "TX input binding through production discovery/Ready/action definitions plus node RPC input funding. Not original-TX replay, all-Family chain acceptance, natural effective-price publication or latency acceptance.",
+  "architecture": {
+    "discovery": "ReadyTransactionReader and production observations/candidates/identity/Graph; no test-owned Family classifier or forged admission",
+    "matching": "Successful internal call matched by the admitted route ActionAdapter.matchTrace; input confirmed by unique transfer call/log, share burn or declared native settlement; expected fixture remains unchanged",
+    "conflicts": "Missing direction, incompatible action/input and ambiguous evidence remain incomplete, independently verified from retained receipt/trace/Ready. They cannot upgrade to pass or be mislabeled as failed execution.",
+    "funding": "Trace balanceOf(actual simulation executor) plus independent account witness, prove a unique isolated full-word slot using two probes, add amount to existing balance. Never invert a mapping hash or transplant another account slot.",
+    "cache": "TX/receipt cache reused with canonical block-hash check. Full simulation requests bind source, executor, overrides, implementation and execution environment. Cached raw results are verified again, not cached pass labels."
+  },
+  "validation": {
+    "offline": {
+      "tests": 905,
+      "pass": 904,
+      "fail": 0,
+      "skip": 1
+    },
+    "fundingTargeted": {
+      "tests": 48,
+      "pass": 48
+    },
+    "buildLive": "pass",
+    "sampleIndexReconciliation": {
+      "query": "samples",
+      "tool": "listener:check:protocol-json-samples",
+      "result": "pass; 41 case inputs; library integrity only",
+      "manifest": "logs/facts-align-funding-20261113/tool-selection.json",
+      "sha256": "461676fcb3a71f48a60df5ba9a5e6528c286f6a2e68cd627ff53f2eee912e238"
+    },
+    "tamperedBindingControl": {
+      "result": "rejected-as-required",
+      "exitCode": 1,
+      "artifact": "logs/facts-align-funding-20261113/tamper-control/verify.log",
+      "mutation": "changed observed amountIn to 1 while raw receipt/trace and Ready were unchanged"
+    },
+    "catalogCheck": {
+      "result": "pass",
+      "command": "npm run family-capability-manifest:check",
+      "exitCode": 0,
+      "npmReceipt": "2026-11-13T04_41_48_428Z-debug-0.log"
+    }
+  },
+  "precisionBefore": {
+    "artifact": "logs/jsonall-alignment-20261112/all-facts/0043/acceptance.json",
+    "simulationErrors": [
+      "node input funding unsupported balance layout"
+    ]
+  },
+  "records": [
+    {
+      "run": "logs/facts-align-funding-20261113/sealed-0192/report.json",
+      "sha256": "c8f63a023ac7e18f81783faf09e28e42e742630c5395affa8a820094ff215641",
+      "sourceFingerprint": "1e697d233e3366a3ce18638cc0076f8064f18626924bbfd7d274a0d5dde1badc",
+      "transactionHash": "0xf8c2d77cd220781f380d60afa26bbb09cf944f9eeebd98d3a663701c8e99f484",
+      "legId": "protocol:erc4626--erc4626--0x2c24b57e2ccd1f273045af6a5f632504c432374f--2-redeem-original-event-input",
+      "familyId": "protocol:erc4626",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "result": "incomplete",
+      "binding": {
+        "version": 1,
+        "transactionHash": "0xf8c2d77cd220781f380d60afa26bbb09cf944f9eeebd98d3a663701c8e99f484",
+        "source": {
+          "number": 25887369,
+          "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+        },
+        "status": "direction-not-admitted",
+        "expected": {
+          "familyId": "protocol:erc4626",
+          "instanceKey": "0x2c24b57e2ccd1f273045af6a5f632504c432374f",
+          "lineageId": "erc4626:standalone-standard-behavior",
+          "tokenIn": "0x2C24B57e2CCd1f273045Af6A5f632504C432374F",
+          "tokenOut": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+          "amountIn": "7620982"
+        },
+        "observed": [],
+        "unresolved": [],
+        "targetCalls": [
+          {
+            "target": "0x2c24b57e2ccd1f273045af6a5f632504c432374f",
+            "selector": "0x1fdae50b",
+            "traceAddress": []
+          },
+          {
+            "target": "0x2c24b57e2ccd1f273045af6a5f632504c432374f",
+            "selector": "0xa9059cbb",
+            "traceAddress": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        ],
+        "claim": "TX action/input binding only; Ready and execution acceptance remain independent gates"
+      },
+      "cache": {
+        "receipt": "reused",
+        "trace": "reused",
+        "canonicalRpcReads": 1
+      },
+      "independentRawVerification": "pass"
+    },
+    {
+      "run": "logs/facts-align-funding-20261113/sealed-0050/report.json",
+      "sha256": "6093f658cdbef8ea30998dc864e3e660a7457a124477b0cea56665a0baddeaa9",
+      "sourceFingerprint": "1e697d233e3366a3ce18638cc0076f8064f18626924bbfd7d274a0d5dde1badc",
+      "transactionHash": "0x313ec84844ecef501c750fc619a1afb723cfe90bb866dffed9bcb06dc977f71a",
+      "legId": "protocol:erc4626--erc4626--0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f--0-deposit-original-event-input",
+      "familyId": "protocol:erc4626",
+      "source": {
+        "number": 25887356,
+        "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+      },
+      "result": "incomplete",
+      "binding": {
+        "version": 1,
+        "transactionHash": "0x313ec84844ecef501c750fc619a1afb723cfe90bb866dffed9bcb06dc977f71a",
+        "source": {
+          "number": 25887356,
+          "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+        },
+        "status": "direction-not-admitted",
+        "expected": {
+          "familyId": "protocol:erc4626",
+          "instanceKey": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+          "lineageId": "erc4626:standalone-standard-behavior",
+          "tokenIn": "0x5F7827FDeb7c20b443265Fc2F40845B715385Ff2",
+          "tokenOut": "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+          "amountIn": "26000000527677091604"
+        },
+        "observed": [
+          {
+            "familyId": "protocol:erc4626",
+            "instanceKey": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "routeKey": "protocol:erc4626\u001f0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f\u001fredeem",
+            "selector": "0xba087652",
+            "traceAddress": [
+              0,
+              6
+            ],
+            "lineageId": "erc4626:standalone-standard-behavior",
+            "adapterId": "erc4626-redeem",
+            "direction": "redeem",
+            "tokenIn": "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+            "tokenOut": "0x5F7827FDeb7c20b443265Fc2F40845B715385Ff2",
+            "amountIn": "25420325352298249641",
+            "target": "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+            "inputEvidence": {
+              "kind": "burn",
+              "logIndex": 45
+            },
+            "outputLogIndices": [
+              46
+            ],
+            "nativeOutputTraceAddresses": []
+          }
+        ],
+        "unresolved": [],
+        "targetCalls": [
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x70a08231",
+            "traceAddress": [
+              0,
+              0
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x4cdad506",
+            "traceAddress": [
+              0,
+              1
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x70a08231",
+            "traceAddress": [
+              0,
+              2
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x4cdad506",
+            "traceAddress": [
+              0,
+              3
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x70a08231",
+            "traceAddress": [
+              0,
+              4
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x4cdad506",
+            "traceAddress": [
+              0,
+              5
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0xba087652",
+            "traceAddress": [
+              0,
+              6
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x70a08231",
+            "traceAddress": [
+              0,
+              7
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x4cdad506",
+            "traceAddress": [
+              0,
+              8
+            ]
+          }
+        ],
+        "claim": "TX action/input binding only; Ready and execution acceptance remain independent gates"
+      },
+      "cache": {
+        "receipt": "reused",
+        "trace": "reused",
+        "canonicalRpcReads": 1
+      },
+      "independentRawVerification": "pass"
+    },
+    {
+      "run": "logs/facts-align-funding-20261113/sealed-0062/report.json",
+      "sha256": "0f67e518d8e61468ebb63900df1d4988acb5086d6cb53243c6bcb4014ec9da09",
+      "sourceFingerprint": "1e697d233e3366a3ce18638cc0076f8064f18626924bbfd7d274a0d5dde1badc",
+      "transactionHash": "0x428e9a180d4da24d330450230c32f4c015ebcf4d34ddedc0d803cc66b018f4da",
+      "legId": "protocol:erc4626--erc4626--0x9bd52f2805c6af014132874124686e7b248c2cbb--2-redeem-original-event-input",
+      "familyId": "protocol:erc4626",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "result": "incomplete",
+      "binding": {
+        "version": 1,
+        "transactionHash": "0x428e9a180d4da24d330450230c32f4c015ebcf4d34ddedc0d803cc66b018f4da",
+        "source": {
+          "number": 25887369,
+          "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+        },
+        "status": "direction-not-admitted",
+        "expected": {
+          "familyId": "protocol:erc4626",
+          "instanceKey": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+          "lineageId": "erc4626:standalone-standard-behavior",
+          "tokenIn": "0x9bD52F2805c6aF014132874124686e7b248c2Cbb",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amountIn": "95254173824"
+        },
+        "observed": [],
+        "unresolved": [],
+        "targetCalls": [
+          {
+            "target": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+            "selector": "0xa9c8eb7e",
+            "traceAddress": [
+              0
+            ]
+          },
+          {
+            "target": "0x9bd52f2805c6af014132874124686e7b248c2cbb",
+            "selector": "0x4b3d1223",
+            "traceAddress": [
+              1
+            ]
+          }
+        ],
+        "claim": "TX action/input binding only; Ready and execution acceptance remain independent gates"
+      },
+      "cache": {
+        "receipt": "reused",
+        "trace": "reused",
+        "canonicalRpcReads": 1
+      },
+      "independentRawVerification": "pass"
+    },
+    {
+      "run": "logs/facts-align-funding-20261113/sealed-0047/report.json",
+      "sha256": "a3c148f086e2df95184d205d627edff8b28c1496b3d4ca4edae4b55d152e1dc4",
+      "sourceFingerprint": "1e697d233e3366a3ce18638cc0076f8064f18626924bbfd7d274a0d5dde1badc",
+      "transactionHash": "0x2aee44cae8118bdd958667dbf92874fa166b273df9543e40c9fd9454bfffed5a",
+      "legId": "protocol:erc4626--erc4626--0xe05fadf242331808f504661bea65972594869826--2-redeem-original-event-input",
+      "familyId": "protocol:erc4626",
+      "source": {
+        "number": 25887369,
+        "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+      },
+      "result": "incomplete",
+      "binding": {
+        "version": 1,
+        "transactionHash": "0x2aee44cae8118bdd958667dbf92874fa166b273df9543e40c9fd9454bfffed5a",
+        "source": {
+          "number": 25887369,
+          "hash": "0x45c9f0913108f7695bae72f8c6dc6f2b805b99bd1887235c66b8796728e0d69c"
+        },
+        "status": "action-not-observed",
+        "expected": {
+          "familyId": "protocol:erc4626",
+          "instanceKey": "0xe05fadf242331808f504661bea65972594869826",
+          "lineageId": "erc4626:standalone-standard-behavior",
+          "tokenIn": "0xe05faDf242331808f504661BEA65972594869826",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amountIn": "5785469083763390859902"
+        },
+        "observed": [],
+        "unresolved": [],
+        "targetCalls": [
+          {
+            "target": "0xe05fadf242331808f504661bea65972594869826",
+            "selector": "0xb460af94",
+            "traceAddress": []
+          },
+          {
+            "target": "0xe05fadf242331808f504661bea65972594869826",
+            "selector": "0xc69507dd",
+            "traceAddress": [
+              3,
+              1
+            ]
+          }
+        ],
+        "claim": "TX action/input binding only; Ready and execution acceptance remain independent gates"
+      },
+      "cache": {
+        "receipt": "reused",
+        "trace": "reused",
+        "canonicalRpcReads": 1
+      },
+      "independentRawVerification": "pass"
+    },
+    {
+      "run": "logs/facts-align-funding-20261113/sealed-0111/report.json",
+      "sha256": "56848728ca4489f20dfe0e003ca4d00104a978a1d331afa9f33ef6956d6fcafa",
+      "sourceFingerprint": "1e697d233e3366a3ce18638cc0076f8064f18626924bbfd7d274a0d5dde1badc",
+      "transactionHash": "0x7f814e6d8d5712e44897b82f512904b274b62dcd6164dbc891425dd3eb952a21",
+      "legId": "protocol:erc4626--erc4626--0x55c1b6e461a6334b567baf0feb5d728715446f05--2-redeem-original-event-input",
+      "familyId": "protocol:erc4626",
+      "source": {
+        "number": 25887363,
+        "hash": "0xc03086eb3caae34426e0243f1c98c253a12531043373463e83e258ebcca500dd"
+      },
+      "result": "incomplete",
+      "binding": {
+        "version": 1,
+        "transactionHash": "0x7f814e6d8d5712e44897b82f512904b274b62dcd6164dbc891425dd3eb952a21",
+        "source": {
+          "number": 25887363,
+          "hash": "0xc03086eb3caae34426e0243f1c98c253a12531043373463e83e258ebcca500dd"
+        },
+        "status": "action-conflict",
+        "expected": {
+          "familyId": "protocol:erc4626",
+          "instanceKey": "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+          "lineageId": "erc4626:standalone-standard-behavior",
+          "tokenIn": "0x55C1B6e461a6334B567bAF0FEb5D728715446f05",
+          "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amountIn": "19853762407926895267527"
+        },
+        "observed": [
+          {
+            "familyId": "protocol:erc4626",
+            "instanceKey": "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+            "routeKey": "protocol:erc4626\u001f0x55c1b6e461a6334b567baf0feb5d728715446f05\u001fdeposit",
+            "selector": "0x6e553f65",
+            "traceAddress": [
+              2,
+              2
+            ],
+            "lineageId": "erc4626:standalone-standard-behavior",
+            "adapterId": "erc4626-deposit",
+            "direction": "deposit",
+            "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "tokenOut": "0x55C1B6e461a6334B567bAF0FEb5D728715446f05",
+            "amountIn": "19942278136",
+            "target": "0x55C1B6e461a6334B567bAF0FEb5D728715446f05",
+            "inputEvidence": {
+              "kind": "transfer-call",
+              "logIndex": 244,
+              "traceAddress": [
+                2,
+                2,
+                2
+              ]
+            },
+            "outputLogIndices": [
+              243,
+              245
+            ],
+            "nativeOutputTraceAddresses": []
+          }
+        ],
+        "unresolved": [],
+        "targetCalls": [
+          {
+            "target": "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+            "selector": "0x38d52e0f",
+            "traceAddress": [
+              2,
+              0
+            ]
+          },
+          {
+            "target": "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+            "selector": "0x6e553f65",
+            "traceAddress": [
+              2,
+              2
+            ]
+          },
+          {
+            "target": "0x55c1b6e461a6334b567baf0feb5d728715446f05",
+            "selector": "0xc69507dd",
+            "traceAddress": [
+              2,
+              2,
+              4,
+              1
+            ]
+          }
+        ],
+        "claim": "TX action/input binding only; Ready and execution acceptance remain independent gates"
+      },
+      "cache": {
+        "receipt": "reused",
+        "trace": "reused",
+        "canonicalRpcReads": 1
+      },
+      "independentRawVerification": "pass"
+    },
+    {
+      "run": "logs/facts-align-funding-20261113/precision-sealed/report.json",
+      "sha256": "b1d2764b0045cdb9a0a11408128bd3138c65c5f3a7d10259fd8aeec6701ad595",
+      "sourceFingerprint": "1e697d233e3366a3ce18638cc0076f8064f18626924bbfd7d274a0d5dde1badc",
+      "transactionHash": "0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554",
+      "legId": "custom-swap:precision-pool--1",
+      "familyId": "custom-swap:precision-pool",
+      "source": {
+        "number": 26129175,
+        "hash": "0xf924162840314cea5b4f7a49aa84827ac258d3ad715dea045140754d1a200b03"
+      },
+      "result": "pass",
+      "binding": {
+        "version": 1,
+        "transactionHash": "0x210a58374f997daa9553f69406bac6960dab1b5e7c431d4ea3bd85a12b0d2554",
+        "source": {
+          "number": 26129175,
+          "hash": "0xf924162840314cea5b4f7a49aa84827ac258d3ad715dea045140754d1a200b03"
+        },
+        "status": "matched",
+        "expected": {
+          "familyId": "custom-swap:precision-pool",
+          "instanceKey": "0x0155358241411db868ba714ae7c83a27087e3d6e",
+          "lineageId": "precision-pool:direct-zero-hook-v1",
+          "tokenIn": "0xa1313eb9f3a445606d9583bcac3ebeb56a858279",
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+          "amountIn": "27866654756646780719"
+        },
+        "observed": [
+          {
+            "familyId": "custom-swap:precision-pool",
+            "instanceKey": "0x0155358241411db868ba714ae7c83a27087e3d6e",
+            "routeKey": "custom-swap:precision-pool:0x0155358241411db868ba714ae7c83a27087e3d6e:1-0",
+            "selector": "0xa6220b66",
+            "traceAddress": [
+              0,
+              3,
+              3
+            ],
+            "lineageId": "precision-pool:direct-zero-hook-v1",
+            "adapterId": "precision-pool-swap",
+            "direction": "swap",
+            "tokenIn": "0xA1313eb9f3A445606D9583bcAc3ebeB56a858279",
+            "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+            "amountIn": "27866654756646780719",
+            "target": "0x0155358241411db868ba714ae7c83a27087e3d6e",
+            "inputEvidence": {
+              "kind": "transfer-call",
+              "logIndex": 472,
+              "traceAddress": [
+                0,
+                3,
+                3,
+                1
+              ]
+            },
+            "outputLogIndices": [],
+            "nativeOutputTraceAddresses": [
+              [
+                0,
+                3,
+                3,
+                4
+              ]
+            ]
+          }
+        ],
+        "unresolved": [
+          {
+            "familyId": "custom-swap:precision-pool",
+            "instanceKey": "0x0155358241411db868ba714ae7c83a27087e3d6e",
+            "routeKey": "custom-swap:precision-pool:0x0155358241411db868ba714ae7c83a27087e3d6e:0-1",
+            "selector": "0xa6220b66",
+            "traceAddress": [
+              0,
+              3,
+              3
+            ],
+            "reason": "input-flow-absent-or-ambiguous",
+            "inputCandidates": [],
+            "outputLogIndices": [
+              472
+            ]
+          }
+        ],
+        "targetCalls": [
+          {
+            "target": "0x0155358241411db868ba714ae7c83a27087e3d6e",
+            "selector": "0xa6220b66",
+            "traceAddress": [
+              0,
+              3,
+              3
+            ]
+          }
+        ],
+        "selected": {
+          "familyId": "custom-swap:precision-pool",
+          "instanceKey": "0x0155358241411db868ba714ae7c83a27087e3d6e",
+          "routeKey": "custom-swap:precision-pool:0x0155358241411db868ba714ae7c83a27087e3d6e:1-0",
+          "selector": "0xa6220b66",
+          "traceAddress": [
+            0,
+            3,
+            3
+          ],
+          "lineageId": "precision-pool:direct-zero-hook-v1",
+          "adapterId": "precision-pool-swap",
+          "direction": "swap",
+          "tokenIn": "0xA1313eb9f3A445606D9583bcAc3ebeB56a858279",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "amountIn": "27866654756646780719",
+          "target": "0x0155358241411db868ba714ae7c83a27087e3d6e",
+          "inputEvidence": {
+            "kind": "transfer-call",
+            "logIndex": 472,
+            "traceAddress": [
+              0,
+              3,
+              3,
+              1
+            ]
+          },
+          "outputLogIndices": [],
+          "nativeOutputTraceAddresses": [
+            [
+              0,
+              3,
+              3,
+              4
+            ]
+          ]
+        },
+        "claim": "TX action/input binding only; Ready and execution acceptance remain independent gates"
+      },
+      "cache": {
+        "receipt": "reused",
+        "trace": "reused",
+        "canonicalRpcReads": 1
+      },
+      "independentRawVerification": "pass",
+      "execution": {
+        "exact": {
+          "status": "pass",
+          "tokenIn": "0xA1313eb9f3A445606D9583bcAc3ebeB56a858279",
+          "tokenOut": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+          "requestedAmountIn": "27866654756646780719",
+          "quotedAmountIn": "27866654756646780719",
+          "quotedAmountOut": "3839389701799474"
+        },
+        "quotedExecution": {
+          "status": "pass",
+          "required": true,
+          "actualAmountIn": "27866654756646780719",
+          "actualAmountOut": "3839389701799474",
+          "differenceFromExact": "0",
+          "controls": {
+            "positive": "pass",
+            "noInput": "pass",
+            "forcedRevert": "pass"
+          }
+        },
+        "runtimeExecution": {
+          "status": "pass",
+          "required": true,
+          "actualAmountIn": "27866654756646780719",
+          "actualAmountOut": "3839389701799474",
+          "differenceFromExact": "0",
+          "controls": {
+            "positive": "pass",
+            "noInput": "pass",
+            "forcedRevert": "pass"
+          }
+        },
+        "simulationOutputParity": {
+          "status": "pass",
+          "toleranceRawUnits": 1,
+          "quotedDifference": "0",
+          "runtimeDifference": "0"
+        }
+      },
+      "simulationCache": {
+        "simulationsExecuted": 0,
+        "simulationsReused": 6
+      },
+      "executor": "counterfactual BotVM code; eth_simulateV1; state pinned to source N, shared N+1 execution environment"
+    },
+    {
+      "run": "logs/facts-align-funding-20261113/beef-sealed/report.json",
+      "sha256": "370c598815acf02d35acf48e9f8040317fa166b0a202272c7ec340de3993c3e9",
+      "sourceFingerprint": "1e697d233e3366a3ce18638cc0076f8064f18626924bbfd7d274a0d5dde1badc",
+      "transactionHash": "0x313ec84844ecef501c750fc619a1afb723cfe90bb866dffed9bcb06dc977f71a",
+      "legId": "protocol:erc4626--erc4626--0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f--2-redeem-original-event-input",
+      "familyId": "protocol:erc4626",
+      "source": {
+        "number": 25887356,
+        "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+      },
+      "result": "pass",
+      "binding": {
+        "version": 1,
+        "transactionHash": "0x313ec84844ecef501c750fc619a1afb723cfe90bb866dffed9bcb06dc977f71a",
+        "source": {
+          "number": 25887356,
+          "hash": "0x08d5bab2e5401462a2394eac39dcf92576ebef92373639d45e53d6cf2ac67be5"
+        },
+        "status": "matched",
+        "expected": {
+          "familyId": "protocol:erc4626",
+          "instanceKey": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+          "lineageId": "erc4626:standalone-standard-behavior",
+          "tokenIn": "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+          "tokenOut": "0x5F7827FDeb7c20b443265Fc2F40845B715385Ff2",
+          "amountIn": "25420325352298249641"
+        },
+        "observed": [
+          {
+            "familyId": "protocol:erc4626",
+            "instanceKey": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "routeKey": "protocol:erc4626\u001f0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f\u001fredeem",
+            "selector": "0xba087652",
+            "traceAddress": [
+              0,
+              6
+            ],
+            "lineageId": "erc4626:standalone-standard-behavior",
+            "adapterId": "erc4626-redeem",
+            "direction": "redeem",
+            "tokenIn": "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+            "tokenOut": "0x5F7827FDeb7c20b443265Fc2F40845B715385Ff2",
+            "amountIn": "25420325352298249641",
+            "target": "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+            "inputEvidence": {
+              "kind": "burn",
+              "logIndex": 45
+            },
+            "outputLogIndices": [
+              46
+            ],
+            "nativeOutputTraceAddresses": []
+          }
+        ],
+        "unresolved": [],
+        "targetCalls": [
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x70a08231",
+            "traceAddress": [
+              0,
+              0
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x4cdad506",
+            "traceAddress": [
+              0,
+              1
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x70a08231",
+            "traceAddress": [
+              0,
+              2
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x4cdad506",
+            "traceAddress": [
+              0,
+              3
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x70a08231",
+            "traceAddress": [
+              0,
+              4
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x4cdad506",
+            "traceAddress": [
+              0,
+              5
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0xba087652",
+            "traceAddress": [
+              0,
+              6
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x70a08231",
+            "traceAddress": [
+              0,
+              7
+            ]
+          },
+          {
+            "target": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+            "selector": "0x4cdad506",
+            "traceAddress": [
+              0,
+              8
+            ]
+          }
+        ],
+        "selected": {
+          "familyId": "protocol:erc4626",
+          "instanceKey": "0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f",
+          "routeKey": "protocol:erc4626\u001f0xbeef0c075da5d01112ae5cf34d257074fb5ddb2f\u001fredeem",
+          "selector": "0xba087652",
+          "traceAddress": [
+            0,
+            6
+          ],
+          "lineageId": "erc4626:standalone-standard-behavior",
+          "adapterId": "erc4626-redeem",
+          "direction": "redeem",
+          "tokenIn": "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+          "tokenOut": "0x5F7827FDeb7c20b443265Fc2F40845B715385Ff2",
+          "amountIn": "25420325352298249641",
+          "target": "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+          "inputEvidence": {
+            "kind": "burn",
+            "logIndex": 45
+          },
+          "outputLogIndices": [
+            46
+          ],
+          "nativeOutputTraceAddresses": []
+        },
+        "claim": "TX action/input binding only; Ready and execution acceptance remain independent gates"
+      },
+      "cache": {
+        "receipt": "reused",
+        "trace": "reused",
+        "canonicalRpcReads": 1
+      },
+      "independentRawVerification": "pass",
+      "execution": {
+        "exact": {
+          "status": "pass",
+          "tokenIn": "0xbeef0C075Da5D01112AE5cF34d257074fB5DDB2f",
+          "tokenOut": "0x5F7827FDeb7c20b443265Fc2F40845B715385Ff2",
+          "requestedAmountIn": "25420325352298249641",
+          "quotedAmountIn": "25420325352298249641",
+          "quotedAmountOut": "26000000820115810755"
+        },
+        "quotedExecution": {
+          "status": "pass",
+          "required": true,
+          "actualAmountIn": "25420325352298249641",
+          "actualAmountOut": "26000000820115810755",
+          "differenceFromExact": "0",
+          "controls": {
+            "positive": "pass",
+            "noInput": "pass",
+            "forcedRevert": "pass"
+          }
+        },
+        "runtimeExecution": {
+          "status": "pass",
+          "required": true,
+          "actualAmountIn": "25420325352298249641",
+          "actualAmountOut": "26000000820115810755",
+          "differenceFromExact": "0",
+          "controls": {
+            "positive": "pass",
+            "noInput": "pass",
+            "forcedRevert": "pass"
+          }
+        },
+        "simulationOutputParity": {
+          "status": "pass",
+          "toleranceRawUnits": 1,
+          "quotedDifference": "0",
+          "runtimeDifference": "0"
+        }
+      },
+      "simulationCache": {
+        "simulationsExecuted": 0,
+        "simulationsReused": 12
+      },
+      "executor": "counterfactual BotVM code; eth_simulateV1; state pinned to source N, shared N+1 execution environment"
+    },
+    {
+      "run": "logs/facts-align-funding-20261113/psm-sealed/report.json",
+      "sha256": "83e4fee8263fdf79f71a4a96a99e9142ad998632bae1b668f9d81110f182cf51",
+      "sourceFingerprint": "1e697d233e3366a3ce18638cc0076f8064f18626924bbfd7d274a0d5dde1badc",
+      "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+      "legId": "protocol:psm--psm--recipient66--0-sell-gem-production-P",
+      "familyId": "protocol:psm",
+      "source": {
+        "number": 26029876,
+        "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+      },
+      "result": "incomplete",
+      "binding": {
+        "version": 1,
+        "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+        "source": {
+          "number": 26029876,
+          "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+        },
+        "status": "action-conflict",
+        "expected": {
+          "familyId": "protocol:psm",
+          "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+          "lineageId": "psm:lite-active-pair",
+          "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+          "amountIn": "5494762"
+        },
+        "observed": [
+          {
+            "familyId": "protocol:psm",
+            "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+            "routeKey": "protocol:psm\u001f0xf6e72db5454dd049d0788e411b06cfaf16853042\u001fbuy-gem",
+            "selector": "0x8d7ef9bb",
+            "traceAddress": [
+              0,
+              1,
+              4,
+              1,
+              1
+            ],
+            "lineageId": "psm:lite-active-pair",
+            "adapterId": "psm",
+            "direction": "convert",
+            "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "amountIn": "8137414000000000000",
+            "target": "0xf6e72Db5454dd049d0788e411b06CfAF16853042",
+            "inputEvidence": {
+              "kind": "transfer-call",
+              "logIndex": 1644,
+              "traceAddress": [
+                0,
+                1,
+                4,
+                1,
+                1,
+                0
+              ]
+            },
+            "outputLogIndices": [
+              1645
+            ],
+            "nativeOutputTraceAddresses": []
+          }
+        ],
+        "unresolved": [
+          {
+            "familyId": "protocol:psm",
+            "instanceKey": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+            "routeKey": "protocol:psm\u001f0xf6e72db5454dd049d0788e411b06cfaf16853042\u001fsell-gem",
+            "selector": "0x8d7ef9bb",
+            "traceAddress": [
+              0,
+              1,
+              4,
+              1,
+              1
+            ],
+            "reason": "input-flow-absent-or-ambiguous",
+            "inputCandidates": [],
+            "outputLogIndices": [
+              1644
+            ]
+          }
+        ],
+        "targetCalls": [
+          {
+            "target": "0xf6e72db5454dd049d0788e411b06cfaf16853042",
+            "selector": "0x8d7ef9bb",
+            "traceAddress": [
+              0,
+              1,
+              4,
+              1,
+              1
+            ]
+          }
+        ],
+        "claim": "TX action/input binding only; Ready and execution acceptance remain independent gates"
+      },
+      "cache": {
+        "receipt": "reused",
+        "trace": "reused",
+        "canonicalRpcReads": 1
+      },
+      "independentRawVerification": "pass"
+    }
+  ],
+  "usage": {
+    "entry": "listener/src/searcher/test/family-transaction-facts.ts",
+    "stages": {
+      "all": "default; binding then Exact/quoted/runtime and independent receipt verification",
+      "ready": "production Ready/Graph only; never a full acceptance pass",
+      "match": "TX/Ready action and input binding only; never a full acceptance pass"
+    },
+    "negativeReportVerifier": "--verify-binding PATH --transaction REGISTERED_JSON --leg LEG_ID; diagnoses incomplete binding only",
+    "positiveReportVerifier": "--verify-report PATH --transaction REGISTERED_JSON --leg LEG_ID"
+  },
+  "limits": [
+    "Credit/Funding keep their existing domain acceptance; new ordinary-route TX matching applies to Swap/Protocol.",
+    "Repeated indistinguishable transfers, unresolved shared-manager pools, unsupported actions and unproven flows remain incomplete.",
+    "Packed, rebasing/nonlinear and external-ledger balance layouts are not guessed by the funding path.",
+    "Existing counterfactual amount/direction results are retained as such; doubled amounts are not declared to be the original TX input.",
+    "No live run, broadcast, deployment or full Ready restart was performed by this change."
+  ]
+}

@@ -128,6 +128,14 @@ export async function familyTestMain(argv = process.argv.slice(2), hooks = {}) {
         const bytes = readFileSync(resolve(directory, "report.json")), child = JSON.parse(bytes);
         row.evidenceSha256 = digest(bytes); row.reportedStages = child.stages;
         row.reportedStagesVerified = false; row.failure = child.failure;
+        if (child.result === "incomplete" && child.failure?.stage === "transactionBinding") {
+          row.bindingVerificationProcess = await run(["--import", "tsx", "src/searcher/test/family-transaction-facts.ts",
+            "--verify-binding", resolve(directory, "report.json"), "--transaction", item.path, "--leg", item.leg.id], root, caseEnv);
+          if (row.bindingVerificationProcess.exitCode === 0) {
+            row.status = "incomplete"; row.inputBinding = child.stages.transactionBinding;
+            row.inputBindingVerified = true;
+          }
+        }
       } catch (error) { row.diagnosticError = safe(error); }
       save();
     }

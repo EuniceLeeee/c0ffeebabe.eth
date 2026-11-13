@@ -174,17 +174,55 @@ test("acceptance mapper exposes only completed V1 reverts as CALL_EXCEPTION", as
   }
 });
 
-test("input funding proves balance writes using the same virtual context", async () => {
-  const slot = keccak256(ABI.encode(["address", "uint256"], [A, 3])); let calls = 0;
+test("input funding traces both accounts and proves isolated writes using the same virtual context", async () => {
+  const slot = (account: string) => keccak256(ABI.encode(["address", "uint256"], [account, 9000]));
+  const accountOf = (data: string) => String(ABI.decode(["address"], "0x" + data.slice(10))[0]).toLowerCase();
+  let calls = 0, traces = 0, fences = 0;
+  const tracedAccounts: string[] = [], probedAccounts: string[] = [];
   const rpc = createNodeSimulateV1Rpc(async (method, params: readonly any[]) => {
-    if (method === "eth_getBlockByNumber") return header;
+    if (method === "eth_getBlockByNumber") { assert.deepEqual(params, ["0x64", false]); fences++; return header; }
+    if (method === "debug_traceCall") {
+      traces++;
+      assert.deepEqual(params[1], pin);
+      assert.deepEqual(params[2], { tracer: "prestateTracer",
+        tracerConfig: { diffMode: false, disableCode: true, disableStorage: false }, timeout: "5s", blockOverrides: env.blockOverrides });
+      assert.equal(params[0].to, T); assert.equal(params[0].gas, "0x30d40");
+      const account = accountOf(params[0].data); tracedAccounts.push(account);
+      return { [T]: { storage: { [slot(account)]: toBeHex(account === A ? 77 : 19, 32) } } };
+    }
     assert.equal(method, "eth_simulateV1"); calls++;
+    assert.equal(params[1], "0x64");
     const b = params[0].blockStateCalls[0]; assert.deepEqual(b.blockOverrides, env.blockOverrides);
-    return block([success(b.stateOverrides[T]?.stateDiff?.[slot] ?? toBeHex(77, 32))]);
+    assert.equal(b.calls.length, 1); assert.equal(b.calls[0].to, T); assert.equal(b.calls[0].gas, "0x30d40");
+    const account = accountOf(b.calls[0].data), writes = b.stateOverrides[T]?.stateDiff;
+    if (writes) {
+      probedAccounts.push(account); assert.deepEqual(Object.keys(writes), [slot(A)]);
+      assert.equal(BigInt(writes[slot(A)]) >> 255n, 1n);
+    }
+    return block([success(writes?.[slot(account)] ?? toBeHex(account === A ? 77 : 19, 32))]);
   }, header);
   const funded = await new NodeInputFunding(rpc, pin).prepare([{ token: T, to: A, amount: "10" }]);
-  assert.equal(funded.expected[0]!.balance, 87n); assert.equal(calls, 4);
-  assert.deepEqual(funded.overrides, { [T]: { stateDiff: { [slot]: toBeHex(87, 32) } } });
+  assert.equal(funded.expected[0]!.balance, 87n); assert.equal(calls, 6); assert.equal(traces, 2); assert.equal(fences, 16);
+  assert.deepEqual(tracedAccounts, [A, T]); assert.deepEqual(probedAccounts, [A, T, A, T]);
+  assert.deepEqual(funded.overrides, { [T]: { stateDiff: { [slot(A)]: toBeHex(87, 32) } } });
+});
+
+test("a source change during funding trace prevents any counterfactual balance write", async () => {
+  const slot = keccak256(ABI.encode(["address", "uint256"], [A, 9000]));
+  let changed = false, calls = 0, traces = 0;
+  const rpc = createNodeSimulateV1Rpc(async (method, params: readonly any[]) => {
+    if (method === "eth_getBlockByNumber") return changed ? { ...header, stateRoot: H } : header;
+    if (method === "debug_traceCall") {
+      assert.deepEqual(params[1], pin); assert.deepEqual(params[2].blockOverrides, env.blockOverrides);
+      traces++; changed = true;
+      return { [T]: { storage: { [slot]: toBeHex(77, 32) } } };
+    }
+    assert.equal(method, "eth_simulateV1"); calls++;
+    assert.deepEqual(params[0].blockStateCalls[0].stateOverrides, {});
+    return block([success(toBeHex(77, 32))]);
+  }, header);
+  await assert.rejects(new NodeInputFunding(rpc, pin).prepare([{ token: T, to: A, amount: "10" }]), /source-fault/);
+  assert.equal(calls, 2); assert.equal(traces, 1);
 });
 
 test("persistent recorder decodes independently measured balances and actual return words", () => {

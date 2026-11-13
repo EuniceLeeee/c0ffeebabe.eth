@@ -13,45 +13,179 @@ const ABI = AbiCoder.defaultAbiCoder();
 const A = "0x" + "11".repeat(20), T = "0x" + "22".repeat(20), O = "0x" + "33".repeat(20);
 const H = "0x" + "aa".repeat(32), S = "0x" + "bb".repeat(32), P = "0x" + "cc".repeat(32);
 const slot = (i: number) => keccak256(ABI.encode(["address", "uint256"], [A, i]));
-
-function balanceRpc(index = 3, starting = 77n) {
-  let calls = 0, current = index;
-  return { get calls() { return calls; }, change(i: number) { current = i; },
+const BALANCE = new Interface(["function balanceOf(address) view returns(uint256)"]);
+const PIN = { blockHash: H, requireCanonical: true };
+type FundingLayout = {
+  storage(account: string): Record<string, string>;
+  balance(account: string, writes: Readonly<Record<string, string>>): bigint;
+  foreign?: Record<string, unknown>;
+};
+function fundingRpc(layout: FundingLayout) {
+  let calls = 0, traces = 0;
+  const writes: { account: string; stateDiff: Record<string, string> }[] = [];
+  return { get calls() { return calls; }, get traces() { return traces; }, writes,
     rpc: async (method: string, params: readonly any[]) => {
-      assert.equal(method, "eth_call"); assert.deepEqual(params[1], { blockHash: H, requireCanonical: true }); calls++;
-      assert.equal(params[0].to, T);
-      const writes = params[2]?.[T]?.stateDiff;
-      return writes?.[slot(current)] ?? toBeHex(starting, 32);
+      assert.deepEqual(params[1], PIN); assert.equal(params[0].to, T); assert.equal(params[0].gas, "0x30d40");
+      const account = String(BALANCE.decodeFunctionData("balanceOf", params[0].data)[0]).toLowerCase();
+      assert(account === A || account === T, "only the target and distinct token-address witness are read");
+      if (method === "debug_traceCall") {
+        traces++;
+        assert.deepEqual(params[2], { tracer: "prestateTracer",
+          tracerConfig: { diffMode: false, disableCode: true, disableStorage: false }, timeout: "5s" });
+        return { ...layout.foreign, [T]: { storage: layout.storage(account) } };
+      }
+      assert.equal(method, "eth_call"); calls++;
+      const stateDiff = params[2]?.[T]?.stateDiff ?? {};
+      if (params[2] !== undefined) {
+        assert.deepEqual(Object.keys(params[2]), [T]);
+        assert.deepEqual(Object.keys(params[2][T]), ["stateDiff"]);
+        assert.equal(Object.keys(stateDiff).length, 1, "prove one slot at a time; never rewrite the trace read set");
+        writes.push({ account, stateDiff });
+      }
+      return toBeHex(layout.balance(account, stateDiff), 32);
     } };
 }
-test("node funding discovers one direct balance slot, retains inventory and caches only proved source facts", async () => {
+
+function balanceRpc(index = 3, starting = 77n) {
+  let current = index;
+  const key = (account: string) => keccak256(ABI.encode(["address", "uint256"], [account, current]));
+  const balance = (account: string) => account === A ? starting : 19n;
+  const model = fundingRpc({
+    storage: account => ({ [key(account)]: toBeHex(balance(account), 32) }),
+    balance: (account, writes) => BigInt(writes[key(account)] ?? balance(account)),
+  });
+  return { get calls() { return model.calls; }, get traces() { return model.traces; }, writes: model.writes,
+    change(i: number) { current = i; }, rpc: model.rpc };
+}
+test("node funding traces one direct account balance, retains inventory and caches only proved source facts", async () => {
   const r = balanceRpc(), cache = createNodeFundingCache(), completed = new Map();
-  const f = new NodeInputFunding(r.rpc, { blockHash: H, requireCanonical: true }, cache, completed);
+  const f = new NodeInputFunding(r.rpc, PIN, cache, completed);
   const first = await f.prepare([{ token: T, to: A, amount: "100" }]);
   assert.deepEqual(first.overrides, { [T]: { stateDiff: { [slot(3)]: toBeHex(177n, 32) } } });
-  assert.equal(r.calls, 4);
-  const reused = await new NodeInputFunding(r.rpc, { blockHash: H, requireCanonical: true }, cache, completed)
+  assert.equal(r.calls, 6); assert.equal(r.traces, 2);
+  const probes = r.writes.filter(w => w.account === A).map(w => BigInt(Object.values(w.stateDiff)[0]!));
+  assert.equal(new Set(probes).size, 2); assert(probes.every(value => value >> 255n === 1n));
+  const reused = await new NodeInputFunding(r.rpc, PIN, cache, completed)
     .prepare([{ token: T, to: A, amount: "20" }]);
-  assert.equal(reused.expected[0]!.balance, 97n); assert.equal(r.calls, 4);
+  assert.equal(reused.expected[0]!.balance, 97n); assert.equal(r.calls, 6); assert.equal(r.traces, 2);
   // A new source keeps only a hint, never an old balance or a proof. A changed
   // layout must be rediscovered, even when token and holder are identical.
   r.change(7);
-  const changed = await new NodeInputFunding(r.rpc, { blockHash: H, requireCanonical: true }, cache)
+  const changed = await new NodeInputFunding(r.rpc, PIN, cache)
     .prepare([{ token: T, to: A, amount: "20" }]);
   assert.deepEqual(changed.overrides[T]!.stateDiff, { [slot(7)]: toBeHex(97n, 32) });
-  assert.equal(r.calls, 9);
+  assert.equal(r.calls, 12); assert.equal(r.traces, 4);
 });
-test("node funding rejects nonlinear balances, duplicate deals, overflow and cancellation; no transfer or allowance writes", async () => {
+test("node funding rejects duplicate deals, overflow and cancellation; no transfer or allowance writes", async () => {
   const r = balanceRpc();
-  await assert.rejects(new NodeInputFunding(async (...args) => toBeHex(BigInt(await r.rpc(...args)) / 2n, 32), { blockHash: H, requireCanonical: true })
-    .prepare([{ token: T, to: A, amount: "1" }]), /unsupported balance layout/);
-  const f = new NodeInputFunding(r.rpc, { blockHash: H, requireCanonical: true });
+  const f = new NodeInputFunding(r.rpc, PIN);
   await assert.rejects(f.prepare([{ token: T, to: A, amount: "1" }, { token: T, to: A, amount: "2" }]), /duplicate/);
   await assert.rejects(f.prepare([{ token: T, to: A, amount: ((1n << 256n) - 1n).toString() }]), /overflow/);
   const cache = createNodeFundingCache();
   await assert.rejects(new NodeInputFunding(async () => { throw new Error("cancelled"); }, H, cache)
     .prepare([{ token: T, to: A, amount: "1" }]), /cancelled/);
   assert.equal(cache.slots.size, 0);
+});
+test("trace discovery supports namespaced storage and never substitutes the same pool's balance key", async () => {
+  const namespace = keccak256(new TextEncoder().encode("funding-test.namespaced.balances"));
+  const key = (account: string) => keccak256(ABI.encode(["address", "bytes32"], [account, namespace]));
+  const proxySlot = keccak256(new TextEncoder().encode("funding-test.proxy-implementation"));
+  const cache = createNodeFundingCache(); cache.slots.set(`${T}:${A}`, key(O));
+  const r = fundingRpc({
+    storage: account => ({ [proxySlot]: toBeHex(BigInt(O), 32), [key(account)]: toBeHex(account === A ? 77 : 19, 32) }),
+    balance: (account, writes) => BigInt(writes[key(account)] ?? (account === A ? 77 : 19)),
+    foreign: { [O]: { storage: { [key(O)]: toBeHex(77, 32) } } },
+  });
+  const result = await new NodeInputFunding(r.rpc, PIN, cache).prepare([{ token: T, to: A, amount: "100" }]);
+  assert.deepEqual(result.overrides, { [T]: { stateDiff: { [key(A)]: toBeHex(177, 32) } } });
+  assert.notEqual(key(A), key(O)); assert.equal(cache.slots.get(`${T}:${A}`), key(A));
+  assert(r.writes.every(write => Object.keys(write.stateDiff)[0] === key(A)));
+  assert.equal(r.calls, 6); assert.equal(r.traces, 2);
+});
+test("trace discovery rejects shared scalars and does not fund a foreign storage ledger", async () => {
+  for (const kind of ["shared", "foreign"] as const) {
+    const shared = toBeHex(47, 32);
+    const r = fundingRpc({
+      storage: () => kind === "shared" ? { [shared]: toBeHex(77, 32) } : {},
+      balance: (_account, writes) => BigInt(writes[shared] ?? 77),
+      ...(kind === "foreign" ? { foreign: { [O]: { storage: { [shared]: toBeHex(77, 32) } } } } : {}),
+    });
+    await assert.rejects(new NodeInputFunding(r.rpc, PIN).prepare([{ token: T, to: A, amount: "1" }]), /unsupported balance layout/);
+    assert.equal(r.writes.length, 0); assert.equal(r.calls, 2); assert.equal(r.traces, 2);
+  }
+});
+test("trace proof rejects packed and nonlinear balances instead of treating storage words as token amounts", async () => {
+  const target = slot(9000), witness = slot(9001);
+  for (const kind of ["packed", "nonlinear"] as const) {
+    const stored = kind === "packed" ? 77n : 154n;
+    const r = fundingRpc({
+      storage: account => ({ [account === A ? target : witness]: toBeHex(account === A ? stored : 19n, 32) }),
+      balance: (account, writes) => {
+        if (account === T) return BigInt(writes[witness] ?? 19n);
+        const value = BigInt(writes[target] ?? stored);
+        return kind === "packed" ? value & ((1n << 248n) - 1n) : value / 2n;
+      },
+    });
+    await assert.rejects(new NodeInputFunding(r.rpc, PIN).prepare([{ token: T, to: A, amount: "1" }]), /unsupported balance layout/);
+    if (kind === "packed") assert(r.writes.some(w => BigInt(Object.values(w.stateDiff)[0]!) >> 255n === 1n));
+    else assert.equal(r.writes.length, 0, "raw shares differing from observed balance are not direct balance candidates");
+  }
+});
+test("an isolated candidate must preserve the distinct witness balance", async () => {
+  const target = slot(8000), witness = slot(8001);
+  const r = fundingRpc({
+    storage: account => ({ [account === A ? target : witness]: toBeHex(account === A ? 77 : 19, 32) }),
+    balance: (account, writes) => account === A ? BigInt(writes[target] ?? 77) : writes[target] === undefined ? 19n : 20n,
+  });
+  await assert.rejects(new NodeInputFunding(r.rpc, PIN).prepare([{ token: T, to: A, amount: "1" }]), /unsupported balance layout/);
+  assert(r.writes.some(write => write.account === T), "target-only sentinel equality is insufficient");
+});
+test("two independently passing balance slots remain ambiguous even with a cached hint", async () => {
+  const first = slot(8000), second = slot(8001), witness = slot(8002), cache = createNodeFundingCache();
+  cache.slots.set(`${T}:${A}`, second);
+  const r = fundingRpc({
+    storage: account => account === A ? { [first]: toBeHex(77, 32), [second]: toBeHex(77, 32) } : { [witness]: toBeHex(19, 32) },
+    balance: (account, writes) => account === T ? 19n : BigInt(writes[first] ?? 77) + BigInt(writes[second] ?? 77) - 77n,
+  });
+  await assert.rejects(new NodeInputFunding(r.rpc, PIN, cache).prepare([{ token: T, to: A, amount: "1" }]), /ambiguous balance layout/);
+  assert.equal(cache.slots.size, 0);
+});
+test("invalid and oversized prestate responses cannot nominate a balance slot", async () => {
+  const key = slot(8000);
+  const invalid = [null, [], { pre: {}, post: {} }, { badAddress: {} }, { [T]: null },
+    { [T]: { storage: [] } }, { [T]: { storage: { "0x01": toBeHex(77, 32) } } },
+    { [T]: { storage: { [key]: "0x4d" } } },
+    { [T]: { storage: { [key]: toBeHex(77, 32), [key.toUpperCase()]: toBeHex(77, 32) } } },
+    { [T]: {}, [T.toUpperCase()]: {} },
+    { [T]: { storage: Object.fromEntries(Array.from({ length: 129 }, (_, i) => [toBeHex(i, 32), toBeHex(77, 32)])) } },
+    Object.fromEntries(Array.from({ length: 129 }, (_, i) => [toBeHex(i + 1, 20), {}])),
+  ];
+  for (const response of invalid) {
+    const r = balanceRpc(), cache = createNodeFundingCache();
+    const rpc = async (method: string, params: readonly unknown[]) => method === "debug_traceCall" ? response : r.rpc(method, params);
+    await assert.rejects(new NodeInputFunding(rpc, PIN, cache).prepare([{ token: T, to: A, amount: "1" }]), /prestate|trace.*limit/);
+    assert.equal(cache.slots.size, 0); assert.equal(r.writes.length, 0);
+  }
+});
+test("trace capability, cancellation and isolated-read errors propagate without guessed fallback", async () => {
+  for (const failure of [Object.assign(new Error("prestateTracer unavailable"), { code: -32601 }),
+    new Error("funding trace cancelled"), Object.assign(new Error("isolated read reverted"), { data: "0x" })]) {
+    const r = balanceRpc(), cache = createNodeFundingCache();
+    const rpc = async (method: string, params: readonly any[]) => {
+      if (failure.message === "isolated read reverted" ? method === "eth_call" && params[2] !== undefined : method === "debug_traceCall")
+        throw failure;
+      return r.rpc(method, params);
+    };
+    await assert.rejects(new NodeInputFunding(rpc, PIN, cache).prepare([{ token: T, to: A, amount: "1" }]), error => error === failure);
+    assert.equal(cache.slots.size, 0);
+  }
+  const r = balanceRpc(), failure = new Error("temporary trace cancellation"); let failed = false;
+  const f = new NodeInputFunding(async (method, params) => {
+    if (method === "debug_traceCall" && !failed) { failed = true; throw failure; }
+    return r.rpc(method, params);
+  }, PIN);
+  await assert.rejects(f.prepare([{ token: T, to: A, amount: "1" }]), error => error === failure);
+  assert.equal((await f.prepare([{ token: T, to: A, amount: "2" }])).expected[0]!.balance, 79n);
 });
 test("node state diff clears changed-to-zero slots and preserves prior writes; deleted accounts reject", () => {
   const a = toBeHex(1n, 32), b = toBeHex(2n, 32), c = toBeHex(3n, 32);
