@@ -1,0 +1,686 @@
+{
+  "format": "psm-node-funding-fix-evidence-v1",
+  "baseCommit": "faaf205ce81eb55f6d2c0c75370139a1a64e752f",
+  "codifyCommit": "933633a71db21559477716f2dc578d3cc59530a5",
+  "timestamp": "2026-11-13T09:22:14.084402+00:00",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+  "source": {
+    "number": 26029876,
+    "hash": "0xd33e839d78988e851e3e85515084208a7229f53feb0d446d9b63d8d1bd9b937a"
+  },
+  "scope": {
+    "familyIds": [
+      "protocol:psm"
+    ],
+    "selectedLegs": 10,
+    "otherFamilyHistoricalTests": false,
+    "broadcast": false,
+    "executorCodeMode": "counterfactual",
+    "simulationMethod": "debug_traceCall",
+    "simulator": "node-rpc",
+    "originalTxReplay": false,
+    "wholeFamilyCoverage": false,
+    "livePerformanceVerified": false
+  },
+  "tooling_defects": [
+    {
+      "tool": "node-input-funding",
+      "issue": "Full-word sentinel rejected independently stored low-bit balance fields.",
+      "status": "codified",
+      "codify_commit": "933633a71db21559477716f2dc578d3cc59530a5",
+      "before": "Pinned historical USDC balanceOf removed sentinel bit 255; NodeInputFunding rejected its layout. DAI full-word funding passed.",
+      "after": "USDC low-255-bit field proved with flags preserved; DAI full-word behavior retained; same PSM Ready changed from 0 verified/1 retryable to 1 verified/0 retryable."
+    },
+    {
+      "tool": "family-transaction-facts",
+      "issue": "Historical action and amount matching prevented registered same-state direction/amount variants from reaching independent execution.",
+      "status": "codified",
+      "codify_commit": "933633a71db21559477716f2dc578d3cc59530a5",
+      "before": "After funding repair, sell-gem case reached action-conflict because original TX called buyGem.",
+      "after": "Conflicts remain as reference evidence; match-only diagnostic stays strict; current Ready, Graph, exact and both execution paths remain mandatory."
+    }
+  ],
+  "tests": {
+    "fundingAndTransport": {
+      "tests": 231,
+      "pass": 231,
+      "fail": 0
+    },
+    "factsRunner": {
+      "tests": 25,
+      "pass": 25,
+      "fail": 0
+    },
+    "sharedOffline": {
+      "tests": 914,
+      "pass": 913,
+      "fail": 0,
+      "skip": 1,
+      "sourceStable": true
+    },
+    "buildLive": "pass",
+    "historicalPsm": {
+      "pass": 10,
+      "fail": 0,
+      "rawReportVerifiersPass": 10
+    }
+  },
+  "baselineArtifacts": [
+    "/opt/mev-cloud/family-runtime-20261007/logs/psm-only-20261113T090530Z",
+    "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/probe-before.json",
+    "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/funding-only-leg-00"
+  ],
+  "cacheReuse": {
+    "probeAfterRpcReads": 5,
+    "probeAfterCachedReads": 13,
+    "historicalTransactionTrace": "shared existing cache",
+    "ready": "PSM-only at the pinned block; no global Ready rebuild"
+  },
+  "concurrentChange": {
+    "initialBatch": "Curve generated catalog reverted between leg 0 and leg 1; original results retained.",
+    "resolution": "Repeated leg 0 in a new output directory, then independently reverified all 10 reports against one final source fingerprint; no PSM or unrelated Family definitions were edited by this task."
+  },
+  "review": {
+    "reviewer": "funding_fix_review",
+    "result": "no blocking findings",
+    "scope": "read-only independent source review; no independent RPC rerun"
+  },
+  "limitations": [
+    "Only this PSM instance, both directions and ten registered sizes were historically executed.",
+    "No original transaction intra-block replay, live launch, or latency acceptance is claimed.",
+    "Token funding supports proven full words or contiguous low-bit fields; shifted, scaled, shared, foreign-ledger and ambiguous layouts remain fail-closed."
+  ],
+  "legs": [
+    {
+      "legId": "protocol:psm--psm--recipient66--0-sell-gem-production-P",
+      "result": "pass",
+      "rawEvidenceVerifierExitCode": 0,
+      "sourceFingerprint": "e8fe216e222c1f15052ecec52343fba2e3370b79d5083bfc8520c2afe43f8a1c",
+      "originalTransactionBinding": "action-conflict",
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "requestedAmountIn": "5494762",
+        "quotedAmountIn": "5494762",
+        "quotedAmountOut": "5494762000000000000"
+      },
+      "quoted": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "5494762",
+        "actualAmountOut": "5494762000000000000",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtime": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "5494762",
+        "actualAmountOut": "5494762000000000000",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "outputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      },
+      "evidence": {
+        "report.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-00-confirm/report.json",
+          "sha256": "6a5334d982565cd58b2f2a485dffdf59517cf874b3d596fa0379d56a7b410e4b"
+        },
+        "ready.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-00-confirm/ready.json",
+          "sha256": "5304a6f70c89b9239aff3451e2660c0e7774d792cb7c3920dab96e46aedee3df"
+        },
+        "acceptance.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-00-confirm/acceptance.json",
+          "sha256": "e4bdc63633ae7c3aa9467ec591fb5de0a452ccfc4c3ad36a1e1e043230e68a36"
+        }
+      }
+    },
+    {
+      "legId": "protocol:psm--psm--recipient66--1-sell-gem-double-production-P",
+      "result": "pass",
+      "rawEvidenceVerifierExitCode": 0,
+      "sourceFingerprint": "e8fe216e222c1f15052ecec52343fba2e3370b79d5083bfc8520c2afe43f8a1c",
+      "originalTransactionBinding": "action-conflict",
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "requestedAmountIn": "10989524",
+        "quotedAmountIn": "10989524",
+        "quotedAmountOut": "10989524000000000000"
+      },
+      "quoted": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "10989524",
+        "actualAmountOut": "10989524000000000000",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtime": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "10989524",
+        "actualAmountOut": "10989524000000000000",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "outputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      },
+      "evidence": {
+        "report.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-01/report.json",
+          "sha256": "a0d56ff412068af601ca8b8adb866178c6cf12964b20c2684dce2a75cc01df47"
+        },
+        "ready.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-01/ready.json",
+          "sha256": "5304a6f70c89b9239aff3451e2660c0e7774d792cb7c3920dab96e46aedee3df"
+        },
+        "acceptance.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-01/acceptance.json",
+          "sha256": "d5dabd5377c1f5ecaf59b7de2349898f26aa8dd19a7aaf248bdb2f109af127f4"
+        }
+      }
+    },
+    {
+      "legId": "protocol:psm--psm--recipient66--2-sell-gem-original-USDC-size-at-N",
+      "result": "pass",
+      "rawEvidenceVerifierExitCode": 0,
+      "sourceFingerprint": "e8fe216e222c1f15052ecec52343fba2e3370b79d5083bfc8520c2afe43f8a1c",
+      "originalTransactionBinding": "action-conflict",
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "requestedAmountIn": "8137414",
+        "quotedAmountIn": "8137414",
+        "quotedAmountOut": "8137414000000000000"
+      },
+      "quoted": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "8137414",
+        "actualAmountOut": "8137414000000000000",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtime": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "8137414",
+        "actualAmountOut": "8137414000000000000",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "outputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      },
+      "evidence": {
+        "report.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-02/report.json",
+          "sha256": "8e55cad2adf01e03f09572b49ff2e8810630226c0749be5e5e2ae6002f5a1225"
+        },
+        "ready.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-02/ready.json",
+          "sha256": "5304a6f70c89b9239aff3451e2660c0e7774d792cb7c3920dab96e46aedee3df"
+        },
+        "acceptance.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-02/acceptance.json",
+          "sha256": "f3a2bf704ba2beae099d618599fc91c29d8188c8236f9c4902f5275c73ba176a"
+        }
+      }
+    },
+    {
+      "legId": "protocol:psm--psm--recipient66--3-sell-gem-one-output-unit-cost",
+      "result": "pass",
+      "rawEvidenceVerifierExitCode": 0,
+      "sourceFingerprint": "e8fe216e222c1f15052ecec52343fba2e3370b79d5083bfc8520c2afe43f8a1c",
+      "originalTransactionBinding": "action-conflict",
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "requestedAmountIn": "1",
+        "quotedAmountIn": "1",
+        "quotedAmountOut": "1000000000000"
+      },
+      "quoted": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "1",
+        "actualAmountOut": "1000000000000",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtime": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "1",
+        "actualAmountOut": "1000000000000",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "outputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      },
+      "evidence": {
+        "report.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-03/report.json",
+          "sha256": "858624f62c07c3023a7ec0dae50f3b78f8cc13af51ca2e2cd8aa9674beb05c42"
+        },
+        "ready.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-03/ready.json",
+          "sha256": "5304a6f70c89b9239aff3451e2660c0e7774d792cb7c3920dab96e46aedee3df"
+        },
+        "acceptance.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-03/acceptance.json",
+          "sha256": "7e4a1b2214ca4933ed90118e3e96a1524c70b57327e5ea1115af3f653577fd44"
+        }
+      }
+    },
+    {
+      "legId": "protocol:psm--psm--recipient66--4-sell-gem-one-output-unit-cost-plus-one",
+      "result": "pass",
+      "rawEvidenceVerifierExitCode": 0,
+      "sourceFingerprint": "e8fe216e222c1f15052ecec52343fba2e3370b79d5083bfc8520c2afe43f8a1c",
+      "originalTransactionBinding": "action-conflict",
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "tokenOut": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "requestedAmountIn": "2",
+        "quotedAmountIn": "2",
+        "quotedAmountOut": "2000000000000"
+      },
+      "quoted": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "2",
+        "actualAmountOut": "2000000000000",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtime": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "2",
+        "actualAmountOut": "2000000000000",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "outputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      },
+      "evidence": {
+        "report.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-04/report.json",
+          "sha256": "5ba231aecc4c90be02e8ad9b98107013c978f73ae8b25a03843d0488a7d61cd9"
+        },
+        "ready.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-04/ready.json",
+          "sha256": "5304a6f70c89b9239aff3451e2660c0e7774d792cb7c3920dab96e46aedee3df"
+        },
+        "acceptance.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-04/acceptance.json",
+          "sha256": "38f8ec0ce216469cc3f7ba9b2b4b9df8676318ed127bced113969e2babaabe40"
+        }
+      }
+    },
+    {
+      "legId": "protocol:psm--psm--recipient66--5-buy-gem-production-P",
+      "result": "pass",
+      "rawEvidenceVerifierExitCode": 0,
+      "sourceFingerprint": "e8fe216e222c1f15052ecec52343fba2e3370b79d5083bfc8520c2afe43f8a1c",
+      "originalTransactionBinding": "input-conflict",
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "requestedAmountIn": "5483517075214014766",
+        "quotedAmountIn": "5483517075214014766",
+        "quotedAmountOut": "5483517"
+      },
+      "quoted": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "5483517000000000000",
+        "actualAmountOut": "5483517",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtime": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "5483517000000000000",
+        "actualAmountOut": "5483517",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "outputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      },
+      "evidence": {
+        "report.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-05/report.json",
+          "sha256": "748151440362c8b68d0d3ec29adb5760dcbbc41c4bdcc7318fc87d238513860f"
+        },
+        "ready.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-05/ready.json",
+          "sha256": "5304a6f70c89b9239aff3451e2660c0e7774d792cb7c3920dab96e46aedee3df"
+        },
+        "acceptance.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-05/acceptance.json",
+          "sha256": "5c4efc4fc4acab96e844b84312fc414750d3e1be2ff80bb2b7987ac4d61f440a"
+        }
+      }
+    },
+    {
+      "legId": "protocol:psm--psm--recipient66--6-buy-gem-double-production-P",
+      "result": "pass",
+      "rawEvidenceVerifierExitCode": 0,
+      "sourceFingerprint": "e8fe216e222c1f15052ecec52343fba2e3370b79d5083bfc8520c2afe43f8a1c",
+      "originalTransactionBinding": "input-conflict",
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "requestedAmountIn": "10967034150428029532",
+        "quotedAmountIn": "10967034150428029532",
+        "quotedAmountOut": "10967034"
+      },
+      "quoted": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "10967034000000000000",
+        "actualAmountOut": "10967034",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtime": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "10967034000000000000",
+        "actualAmountOut": "10967034",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "outputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      },
+      "evidence": {
+        "report.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-06/report.json",
+          "sha256": "87713acf153fa15e207850649cdf9687704230991d6e4038143642f3e4b7a52e"
+        },
+        "ready.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-06/ready.json",
+          "sha256": "5304a6f70c89b9239aff3451e2660c0e7774d792cb7c3920dab96e46aedee3df"
+        },
+        "acceptance.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-06/acceptance.json",
+          "sha256": "f79b3a3dd6d1a29f3149d4b669ef21a5a2949be572533ce1ce346ab91d326d58"
+        }
+      }
+    },
+    {
+      "legId": "protocol:psm--psm--recipient66--7-buy-gem-historical-amount-at-N",
+      "result": "pass",
+      "rawEvidenceVerifierExitCode": 0,
+      "sourceFingerprint": "e8fe216e222c1f15052ecec52343fba2e3370b79d5083bfc8520c2afe43f8a1c",
+      "originalTransactionBinding": "matched",
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "requestedAmountIn": "8137414000000000000",
+        "quotedAmountIn": "8137414000000000000",
+        "quotedAmountOut": "8137414"
+      },
+      "quoted": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "8137414000000000000",
+        "actualAmountOut": "8137414",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtime": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "8137414000000000000",
+        "actualAmountOut": "8137414",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "outputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      },
+      "evidence": {
+        "report.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-07/report.json",
+          "sha256": "508291c3be6011b366e8b4336f9c86dbbe688a214a1377e7e5694617a93f3708"
+        },
+        "ready.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-07/ready.json",
+          "sha256": "5304a6f70c89b9239aff3451e2660c0e7774d792cb7c3920dab96e46aedee3df"
+        },
+        "acceptance.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-07/acceptance.json",
+          "sha256": "2c9dc1a96cc41b356da1d49b20a75994032ea508bba40f458eee33bf9ccb8268"
+        }
+      }
+    },
+    {
+      "legId": "protocol:psm--psm--recipient66--8-buy-gem-one-output-unit-cost",
+      "result": "pass",
+      "rawEvidenceVerifierExitCode": 0,
+      "sourceFingerprint": "e8fe216e222c1f15052ecec52343fba2e3370b79d5083bfc8520c2afe43f8a1c",
+      "originalTransactionBinding": "input-conflict",
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "requestedAmountIn": "1000000000000",
+        "quotedAmountIn": "1000000000000",
+        "quotedAmountOut": "1"
+      },
+      "quoted": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "1000000000000",
+        "actualAmountOut": "1",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtime": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "1000000000000",
+        "actualAmountOut": "1",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "outputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      },
+      "evidence": {
+        "report.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-08/report.json",
+          "sha256": "3fec3ae87ced76d54975b17824e1a0013048830522053cdd54ff6aa90333340d"
+        },
+        "ready.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-08/ready.json",
+          "sha256": "5304a6f70c89b9239aff3451e2660c0e7774d792cb7c3920dab96e46aedee3df"
+        },
+        "acceptance.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-08/acceptance.json",
+          "sha256": "3ca64aa5efed353c1f14eb8e90131cae296240c637d460e949d88c879c140c6b"
+        }
+      }
+    },
+    {
+      "legId": "protocol:psm--psm--recipient66--9-buy-gem-one-output-unit-cost-plus-one",
+      "result": "pass",
+      "rawEvidenceVerifierExitCode": 0,
+      "sourceFingerprint": "e8fe216e222c1f15052ecec52343fba2e3370b79d5083bfc8520c2afe43f8a1c",
+      "originalTransactionBinding": "input-conflict",
+      "exact": {
+        "status": "pass",
+        "tokenIn": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+        "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "requestedAmountIn": "1000000000001",
+        "quotedAmountIn": "1000000000001",
+        "quotedAmountOut": "1"
+      },
+      "quoted": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "1000000000000",
+        "actualAmountOut": "1",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "runtime": {
+        "status": "pass",
+        "required": true,
+        "actualAmountIn": "1000000000000",
+        "actualAmountOut": "1",
+        "differenceFromExact": "0",
+        "controls": {
+          "positive": "pass",
+          "noInput": "pass",
+          "forcedRevert": "pass"
+        }
+      },
+      "outputParity": {
+        "status": "pass",
+        "toleranceRawUnits": 1,
+        "quotedDifference": "0",
+        "runtimeDifference": "0"
+      },
+      "evidence": {
+        "report.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-09/report.json",
+          "sha256": "90499a8f96636158067ca5dd4d5221a7518c37f6c4b0154f2ff58e5b0cc1cd3d"
+        },
+        "ready.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-09/ready.json",
+          "sha256": "5304a6f70c89b9239aff3451e2660c0e7774d792cb7c3920dab96e46aedee3df"
+        },
+        "acceptance.json": {
+          "path": "/opt/mev-cloud/family-runtime-20261007/logs/psm-funding-fix-20261113/after-fix/leg-09/acceptance.json",
+          "sha256": "74e06672b52d864a6e0b5d60e97ded5a8c31bb3c66262aed59ce76da984bdabf"
+        }
+      }
+    }
+  ]
+}
