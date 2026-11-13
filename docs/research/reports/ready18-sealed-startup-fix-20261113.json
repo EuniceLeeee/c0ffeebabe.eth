@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-13",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "fixCommit": "28c00d9704f2d87f98f5ccdbdc04aca15941126b",
+  "failure": {
+    "runId": "live-2026-11-13T09-36-24-876Z-3c1748bf",
+    "stage": "startup before first scanned block",
+    "reason": "launcher prepared generation 18; ordinary main Ready update rebuilt a single-block candidate range and published generation 19; supervisor rejected generation mismatch",
+    "notPortConflict": true,
+    "originalReadyPreserved": true,
+    "replay": {
+      "runId": "live-2026-11-13T09-36-24-876Z-3c1748bf",
+      "expectedGeneration": 18,
+      "lines": 260,
+      "errors": [
+        {
+          "line": 249,
+          "message": "unexpected Ready generation"
+        }
+      ],
+      "first": null,
+      "last": null,
+      "broadcast": false
+    },
+    "accidentalOutput": {
+      "readyGeneration": 19,
+      "activeInstances": 40,
+      "routeInstances": 39,
+      "edges": 78
+    }
+  },
+  "change": {
+    "preparedConsumer": "Explicit generation and SHA256 from launcher activation output; no discovery/rebuild on this path",
+    "guards": [
+      "complete checkpoint",
+      "sealed SHA256 and generation",
+      "no unsealed side journal",
+      "canonical source",
+      "active source coverage",
+      "current Family definitions",
+      "activation",
+      "rehydrated Graph equivalence"
+    ],
+    "ordinaryReadyUpdateUnchanged": true,
+    "observerStopGuardUnchanged": true,
+    "observerDiagnosticAdded": true
+  },
+  "validation": {
+    "regression": {
+      "tests": 55,
+      "pass": 55,
+      "fail": 0
+    },
+    "cloudBuild": "pass",
+    "frozenPackageBuild": "pass",
+    "preparedConsumer": {
+      "status": "passed",
+      "elapsedMs": 413756,
+      "lineage": {
+        "generation": 18,
+        "graphHash": "252ab851c36a147d9f0746b70f0c38ed0bbd2b5c0bbb1e9b572ea19a8b5c7a34",
+        "catalogHash": "7ca7845bf981da5bf78ffb0bc23726d879510a0b5197876e0a62c39f4008b51e",
+        "cutoffNumber": 26222895,
+        "appliedThroughNumber": 26222895,
+        "appliedThroughHash": "0x3963feb050e7486f66e2c09595f12dc42206a78b51b2c287caaa1a3e99ceb59c",
+        "sourceCount": 180
+      },
+      "routeInstances": 71885,
+      "graphEdges": 147694,
+      "fundingTokens": 177,
+      "baseline": {
+        "generation": 18,
+        "cutoffNumber": 26222895,
+        "activeInstanceCount": 72092,
+        "observationScanFrom": 26222895
+      },
+      "signing": false,
+      "broadcast": false
+    },
+    "journalGuard": "absence independently checked; rejection regression passes",
+    "clientCheck": {
+      "checkOnly": true,
+      "signing": false,
+      "broadcast": false,
+      "head": 26405453,
+      "blocks": 500,
+      "profitMode": "positive-ev",
+      "catchupSource": "rpc",
+      "bribeBps": 9000,
+      "nodeHeapMiB": 22528,
+      "serviceMemoryMaxGiB": 26,
+      "readyGeneration": 18,
+      "readyReused": true,
+      "automaticRestart": false
+    },
+    "unchangedReadySha256": "30d9427efe27763fae69dc09139edf98d413bf1051be17984165723f01b2c464"
+  },
+  "package": {
+    "release": "/opt/mev-cloud/manual-live/releases/ready18-sealed-startup-20261113",
+    "baseCommit": "faaf205ce81eb55f6d2c0c75370139a1a64e752f",
+    "startupPatchCommit": "28c00d9704f2d87f98f5ccdbdc04aca15941126b",
+    "changedPackageFiles": [
+      "bounded-live-launcher.mjs",
+      "checks.json",
+      "package-provenance.json",
+      "runtime/listener/src/searcher/main.ts"
+    ],
+    "releaseSha256": "0f35fec1e75fab7d8b4879c732fd04585a8cdce636e565382dbc2ca55a34748b",
+    "readySha256": "30d9427efe27763fae69dc09139edf98d413bf1051be17984165723f01b2c464",
+    "configUnchanged": true,
+    "broadcast": false
+  },
+  "factAcceptancePort": 8556,
+  "livePort": 8557,
+  "factAcceptanceProcessUntouched": true,
+  "noLiveStarted": true,
+  "reconciliation": {
+    "query": [
+      "redaction",
+      "live-window"
+    ],
+    "toolIds": [
+      "analysis:redact-live-run"
+    ],
+    "manifestSha256": "7582e6c8b77c4ac6ce436fab3ab38042f4f20c4bae1398aab3b2d8c239cc7f19",
+    "manifestPath": "/Users/eunice/src/MEV/logs/ready18-startup-fix-20261113/tool-selection.json",
+    "conclusion": "zero events and no scan timing agree with startup failure; original RunWindow replay pinpoints the generation assertion"
+  },
+  "limits": [
+    "Read-only full Ready assembly and launcher preflight passed; a new live run has not been started.",
+    "This patch does not claim post-start pricing, opportunity, latency or execution results."
+  ]
+}

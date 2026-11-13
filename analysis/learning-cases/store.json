@@ -2779,6 +2779,41 @@
       },
       "created_at": "2026-11-12T14:50:42.375934+00:00",
       "updated_at": "2026-11-12T14:50:42.375934+00:00"
+    },
+    {
+      "learning_case_id": "tooldef-20261113-live-observer-ready-generation-diagnostics",
+      "status": "manual_required",
+      "strategy_kind": "block-scan",
+      "edge_kinds": [],
+      "trigger": "competitor_not_seen",
+      "comparable": false,
+      "primary_gap": "manual_required",
+      "gap_detail": "bounded_live_observer_hid_ready_generation_assertion",
+      "evidence": {
+        "scope": "Diagnostic tooling defect only. The legacy trigger enum is bookkeeping, not a competitor observation or a bundle non-inclusion claim. No competitor transaction, profitable opportunity, live verification, signing or broadcast is asserted.",
+        "runId": "live-2026-11-13T09-36-24-876Z-3c1748bf",
+        "observation": "Launcher activation prepared Ready generation 18 with 72092 instances and 147694 edges. Main ordinary useReadyGeneration subsequently invoked rebuildUniverse against the sealed single-block universeRange and published generation 19. The original RunWindow correctly rejected its catalog line with unexpected Ready generation, but the observer catch retained only observer_failed.",
+        "independentReview": "Read-only review confirmed the unintended second rebuild and the strict observer rejection. Reviewed the prepared-consumer branch retaining canonical source, coverage, current definitions, activation and graph checks; recommended rejecting an unsealed attestation journal, incorporated in the fix.",
+        "fix": "Launcher passes its prepared generation and checkpoint SHA256 after config overrides. Explicit prepared consumption rejects changed bytes, generation, pending work and a sidecar journal, then validates source/definitions/activation/graph without rebuilding Ready. Observer failures record phase, safe error classification, expected and observed Ready generations and a redacted-line hash, while preserving fail-closed stopping.",
+        "validation": "55/55 scoped regressions; cloud and frozen package build:live passed. Full read-only production Ready18 consumer assembly passed with 72092 active instances, 147694 edges and generation 18 preserved. Launcher client --check passed at head 26405453. No live run started; evidence is in docs/research/reports/ready18-sealed-startup-fix-20261113.json.",
+        "files": [
+          "listener/src/searcher/main.ts",
+          "listener/src/searcher/test/startup-ready-input-review.ts",
+          "scripts/bounded-live-launcher.mjs",
+          "scripts/bounded-live-launcher-lifecycle.test.mjs"
+        ],
+        "limitations": "No live restart performed by this review; no live_verified status. Existing failed-run artifacts and unrelated Anvil processes remain untouched."
+      },
+      "tooling_defect": {
+        "tool": "scripts/bounded-live-launcher.mjs observer diagnostics",
+        "issue": "Catch-all observer_failed suppressed the reason for a legitimate Ready generation mismatch, obscuring an unintended startup Ready rebuild.",
+        "evidence": "Original failed-run catalog line replayed through its RunWindow rejects generation 19 against prepared generation 18. Scoped lifecycle regression now preserves this mismatch evidence and still stops the run.",
+        "codify_target": "Prepared Ready consumer binding in main.ts and bounded-live-launcher.mjs; startup-ready-input-review and launcher-lifecycle regressions.",
+        "codify_commit": "28c00d9704f2d87f98f5ccdbdc04aca15941126b",
+        "status": "codified"
+      },
+      "created_at": "2026-11-13T10:27:25.459Z",
+      "updated_at": "2026-11-13T10:31:52.705Z"
     }
   ]
 }
