@@ -3158,6 +3158,30 @@ function catalogActivityChunks(input: {
   return Object.freeze(chunks);
 }
 
+/** Graph roots retain their sealed order. Publication reconstruction can visit
+ * Families in catalog order instead of attestation order; compare full edge
+ * contents with multiplicity, without rewriting either graph or its hash. */
+export function readyGraphSnapshotsEquivalent(actual: unknown, expected: unknown): boolean {
+  if (actual === null || expected === null || typeof actual !== "object" ||
+    typeof expected !== "object" || Array.isArray(actual) || Array.isArray(expected)) return false;
+  const { edges: left, ...leftHeader } = actual as Record<string, unknown>;
+  const { edges: right, ...rightHeader } = expected as Record<string, unknown>;
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length ||
+    canonicalJson(leftHeader) !== canonicalJson(rightHeader)) return false;
+  const counts = new Map<string, number>();
+  for (const edge of left) {
+    const key = canonicalJson(edge);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  for (const edge of right) {
+    const key = canonicalJson(edge), count = counts.get(key);
+    if (count === undefined) return false;
+    if (count === 1) counts.delete(key);
+    else counts.set(key, count - 1);
+  }
+  return counts.size === 0;
+}
+
 export function createRebuildWiring(input?: {
   readonly readyThrottle?: ReadyRpcThrottle;
   readonly rpcUrl?: string;
@@ -4355,7 +4379,7 @@ export function createRebuildWiring(input?: {
       assertOpen();
       // Reproject ALL routes, not just scanner-consumed edges. The closed-over
       // production builder is independent of a caller's candidate graph.
-      if (canonicalJson(graphSnapshot) !== canonicalJson(wiring.buildGraphSnapshot(publications, cutoff))) {
+      if (!readyGraphSnapshotsEquivalent(graphSnapshot, wiring.buildGraphSnapshot(publications, cutoff))) {
         throw new Error("Ready restriction Graph differs from retained Family publications");
       }
       const readyInstances: PreparedFamilyInstance[] = [];

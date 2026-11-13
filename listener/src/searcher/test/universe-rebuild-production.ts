@@ -28,6 +28,7 @@ import {
   rebuildFamilyCandidateKey,
   rebuildFamilyInstanceDedupeKey,
   resolveRebuildRevmTimeoutMs,
+  readyGraphSnapshotsEquivalent,
   upgradeLegacyVerifiedMemo,
   validateObservedSenderEvidence,
   type RebuildScanObservation,
@@ -570,6 +571,28 @@ async function assertRebuildQueuedPhysicalFencing(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  const edgeA = { canonicalEdgeId: "family-a:pool:forward", target: "pool", executionVariantKey: "v1", score: 0 };
+  const edgeB = { canonicalEdgeId: "family-b:pool:reverse", target: "pool", executionVariantKey: "v2", score: 0 };
+  const sealedGraph = { format: "strict-rebuild-graph-v1", edges: [edgeA, edgeB, edgeA] };
+  const originalGraph = structuredClone(sealedGraph);
+  assert(readyGraphSnapshotsEquivalent(sealedGraph, { ...sealedGraph, edges: [edgeB, edgeA, edgeA] }),
+    "catalog and attestation publication order must not invalidate the same Ready graph");
+  for (const changed of [
+    { ...sealedGraph, format: "different-format" },
+    { ...sealedGraph, edges: [edgeA, edgeB] },
+    { ...sealedGraph, edges: [edgeA, edgeB, edgeB] },
+    { ...sealedGraph, edges: [edgeA, edgeB, { ...edgeA, target: "other-pool" }] },
+    { ...sealedGraph, edges: [edgeA, edgeB, { ...edgeA, executionVariantKey: "v3" }] },
+    { ...sealedGraph, edges: [edgeA, edgeB, { ...edgeA, score: 1 }] },
+    { ...sealedGraph, edges: [edgeA, edgeB, { ...edgeA, extra: true }] },
+  ]) assert(!readyGraphSnapshotsEquivalent(sealedGraph, changed), "all edge fields and multiplicities remain binding");
+  assert.deepEqual(sealedGraph, originalGraph, "comparison must not rewrite sealed edge order or roots");
+  assert(!readyGraphSnapshotsEquivalent(null, sealedGraph));
+  assert(!readyGraphSnapshotsEquivalent({}, sealedGraph));
+  if (process.argv.includes("--graph-equivalence-only")) {
+    console.log("Ready Graph order equivalence and content rejection PASS");
+    return;
+  }
   assert.equal(resolveRebuildRevmTimeoutMs({}), 180_000);
   assert.equal(resolveRebuildRevmTimeoutMs({ SEARCHER_REVM_TIMEOUT_MS: "60000" }), 60_000);
   assert.equal(resolveRebuildRevmTimeoutMs({
