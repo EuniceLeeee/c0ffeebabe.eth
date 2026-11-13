@@ -128,6 +128,21 @@ function nominationProviderFor(input: {
   return session;
 }
 
+/** Only raw observations from the selected TX may change lifecycle context.
+ * State-derived address/factory evidence must be reconstructed at execution. */
+export function reanchorTransactionNomination(observation: UnifiedObservation,
+  evidence: CanonicalSource, execution: CanonicalSource, transactionHash: string): UnifiedObservation {
+  if ((observation.kind !== "log" && observation.kind !== "call") ||
+      !/^0x[0-9a-f]{64}$/i.test(transactionHash) ||
+      observation.transactionHash?.toLowerCase() !== transactionHash.toLowerCase() ||
+      observation.source.number !== evidence.number ||
+      observation.source.hash.toLowerCase() !== evidence.hash.toLowerCase() ||
+      observation.source.generation !== evidence.generation) {
+    throw new Error("nomination must be a raw call/log bound to the selected transaction source");
+  }
+  return Object.freeze({ ...observation, source: execution });
+}
+
 export type StrictAttestedPool<Pool extends {
   readonly address: string;
   readonly adapter?: string;
@@ -202,6 +217,8 @@ export async function attestPoolIdentitiesStrict<
   readonly provider: StrictIdentityProvider;
   readonly runtime: CentralAdapterRuntime;
   readonly source: CanonicalSource;
+  /** Optional observation anchor; identity and all publications still use source. */
+  readonly nomination?: { readonly source: CanonicalSource; readonly provider: StrictIdentityProvider; readonly transactionHash: string };
   readonly pools: readonly Pool[];
   /**
    * Maps a verified identity lineage back to the legacy adapter/venue
@@ -280,9 +297,10 @@ export async function attestPoolIdentitiesStrict<
   // even when the durable rebuild invokes this function once per candidate.
   // Plugin caches (notably V4's manager-wide recent-swap index) bind their
   // settled/in-flight key to this provider identity + canonical source.
+  const nominationSource = input.nomination?.source ?? input.source;
   const nominationProvider = nominationProviderFor({
-    provider: input.provider,
-    source: input.source,
+    provider: input.nomination?.provider ?? input.provider,
+    source: nominationSource,
   });
   const processPool = async (index: number): Promise<void> => {
     const pool = input.pools[index];
@@ -320,6 +338,7 @@ export async function attestPoolIdentitiesStrict<
         opaque: Object.freeze(entryOpaque(pool)) as never,
       })]);
       let observations: readonly UnifiedObservation[];
+      let captured = false;
       if (input.channelOrder === "reverse-binding-first") {
         // Retain channel first: reverse binding needs no recent activity and
         // is the cheap chain-truth path for retained rows. Fall through to
@@ -329,26 +348,33 @@ export async function attestPoolIdentitiesStrict<
           catalog: input.catalog,
           source: input.source,
           nominations,
-          provider: nominationProvider,
+          provider: nominationProviderFor({ provider: input.provider, source: input.source }),
           onlyFamilyId,
         });
         if (observations.length === 0) {
+          captured = true;
           observations = await executeCatalogCaptureNominations({
             catalog: input.catalog,
-            source: input.source,
+            source: nominationSource,
             nominations,
             provider: nominationProvider,
             alreadyAdmitted: excludedFamilies,
           });
         }
       } else {
+        captured = true;
         observations = await executeCatalogCaptureNominations({
           catalog: input.catalog,
-          source: input.source,
+          source: nominationSource,
           nominations,
           provider: nominationProvider,
           alreadyAdmitted: excludedFamilies,
         });
+      }
+      if (captured && input.nomination) {
+        observations = observations.map(observation => reanchorTransactionNomination(
+          observation, input.nomination!.source, input.source, input.nomination!.transactionHash,
+        ));
       }
       let observation: UnifiedObservation | undefined = observations[0];
       if (observation === undefined) {

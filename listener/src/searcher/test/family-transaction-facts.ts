@@ -8,7 +8,7 @@ import { familyTransactionDirectory, familyTransactionInputFingerprint, familyTr
   getInstalledTransactionFamilies, readFamilyTransaction, type FamilyTransaction, type FamilyTransactionLeg } from "./family-transaction-registry.js";
 import { registerTransactionAcceptanceSample, transactionSimulationCase, transactionTestActors } from "./protocol-json-sample-registration.js";
 import { prepareFamilyReady, assertAcceptanceReadyTarget, readFamilyTransactionEvidence, transactionReadyRoutes } from "./family-json-ready.js";
-import { acceptanceSourceFingerprint, assertAcceptanceHeader, openFamilyAcceptanceRuntimeContext, openProtocolJsonAcceptanceContext } from "./protocol-json-acceptance-context.js";
+import { acceptanceSourceFingerprint, assertAcceptanceHeader, assertAcceptanceReceipt, openFamilyAcceptanceRuntimeContext, openProtocolJsonAcceptanceContext } from "./protocol-json-acceptance-context.js";
 import { basicRouteAcceptanceStages, verifyBasicRouteAcceptance } from "./protocol-json-basic-facts.js";
 import { runProtocolJsonAcceptance } from "./protocol-json-acceptance.js";
 import { parseFundingAcceptanceCase, runFamilyFundingAcceptance, verifyFundingAcceptanceReport,
@@ -18,6 +18,9 @@ import { nodeSimulateV1Environment } from "../simulator/node-simulate-v1.js";
 import { UniverseRebuildCheckpointStore } from "../universe-rebuild-checkpoint.js";
 import { loadBotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
 import { verifyRecordedExecutionReceipts } from "./family-node-receipt-verification.js";
+
+import { JsonRpcProvider } from "ethers";
+import { selectTransactionExecutionSource, validateTransactionStateSelection, type TransactionStateSelection } from "./family-transaction-source.js";
 
 import { familyFactCacheDirectory } from "./family-transaction-cache.js";
 import { matchFamilyTransactionInput } from "./family-transaction-matching.js";
@@ -43,11 +46,11 @@ const save = (path: string, value: unknown) => {
 const fileEvidence = (path: string) => ({ file: basename(path), sha256: sha(readFileSync(path)) });
 
 export { transactionSimulationCase };
-export function transactionFundingCase(transaction: FamilyTransaction, leg: FamilyTransactionLeg) {
+export function transactionFundingCase(transaction: FamilyTransaction, leg: FamilyTransactionLeg, stateSelection?: TransactionStateSelection) {
   assert.equal(leg.domain, "funding"); assert.deepEqual(familyTransactionLegMissing(leg), []);
   familyTransactionInputFingerprint(transaction, leg);
   return parseFundingAcceptanceCase({ version: 1, domain: "funding", id: leg.id, familyId: leg.familyId,
-    instanceKey: leg.instanceKey, lineageId: leg.lineageId, source: leg.source, ...transactionTestActors(leg),
+    instanceKey: leg.instanceKey, lineageId: leg.lineageId, source: validateTransactionStateSelection(leg.source!, stateSelection).executionSource, ...transactionTestActors(leg),
     transactionHash: transaction.transactionHash, token: leg.tokenIn, amountIn: leg.amountIn });
 }
 
@@ -59,8 +62,12 @@ function evidenceFile(reportPath: string, evidence: any): string {
   return path;
 }
 
-function verifyContextEvidence(raw: any, transaction: FamilyTransaction, leg: FamilyTransactionLeg, execution: any) {
-  const e = raw.evidence, actors = transactionTestActors(leg), source = leg.source!;
+export function verifyContextEvidence(raw: any, transaction: FamilyTransaction, leg: FamilyTransactionLeg, execution: any, stateSelection: TransactionStateSelection) {
+  const e = raw.evidence, actors = transactionTestActors(leg), source = stateSelection.executionSource;
+  if (stateSelection.mode === "parent") {
+    assert.deepEqual(e?.transactionState, stateSelection, "execution and TX source relation differs");
+    assertAcceptanceReceipt(e.receipt, transaction.transactionHash, stateSelection.evidenceSource);
+  }
   assert(e && e.simulator === "node-rpc", "recorded node execution evidence is missing");
   assert(execution && ["deployed", "counterfactual"].includes(execution.executorCodeMode) &&
     ["debug_traceCall", "eth_simulateV1"].includes(execution.simulationMethod), "execution mode identity missing");
@@ -95,6 +102,7 @@ function verifyContextEvidence(raw: any, transaction: FamilyTransaction, leg: Fa
  * never substitutes for current Ready admission or independent simulation. */
 export async function verifyFamilyTransactionBindingReport(reportPath: string, transaction: FamilyTransaction, leg: FamilyTransactionLeg) {
   const report = read(reportPath);
+  const stateSelection = validateTransactionStateSelection(leg.source!, report.stateSelection);
   assert.equal(report.format, "family-transaction-facts-v1");
   assert.equal(report.scope, "same-state-simulation");
   assert.deepEqual(report.originalTransactionInput, ORIGINAL_INPUT_REFERENCE, "original transaction input must remain reference-only");
@@ -107,7 +115,7 @@ export async function verifyFamilyTransactionBindingReport(reportPath: string, t
   assert(envelope);
   const binding = matchFamilyTransactionInput({ transactionHash: transaction.transactionHash,
     evidence: read(evidenceFile(reportPath, report.evidence?.transaction)), expected: leg,
-    routes: await transactionReadyRoutes(envelope, { source: leg.source!, ...transactionTestActors(leg) }) });
+    routes: await transactionReadyRoutes(envelope, { source: stateSelection.executionSource, ...transactionTestActors(leg) }) });
   assert.deepEqual(report.stages.transactionBinding, binding, "reported TX binding differs from raw evidence");
   return binding;
 }
@@ -116,6 +124,7 @@ export async function verifyFamilyTransactionBindingReport(reportPath: string, t
  * summary-only pass document cannot satisfy the installed Family gate. */
 export async function verifyFamilyTransactionFactsReport(reportPath: string, transaction: FamilyTransaction, leg: FamilyTransactionLeg): Promise<void> {
   const report = read(reportPath);
+  const stateSelection = validateTransactionStateSelection(leg.source!, report.stateSelection);
   assert.equal(report.format, "family-transaction-facts-v1"); assert.equal(report.scope, "same-state-simulation");
   assert.deepEqual(report.originalTransactionInput, ORIGINAL_INPUT_REFERENCE, "original transaction input must remain reference-only");
   assert.equal(report.result, "pass"); assert.equal(report.transactionHash, transaction.transactionHash);
@@ -128,7 +137,7 @@ export async function verifyFamilyTransactionFactsReport(reportPath: string, tra
   if (leg.domain === "protocol" || leg.domain === "swap") {
     await verifyFamilyTransactionBindingReport(reportPath, transaction, leg);
   }
-  verifyContextEvidence(raw, transaction, leg, report.execution);
+  verifyContextEvidence(raw, transaction, leg, report.execution, stateSelection);
   const actors = transactionTestActors(leg);
   await verifyRecordedExecutionReceipts({ source: raw.source, chainId: transaction.chainId,
     stateRoot: raw.evidence.header.stateRoot, ...actors, executorRuntimeCode: loadBotVmRuntimeCode(actors.owner),
@@ -137,7 +146,7 @@ export async function verifyFamilyTransactionFactsReport(reportPath: string, tra
   const installed = (await getInstalledTransactionFamilies()).find(row => row.familyId === leg.familyId);
   assert(installed && installed.domain === leg.domain);
   if (leg.domain === "funding") {
-    const sample = transactionFundingCase(transaction, leg);
+    const sample = transactionFundingCase(transaction, leg, stateSelection);
     const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog } = await import("../venues/production-family-composition.js");
     const family = catalog.forStrictFamily(leg.familyId as never);
     const target = await assertFundingTransactionReady({ envelope, sample });
@@ -145,7 +154,7 @@ export async function verifyFamilyTransactionFactsReport(reportPath: string, tra
     await verifyFundingAcceptanceReport(sample, raw, family);
     assert.deepEqual(report.stages, { ...fundingAcceptanceStages(sample, raw), discoveryCheckpoint: { status: "pass", ...target } });
   } else {
-    const sample = transactionSimulationCase(transaction, leg), target = await assertAcceptanceReadyTarget(envelope, sample);
+    const sample = transactionSimulationCase(transaction, leg, stateSelection), target = await assertAcceptanceReadyTarget(envelope, sample);
     assert.deepEqual(raw.source, target.source, "execution source differs from target checkpoint");
     assert.deepEqual(report.stages, { discoveryCheckpoint: { status: "pass", ...target },
       ...verifyBasicRouteAcceptance(sample, raw, installed.ordinaryRuntimeLeg),
@@ -181,7 +190,7 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
   }
   const args = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
-    assert(["--transaction", "--leg", "--rpc-file", "--out", "--ready", "--executor-code-mode", "--simulation-method", "--stage"].includes(argv[i]!) &&
+    assert(["--transaction", "--leg", "--rpc-file", "--out", "--ready", "--executor-code-mode", "--simulation-method", "--stage", "--execution-source"].includes(argv[i]!) &&
       !args.has(argv[i]!) && argv[i + 1] && !argv[i + 1]!.startsWith("--"), "invalid transaction facts option");
     args.set(argv[i]!, argv[i + 1]!);
   }
@@ -214,11 +223,21 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     assert(["deployed", "counterfactual"].includes(mode)); assert(["debug_traceCall", "eth_simulateV1"].includes(method));
     report.execution = { executorCodeMode: mode, simulationMethod: method };
     const actors = transactionTestActors(leg), rpcFile = realpathSync(resolve(args.get("--rpc-file")!));
+    const executionSourceMode = args.get("--execution-source") ?? "transaction";
+    const rpc = read(rpcFile); assert(typeof rpc.MAINNET_RPC_URL === "string", "RPC configuration lacks MAINNET_RPC_URL");
+    const sourceProvider = new JsonRpcProvider(rpc.MAINNET_RPC_URL, transaction.chainId, { staticNetwork: true });
+    let stateSelection: TransactionStateSelection;
+    try { stateSelection = await selectTransactionExecutionSource(leg.source!, executionSourceMode,
+      (name, params) => sourceProvider.send(name, [...params])); }
+    finally { sourceProvider.destroy(); }
+    const executionSource = stateSelection.executionSource;
+    report.stateSelection = stateSelection; checkpoint();
     stage = "discoveryCheckpoint";
     const envelope = args.has("--ready") ? (copyFileSync(realpathSync(resolve(args.get("--ready")!)), readyPath),
       await new UniverseRebuildCheckpointStore({ path: readyPath }).load())
-      : await prepareFamilyReady({ familyId: leg.familyId, domain: leg.domain, source: leg.source!, ...actors, rpcFile, out: readyPath,
-        target: { transactionHash: transaction.transactionHash, instanceKey: leg.instanceKey! },
+      : await prepareFamilyReady({ familyId: leg.familyId, domain: leg.domain, source: executionSource, ...actors, rpcFile, out: readyPath,
+        target: { transactionHash: transaction.transactionHash, instanceKey: leg.instanceKey!,
+          ...(stateSelection.mode === "parent" ? { stateSelection } : {}) },
         executorCodeMode: mode as "deployed" | "counterfactual", simulationMethod: method as "debug_traceCall" | "eth_simulateV1" });
     assert(envelope, "Ready checkpoint unavailable");
     if (requestedStage !== "ready" && (leg.domain === "protocol" || leg.domain === "swap")) {
@@ -231,7 +250,7 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
       report.transactionEvidenceCache = evidence.cache;
       report.evidence = { ready: fileEvidence(readyPath), transaction: fileEvidence(transactionEvidencePath) };
       report.stages.transactionBinding = matchFamilyTransactionInput({ transactionHash: transaction.transactionHash, evidence, expected: leg,
-        routes: await transactionReadyRoutes(envelope, { source: leg.source!, ...actors }) });
+        routes: await transactionReadyRoutes(envelope, { source: stateSelection.executionSource, ...actors }) });
       checkpoint();
       // Registry variants deliberately test new amounts and directions. Keep
       // the original TX relation accurate, while the current Ready/Graph and
@@ -249,20 +268,21 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     stage = "discoveryCheckpoint";
     if (requestedStage === "ready") {
       const target = leg.domain === "funding"
-        ? await assertFundingTransactionReady({ envelope, sample: transactionFundingCase(transaction, leg) })
-        : await assertAcceptanceReadyTarget(envelope, transactionSimulationCase(transaction, leg));
+        ? await assertFundingTransactionReady({ envelope, sample: transactionFundingCase(transaction, leg, stateSelection) })
+        : await assertAcceptanceReadyTarget(envelope, transactionSimulationCase(transaction, leg, stateSelection));
       report.stages.discoveryCheckpoint = { status: "pass", ...target };
       report.evidence = { ready: fileEvidence(readyPath) };
       report.result = "ready-only"; checkpoint();
       console.log(json({ result: report.result, familyId: leg.familyId, legId: leg.id, report: reportPath }));
       return { exitCode: 0, reportPath, report };
     }
-    const input = { readyPath, rpcFile, familyId: leg.familyId, domain: leg.domain, instanceKey: leg.instanceKey!, source: leg.source!,
+    const input = { readyPath, rpcFile, familyId: leg.familyId, domain: leg.domain, instanceKey: leg.instanceKey!, source: executionSource,
+      ...(stateSelection.mode === "parent" ? { transactionHash: transaction.transactionHash, transactionState: stateSelection } : {}),
       ...actors, chainId: transaction.chainId, allowExecutorCodeOverride: mode === "counterfactual",
       simulationMethod: method as "debug_traceCall" | "eth_simulateV1", inputPaths: [transactionPath] };
     const raw: Record<string, any> = {};
     if (leg.domain === "funding") {
-      const sample = transactionFundingCase(transaction, leg);
+      const sample = transactionFundingCase(transaction, leg, stateSelection);
       const target = await assertFundingTransactionReady({ envelope, sample });
       report.stages.discoveryCheckpoint = { status: "pass", ...target }; checkpoint();
       stage = "execution"; context = await openFamilyAcceptanceRuntimeContext(input);
@@ -270,9 +290,9 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
       raw.diagnostics = context.counters(); raw.evidence = context.evidence; save(rawPath, raw);
       report.stages = { ...report.stages, ...fundingAcceptanceStages(sample, raw), discoveryCheckpoint: { status: "pass", ...target } };
     } else {
-      const sample = transactionSimulationCase(transaction, leg), target = await assertAcceptanceReadyTarget(envelope, sample);
+      const sample = transactionSimulationCase(transaction, leg, stateSelection), target = await assertAcceptanceReadyTarget(envelope, sample);
       report.stages.discoveryCheckpoint = { status: "pass", ...target }; checkpoint();
-      const registration = registerTransactionAcceptanceSample(sample, transactionPath, leg.id);
+      const registration = registerTransactionAcceptanceSample(sample, transactionPath, leg.id, undefined, stateSelection);
       stage = "execution";
       const routeContext = await openProtocolJsonAcceptanceContext({ ...input, domain: leg.domain }); context = routeContext;
       await runProtocolJsonAcceptance(sample, routeContext, raw, () => save(rawPath, raw), registration);
@@ -286,7 +306,7 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     // This entry verifies one selected action. Broader settlement/route coverage
     // remains in acceptance.json; it is not evidence of failure of this action.
     if (leg.domain === "funding") assert.equal(raw.result, "pass", JSON.stringify({ failure: raw.failure, stages: report.stages }));
-    else verifyBasicRouteAcceptance(transactionSimulationCase(transaction, leg), raw, installed.ordinaryRuntimeLeg);
+    else verifyBasicRouteAcceptance(transactionSimulationCase(transaction, leg, stateSelection), raw, installed.ordinaryRuntimeLeg);
     report.result = "pass"; checkpoint(); stage = "evidenceVerification";
     await verifyFamilyTransactionFactsReport(reportPath, transaction, leg);
   } catch (error) {

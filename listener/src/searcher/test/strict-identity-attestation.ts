@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { ethers } from "ethers";
 import {
   attestPoolIdentitiesStrict,
+  reanchorTransactionNomination,
   attestStartupPoolSetsStrict,
   centralAddressSurfaceFallback,
   mergeStartupFamilyPublications,
@@ -183,6 +184,58 @@ async function main(): Promise<void> {
   });
   assert.equal(noMatch.accepted.length, 0);
   assert.equal(noMatch.rejected[0]?.reason, "no_catalog_match");
+
+  // A TX observation can nominate at N while retained identity still reads
+  // N-1. Missing/mismatching nomination remains rejected, never admitted.
+  const observationSource = { number: 101, hash: `0x${"cd".repeat(32)}`, generation: 101 };
+  const channels: Array<[string, number]> = [], reads: number[] = [];
+  const separateFamily = { ...family, plugin: { ...family.plugin, discovery: {
+    ...family.plugin.discovery,
+    reverseBinding: { kind: "implementation", async reverseBinding({ source, provider }: any) {
+      channels.push(["reverse", source.number]); await provider.getCode(POOL); return [];
+    } },
+    nominate: { async nominate({ source, provider }: any) {
+      channels.push(["nominate", source.number]); await provider.getCode(POOL); return [];
+    } },
+  } } };
+  const separated = await attestPoolIdentitiesStrict({
+    catalog: { ...catalog, listAll: () => [separateFamily],
+      forStrictFamily: () => separateFamily, forFamily: () => separateFamily,
+      matches: () => [],
+    } as unknown as FamilyCapabilityCatalog,
+    provider: { ...provider2, getCode: async (_address: string, at: number) => {
+      assert.equal(at, SOURCE.number, "identity provider must never read N");
+      reads.push(at); return "0x60806040";
+    } },
+    runtime: runtime(false), source: SOURCE,
+    nomination: { source: observationSource, transactionHash: `0x${"ef".repeat(32)}`, provider: { ...provider2,
+      getCode: async (_address: string, at: number) => {
+        assert.equal(at, observationSource.number, "observation provider must never read N-1");
+        reads.push(at); return "0x60806040";
+      },
+    } },
+    pools: [{ address: POOL, adapter: ACTION }], channelOrder: "reverse-binding-first",
+  });
+  assert.deepEqual(channels, [["reverse", 100], ["nominate", 101]]);
+  assert.deepEqual(reads.slice(0, 3), [100, 100, 101]);
+  assert.equal(reads.at(-1), 100, "surface/identity fallback remains at execution state");
+  assert.equal(separated.accepted.length, 0);
+  assert.equal(separated.rejected[0]?.reason, "no_catalog_match");
+
+  const txHash = `0x${"ef".repeat(32)}`;
+  const raw = { kind: "log", source: observationSource, transactionHash: txHash,
+    address: POOL, topics: [], data: "0x", blockNumber: 101, blockHash: observationSource.hash } as unknown as UnifiedObservation;
+  const rebound = reanchorTransactionNomination(raw, observationSource, SOURCE, txHash) as any;
+  assert.deepEqual(rebound.source, SOURCE);
+  assert.equal(rebound.blockNumber, 101, "event occurrence is not rewritten");
+  assert.equal(rebound.blockHash, observationSource.hash);
+  for (const wrong of [
+    { ...raw, transactionHash: `0x${"aa".repeat(32)}` },
+    { ...raw, source: SOURCE },
+    { ...raw, kind: "address-surface" },
+    { ...raw, kind: "factory-log" },
+  ]) assert.throws(() => reanchorTransactionNomination(wrong as UnifiedObservation,
+    observationSource, SOURCE, txHash), /raw call\/log bound/);
 
   // Central cold-pool fallback contract: no plugin nomination result is
   // re-materialized by the framework as an address-surface observation

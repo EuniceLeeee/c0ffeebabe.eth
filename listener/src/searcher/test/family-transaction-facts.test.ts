@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { getAddress, JsonRpcProvider, toBeHex } from "ethers";
+import { getAddress, JsonRpcProvider, toBeHex, toQuantity } from "ethers";
 import { RuntimeAmountProgram, runtimeProgramScript } from "../../adapters/runtime-amount-program.js";
 import { concatBytes } from "../../encoder.js";
 import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
@@ -13,13 +13,15 @@ import { parseFamilyTransaction, readFamilyTransaction } from "./family-transact
 import { assertRegisteredAcceptanceSample, registerTransactionAcceptanceSample, transactionSimulationCase } from "./protocol-json-sample-registration.js";
 import { basicRouteAcceptanceStages, verifyBasicRouteAcceptance } from "./protocol-json-basic-facts.js";
 import { assertUniqueAcceptanceGraphEdge } from "./family-json-ready.js";
-import { familyTransactionFactsMain, verifyFamilyTransactionBindingReport, verifyFamilyTransactionFactsReport } from "./family-transaction-facts.js";
+import { familyTransactionFactsMain, verifyContextEvidence, verifyFamilyTransactionBindingReport, verifyFamilyTransactionFactsReport } from "./family-transaction-facts.js";
 import { buildReadyCatalogSnapshot, durableVerifiedMemoFingerprint, UniverseRebuildCheckpointStore } from "../universe-rebuild-checkpoint.js";
 import { hashReadyCatalogSnapshot, hashReadyGraphSnapshot, hashReadyPublicationSet } from "../universe-rebuild-runner.js";
 import { familyMemoDefinitionHash } from "../universe-rebuild-production.js";
 import { buildFamilyRouteGraphView } from "../adapter-family-graph-runtime.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../venues/production-family-composition.js";
 import { runUniv2Lifecycle, UNIV2_FIXTURE_FACTORY } from "../architecture-migration-fixture-replay.js";
+
+import { selectTransactionExecutionSource, validateTransactionStateSelection } from "./family-transaction-source.js";
 
 const address = (n: number) => toBeHex(n, 20), blockHash = toBeHex(100, 32);
 function fixture(tokenIn = address(4), tokenOut = address(5)) {
@@ -197,6 +199,36 @@ test("registry registration binds direction, actors, input and policy, and detec
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
+test("parent selection keeps the immutable TX seed and binds both sources to registration", async () => {
+  const { transaction, leg } = fixture(); let reads = 0;
+  const selected = await selectTransactionExecutionSource(leg.source!, "parent", async (method, params) => {
+    reads++; assert.equal(method, "eth_getBlockByNumber"); assert.deepEqual(params, ["0x64", false]);
+    return { number: "0x64", hash: blockHash, parentHash: toBeHex(99, 32) };
+  });
+  const sample = transactionSimulationCase(transaction, leg, selected);
+  assert.equal(reads, 1); assert.equal(sample.source.number, 99); assert.equal(leg.source!.number, 100);
+  assert.equal(sample.trials[0]!.amountIn, leg.amountIn);
+  assert.equal(sample.trials[0]!.expectedAmountOut, undefined);
+  assert.equal(validateTransactionStateSelection(leg.source!).executionSource.number, 100);
+  for (const bad of [
+    { ...selected, executionSource: { ...selected.executionSource, number: 98 } },
+    { ...selected, executionSource: { ...selected.executionSource, hash: toBeHex(97, 32) } },
+    { ...selected, evidenceSource: { ...selected.evidenceSource, hash: toBeHex(96, 32) } },
+    { ...selected, evidenceHeader: { ...selected.evidenceHeader!, hash: toBeHex(95, 32) } },
+  ]) assert.throws(() => transactionSimulationCase(transaction, leg, bad));
+  await assert.rejects(selectTransactionExecutionSource(leg.source!, "latest", async () => null));
+  const directory = mkdtempSync(join(tmpdir(), "parent-registration-"));
+  try {
+    mkdirSync(join(directory, "family-transactions"));
+    const path = join(directory, "family-transactions", `${transaction.transactionHash}.json`);
+    writeFileSync(path, JSON.stringify(transaction));
+    assert.throws(() => registerTransactionAcceptanceSample(sample, path, leg.id, directory), /differs/);
+    const registration = registerTransactionAcceptanceSample(sample, path, leg.id, directory, selected);
+    assertRegisteredAcceptanceSample(sample, registration);
+    assert.throws(() => assertRegisteredAcceptanceSample(transactionSimulationCase(transaction, leg), registration), /differs/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test("checkpoint comparison requires exactly one complete target edge, not a nonempty unrelated graph", () => {
   const edge: any = { canonicalEdgeId: "family:edge", instanceKey: address(3), executionVariantKey: "route-binding",
     adapterId: "family-action", target: address(3), tokenIn: address(4), tokenOut: address(5), slotKind: "protocol",
@@ -214,11 +246,11 @@ test("checkpoint comparison requires exactly one complete target edge, not a non
  * and routes. Only RPC/checkpoint I/O is substituted; the real matcher, target
  * Graph gate, report writer and raw verifiers execute without an acceptance hook.
  * The registered TX is a seed here, not a claim about its on-chain trace. */
-async function withFactsMainFixture(run: (input: any) => Promise<void>) {
+async function withFactsMainFixture(run: (input: any) => Promise<void>, parent = false) {
   const directory = mkdtempSync(join(tmpdir(), "family-facts-main-"));
   const transactionPath = fileURLToPath(new URL("./fixtures/family-transactions/0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b.json", import.meta.url));
   const transaction = readFamilyTransaction(transactionPath), leg = transaction.legs[0]!;
-  const source = { ...leg.source!, generation: leg.source!.number };
+  const source = { ...(parent ? { number: leg.source!.number - 1, hash: toBeHex(99, 32) } : leg.source!), generation: leg.source!.number };
   const publication = await runUniv2Lifecycle(source, { pool: getAddress(leg.instanceKey!), factory: UNIV2_FIXTURE_FACTORY,
     token0: getAddress(leg.tokenIn!), token1: getAddress(leg.tokenOut!),
     reserves: { reserve0: 1_000_000_000n, reserve1: 2_000_000_000n, blockTimestampLast: 1 } });
@@ -230,7 +262,7 @@ async function withFactsMainFixture(run: (input: any) => Promise<void>) {
   const memo: any = { familyCandidateKey: "offline-fixture-candidate", familyInstanceKey: "offline-fixture-instance",
     familyId: leg.familyId, candidateKey: instance.candidateKey, instanceKey: instance.instanceKey,
     candidateFingerprint: "offline-fixture", familyDefinitionHash: familyMemoDefinitionHash(leg.familyId),
-    validity: { policy: "immutable-code", authorityFingerprint: "offline-fixture", proofSource: leg.source },
+    validity: { policy: "immutable-code", authorityFingerprint: "offline-fixture", proofSource: { number: source.number, hash: source.hash } },
     verifiedIdentity: { lineageId: instance.lineageId }, compiledDescriptor: encode(instance.descriptor),
     staticProjection: encode({ routes: instance.routes, pricingInstances: instance.pricingInstances,
       staticBindingFingerprint: instance.staticBindingFingerprint, staticEvidenceFingerprint: instance.staticEvidenceFingerprint,
@@ -251,7 +283,7 @@ async function withFactsMainFixture(run: (input: any) => Promise<void>) {
         publicationSetHash: hashReadyPublicationSet(catalogSnapshot), activeInstanceKeys: memos.map(m => m.familyInstanceKey),
         graphSnapshot, graphHash: hashReadyGraphSnapshot(graphSnapshot),
         candidateAccounting: { total: memos.length, verified: memos.length, terminalRejected: 0, retryable: 0, remainingUnaccounted: 0 },
-        observedThrough: leg.source, appliedThrough: leg.source,
+        observedThrough: { number: source.number, hash: source.hash }, appliedThrough: { number: source.number, hash: source.hash },
         sourceCoverage: [{ familyId: leg.familyId, sourceId: "offline-fixture", completeThroughBlock: source.number, completeThroughHash: source.hash }] } };
   };
   const readyPath = join(directory, "ready.json"), rpcFile = join(directory, "rpc.json");
@@ -263,11 +295,11 @@ async function withFactsMainFixture(run: (input: any) => Promise<void>) {
   UniverseRebuildCheckpointStore.prototype.load = async () => checkpoint(admitted) as any;
   JsonRpcProvider.prototype.send = async (method: string) => {
     if (method === "eth_chainId") return "0x1";
-    if (method === "eth_getBlockByNumber") return { number: toBeHex(source.number), hash: source.hash };
+    if (method === "eth_getBlockByNumber") return { number: toQuantity(leg.source!.number), hash: leg.source!.hash, parentHash: toBeHex(99, 32) };
     if (method === "eth_getTransactionReceipt") return { transactionHash: transaction.transactionHash,
-      blockNumber: toBeHex(source.number), blockHash: source.hash, transactionIndex: "0x0", status: "0x1", logs: [] };
+      blockNumber: toBeHex(leg.source!.number), blockHash: leg.source!.hash, transactionIndex: "0x0", status: "0x1", logs: [] };
     if (method === "trace_transaction") return [{ type: "call", traceAddress: [], subtraces: 0,
-      transactionHash: transaction.transactionHash, blockNumber: source.number, blockHash: source.hash,
+      transactionHash: transaction.transactionHash, blockNumber: leg.source!.number, blockHash: leg.source!.hash,
       action: { from: address(80), to: leg.instanceKey, input: "0x12345678", callType: "call", gas: "0xffff", value: "0x0" },
       result: { output: "0x", gasUsed: "0x1" } }];
     throw new Error("offline fixture execution boundary: " + method);
@@ -277,7 +309,7 @@ async function withFactsMainFixture(run: (input: any) => Promise<void>) {
     await run({ directory, transaction, leg, transactionPath,
       execute: (stage = "all", hasReady = true) => {
         admitted = hasReady;
-        return familyTransactionFactsMain(["--transaction", transactionPath, "--leg", leg.id,
+        return familyTransactionFactsMain([...(parent ? ["--execution-source", "parent"] : []), "--transaction", transactionPath, "--leg", leg.id,
           "--rpc-file", rpcFile, "--ready", readyPath, "--out", join(directory, `case-${sequence++}`), "--stage", stage]);
       } });
   } finally {
@@ -345,4 +377,23 @@ test("full pass verifier permits an honestly unmatched reference but still rejec
     writeFileSync(result.reportPath, JSON.stringify(report));
     await assert.rejects(verifyFamilyTransactionFactsReport(result.reportPath, transaction, leg), /recorded node execution evidence is missing/);
   });
+});
+
+test("main accepts parent-state Ready without moving the transaction evidence block", async () => {
+  await withFactsMainFixture(async ({ execute, leg }: any) => {
+    const result = await execute("ready");
+    assert.equal(result.report.result, "ready-only", JSON.stringify(result.report.failure));
+    assert.equal(result.report.stateSelection.evidenceSource.number, leg.source.number);
+    assert.equal(result.report.stages.discoveryCheckpoint.source.number, leg.source.number - 1);
+    assert.equal(result.report.stateSelection.executionSource.hash, toBeHex(99, 32));
+  }, true);
+});
+
+test("independent parent-state verification rejects an execution-block receipt presented as TX evidence", () => {
+  const { transaction, leg } = fixture();
+  const selected = { mode: "parent" as const, evidenceSource: leg.source!, executionSource: { number: 99, hash: toBeHex(99, 32) },
+    evidenceHeader: { number: "0x64", hash: leg.source!.hash, parentHash: toBeHex(99, 32) } };
+  const receipt = { transactionHash: transaction.transactionHash, blockNumber: "0x63", blockHash: selected.executionSource.hash, status: "0x1", logs: [] };
+  assert.throws(() => verifyContextEvidence({ evidence: { transactionState: selected, receipt } }, transaction, leg,
+    { executorCodeMode: "counterfactual", simulationMethod: "debug_traceCall" }, selected), /receipt source/);
 });

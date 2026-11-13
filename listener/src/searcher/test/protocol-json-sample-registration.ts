@@ -8,6 +8,8 @@ import { loadFamilyJsonSamples } from "./protocol-json-samples.js";
 import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
 import { readFamilyTransaction, familyTransactionLegMissing, type FamilyTransaction, type FamilyTransactionLeg } from "./family-transaction-registry.js";
 
+import { validateTransactionStateSelection, type TransactionStateSelection } from "./family-transaction-source.js";
+
 const fixtures = fileURLToPath(new URL("./fixtures", import.meta.url));
 const sha = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 const authorities = new WeakMap<object, { sample: unknown; pins: readonly { path: string; sha256: string }[] }>();
@@ -28,24 +30,24 @@ export function transactionTestActors(leg: FamilyTransactionLeg) {
 
 /** Historical output is deliberately excluded. Only current quote/simulation
  * effects determine the result for this immutable input seed. */
-export function transactionSimulationCase(transaction: FamilyTransaction, leg: FamilyTransactionLeg) {
+export function transactionSimulationCase(transaction: FamilyTransaction, leg: FamilyTransactionLeg, stateSelection?: TransactionStateSelection) {
   assert.notEqual(leg.domain, "funding", "Funding uses its own production capabilities");
   assert.deepEqual(familyTransactionLegMissing(leg), [], "incomplete simulation seed");
   assert(transaction.legs.some(item => isDeepStrictEqual(item, leg)), "transaction does not register this leg");
   return parseProtocolJsonAcceptanceCase({ version: 1, familyId: leg.familyId, domain: leg.domain,
-    instanceKey: leg.instanceKey, lineageId: leg.lineageId, source: leg.source, ...transactionTestActors(leg),
+    instanceKey: leg.instanceKey, lineageId: leg.lineageId, source: validateTransactionStateSelection(leg.source!, stateSelection).executionSource, ...transactionTestActors(leg),
     transactionHash: transaction.transactionHash, trials: [{ id: leg.id, tokenIn: leg.tokenIn, tokenOut: leg.tokenOut,
       amountIn: leg.amountIn, inputToleranceRawUnits: 0, outputToleranceRawUnits: 1,
       ...(leg.routeKey ? { routeKey: leg.routeKey } : {}), ...(leg.credit ? { credit: leg.credit } : {}) }] });
 }
 
 export function registerTransactionAcceptanceSample(sample: unknown, transactionPath: string, legId: string,
-  fixtureRoot = fixtures): SampleRegistration {
+  fixtureRoot = fixtures, stateSelection?: TransactionStateSelection): SampleRegistration {
   const root = realpathSync(resolve(fixtureRoot, "family-transactions")), path = realpathSync(transactionPath);
   assert.equal(resolve(path, ".."), root, "transaction seed must be in the centralized registry");
   const transaction = readFamilyTransaction(path), leg = transaction.legs.find(item => item.id === legId);
   assert(leg, "registered transaction leg missing");
-  assert.deepEqual(sample, transactionSimulationCase(transaction, leg), "case differs from registered simulation input");
+  assert.deepEqual(sample, transactionSimulationCase(transaction, leg, stateSelection), "case differs from registered simulation input");
   const pin = { path, sha256: sha(readFileSync(path)) };
   const token = Object.freeze({ kind: "transaction" as const, ...pin, transactionHash: transaction.transactionHash, legId });
   authorities.set(token, { sample: JSON.parse(JSON.stringify(sample)), pins: [pin] });

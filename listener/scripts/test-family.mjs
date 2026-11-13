@@ -28,12 +28,13 @@ export function parseFamilyTestArguments(argv) {
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
     if (key === "--offline" && !offline) { offline = true; continue; }
-    assert(["--scope", "--family", "--rpc-file", "--ready", "--out", "--executor-code-mode", "--simulation-method"].includes(key) && !values.has(key) && argv[i + 1] && !argv[i + 1].startsWith("--"), `invalid test argument ${key}`);
+    assert(["--scope", "--family", "--rpc-file", "--ready", "--out", "--executor-code-mode", "--simulation-method", "--execution-source"].includes(key) && !values.has(key) && argv[i + 1] && !argv[i + 1].startsWith("--"), `invalid test argument ${key}`);
     values.set(key, argv[++i]);
   }
   assert((values.get("--scope") ?? "installed") === "installed", "main test scope is installed");
   assert(["deployed", "counterfactual"].includes(values.get("--executor-code-mode") ?? "counterfactual"), "invalid executor code mode");
   assert(["debug_traceCall", "eth_simulateV1"].includes(values.get("--simulation-method") ?? "eth_simulateV1"), "invalid simulation method");
+  assert(["transaction", "parent"].includes(values.get("--execution-source") ?? "transaction"), "invalid execution source");
   return { values, offline };
 }
 export function summarizeFamilyTransactionResults(family, legs, offlinePassed) {
@@ -64,7 +65,7 @@ const execute = (args, root, env) => {
 export async function familyTestMain(argv = process.argv.slice(2), hooks = {}) {
   if (argv.length === 1 && argv[0] === "--help") {
     console.log("npm test -- [--scope installed] [--family ID] [--rpc-file PATH] [--ready PATH] [--out NEW_DIRECTORY]\n" +
-      "            [--executor-code-mode deployed|counterfactual] [--simulation-method debug_traceCall|eth_simulateV1]\n" +
+      "            [--executor-code-mode deployed|counterfactual] [--simulation-method debug_traceCall|eth_simulateV1] [--execution-source transaction|parent]\n" +
       "npm test -- --offline  # Existing offline contracts only; no factual simulation acceptance\n" +
       "RPC file: {MAINNET_RPC_URL: ...}. Main tests default to eth_simulateV1 and counterfactual test executors, requiring a current BotVM artifact.");
     return { exitCode: 0 };
@@ -81,7 +82,7 @@ export async function familyTestMain(argv = process.argv.slice(2), hooks = {}) {
   mkdirSync(dirname(out), { recursive: true }); mkdirSync(out);
   const report = { format: "family-main-tests-v1", scope: "installed", started: new Date().toISOString(), sourceFingerprint,
     selection: { familyIds: families.map(family => family.familyId), wholeInstalledCatalog: families.length === installed.length, installedFamilyCount: installed.length },
-    execution: { executorCodeMode, simulationMethod },
+    execution: { executorCodeMode, simulationMethod }, executionSource: values.get("--execution-source") ?? "transaction",
     offline: { status: "not-run" }, transactions: { status: "not-run" }, families: [], finished: false };
   const rows = [], save = () => {
     report.families = families.map(family => summarizeFamilyTransactionResults(family, rows, report.offline.status === "pass"));
@@ -112,6 +113,7 @@ export async function familyTestMain(argv = process.argv.slice(2), hooks = {}) {
       const args = ["--import", "tsx", "src/searcher/test/family-transaction-facts.ts", "--transaction", item.path,
         "--leg", item.leg.id, "--rpc-file", resolve(values.get("--rpc-file")), "--out", directory,
         "--executor-code-mode", executorCodeMode, "--simulation-method", simulationMethod];
+      if (values.has("--execution-source")) args.push("--execution-source", values.get("--execution-source"));
       if (values.has("--ready")) args.push("--ready", resolve(values.get("--ready")));
       console.log(`[family-tests] ${row.familyId} ${row.transactionHash} ${row.legId}`);
       const caseEnv = { ...process.env, SEARCHER_DRY_RUN: "1", ...(family.envKey ? { [family.envKey]: "1" } : {}) };
@@ -131,6 +133,8 @@ export async function familyTestMain(argv = process.argv.slice(2), hooks = {}) {
           const bytes = readFileSync(resolve(directory, "report.json"));
           const child = JSON.parse(bytes);
           assert.deepEqual(child.execution, report.execution, "case execution mode differs from requested main run");
+          assert.equal(child.stateSelection?.mode ?? "transaction", report.executionSource, "case execution source mode differs from requested main run");
+          row.stateSelection = child.stateSelection;
           row.evidenceSha256 = digest(bytes); row.stages = child.stages;
           row.originalTransactionInput = child.originalTransactionInput;
         }

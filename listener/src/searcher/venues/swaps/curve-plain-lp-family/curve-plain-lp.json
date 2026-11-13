@@ -939,37 +939,42 @@
        {
         "let": "handlers",
         "value": {
-         "op": "filter",
+         "op": "concat",
          "args": [
           {
-           "op": "decodeCanonical",
+           "op": "filter",
            "args": [
-            "registry",
-            "get_registry_handlers_from_pool",
             {
-             "op": "get",
+             "op": "decodeCanonical",
              "args": [
+              "registry",
+              "get_registry_handlers_from_pool",
               {
-               "op": "returned",
+               "op": "get",
                "args": [
-                "registry-handlers"
+                {
+                 "op": "returned",
+                 "args": [
+                  "registry-handlers"
+                 ]
+                },
+                "data"
                ]
               },
-              "data"
+              0
              ]
             },
-            0
-           ]
-          },
-          "handler",
-          {
-           "op": "not",
-           "args": [
+            "handler",
             {
-             "op": "sameAddress",
+             "op": "not",
              "args": [
-              "$handler",
-              "$constants.zero"
+              {
+               "op": "sameAddress",
+               "args": [
+                "$handler",
+                "$constants.zero"
+               ]
+              }
              ]
             }
            ]
@@ -980,37 +985,42 @@
        {
         "let": "coins",
         "value": {
-         "op": "filter",
+         "op": "concat",
          "args": [
           {
-           "op": "decodeCanonical",
+           "op": "filter",
            "args": [
-            "registry",
-            "get_coins",
             {
-             "op": "get",
+             "op": "decodeCanonical",
              "args": [
+              "registry",
+              "get_coins",
               {
-               "op": "returned",
+               "op": "get",
                "args": [
-                "registry-coins"
+                {
+                 "op": "returned",
+                 "args": [
+                  "registry-coins"
+                 ]
+                },
+                "data"
                ]
               },
-              "data"
+              0
              ]
             },
-            0
-           ]
-          },
-          "coin",
-          {
-           "op": "not",
-           "args": [
+            "coin",
             {
-             "op": "sameAddress",
+             "op": "not",
              "args": [
-              "$coin",
-              "$constants.zero"
+              {
+               "op": "sameAddress",
+               "args": [
+                "$coin",
+                "$constants.zero"
+               ]
+              }
              ]
             }
            ]

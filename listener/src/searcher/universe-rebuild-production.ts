@@ -898,6 +898,12 @@ export interface RebuildTestExecutorProvisioning {
   readonly owner: string;
   readonly runtimeCode: ExecutorRuntimeCode;
 }
+/** Explicit historical acceptance observation. This nominates candidates only;
+ * code, identity, behavior, and publication stay pinned to the rebuild cutoff. */
+export interface RebuildTestTransactionObservation {
+  readonly transactionHash: string;
+  readonly source: CanonicalSource;
+}
 type RebuildSimulationMethod = "debug_traceCall" | "eth_simulateV1";
 
 function testExecutorProvisioning(input: {
@@ -962,6 +968,7 @@ export function createProbeWiring(
     readonly familyIds?: readonly string[];
     readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
     readonly testExecutorProvisioning?: RebuildTestExecutorProvisioning;
+    readonly testTransactionObservation?: RebuildTestTransactionObservation;
     readonly simulationMethod?: RebuildSimulationMethod;
     readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
     readonly readyThrottle?: ReadyRpcThrottle;
@@ -1343,12 +1350,28 @@ export function createProbeWiring(
           code,
           implementationWord,
         });
+        let nominationSource: CanonicalSource | undefined;
+        const observation = input?.testTransactionObservation;
+        if (observation && candidate.transactionHash === observation.transactionHash) {
+          const header = await provider.send("eth_getBlockByNumber", [ethers.toQuantity(observation.source.number), false]);
+          if (!/^0x[0-9a-f]{64}$/i.test(observation.transactionHash) ||
+              observation.source.number !== attestInput.cutoff.number + 1 ||
+              candidate.blockNumber !== observation.source.number ||
+              String(candidate.blockHash).toLowerCase() !== observation.source.hash.toLowerCase() ||
+              !header || Number(BigInt(header.number)) !== observation.source.number ||
+              header.hash?.toLowerCase() !== observation.source.hash.toLowerCase() ||
+              header.parentHash?.toLowerCase() !== attestInput.cutoff.hash.toLowerCase()) {
+            throw new Error("test observation is not bound to the selected TX and execution parent");
+          }
+          nominationSource = observation.source;
+        }
         runtimeHandle = await runtimeFor(attestInput.cutoff, candidate, observedSender);
         result = await attestPoolIdentitiesStrict({
           catalog,
           provider: strictProvider,
           runtime: runtimeHandle.runtime,
           source: attestInput.cutoff,
+          ...(nominationSource ? { nomination: { source: nominationSource, provider: strictProviderFor(nominationSource), transactionHash: observation!.transactionHash } } : {}),
           pools: Object.freeze([pool]),
           channelOrder: "reverse-binding-first",
           onlyFamilyId: candidateFamilyId as FamilyId,
@@ -3191,6 +3214,7 @@ export function createRebuildWiring(input?: {
   readonly startupCandidates?: readonly Readonly<Record<string, unknown>>[];
   readonly executionIdentity?: { readonly executor: string; readonly transactionOrigin: string };
   readonly testExecutorProvisioning?: RebuildTestExecutorProvisioning;
+  readonly testTransactionObservation?: RebuildTestTransactionObservation;
   readonly simulationMethod?: RebuildSimulationMethod;
   readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
 }): UniverseRebuildDependencies & {
@@ -3304,6 +3328,7 @@ export function createRebuildWiring(input?: {
   // inside this same catalog activity plan, not a second discovery source.
   const probe = createProbeWiring({ rpcUrl, familyIds, executionIdentity: input?.executionIdentity,
     testExecutorProvisioning: provision, simulationMethod,
+    testTransactionObservation: input?.testTransactionObservation,
     onSimulationFatal, readyThrottle });
 
   const disabledPlugins = PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins;
@@ -3320,6 +3345,7 @@ export function createRebuildWiring(input?: {
       executionIdentity: input?.executionIdentity ?? null,
       ...(includeProofContext && provision ? { testExecutorProvisioning: { owner: provision.owner, codeHash: provision.runtimeCode.keccak256 } } : {}),
       ...(simulationMethod ? { simulationMethod } : {}),
+      ...(includeProofContext && input?.testTransactionObservation ? { testTransactionObservation: input.testTransactionObservation } : {}),
       explicitPool: input?.startupCandidates !== undefined }));
     for (const candidate of input?.startupCandidates ?? []) hash.update(canonicalJson(encodeDurableValue(candidate))).update("\n");
     return hash.digest("hex");

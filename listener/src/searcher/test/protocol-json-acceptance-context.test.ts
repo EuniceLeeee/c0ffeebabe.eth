@@ -188,3 +188,15 @@ test("an installed JSON entry must reproduce the generated entry and identify th
   assert.equal((await inspectAcceptanceEntry(other)).kind, "not-installed");
   await assert.rejects(inspectAcceptanceEntry({ ...conversion, sourceFile: "borrowed.production.ts" }));
 });
+
+test("parent execution does not broaden the state RPC pin or receipt source", () => {
+  const parent = { number: 99, hash: ethers.toBeHex(99, 32) };
+  const selected = { mode: "parent" as const, evidenceSource: source, executionSource: parent,
+    evidenceHeader: { number: "0x64", hash: source.hash, parentHash: parent.hash } };
+  assert.doesNotThrow(() => validateAcceptanceContextInput({ ...input(), source: parent, transactionState: selected }));
+  assert.throws(() => validateAcceptanceContextInput({ ...input(), transactionState: selected }));
+  assert.throws(() => validateAcceptanceContextInput({ ...input(), source: parent, transactionHash: undefined, transactionState: selected }));
+  assert.throws(() => assertAcceptanceReadOnlyRpc("eth_call", call, parent), /pin/);
+  assert.throws(() => assertAcceptanceReadOnlyRpc("eth_getBlockByNumber", ["0x64", false], parent), /exceeds/);
+  assert.throws(() => assertAcceptanceReceipt({ transactionHash: txHash, blockNumber: "0x64", blockHash: source.hash, status: "0x1", logs: [] }, txHash, parent), /source/);
+});

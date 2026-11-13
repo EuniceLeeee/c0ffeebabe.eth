@@ -12,6 +12,8 @@ import { createNodeSimulateV1Rpc, nodeSimulateV1Environment, type NodeSimulateV1
 import type { PinnedNodeRpc } from "../simulator/node-input-funding.js";
 import { cachedFamilySimulation, familyFactCacheDirectory } from "./family-transaction-cache.js";
 
+import { validateTransactionStateSelection, type TransactionStateSelection } from "./family-transaction-source.js";
+
 const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const hash = (value: Buffer | string) => createHash("sha256").update(value).digest("hex");
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -63,6 +65,7 @@ export interface ProtocolJsonAcceptanceContextInput {
   readonly executor: string;
   readonly owner: string;
   readonly transactionHash?: string;
+  readonly transactionState?: TransactionStateSelection;
   readonly inputPaths?: readonly string[];
   readonly timeoutMs?: number;
   readonly maxRpcRequests?: number;
@@ -86,6 +89,12 @@ function validateRuntimeContextInput(input: FamilyAcceptanceRuntimeContextInput)
   assert(Number.isSafeInteger(input.chainId ?? 1) && (input.chainId ?? 1) > 0, "invalid chain id");
   assert(!same(ethers.getAddress(input.executor), ethers.getAddress(input.owner)), "executor and origin must differ");
   assert(input.transactionHash === undefined || bytes32(input.transactionHash), "invalid transaction hash");
+  if (input.transactionState) {
+    const selected = validateTransactionStateSelection(input.transactionState.evidenceSource, input.transactionState);
+    assert(input.transactionHash, "separate TX evidence source requires a transaction hash");
+    assert.equal(input.source.number, selected.executionSource.number);
+    assert(same(input.source.hash, selected.executionSource.hash), "selected execution source differs from context");
+  }
   for (const n of [input.timeoutMs ?? 480_000, input.maxRpcRequests ?? 600]) assert(Number.isSafeInteger(n) && n > 0, "invalid acceptance limit");
 }
 
@@ -298,16 +307,35 @@ export async function openFamilyAcceptanceRuntimeContext(input: FamilyAcceptance
     evidence.executionEnvironment = input.simulationMethod === "eth_simulateV1" ? nodeSimulateV1Environment(header)
       : { method: "debug_traceCall", base: source, header };
     evidence.simulations = [];
+    // Separate narrow receipt/header channel; state reads and simulation retain
+    // the execution-source pin and cannot read the later TX state.
+    const transactionState = input.transactionState;
+    const evidenceSource = transactionState?.evidenceSource ?? source;
+    const evidenceRpc = transactionState?.mode === "parent"
+      ? createAcceptanceReadOnlyRpc({ url, source: evidenceSource, control, maxRequests: 8 }) : rpc;
+    const evidenceRequest = evidenceRpc.request;
+    if (transactionState) {
+      const observed = await evidenceRequest("eth_getBlockByNumber", [ethers.toQuantity(evidenceSource.number), false]);
+      assertAcceptanceHeader(observed, evidenceSource);
+      if (transactionState.mode === "parent") assert.deepEqual(
+        { number: observed.number, hash: observed.hash, parentHash: observed.parentHash }, transactionState.evidenceHeader,
+        "TX evidence header changed since source selection");
+      evidence.transactionState = transactionState;
+    }
     if (input.transactionHash !== undefined) {
-      const receipt = await request("eth_getTransactionReceipt", [input.transactionHash]); assertAcceptanceReceipt(receipt, input.transactionHash, source); evidence.receipt = receipt;
+      const receipt = await evidenceRequest("eth_getTransactionReceipt", [input.transactionHash]); assertAcceptanceReceipt(receipt, input.transactionHash, evidenceSource); evidence.receipt = receipt;
     }
     const candidate = memo.candidateSnapshot as any;
     if (candidate?.transactionHash !== undefined) {
-      assert(bytes32(candidate.transactionHash) && Number.isSafeInteger(candidate.blockNumber) && candidate.blockNumber >= 0 && candidate.blockNumber <= source.number && bytes32(candidate.blockHash), "candidate discovery anchor incomplete");
+      const selectedEvidence = transactionState?.mode === "parent" && same(candidate.transactionHash, input.transactionHash!) &&
+        candidate.blockNumber === evidenceSource.number && same(candidate.blockHash ?? "", evidenceSource.hash);
+      assert(bytes32(candidate.transactionHash) && Number.isSafeInteger(candidate.blockNumber) && candidate.blockNumber >= 0 &&
+        (candidate.blockNumber <= source.number || selectedEvidence) && bytes32(candidate.blockHash), "candidate discovery anchor incomplete");
       const anchor = { number: candidate.blockNumber, hash: candidate.blockHash };
-      const receipt = evidence.receipt && same(evidence.receipt.transactionHash, candidate.transactionHash) ? evidence.receipt : await request("eth_getTransactionReceipt", [candidate.transactionHash]);
+      const anchorRequest = selectedEvidence ? evidenceRequest : request;
+      const receipt = evidence.receipt && same(evidence.receipt.transactionHash, candidate.transactionHash) ? evidence.receipt : await anchorRequest("eth_getTransactionReceipt", [candidate.transactionHash]);
       assertAcceptanceReceipt(receipt, candidate.transactionHash, anchor);
-      if (anchor.number !== source.number) assertAcceptanceHeader(await request("eth_getBlockByNumber", [ethers.toQuantity(anchor.number), false]), anchor);
+      if (anchor.number !== source.number) assertAcceptanceHeader(await anchorRequest("eth_getBlockByNumber", [ethers.toQuantity(anchor.number), false]), anchor);
       else assert(same(anchor.hash, source.hash), "discovery source differs from Ready");
       evidence.candidateReceipt = receipt;
     }
@@ -352,6 +380,12 @@ export async function openFamilyAcceptanceRuntimeContext(input: FamilyAcceptance
       assert.equal(acceptanceSourceFingerprint(ROOT), sourceTreeSha256, "production source changed");
       const currentHeader = await request("eth_getBlockByNumber", [ethers.toQuantity(source.number), false]);
       assertAcceptanceHeader(currentHeader, source); assert.deepEqual(currentHeader, header, "historical header environment changed");
+      if (transactionState?.mode === "parent") {
+        const current = await evidenceRequest("eth_getBlockByNumber", [ethers.toQuantity(evidenceSource.number), false]);
+        assertAcceptanceHeader(current, evidenceSource);
+        assert.deepEqual({ number: current.number, hash: current.hash, parentHash: current.parentHash }, transactionState.evidenceHeader,
+          "TX evidence header changed during execution");
+      }
     };
     let closePromise: Promise<void> | undefined;
     const close = () => closePromise ??= (async () => {
@@ -360,7 +394,7 @@ export async function openFamilyAcceptanceRuntimeContext(input: FamilyAcceptance
       finally { clearTimeout(timer); abort.abort(new Error("acceptance context settled")); await simulation!.closeAndDrain(); }
     })();
     return Object.freeze({ catalog, family, instance, memo, ready, graph, source, executor, owner, header, runtime, control, evidence,
-      counters: () => ({ ...rpc!.counters(), simulationErrors: [...simulationErrors],
+      counters: () => ({ ...rpc!.counters(), ...(evidenceRpc !== rpc ? { transactionEvidenceReads: evidenceRpc.counters() } : {}), simulationErrors: [...simulationErrors],
         simulationsExecuted: evidence.simulations.filter((row: any) => row.cache.status === "executed").length,
         simulationsReused: evidence.simulations.filter((row: any) => row.cache.status === "reused").length }), assertUnchanged, close });
   } catch (error) {

@@ -11,11 +11,14 @@ import { ReadyActivityArchive } from "../ready-activity-archive.js";
 import { cachedFamilyReady, familyFactCacheDirectory, familyFactCacheKey, withFamilyFactCacheLock } from "./family-transaction-cache.js";
 import type { UniverseRebuildDependencies } from "../universe-rebuild-runner.js";
 
+import { validateTransactionStateSelection, type TransactionStateSelection } from "./family-transaction-source.js";
+
 const sameKey = (a: string, b: string) => isAddress(a) && isAddress(b) ? a.toLowerCase() === b.toLowerCase() : a === b;
 
 export interface TransactionReadyTarget {
   transactionHash: string;
   instanceKey: string;
+  stateSelection?: TransactionStateSelection;
 }
 
 /** Shared production TX transport/cache, also used after a Ready cache hit. */
@@ -67,24 +70,27 @@ export async function discoverTransactionReadyInput(input: {
   source: { number: number; hash: string; generation: number };
 }) {
   const { wiring, source, target, familyId, activityArchive, directory } = input;
+  const selection = target.stateSelection && validateTransactionStateSelection(target.stateSelection.evidenceSource, target.stateSelection);
+  if (selection) { assert.equal(source.number, selection.executionSource.number); assert.equal(source.hash.toLowerCase(), selection.executionSource.hash.toLowerCase()); }
+  const observationSource = selection ? { ...selection.evidenceSource, generation: selection.evidenceSource.number } : source;
   const discovery = await import("../universe-rebuild-production.js");
   // One canonical block archive shared by every tested Family. This is also
   // the source used by the normal Ready scanner, not another trace RPC path.
-  await withFamilyFactCacheLock(resolve(directory, "activity", familyFactCacheKey(source)), async () => {
-    await wiring.scanSwapWindow({ fromBlock: source.number, cutoff: source });
+  await withFamilyFactCacheLock(resolve(directory, "activity", familyFactCacheKey(observationSource)), async () => {
+    await wiring.scanSwapWindow({ fromBlock: observationSource.number, cutoff: observationSource });
   });
   const observations: unknown[] = [];
   const evidence = await readFamilyTransactionEvidence({ rpcUrl: input.rpcUrl, directory,
-    transactionHash: target.transactionHash, source,
+    transactionHash: target.transactionHash, source: observationSource,
     traceSend: async (method, params) => {
       assert.equal(params[0], target.transactionHash);
       if (method === "trace_transaction") {
-        const raw = await activityArchive.readTrace({ blockNumber: source.number, method: "trace_block" });
+        const raw = await activityArchive.readTrace({ blockNumber: observationSource.number, method: "trace_block" });
         if (raw !== null) return raw.filter(row => (row as any)?.transactionHash?.toLowerCase() === target.transactionHash);
         throw Object.assign(new Error("method not found in shared block archive"), { code: -32601 });
       }
       assert.equal(method, "debug_traceTransaction");
-      const raw = await activityArchive.readTrace({ blockNumber: source.number, method: "debug_traceBlockByNumber" });
+      const raw = await activityArchive.readTrace({ blockNumber: observationSource.number, method: "debug_traceBlockByNumber" });
       const matches = raw?.filter(row => String((row as any)?.txHash ?? (row as any)?.transactionHash).toLowerCase() === target.transactionHash);
       assert(matches?.length === 1, "TX not found uniquely in shared block trace");
       return (matches[0] as any).result;
@@ -277,12 +283,26 @@ export async function prepareFamilyReady(input: FamilyReadyInput) {
   // Raw logs/trace are shared across Families. A producer change (including
   // tracer configuration) changes this key; Family classifiers stay separate.
   const producerSha256 = createHash("sha256").update(readFileSync(new URL("../universe-rebuild-production.ts", import.meta.url))).digest("hex");
-  const archiveScope = { chainId: 1, fromBlock: source.number, toBlock: source.number, cutoffHash: source.hash };
-  const activityArchive = new ReadyActivityArchive({ ...archiveScope,
-    directory: resolve(directory, "activity", familyFactCacheKey({ ...archiveScope, producerSha256 })) });
-  const makeWiring = (startupCandidates?: readonly Readonly<Record<string, unknown>>[]) => createRebuildWiring({
-    rpcUrl: rpc.MAINNET_RPC_URL, familyIds: [familyId], activityArchive, startupCandidates,
+  const makeArchive = (at: { number: number; hash: string }) => {
+    const scope = { chainId: 1, fromBlock: at.number, toBlock: at.number, cutoffHash: at.hash };
+    return new ReadyActivityArchive({ ...scope,
+      directory: resolve(directory, "activity", familyFactCacheKey({ ...scope, producerSha256 })) });
+  };
+  const activityArchive = makeArchive(source);
+  const stateSelection = input.target?.stateSelection;
+  if (stateSelection) {
+    validateTransactionStateSelection(stateSelection.evidenceSource, stateSelection);
+    assert.equal(source.number, stateSelection.executionSource.number);
+    assert.equal(source.hash.toLowerCase(), stateSelection.executionSource.hash.toLowerCase());
+  }
+  const observationArchive = stateSelection?.mode === "parent" ? makeArchive(stateSelection.evidenceSource) : activityArchive;
+  const makeWiring = (startupCandidates?: readonly Readonly<Record<string, unknown>>[], archive = activityArchive) => createRebuildWiring({
+    rpcUrl: rpc.MAINNET_RPC_URL, familyIds: [familyId], activityArchive: archive, startupCandidates,
     executionIdentity: { executor, transactionOrigin: owner },
+    ...(stateSelection?.mode === "parent" ? { testTransactionObservation: {
+      transactionHash: input.target!.transactionHash,
+      source: { ...stateSelection.evidenceSource, generation: stateSelection.evidenceSource.number },
+    } } : {}),
     simulationMethod: method, ...(testExecutorProvisioning ? { testExecutorProvisioning } : {}) });
   const wiring = makeWiring();
   const freeze = async (requested = source.number) => {
@@ -294,11 +314,12 @@ export async function prepareFamilyReady(input: FamilyReadyInput) {
     reviewInput: wiring.readyReviewInputFingerprint!(),
     familyDefinition: wiring.familyDefinitionHash!(familyId), discoveryDefinition: wiring.familyDiscoveryDefinitionHash(familyId),
     familyEnabled: wiring.isFamilyEnabled!(familyId),
-    lifecycle: ["universe-rebuild-runner.ts", "universe-rebuild-checkpoint.ts", "strict-ready-runtime.ts", "ready-transaction-input.ts"].map(name =>
+    readyPreparation: createHash("sha256").update(readFileSync(fileURLToPath(import.meta.url))).digest("hex"),
+    lifecycle: ["universe-rebuild-production.ts", "strict-identity-attestation.ts", "universe-rebuild-runner.ts", "universe-rebuild-checkpoint.ts", "strict-ready-runtime.ts", "ready-transaction-input.ts"].map(name =>
       [name, createHash("sha256").update(readFileSync(new URL(`../${name}`, import.meta.url))).digest("hex")]) };
   const cache = await cachedFamilyReady({ directory, binding, out, build: async path => {
     const store = new UniverseRebuildCheckpointStore({ path });
-    const selection = input.target ? await discoverTransactionReadyInput({ wiring, familyId, activityArchive,
+    const selection = input.target ? await discoverTransactionReadyInput({ wiring: observationArchive === activityArchive ? wiring : makeWiring(undefined, observationArchive), familyId, activityArchive: observationArchive,
       directory, rpcUrl: rpc.MAINNET_RPC_URL, target: input.target, source: await freeze() }) : undefined;
     if (selection) writeFileSync(`${out}.discovery.json`, JSON.stringify(selection.evidence, null, 2) + "\n", { mode: 0o600 });
     await rebuildUniverse({ ...(selection ? makeWiring(selection.candidates) : wiring),
