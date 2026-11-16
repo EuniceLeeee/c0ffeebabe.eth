@@ -16,6 +16,7 @@ export type ReadyInputClass = "A" | "B" | "C" | "D";
 export function reconcileReadyInputs(input: {
   readonly candidatesByFamily: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
   readonly familyDefinitionHashes: Readonly<Record<string, string>>;
+  readonly definitionsEquivalent?: (familyId: string, oldHash: string, currentHash: string) => boolean;
   readonly previousPartitions?: Readonly<Record<string, ReadyFamilyPartition>>;
   readonly history?: readonly ReadyResultHistoryPartition[];
   readonly cutoff: ReadyUniverseGeneration["cutoff"];
@@ -34,13 +35,15 @@ export function reconcileReadyInputs(input: {
   for (const [familyId, candidates] of input.candidatesByFamily) {
     const previous = input.previousPartitions?.[familyId];
     const currentHash = input.familyDefinitionHashes[familyId];
+    const matches = (oldHash: string) => oldHash === currentHash ||
+      input.definitionsEquivalent?.(familyId, oldHash, currentHash) === true;
     const history = input.history?.find(partition => partition.familyId === familyId &&
-      partition.familyDefinitionHash === currentHash && canonicalJson(partition.cutoff) === canonicalJson(input.cutoff));
+      matches(partition.familyDefinitionHash) && canonicalJson(partition.cutoff) === canonicalJson(input.cutoff));
     // A new member has no changed old definition. It is B, not D.
     const definitionChanged = previous?.familyDefinitionHash !== undefined &&
-      previous.familyDefinitionHash !== currentHash;
+      !matches(previous.familyDefinitionHash);
     const sameDefinition = previous?.familyDefinitionHash !== undefined &&
-      previous.familyDefinitionHash === currentHash;
+      matches(previous.familyDefinitionHash);
     const samePartition = previous !== undefined && previous.candidateSetHash ===
       canonicalJsonFingerprint(candidates, "universe-candidate-partition-v1:");
     for (const [key, snapshot] of Object.entries(candidates)) {

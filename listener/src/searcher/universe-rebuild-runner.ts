@@ -1,3 +1,4 @@
+import type { ReadyRuleCompatibility } from "./ready-rule-bindings.js";
 import { createHash } from "node:crypto";
 import {
   AttestationCheckpointWriter,
@@ -66,6 +67,7 @@ export class UniverseRunIncomplete extends Error {
 }
 
 export interface UniverseRebuildDependencies {
+  readonly ruleCompatibility?: ReadyRuleCompatibility;
   readonly readyThrottle?: ReadyRpcThrottle;
   /** Stable complete caller discovery-input identity, separate from force or
    * attempt identity. Its existing output also binds sealed discovery reuse;
@@ -787,7 +789,7 @@ export async function rebuildUniverse(
   const reconciliation = familyDefinitionHashes === undefined ? undefined : reconcileReadyInputs({
     candidatesByFamily, familyDefinitionHashes, previousPartitions: parent?.familyPartitions,
     history, cutoff, sameProofSource: parent !== null && canonicalJson(parent.cutoff) === canonicalJson(cutoff),
-    forcedStatuses,
+    forcedStatuses, definitionsEquivalent: input.ruleCompatibility?.equivalent,
   });
   const inheritedOutcomes = new Map(reconciliation?.inheritedOutcomes ?? []);
   // The independent probe queue can advance after a Ready was published.
@@ -1319,6 +1321,8 @@ export async function rebuildUniverse(
   const familyPartitions = buildReadyFamilyPartitions(input, currentRun);
   const resultHistory = retainReadyResultHistory(checkpoint.readyGeneration, familyPartitions, cutoff);
   const ready = Object.freeze({
+    ...(input.ruleCompatibility ? { ruleBindings: input.ruleCompatibility.nextBindings() } :
+      checkpoint.readyGeneration?.ruleBindings ? { ruleBindings: checkpoint.readyGeneration.ruleBindings } : {}),
     ...(currentRun.familyUpdateScope === undefined ? {} : { familyUpdateScope: currentRun.familyUpdateScope }),
     ...(discoveryInputBinding === undefined ? {} : { discoveryInputBinding }),
     generation: (checkpoint.readyGeneration?.generation ?? 0) + 1,

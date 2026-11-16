@@ -19,7 +19,7 @@ function functionSource(name: string): string {
 const dependencies = ["liveReadySubsetPriceMode", "UniverseRebuildCheckpointStore", "createRebuildWiring",
   "rebuildUniverse", "UniverseRunIncomplete", "resolveStrictReadyRuntime", "canonicalJson", "console", "process", "createReadStream", "createHash", "existsSync",
   "sealedReadyMemos", "assertReadyFamilyActivation", "PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG",
-  "ethers", "StrictProductionRuntimeRoot", "StrictReadyGraphViewCoordinator", "resolveProducerBaseline"];
+  "ethers", "StrictProductionRuntimeRoot", "StrictReadyGraphViewCoordinator", "resolveProducerBaseline", "readyRuleCompatibilityFor"];
 const factory = new Function(...dependencies, ts.transpileModule(
   functionSource("readPreparedReadySeal") + "\n" + functionSource("readyStartupReviewPlan") + "\n" + functionSource("initializeReadyProducer") +
     "\nreturn { initializeReadyProducer, readyStartupReviewPlan, readPreparedReadySeal };",
@@ -92,6 +92,7 @@ function harness(initial = checkpoint(), env: Record<string, string> = {}, fail?
     {forStrictFamily: (id: string) => ({plugin:{manifest:{domain:id==="fixture:funding"?"funding":"protocol"}}})},
     {getAddress:(address:string)=>address}, class {}, class {},
     ({ready}: any) => ({ready, activeInstanceKeys:new Set(ready.activeInstanceKeys), observationScanFrom:101}),
+    async () => undefined,
   );
   const invoke = (overrides: Record<string, unknown> = {}) => functions.initializeReadyProducer({
     universeRebuildCheckpointPath: "/offline/checkpoint.json", rpcUrl: "http://offline.invalid",

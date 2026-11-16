@@ -7,7 +7,7 @@ import { ReadyActivityArchive } from "./ready-activity-archive.js";
 import { UniverseRebuildCheckpointStore, activeReadyMemos, canonicalJson, canonicalJsonFingerprint } from "./universe-rebuild-checkpoint.js";
 import type { ReadyFamilyPartition, ReadyUniverseGeneration } from "./universe-rebuild-checkpoint.js";
 import { rebuildUniverse } from "./universe-rebuild-runner.js";
-import { createRebuildWiring, familyDefinitionHash } from "./universe-rebuild-production.js";
+import { createRebuildWiring, familyDefinitionHash, readyRuleCompatibilityFor } from "./universe-rebuild-production.js";
 import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 
 /** One authoritative checkpoint and one complete-input review path.
@@ -97,11 +97,12 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     throw new Error("Ready test executor differs from the installed artifact");
   }
   const testExecutorProvisioning = runtimeCode ? { owner: transactionOrigin, runtimeCode } : undefined;
-  const common = { rpcUrl, executionIdentity: { executor, transactionOrigin },
-    ...(testExecutorProvisioning && { testExecutorProvisioning }),
-    ...(familyIds === undefined ? {} : { familyIds }) };
   const store = new UniverseRebuildCheckpointStore({ path: checkpointPath });
   const incumbent = await store.load();
+  const ruleCompatibility = await readyRuleCompatibilityFor(incumbent?.readyGeneration?.ruleBindings);
+  const common = { rpcUrl, ruleCompatibility, executionIdentity: { executor, transactionOrigin },
+    ...(testExecutorProvisioning && { testExecutorProvisioning }),
+    ...(familyIds === undefined ? {} : { familyIds }) };
   const discovery = createRebuildWiring(common);
   const enabledIds = familyIds ?? [...new Set(discovery.requiredSourceCoverageKeys().map(key => key.slice(0, key.indexOf("|"))))].sort();
   const selectedFile = options.get("--candidates");
@@ -181,8 +182,10 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     // Compatibility assertion only: it does not choose a separate update path,
     // and it never rechecks every verified memo in an unchanged partition.
     const changed = enabledIds.filter(id => !partitions[id] ||
-      partitions[id]!.familyDefinitionHash !== familyDefinitionHash(id) ||
-      partitions[id]!.discoveryDefinitionHash !== wiring.familyDiscoveryDefinitionHash!(id));
+      (partitions[id]!.familyDefinitionHash !== familyDefinitionHash(id) &&
+        !ruleCompatibility?.accepts(id, "full", partitions[id]!.familyDefinitionHash!)) ||
+      (partitions[id]!.discoveryDefinitionHash !== wiring.familyDiscoveryDefinitionHash!(id) &&
+        !ruleCompatibility?.accepts(id, "discovery", partitions[id]!.discoveryDefinitionHash!)));
     if (!isFamilySetOnlyReadyUpdate(partitions, enabledIds, changed, candidateFile ? selected : undefined)) {
       throw new Error("requested Family-set update also changes rules or retained candidates; full review not started");
     }

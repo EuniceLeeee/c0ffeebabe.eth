@@ -1,3 +1,4 @@
+import { createReadyRuleCompatibility, issueReadyRuleMigration } from "../ready-rule-bindings.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -95,7 +96,7 @@ async function startupReadyFromMain(
   refresh: typeof refreshReadyInstances = refreshReadyInstances,
 ): Promise<{ readyUniverse: ReadyUniverseGeneration; rebuildEnvelope: StartupCheckpointEnvelope }> {
   const source = await readFile(new URL("../main.ts", import.meta.url), "utf8");
-  const start = source.indexOf("  let rebuildEnvelope = await rebuildStore.load();");
+  const start = source.indexOf("  let readyUniverse;", source.indexOf("  let rebuildEnvelope = await rebuildStore.load();"));
   const end = source.indexOf("  const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);", start);
   assert(start >= 0 && end > start, "main Ready selection/root-check boundary must exist");
   const parsed = ts.createSourceFile("main.ts", source, ts.ScriptTarget.ES2022, true);
@@ -103,7 +104,7 @@ async function startupReadyFromMain(
     ts.isFunctionDeclaration(node) && node.name?.text === "readyStartupReviewPlan");
   assert(plan, "the production source-binding planner exists");
   const body = ts.transpileModule(plan.getText(parsed).replace(/^export /, "") +
-    `\nreturn (async () => { ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
+    `\nreturn (async () => { let rebuildEnvelope = await rebuildStore.load(); const preparedReady = undefined; ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
     { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
   const run = new Function(
     "rebuildStore", "rebuildWiring", "rebuildUniverse", "canonicalJson",
@@ -328,6 +329,43 @@ async function main(): Promise<void> {
   );
   const dir = await mkdtemp(join(tmpdir(), "universe-rebuild-runner-"));
   try {
+    {
+      const f = makeFixture(join(dir, "rule-migration"));
+      const hashes = (s: string) => ({ full: s.repeat(64), memo: s.repeat(64), discovery: s.repeat(64) });
+      const old = hashes("3"), current = hashes("5"), rules = hashes("1");
+      f.failKeys.add("b"); f.terminalKeys.add("c");
+      const bound: RebuildUniverseInput = { ...f.input, runId: "rule-old",
+        dedupeFamilyCandidates: rows => f.input.dedupeFamilyCandidates(rows).map(row => ({ ...(row as object), familyId: "univ2" })),
+        readyReviewInputFingerprint: () => "1".repeat(64), readyDiscoveryInputFingerprint: () => "1".repeat(64),
+        familyDefinitionHash: () => old.full, familyDiscoveryDefinitionHash: () => old.discovery, candidateFamilyId: () => "univ2",
+        sealDurableVerifiedMemo: arg => sealFixtureMemo({ ...f.input.sealDurableVerifiedMemo(arg), familyDefinitionHash: old.memo }),
+      };
+      await rebuildUniverse(bound);
+      const before = (await f.store.load())!;
+      const migration = issueReadyRuleMigration({ checkpoint: before, archivedHashes: {univ2: old}, archivedRules: {univ2: rules},
+        sourceSha256: "b".repeat(64), archiveManifestSha256: "c".repeat(64) });
+      await assert.rejects(f.store.casMigrateReadyRuleBindings({ expectedRevision: before.revision, migration: {...migration} }), /not issued/);
+      const migrated = await f.store.casMigrateReadyRuleBindings({ expectedRevision: before.revision, migration });
+      assert.deepEqual(migrated.verifiedMemos, before.verifiedMemos);
+      assert.deepEqual(migrated.readyGeneration!.graphSnapshot, before.readyGeneration!.graphSnapshot);
+      assert.deepEqual(migrated.readyGeneration!.familyPartitions, before.readyGeneration!.familyPartitions);
+      assert.deepEqual((await f.store.load())!.readyGeneration!.ruleBindings, migration.bindings);
+      const compatibility = createReadyRuleCompatibility({ bindings: migration.bindings,
+        currentRules: {univ2: rules}, currentHashes: {univ2: current} });
+      f.attestCalls.clear();
+      const next = await rebuildUniverse({ ...bound, runId: "rule-current", ruleCompatibility: compatibility,
+        readyReviewInputFingerprint: () => "6".repeat(64), familyDefinitionHash: () => current.full,
+        familyDiscoveryDefinitionHash: () => current.discovery });
+      assert.equal(f.attestCalls.size, 0, "same rules reuse verified, reject and retryable without attestation");
+      assert.deepEqual(next.activeInstanceKeys, before.readyGeneration!.activeInstanceKeys);
+      assert.deepEqual((await f.store.load())!.verifiedMemos, before.verifiedMemos, "legacy proof hashes and sources never rewritten");
+      assert.deepEqual(next.ruleBindings!.families.univ2.memo.definitionHashes, [old.memo, current.memo]);
+      f.attestCalls.clear(); f.failKeys.clear();
+      await rebuildUniverse({ ...bound, runId: "rule-force", ruleCompatibility: compatibility,
+        familyDefinitionHash: () => current.full, familyDiscoveryDefinitionHash: () => current.discovery,
+        previousReadyReview: { inputFingerprint: "7".repeat(64), forceStatuses: ["retryable"] } });
+      assert.deepEqual([...f.attestCalls], [["b", 1]], "migration does not swallow explicit revalidation");
+    }
     {
       const f = makeFixture(join(dir, "proof-context-only"));
       f.failKeys.add("b"); f.terminalKeys.add("c");

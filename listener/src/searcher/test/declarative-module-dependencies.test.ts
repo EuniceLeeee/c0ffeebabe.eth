@@ -60,3 +60,48 @@ test("dormant modules with throwing Set initializers retain their complete sourc
   assert(dormantDeclarativeModuleSource({ rootDirectory, file, inactive,
     source: `const values = new Set(["a", "b"]); export function operation() { return values; }` }));
 });
+
+test("conversion workflow and admission dependencies follow root and child definitions", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "conversion-dependencies-"));
+  try {
+    const directory = resolve(root, "src/searcher/venues"); await mkdir(directory, { recursive: true });
+    await writeFile(resolve(root, "tsconfig.json"), JSON.stringify({ compilerOptions: { target: "ES2022", module: "ESNext", resolveJsonModule: true } }));
+    await writeFile(resolve(root, "package-lock.json"), JSON.stringify({ packages: {} }));
+    const entry = resolve(directory, "entry.ts"), admission = resolve(directory, "declarative-conversion-admission.ts");
+    const workflow = resolve(directory, "sampled-conversion-flow.json");
+    await writeFile(entry, `import flow from './sampled-conversion-flow.json'; import {expand} from './declarative-conversion-admission.js'; export const compiler = {flow, expand};`);
+    await writeFile(admission, "export function expand() { return 1; }");
+    await writeFile(workflow, '{"operation":1}');
+    const hash = async (documents: any[]) => (await generateRuntimeSourceClosure({ rootDirectory: root,
+      entryFile: entry, inactiveRuntimeModules: inactiveDeclarativeModules(documents) })).closureHash;
+    const absent = [{}], flow = [{ identity: { definition: { workflow: "sampled-conversion-v1" } } }];
+    const child = [{}, { admission: { version: 1 } }];
+    const before = await Promise.all([absent, flow, child].map(hash));
+    await writeFile(workflow, '{"operation":2}');
+    const changedFlow = await Promise.all([absent, flow, child].map(hash));
+    assert.equal(before[0], changedFlow[0]); assert.notEqual(before[1], changedFlow[1]); assert.equal(before[2], changedFlow[2]);
+    await writeFile(admission, "export function expand() { return 2; }");
+    const changedAdmission = await Promise.all([absent, flow, child].map(hash));
+    assert.equal(changedFlow[0], changedAdmission[0]); assert.equal(changedFlow[1], changedAdmission[1]); assert.notEqual(changedFlow[2], changedAdmission[2]);
+    assert(!inactiveDeclarativeModules([{ standard: { admission: {} } }]).includes("declarative-conversion-admission.ts"));
+    await writeFile(entry, (await readFile(entry, "utf8")) + " export const validationGuard = 2;");
+    assert.notEqual(await hash(absent), changedAdmission[0], "changing the common selection guard invalidates all consumers");
+    await writeFile(admission, "export function expand() { return 2; } globalThis.x = 1;");
+    assert.equal(dormantDeclarativeModuleSource({ rootDirectory: root, file: admission,
+      source: await readFile(admission, "utf8"), inactive: inactiveDeclarativeModules(absent) }), undefined);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("dormant admission accepts inert data construction but never runs unknown top-level helpers", async () => {
+  const rootDirectory = resolve(new URL("../../..", import.meta.url).pathname);
+  const file = resolve(rootDirectory, "src/searcher/venues/declarative-conversion-admission.ts");
+  const inactive = inactiveDeclarativeModules([{}]);
+  assert(dormantDeclarativeModuleSource({ rootDirectory, file, inactive, source: await readFile(file, "utf8") }),
+    "the installed dormant admission implementation must be scoped out");
+  for (const body of ["sideEffect()", "x.value", "{get value(){throw Error()}}", "{...x}"]) {
+    assert.equal(dormantDeclarativeModuleSource({ rootDirectory, file, inactive,
+      source: `const make = (x: any) => (${body}); const initial = make(1);` }), undefined);
+  }
+  assert.equal(dormantDeclarativeModuleSource({ rootDirectory, file, inactive,
+    source: "const make = (x = sideEffect()) => ({x}); const initial = make();" }), undefined);
+});

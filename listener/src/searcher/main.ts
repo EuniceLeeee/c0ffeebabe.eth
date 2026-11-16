@@ -1,3 +1,4 @@
+import { readyRuleCompatibilityFor } from "./universe-rebuild-production.js";
 import { NodeStrictClient } from "./simulator/node-strict-client.js";
 import { createNodeFundingCache } from "./simulator/node-input-funding.js";
 import { execFile } from "node:child_process";
@@ -1580,13 +1581,14 @@ export async function initializeReadyProducer({
   const rebuildStore = new UniverseRebuildCheckpointStore({
     path: universeRebuildCheckpointPath,
   });
+  let rebuildEnvelope = await rebuildStore.load();
   const rebuildWiring = createRebuildWiring({
+    ruleCompatibility: await readyRuleCompatibilityFor(rebuildEnvelope?.readyGeneration?.ruleBindings),
     rpcUrl,
     startupCandidates,
     executionIdentity,
     onSimulationFatal,
   });
-  let rebuildEnvelope = await rebuildStore.load();
   let readyUniverse;
   if (blindUseIncumbentReady || liveSubset || preparedReady) {
     if (

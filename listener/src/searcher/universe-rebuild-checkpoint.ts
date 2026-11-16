@@ -1,3 +1,4 @@
+import { assertIssuedReadyRuleMigration, validateReadyRuleBindings, type ReadyRuleBindings, type ReadyRuleMigration } from "./ready-rule-bindings.js";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import {
@@ -236,6 +237,7 @@ export interface ReadyResultHistoryPartition {
 }
 
 export interface ReadyUniverseGeneration {
+  readonly ruleBindings?: ReadyRuleBindings;
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   /** Exact caller discovery input, independent of result refresh/force policy.
    * Absence on legacy Ready requires one ordinary discovery pass. */
@@ -1128,6 +1130,7 @@ function parseEnvelopeValue(parsed: unknown): StartupCheckpointEnvelope {
   }
   const inProgressRun = legacyEnvelope.inProgressRun ?? null;
   assertReadyResultHistory(legacyEnvelope.readyGeneration);
+  if (legacyEnvelope.readyGeneration?.ruleBindings) validateReadyRuleBindings(legacyEnvelope.readyGeneration.ruleBindings);
   if (
     inProgressRun !== null &&
     !Array.isArray(inProgressRun.sourceReceipts)
@@ -2143,6 +2146,21 @@ export class UniverseRebuildCheckpointStore {
             })
           : run,
       });
+    });
+  }
+
+  /** Attach independently reconstructed rules without rewriting any memo,
+   * proof, outcome, source receipt or Graph. Only a completed copy is eligible. */
+  async casMigrateReadyRuleBindings(input: {
+    expectedRevision: number; migration: ReadyRuleMigration;
+  }): Promise<StartupCheckpointEnvelope> {
+    assertIssuedReadyRuleMigration(input.migration);
+    return this.#cas(input.expectedRevision, current => {
+      if (!current?.readyGeneration || current.inProgressRun || current.readyGeneration.ruleBindings ||
+          current.checkpointFingerprint !== input.migration.checkpointFingerprint)
+        throw new Error("Ready changed before rule migration");
+      return { ...current, revision: current.revision + 1,
+        readyGeneration: { ...current.readyGeneration, ruleBindings: input.migration.bindings } };
     });
   }
 

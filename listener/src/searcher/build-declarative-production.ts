@@ -187,8 +187,9 @@ function renderDataFamilyEntry(input: {
     domain, source, childFiles: Object.freeze(childFiles), ownedActionAdapterIds: Object.freeze([...ownedActionAdapterIds]),
     declaresOracleVictim: modules.get("oracleVictim") !== undefined,
     ...(typesFile ? { typesFile } : {}),
-    dependencyFiles: Object.freeze([definitionFile, ...childFiles, compiler, resolve(root, "src/searcher/build-declarative-production.ts"),
-      ...(typesFile ? [resolve(root, "src/searcher/venues/declarative-types.ts")] : [])]) });
+    // Hash the validated generated runtime, never the generator or type emitter.
+    // A generator edit that leaves this entry unchanged is not a Family rule change.
+    dependencyFiles: Object.freeze([definitionFile, ...childFiles, compiler]) });
 }
 export function renderDeclarativeProductionEntry(input: {
   rootDirectory: string; definitionFile: string; productionDirectory?: string; entryFile?: string; document: unknown;
@@ -260,7 +261,7 @@ export function renderDeclarativeProductionEntry(input: {
     `  actionAdapters: [${declarations.actionAdapters.map((_b, i) => `action${i}`).join(", ")}],`, "});", ""].join("\n");
   return Object.freeze({ format: "bindings-v1", definitionFile, entryFile, familyId: scope.family, domain, source,
     childFiles: Object.freeze([]), ownedActionAdapterIds: Object.freeze([]),
-    dependencyFiles: Object.freeze([definitionFile, resolve(root, "src/searcher/build-declarative-production.ts")]) });
+    dependencyFiles: Object.freeze([definitionFile]) });
 }
 
 /** Read only the static identity of a handwritten strict entry. Never import or

@@ -248,7 +248,7 @@ test("v2 emits only shared compiler and static JSON imports; child data and tran
       assert.equal(row.root.entrySourceFile, "src/searcher/venues/declarative-protocol.ts");
       for (const file of ["src/searcher/venues/protocols/fixture-family/child.json",
         "src/searcher/venues/protocols/fixture-family/fixture.json",
-        "src/searcher/venues/fixture-operation.ts", "src/searcher/build-declarative-production.ts"])
+        "src/searcher/venues/fixture-operation.ts", "src/searcher/venues/production-families/fixture.production.ts"])
         assert(row.identity.semanticDependencies.includes(file), `${row.identity.capability}:${file}`);
       assert(!row.identity.semanticDependencies.some(file => /fixture-family\/(?:exact|execution|identity)\.ts$/.test(file)));
     }
@@ -487,16 +487,19 @@ test("shadowed Object.freeze cannot authorize replacing a handwritten Family", a
   }
 });
 
-test("the dependency-selection policy itself remains part of every JSON capability fingerprint", async () => {
+test("generator and Ready orchestration maintenance do not change Family hashes with identical emitted runtime", async () => {
   const f = await protocolFixture();
   try {
     await f.put("src/searcher/build-declarative-production.ts", `import {policy} from './venues/declarative-module-dependencies.js'; export const compilerRevision = policy;`);
     await f.put("src/searcher/venues/declarative-module-dependencies.ts", "export const policy = 1;");
     await f.sync("write"); const before = await f.build(); assert(before.complete, JSON.stringify(before.issues));
     const identity = before.exact.find(row => row.identity.capability === "identity")!;
-    assert(identity.identity.semanticDependencies.includes("src/searcher/venues/declarative-module-dependencies.ts"));
+    assert(!identity.identity.semanticDependencies.includes("src/searcher/venues/declarative-module-dependencies.ts"));
+    assert(!identity.identity.semanticDependencies.includes("src/searcher/build-declarative-production.ts"));
     await f.put("src/searcher/venues/declarative-module-dependencies.ts", "export const policy = 2;");
+    for (const file of ["main.ts", "universe-rebuild-runner.ts", "universe-rebuild-checkpoint.ts", "ready-input-reconciliation.ts"])
+      await f.put("src/searcher/" + file, "export const scheduling = 2;");
     const after = await f.build();
-    assert.notEqual(after.exact.find(row => row.identity.capability === "identity")!.identity.contentHash, identity.identity.contentHash);
+    assert.equal(after.exact.find(row => row.identity.capability === "identity")!.identity.contentHash, identity.identity.contentHash);
   } finally { await rm(f.directory, { recursive: true, force: true }); }
 });

@@ -1,3 +1,5 @@
+import { fileURLToPath } from "node:url";
+import { createReadyRuleCompatibility, type ReadyRuleBindings, type ReadyRuleDefinitions, type ReadyRuleCompatibility } from "./ready-rule-bindings.js";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -2372,6 +2374,7 @@ export function memoCheapBindingValid(input: {
   readonly candidate: Readonly<Record<string, unknown>>;
   readonly cutoff: CanonicalSource;
   readonly familyId: string;
+  readonly ruleCompatibility?: ReadyRuleCompatibility;
 }): boolean {
   if (input.memo.familyId !== input.familyId) return false;
   if (input.memo.candidateFingerprint !== candidateFingerprint(input.candidate)) {
@@ -2384,7 +2387,8 @@ export function memoCheapBindingValid(input: {
   // authority (exact/execution changes do not invalidate identity memos).
   const definitionMatches =
     input.memo.familyDefinitionHash === familyDefinitionHash(input.familyId) ||
-    input.memo.familyDefinitionHash === familyMemoDefinitionHash(input.familyId);
+    input.memo.familyDefinitionHash === familyMemoDefinitionHash(input.familyId) ||
+    input.ruleCompatibility?.accepts(input.familyId, "memo", input.memo.familyDefinitionHash) === true;
   if (!definitionMatches) return false;
   if (!memoPricingProjectionCompatible(input.memo)) return false;
   if (input.memo.validity.policy !== "immutable-code") return false;
@@ -2412,6 +2416,7 @@ export function canReuseMemo(input: {
   readonly candidate: Readonly<Record<string, unknown>>;
   readonly cutoff: CanonicalSource;
   readonly familyId: string;
+  readonly ruleCompatibility?: ReadyRuleCompatibility;
   readonly currentAuthorityFingerprint: string;
 }): boolean {
   if (!memoCheapBindingValid(input)) return false;
@@ -3205,7 +3210,23 @@ export function readyGraphSnapshotsEquivalent(actual: unknown, expected: unknown
   return counts.size === 0;
 }
 
+let readyRulesPending: Promise<ReadyRuleDefinitions> | undefined;
+export async function readyRuleCompatibilityFor(bindings: ReadyRuleBindings | undefined): Promise<ReadyRuleCompatibility | undefined> {
+  if (!bindings) return undefined;
+  const rootDirectory = fileURLToPath(new URL("../../", import.meta.url));
+  readyRulesPending ??= import("./build-ready-rule-bindings.js").then(({ calculateReadyRuleDefinitions }) => calculateReadyRuleDefinitions({ rootDirectory,
+    artifact: JSON.parse(readFileSync(resolve(rootDirectory, "src/searcher/generated/family-capability-shadow.generated.json"), "utf8")),
+    definitionBoundaryHashes: Object.fromEntries(PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll()
+      .map(family => [family.plugin.manifest.familyId, family.definitionBoundaryHash])) }));
+  const currentHashes = Object.fromEntries(PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll().map(family => {
+    const id = String(family.plugin.manifest.familyId);
+    return [id, { full: familyDefinitionHash(id), memo: familyMemoDefinitionHash(id), discovery: familyDiscoveryDefinitionHash(id) }];
+  }));
+  return createReadyRuleCompatibility({ bindings, currentRules: await readyRulesPending, currentHashes });
+}
+
 export function createRebuildWiring(input?: {
+  readonly ruleCompatibility?: ReadyRuleCompatibility;
   readonly readyThrottle?: ReadyRpcThrottle;
   readonly rpcUrl?: string;
   /** Scratch incremental rebuild only; the owner merges sealed Ready at the same cutoff. */
@@ -3355,6 +3376,7 @@ export function createRebuildWiring(input?: {
     readonly familyDiscoveryDefinitionHash: (familyId: string) => string;
   } = {
     readyThrottle,
+    ruleCompatibility: input?.ruleCompatibility,
     candidateFamilyId,
     candidateCoverage: (candidate) => {
       const row = candidate as Readonly<Record<string, unknown>>;
@@ -4107,7 +4129,8 @@ export function createRebuildWiring(input?: {
         accepted = new Set([familyDefinitionHash(memo.familyId), familyMemoDefinitionHash(memo.familyId)]);
         memoDefinitionHashes.set(memo.familyId, accepted);
       }
-      return accepted.has(memo.familyDefinitionHash) && memoPricingProjectionCompatible(memo);
+      return (accepted.has(memo.familyDefinitionHash) ||
+        input?.ruleCompatibility?.accepts(memo.familyId, "memo", memo.familyDefinitionHash) === true) && memoPricingProjectionCompatible(memo);
     },
     findReusableMemo: async (memoInput) => {
       assertOpen();
@@ -4129,6 +4152,7 @@ export function createRebuildWiring(input?: {
         candidate,
         cutoff: memoInput.cutoff,
         familyId,
+        ruleCompatibility: input?.ruleCompatibility,
       })) return null;
       const proofSourceIsCutoff =
         memo.validity.proofSource.number === memoInput.cutoff.number &&
@@ -4141,6 +4165,7 @@ export function createRebuildWiring(input?: {
           candidate,
           cutoff: memoInput.cutoff,
           familyId,
+          ruleCompatibility: input?.ruleCompatibility,
           // The memo already proves this exact block hash. A completed run
           // may start another target-blind replay at the same historical
           // cutoff with no old in-progress outcome to consult; re-reading
@@ -4177,9 +4202,14 @@ export function createRebuildWiring(input?: {
         code,
         implementationWord,
       });
+      const migratedAuthority = input?.ruleCompatibility?.accepts(familyId, "memo", memo.familyDefinitionHash)
+        ? digest("memo-authority-v1:" + canonicalJson({ familyDefinitionHash: memo.familyDefinitionHash,
+            address: address.toLowerCase(), codeHash: ethers.keccak256(code), implementationWord: implementationWord.toLowerCase() }))
+        : undefined;
       if (
         memo.validity.authorityFingerprint !== authority &&
-        memo.validity.authorityFingerprint !== authorityMemoScope
+        memo.validity.authorityFingerprint !== authorityMemoScope &&
+        memo.validity.authorityFingerprint !== migratedAuthority
       ) {
         return null;
       }
@@ -4188,6 +4218,7 @@ export function createRebuildWiring(input?: {
         candidate,
         cutoff: memoInput.cutoff,
         familyId,
+        ruleCompatibility: input?.ruleCompatibility,
         currentAuthorityFingerprint: memo.validity.authorityFingerprint,
       })) return null;
       const proofHash = await readMemoProofHash(

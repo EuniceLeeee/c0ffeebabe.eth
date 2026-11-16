@@ -10,7 +10,8 @@
     "src/searcher/ready-family-update-cli.ts",
     "src/searcher/blockscan-enumeration-solver-worker.ts",
     "src/searcher/venues/production-families/*.production.ts",
-    "src/searcher/test/family-json-ready.ts"
+    "src/searcher/test/family-json-ready.ts",
+    "src/searcher/ready-rule-migration-cli.ts"
   ],
   "exclude": [
     "node_modules",

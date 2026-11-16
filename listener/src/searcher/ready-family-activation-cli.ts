@@ -5,7 +5,7 @@ import {createReadStream} from "node:fs";
 import {writeFile} from "node:fs/promises";
 import {UniverseRebuildCheckpointStore,activeReadyMemos} from "./universe-rebuild-checkpoint.js";
 import {assertReadyFamilyActivation,refreshReadyInstances,restrictReadyFamilies,updateReadyFamilies} from "./universe-rebuild-runner.js";
-import {createRebuildWiring} from "./universe-rebuild-production.js";
+import {createRebuildWiring,readyRuleCompatibilityFor} from "./universe-rebuild-production.js";
 import {resolveStrictReadyRuntime} from "./strict-ready-runtime.js";
 
 async function main():Promise<void>{
@@ -18,13 +18,14 @@ async function main():Promise<void>{
   const sourceHash=createHash("sha256");for await(const chunk of createReadStream(path))sourceHash.update(chunk);
   assert.equal(sourceHash.digest("hex"),sourceSha256,"Ready source changed before activation");
   const store=new UniverseRebuildCheckpointStore({path});
-  const wiring=createRebuildWiring({rpcUrl:process.env.MAINNET_RPC_URL,
+  console.log("[ready-activation] loading source Ready");
+  const base=await store.load();assert(base?.readyGeneration&&base.inProgressRun===null);
+  const wiring=createRebuildWiring({ruleCompatibility:await readyRuleCompatibilityFor(base.readyGeneration.ruleBindings),rpcUrl:process.env.MAINNET_RPC_URL,
     executionIdentity:{executor:process.env.BOTVM_ADDRESS!,transactionOrigin:process.env.BOTVM_OWNER!}});
   const noWork=async():Promise<never>=>{throw new Error("activation requires new or stale evidence; run scoped Ready explicitly");};
   const pure={...wiring,store,scanSwapWindow:noWork,freezeCanonicalHead:noWork,attestFamilyInstanceOnce:noWork,findReusableMemo:noWork,
     log:(message:string)=>{if(!message.includes("ready instance refresh"))console.log("[ready-activation] "+message);}};
-  console.log("[ready-activation] loading source Ready");
-  const base=await store.load();assert(base?.readyGeneration&&base.inProgressRun===null);
+
   const sourceGeneration=Number(process.env.SEARCHER_READY_SOURCE_GENERATION);assert.equal(base.readyGeneration.generation,sourceGeneration);
   const coverage=new Set(base.readyGeneration.sourceCoverage.map(row=>row.familyId+"|"+row.sourceId));
   assert(wiring.requiredSourceCoverageKeys().every(key=>coverage.has(key)),"new Family lacks Ready coverage; scoped Ready required");

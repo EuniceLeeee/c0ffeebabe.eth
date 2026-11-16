@@ -610,7 +610,10 @@ async function declarativeProtocolRecords(input: {
       constructorRoot?.exportName !== constructor || constructorRoot.sourceFile !==
       resolve(input.context.rootDirectory, "src/searcher/venues/adapter-family-plugin.ts"))
     return fail("declarative compiler or strict constructor is not a resolvable framework export");
-  const dependencies = [...new Set(entry.dependencyFiles)].filter(file => file !== compilerRoot.sourceFile);
+  // The validated emitted entry owns runtime wiring. Generator/type-emitter
+  // implementation changes alone cannot invalidate a Family proof.
+  const dependencies = [...new Set([...entry.dependencyFiles, input.source.fileName])]
+    .filter(file => file !== compilerRoot.sourceFile);
   const strictFamilyId = familyId(entry.familyId);
   const capabilities = familyCapabilitiesForDefinition(entry.domain, () => true)
     .filter(capability => capability !== "victim" || entry.domain === "swap" || entry.declaresOracleVictim === true);
