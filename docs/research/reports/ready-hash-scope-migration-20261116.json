@@ -939,13 +939,13 @@
     "independentReview": "read-only approved; no independent RPC"
   },
   "readyUpdate": {
-    "status": "running",
+    "status": "completed",
     "unit": "mev-ready-rules-20261116.service",
     "pid": 180737,
     "concurrency": 4,
     "source": "Ready18 retained candidates and original cutoff; ordinary update command",
-    "chainAcceptance": "not yet complete",
-    "observedAt": "2026-11-16T09:35:57Z",
+    "chainAcceptance": "reviewed-ready",
+    "observedAt": "2026-11-16T10:17:29Z",
     "classes": {
       "A": 127059,
       "B": 11,
@@ -961,7 +961,7 @@
     "priorVerifiedToReview": 990,
     "remainingOrdinary": 1725,
     "forced": 0,
-    "observedProcessed": 127200,
+    "observedProcessed": 129773,
     "totalCurrentCandidates": 129773,
     "throttle": {
       "concurrency": 4,
@@ -969,7 +969,18 @@
     },
     "retainedCandidateScope": "Ready18 partitions plus 11 nominations at the original single-block cutoff",
     "rescanBlocks": 1,
-    "note": "One unchanged-rule historical row was not accepted directly by the existing reconciliation guards; it remains in ordinary work. Chain update not yet complete."
+    "note": "Inherited outcomes stayed outside RPC review. Normal production update published generation 19 and resolved its strict runtime Graph; original Ready18 archive was preserved.",
+    "finishedAt": "2026-11-16T10:16:58.289Z",
+    "generation": 19,
+    "activeInstances": 72605,
+    "accounting": {
+      "total": 129773,
+      "verified": 72605,
+      "terminalRejected": 47079,
+      "retryable": 10081,
+      "covered": 8,
+      "remainingUnaccounted": 0
+    }
   },
   "limitations": [
     "Runtime module boundaries remain conservative; this is not arbitrary function-level dead-code analysis.",
