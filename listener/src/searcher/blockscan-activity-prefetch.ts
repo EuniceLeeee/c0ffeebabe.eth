@@ -35,7 +35,7 @@ export class BlockScanActivityPrefetch implements BlockTouchedProvider {
   private closed = false;
 
   constructor(private readonly provider: BlockTouchedProvider, private readonly signal: AbortSignal,
-    private readonly mode: "trace" | "logs-shadow" = "trace") {}
+    private readonly mode: "trace" | "logs-shadow" | "logs" = "trace") {}
 
   noteHead(number: number, hash: string): void {
     if (this.closed || this.signal.aborted || !Number.isSafeInteger(number) || number < 0 ||
@@ -89,7 +89,7 @@ export class BlockScanActivityPrefetch implements BlockTouchedProvider {
 
   send(method: string, params: unknown[]): Promise<unknown> {
     this.assertOpen();
-    if (this.mode === "logs-shadow" && (method === "debug_traceBlockByHash" || method === "debug_traceBlockByNumber")) {
+    if (this.mode !== "trace" && (method === "debug_traceBlockByHash" || method === "debug_traceBlockByNumber")) {
       return Promise.reject(new Error("logs-shadow live activity provider cannot issue block traces"));
     }
     const entry = typeof params[0] === "string" ? this.confirmed.get(params[0].toLowerCase()) : undefined;
@@ -128,7 +128,7 @@ export class BlockScanActivityPrefetch implements BlockTouchedProvider {
 
   private start(hash: string): Entry {
     const logs = settle(() => { this.assertOpen(); return this.provider.getLogs({ blockHash: hash }); });
-    const traces = this.mode === "logs-shadow" ? undefined : settle(() => {
+    const traces = this.mode !== "trace" ? undefined : settle(() => {
       this.assertOpen();
       return this.provider.send("debug_traceBlockByHash", [hash,
         { tracer: "callTracer", tracerConfig: { onlyTopCall: false } }]);

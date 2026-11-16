@@ -293,11 +293,17 @@ async function withFactsMainFixture(run: (input: any) => Promise<void>, parent =
   const originalCache = process.env.SEARCHER_FAMILY_FACT_CACHE_DIR;
   let admitted = true, sequence = 0;
   UniverseRebuildCheckpointStore.prototype.load = async () => checkpoint(admitted) as any;
-  JsonRpcProvider.prototype.send = async (method: string) => {
+  JsonRpcProvider.prototype.send = async (method: string, params?: any) => {
     if (method === "eth_chainId") return "0x1";
     if (method === "eth_getBlockByNumber") return { number: toQuantity(leg.source!.number), hash: leg.source!.hash, parentHash: toBeHex(99, 32) };
     if (method === "eth_getTransactionReceipt") return { transactionHash: transaction.transactionHash,
       blockNumber: toBeHex(leg.source!.number), blockHash: leg.source!.hash, transactionIndex: "0x0", status: "0x1", logs: [] };
+    if (method === "debug_traceTransaction") {
+      assert.equal(params[1].tracerConfig.withLog, true);
+      return { type: "CALL", from: address(80), to: leg.instanceKey,
+        input: new Interface(["function swap(uint256,uint256,address,bytes)"]).encodeFunctionData("swap", [0n, 1n, address(80), "0x"]),
+        gas: "0xffff", value: "0x0", output: "0x", gasUsed: "0x1", logs: [] };
+    }
     if (method === "trace_transaction") return [{ type: "call", traceAddress: [], subtraces: 0,
       transactionHash: transaction.transactionHash, blockNumber: leg.source!.number, blockHash: leg.source!.hash,
       action: { from: address(80), to: leg.instanceKey, input: new Interface(["function swap(uint256,uint256,address,bytes)"]).encodeFunctionData("swap", [0n, 1n, address(80), "0x"]), callType: "call", gas: "0xffff", value: "0x0" },

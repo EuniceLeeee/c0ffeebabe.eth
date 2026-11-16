@@ -46,7 +46,7 @@ export interface BlockTouchedCanonicalAnchor {
 /** Shadow is an observation sink only. Its result can never enter the reader's
  * live set or completed caches, and no shadow promise is joined here. */
 export interface BlockTouchedReadOptions {
-  readonly mode?: "trace" | "logs-shadow";
+  readonly mode?: "trace" | "logs-shadow" | "logs";
   readonly shadow?: {
     begin(number: number, anchor: BlockTouchedCanonicalAnchor): {
       observeLogs(keys: Iterable<string>): void;
@@ -68,7 +68,7 @@ interface CompletedBlockActivity {
 const completedByProvider = new WeakMap<BlockTouchedProvider, {
   readonly poolManager: string;
   readonly resolver: BlockTouchedStateKeyResolver | undefined;
-  readonly mode: "trace" | "logs-shadow";
+  readonly mode: "trace" | "logs-shadow" | "logs";
   readonly blocks: Map<number, CompletedBlockActivity>;
 }>();
 
@@ -76,7 +76,7 @@ interface RetainedBlockActivity extends CompletedBlockActivity { readonly number
 const retainedByProvider = new WeakMap<BlockTouchedProvider, {
   readonly poolManager: string;
   readonly resolver: BlockTouchedStateKeyResolver | undefined;
-  readonly mode: "trace" | "logs-shadow";
+  readonly mode: "trace" | "logs-shadow" | "logs";
   readonly blocks: Map<string, RetainedBlockActivity>;
 }>();
 
@@ -143,7 +143,7 @@ export async function readBlockTouchedStateKeys(
   if (resolver !== undefined && pinned === undefined) {
     throw new Error("activity resolver requires a canonical block anchor");
   }
-  if (options?.mode === "logs-shadow" && pinned === undefined) {
+  if (options?.mode !== undefined && options.mode !== "trace" && pinned === undefined) {
     throw new Error("logs-shadow activity requires a canonical block anchor");
   }
   if (range === undefined) return readTouchedBlock(provider, blockNumber, uniswapV4PoolManager, pinned, undefined, resolver, options);
@@ -240,7 +240,7 @@ async function readTouchedBlock(
 ): Promise<ReadonlySet<string>> {
   assertOpen();
   const mode = options?.mode ?? "trace";
-  if (mode !== "trace" && mode !== "logs-shadow") throw new Error("invalid block activity mode");
+  if (mode !== "trace" && mode !== "logs-shadow" && mode !== "logs") throw new Error("invalid block activity mode");
   let ticket: ReturnType<NonNullable<BlockTouchedReadOptions["shadow"]>["begin"]> = undefined;
   // Start only after the header/range anchor was checked, before awaiting logs.
   // A diagnostic callback, including a synchronous throw, has no live authority.
@@ -265,7 +265,7 @@ async function readTouchedBlockActivity(
   pinned: BlockTouchedCanonicalAnchor | undefined,
   assertOpen: () => void,
   resolver: BlockTouchedStateKeyResolver | undefined,
-  mode: "trace" | "logs-shadow",
+  mode: "trace" | "logs-shadow" | "logs",
 ): Promise<ReadonlySet<string>> {
   // Keep hash-bound completed facts independently of the canonical range memo.
   // Invalidating a range must not erase the old branch needed to repair it.
@@ -282,7 +282,7 @@ async function readTouchedBlockActivity(
       return provider.getLogs(pinned === undefined
         ? { fromBlock: blockNumber, toBlock: blockNumber } : { blockHash: pinned.hash });
     }),
-    mode === "logs-shadow" ? Promise.resolve(undefined) : Promise.resolve().then(() => {
+    mode !== "trace" ? Promise.resolve(undefined) : Promise.resolve().then(() => {
       assertOpen();
       return provider.send(traceMethod, [
         pinned === undefined ? `0x${blockNumber.toString(16)}` : pinned.hash,

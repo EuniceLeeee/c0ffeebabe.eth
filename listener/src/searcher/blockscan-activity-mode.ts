@@ -1,4 +1,4 @@
-export type BlockScanActivityMode = "trace" | "logs-shadow";
+export type BlockScanActivityMode = "trace" | "logs-shadow" | "logs";
 
 export interface BlockScanActivitySettings {
   readonly mode: BlockScanActivityMode;
@@ -9,11 +9,11 @@ export interface BlockScanActivitySettings {
 /** Select only the touched reader. Pricing, reorg recovery, continuation and
  * execution keep their existing production contracts in either mode. */
 export function resolveBlockScanActivitySettings(env: NodeJS.ProcessEnv): BlockScanActivitySettings {
-  const mode = env.SEARCHER_BLOCKSCAN_ACTIVITY_MODE ?? "logs-shadow";
-  if (mode !== "trace" && mode !== "logs-shadow") {
-    throw new Error("SEARCHER_BLOCKSCAN_ACTIVITY_MODE must be trace or logs-shadow");
+  const mode = env.SEARCHER_BLOCKSCAN_ACTIVITY_MODE ?? "logs";
+  if (mode !== "trace" && mode !== "logs-shadow" && mode !== "logs") {
+    throw new Error("SEARCHER_BLOCKSCAN_ACTIVITY_MODE must be trace, logs-shadow or logs");
   }
-  if (mode === "trace") return Object.freeze({ mode, shadowTimeoutMs: 20_000, shadowMaxConcurrent: 1 });
+  if (mode !== "logs-shadow") return Object.freeze({ mode, shadowTimeoutMs: 20_000, shadowMaxConcurrent: 1 });
   const boundedInteger = (key: string, fallback: number, maximum: number): number => {
     const raw = env[key];
     if (raw === undefined) return fallback;

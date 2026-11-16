@@ -3026,6 +3026,10 @@ async function main(): Promise<void> {
     separateShadowEndpoint: Boolean(process.env.SEARCHER_BLOCKSCAN_TRACE_SHADOW_RPC_URL),
     shadowParsing: "isolated-worker", shadowClassification: "cooperative-batches",
   })}`);
+  if (blockScanActivitySettings.mode === "logs") console.log(`[searcher/activity-mode] ${JSON.stringify({
+    mode: "logs", activityCoverage: "logs-only-unverified", traceEnabled: false,
+    submission: !config.dryRun && config.blockScanSubmit,
+  })}`);
   const continuePrices = liveContinuationEnabled(process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED);
   const continuationCatchupSource = startupCatchupSource(process.env.SEARCHER_BLOCKSCAN_STARTUP_CATCHUP_SOURCE);
   const continuationDirectory = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR;

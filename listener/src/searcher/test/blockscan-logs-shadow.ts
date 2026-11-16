@@ -301,3 +301,17 @@ test("trace-only interpretation retains complete anchored validation without con
   await tick();
   assert.deepEqual(f.calls, [`logs:${f.h.hash}`]);
 });
+
+
+test("logs mode starts neither foreground nor background trace", async () => {
+  const f = fixture();
+  const reader = new BlockScanActivityPrefetch(f.provider, new AbortController().signal, "logs");
+  reader.noteHead(f.h.number, f.h.hash);
+  const h = await reader.observeHeader(f.h.number, async () => f.h);
+  const value = await readBlockTouchedStateKeys(reader, h.number, manager, h, undefined, resolver, {
+    mode: "logs", shadow: { begin() { assert.fail("background trace must stay off"); } },
+  });
+  assert.deepEqual(value, new Set([logPool, logKey, passive, passiveKey]));
+  await reader.closeAndDrain();
+  assert.deepEqual(f.calls, [`logs:${f.h.hash}`]);
+});

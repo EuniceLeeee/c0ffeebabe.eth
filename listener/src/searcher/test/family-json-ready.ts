@@ -25,6 +25,7 @@ export interface TransactionReadyTarget {
 export async function readFamilyTransactionEvidence(input: {
   rpcUrl: string; directory: string; transactionHash: string;
   source: { number: number; hash: string; generation: number };
+  withFrameLogs?: boolean;
   traceSend?: (method: string, params: readonly unknown[]) => Promise<unknown>;
 }) {
   const { ReadyTransactionReader, parseReadyTransactionInput } = await import("../ready-transaction-input.js");
@@ -39,7 +40,7 @@ export async function readFamilyTransactionEvidence(input: {
   const reader = new ReadyTransactionReader({
     selection: parseReadyTransactionInput(`transaction_hash,block_number,block_hash\n${input.transactionHash},${input.source.number},${input.source.hash}`),
     cacheDir: resolve(input.directory, "transactions", input.source.hash),
-    concurrency: 1, attempts: 1, send, traceSend: (method, params) => {
+    concurrency: 1, attempts: 1, traceWithLogs: input.withFrameLogs !== false, send, traceSend: (method, params) => {
       reads.trace++; return (input.traceSend ?? send)(method, params);
     },
   });
@@ -81,7 +82,7 @@ export async function discoverTransactionReadyInput(input: {
   });
   const observations: unknown[] = [];
   const evidence = await readFamilyTransactionEvidence({ rpcUrl: input.rpcUrl, directory,
-    transactionHash: target.transactionHash, source: observationSource,
+    transactionHash: target.transactionHash, source: observationSource, withFrameLogs: false,
     traceSend: async (method, params) => {
       assert.equal(params[0], target.transactionHash);
       if (method === "trace_transaction") {

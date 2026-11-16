@@ -32,6 +32,18 @@ function fixture() {
   return { transactionHash: TX, expected, routes, evidence };
 }
 
+function withFrameLogs(f: ReturnType<typeof fixture>) {
+  const flat = f.evidence.rawTrace as any[], nodes = new Map<string, any>();
+  for (const x of flat) nodes.set(JSON.stringify(x.traceAddress), {
+    type: "CALL", ...x.action, ...(x.error ? { error: x.error } : {}), calls: [], logs: [],
+  });
+  for (const x of flat) if (x.traceAddress.length) nodes.get(JSON.stringify(x.traceAddress.slice(0, -1))).calls.push(nodes.get(JSON.stringify(x.traceAddress)));
+  // This fixture's receipt logs are produced by its known action.
+  nodes.get("[0]").logs = f.evidence.receipt.logs;
+  f.evidence = { ...f.evidence, method: "debug_traceTransaction", traceLogsComplete: true, rawTrace: nodes.get("[]") };
+  return f;
+}
+
 test("inner action uses admitted production matcher and actual input flow; outer selector cannot select a direction", () => {
   const f = fixture(), result = matchFamilyTransactionInput(f);
   assert.equal(result.status, "matched"); assert.equal(result.selected.amountIn, "7");
@@ -156,11 +168,11 @@ test("known nested action cannot excuse an unsupported outer action", () => {
   assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector/);
 });
 
-test("known action cannot hide a separate unsupported action on the same instance", () => {
+test("unattributed sibling calls are diagnostics rather than invented actions", () => {
   const f = fixture();
   f.evidence = { ...f.evidence, rawTrace: [...f.evidence.rawTrace as any[],
     frame(pool, holder, "0x94bf804d" + "00".repeat(64), [1])] };
-  assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector/);
+  assert.throws(() => resolveTransactionCaseBinding(f), /complete frame asset logs required/);
 });
 
 
@@ -169,5 +181,44 @@ test("known action cannot cover an unknown call at a different candidate target"
   f.routes.push({ ...f.routes[0]!, target: A(20), routeKey: "other-target", matchTrace: () => false });
   f.evidence = { ...f.evidence, rawTrace: [...f.evidence.rawTrace as any[],
     frame(A(20), pool, "0xad207501", [0, 1])] };
-  assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector/);
+  assert.throws(() => resolveTransactionCaseBinding(f), /complete frame asset logs required/);
+});
+
+
+test("an unknown sibling moving route assets remains an adaptation gap", () => {
+  const f = fixture();
+  f.evidence.rawTrace = [...f.evidence.rawTrace as any[],
+    frame(pool, holder, "0x94bf804d", [1]),
+    frame(asset, pool, token.encodeFunctionData("transferFrom", [holder, pool, 9n]), [1, 0])];
+  assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector with asset flow/);
+});
+
+test("CALL-form view beside a share burn cannot invalidate the redeem action", () => {
+  const f = fixture(); f.expected = { ...f.expected, tokenIn: pool, tokenOut: asset };
+  f.evidence = { ...f.evidence, receipt: { ...f.evidence.receipt,
+    logs: [log(pool, holder, ZeroAddress, 7n, 0), log(asset, pool, holder, 9n, 1)] },
+    rawTrace: [frame(A(10), holder, "0x12345678", []),
+      frame(pool, holder, action.encodeFunctionData("redeem", [7n, holder, holder]), [0]),
+      frame(asset, pool, token.encodeFunctionData("transfer", [holder, 9n]), [0, 0]),
+      frame(pool, holder, "0x18160ddd", [1])] };
+  withFrameLogs(f);
+  assert.equal(matchFamilyTransactionInput(f).status, "matched");
+  assert.equal(resolveTransactionCaseBinding(f).resolved.routeKey, "redeem");
+});
+
+
+test("unknown burn cannot donate receipt evidence to a sibling known redeem", () => {
+  const f = fixture(); f.expected = { ...f.expected, tokenIn: pool, tokenOut: asset };
+  f.evidence = { ...f.evidence, receipt: { ...f.evidence.receipt,
+    logs: [log(pool, holder, ZeroAddress, 7n, 0), log(asset, pool, holder, 9n, 1)] },
+    rawTrace: [frame(A(10), holder, "0x12345678", []), frame(pool, holder, "0xdeadbeef", [0]),
+      frame(pool, holder, action.encodeFunctionData("redeem", [7n, holder, holder]), [1]),
+      frame(asset, pool, token.encodeFunctionData("transfer", [holder, 9n]), [1, 0])] };
+  assert.notEqual(matchFamilyTransactionInput(f).status, "matched");
+  assert.throws(() => resolveTransactionCaseBinding(f), /complete frame asset logs required/);
+  withFrameLogs(f);
+  assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector with asset flow/);
+  (f.evidence.rawTrace as any).calls[0].input = "0x";
+  assert.notEqual(matchFamilyTransactionInput(f).status, "matched");
+  assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector with asset flow/);
 });

@@ -106,6 +106,7 @@ export interface ReadyTransactionReceipt {
 }
 export type TransactionTraceMethod = "trace_transaction" | "debug_traceTransaction";
 export interface ReadyTransactionEvidence {
+  readonly traceLogsComplete?: boolean;
   readonly receipt: ReadyTransactionReceipt;
   readonly method: TransactionTraceMethod;
   readonly rawTrace: unknown;
@@ -152,7 +153,7 @@ function receiptFromRpc(raw: unknown, entry: ReadyTransactionEntry): ReadyTransa
 
 /** Input transport/cache only. Classification, dedupe, strict and Graph stay in Ready. */
 export class ReadyTransactionReader {
-  readonly #input: { selection: ReadyTransactionSelection; cacheDir: string; send: Send; traceSend: Send;
+  readonly #input: { selection: ReadyTransactionSelection; cacheDir: string; send: Send; traceSend: Send; traceWithLogs?: boolean;
     concurrency: number; attempts: number; log?: (message: string) => void };
   readonly #receipts = new Map<string, ReadyTransactionReceipt>();
   #prepared: Promise<{ fromBlock: number; toBlock: number }> | undefined;
@@ -171,7 +172,7 @@ export class ReadyTransactionReader {
     this.#input = input;
   }
   // Public structural options type avoids coupling this transport to ethers or Families.
-  declare readonly options: { selection: ReadyTransactionSelection; cacheDir: string; send: Send; traceSend: Send;
+  declare readonly options: { selection: ReadyTransactionSelection; cacheDir: string; send: Send; traceSend: Send; traceWithLogs?: boolean;
     concurrency: number; attempts: number; log?: (message: string) => void };
   async #readCache(key: string): Promise<unknown | null> {
     let bytes: Buffer;
@@ -251,23 +252,23 @@ export class ReadyTransactionReader {
     }
   }
   async #trace(receipt: ReadyTransactionReceipt): Promise<ReadyTransactionEvidence> {
-    const key = "trace-" + receipt.transactionHash + "-" + receipt.blockHash;
+    const key = (this.#input.traceWithLogs ? "trace-with-logs-v1-" : "trace-") + receipt.transactionHash + "-" + receipt.blockHash;
     const cached = await this.#readCache(key) as { method: TransactionTraceMethod; rawTrace: unknown } | null;
     if (cached !== null) {
       if (!["trace_transaction", "debug_traceTransaction"].includes(cached.method) || cached.rawTrace == null) throw new Error("invalid transaction trace cache");
       return { receipt, ...cached };
     }
-    let method = this.#method ?? "trace_transaction", rawTrace: unknown;
-    try { rawTrace = await this.#request(this.#input.traceSend, method, [receipt.transactionHash, ...(method === "debug_traceTransaction" ? [{ tracer: "callTracer" }] : [])]); }
+    let method = this.#input.traceWithLogs ? "debug_traceTransaction" as const : this.#method ?? "trace_transaction", rawTrace: unknown;
+    try { rawTrace = await this.#request(this.#input.traceSend, method, [receipt.transactionHash, ...(method === "debug_traceTransaction" ? [{ tracer: "callTracer", ...(this.#input.traceWithLogs ? { tracerConfig: { withLog: true } } : {}) }] : [])]); }
     catch (error) {
       if (method !== "trace_transaction" || !unsupportedTraceMethod(error)) throw error;
       method = "debug_traceTransaction";
-      rawTrace = await this.#request(this.#input.traceSend, method, [receipt.transactionHash, { tracer: "callTracer" }]);
+      rawTrace = await this.#request(this.#input.traceSend, method, [receipt.transactionHash, { tracer: "callTracer", ...(this.#input.traceWithLogs ? { tracerConfig: { withLog: true } } : {}) }]);
     }
     if (rawTrace == null) throw new Error("missing selected transaction trace");
     this.#method = method;
     // The production decoder validates the full schema before this is admitted.
-    return { receipt, method, rawTrace };
+    return { receipt, method, rawTrace, ...(this.#input.traceWithLogs ? { traceLogsComplete: true } : {}) };
   }
   async scan(cutoff: { readonly number: number; readonly hash: string }, consume: (evidence: ReadyTransactionEvidence) => Promise<void>): Promise<{ successful: number; reverted: number; evidenceHash: string }> {
     await this.#assertFixedCutoff(cutoff);
@@ -278,8 +279,8 @@ export class ReadyTransactionReader {
       const results = await Promise.allSettled(receipts.slice(start, start + this.#input.concurrency).map(async receipt => {
         const evidence = await this.#trace(receipt);
         await consume(evidence);
-        await this.#writeCache("trace-" + receipt.transactionHash + "-" + receipt.blockHash,
-          { method: evidence.method, rawTrace: evidence.rawTrace });
+        await this.#writeCache((this.#input.traceWithLogs ? "trace-with-logs-v1-" : "trace-") + receipt.transactionHash + "-" + receipt.blockHash,
+          { method: evidence.method, rawTrace: evidence.rawTrace, ...(evidence.traceLogsComplete ? { traceLogsComplete: true } : {}) });
         return evidence;
       }));
       for (const result of results) {

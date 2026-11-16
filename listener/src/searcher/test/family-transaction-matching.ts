@@ -27,6 +27,32 @@ const before = (a: readonly number[], b: readonly number[]) => {
   return a.length < b.length;
 };
 
+function completeFrameAssetLogs(evidence: ReadyTransactionEvidence, frames: Map<string, any>, tokens: readonly string[]): boolean {
+  if (!evidence.traceLogsComplete || evidence.method !== "debug_traceTransaction") return false;
+  const key = (l: any) => JSON.stringify([lower(l.address), l.topics.map(lower), lower(l.data)]);
+  const relevant = (l: any) => typeof l.address === "string" && tokens.some(t => same(t, l.address));
+  const receipt = evidence.receipt.logs.filter(relevant).map(key).sort();
+  const traced = [...frames.values()].flatMap(f => f.logs ?? []).filter(relevant).map(key).sort();
+  return JSON.stringify(receipt) === JSON.stringify(traced);
+}
+
+/** Flow evidence is independent of the Family selector inventory. Unknown
+ * calls with route-asset movement remain coverage gaps; calls without such
+ * evidence are retained diagnostically, not promoted to conversion actions. */
+function hasAssetFlow(call: { traceAddress: readonly number[] }, calls: readonly RebuildCallObservation[], frames: Map<string, any>, tokens: readonly string[]): boolean {
+  for (const child of calls) {
+    if (!inside(child.traceAddress, call.traceAddress) || !tokens.some(t => same(t, child.target))) continue;
+    try {
+      const parsed = TOKEN.parseTransaction({ data: child.data });
+      if (parsed && BigInt(parsed.args[parsed.name === "transferFrom" ? 2 : 1]) > 0n) return true;
+    } catch { /* Not a token transport call. */ }
+  }
+  if ([...frames.values()].some(f => inside(f.path, call.traceAddress) && (f.logs ?? []).some((l: any) =>
+    typeof l.address === "string" && tokens.some(t => same(t, l.address))))) return true;
+  return [...frames.values()].some(f => inside(f.path, call.traceAddress) &&
+    lower(String(f.action.callType ?? f.type)) === "call" && BigInt(f.action.value ?? "0x0") > 0n);
+}
+
 export interface ObservedReadyRoute {
   familyId: string; instanceKey: string; lineageId: string; routeKey: string;
   adapterId: string; target: string; tokenIn: string; tokenOut: string;
@@ -67,6 +93,7 @@ export function resolveTransactionCaseBinding(input: {
   if (!candidates.length) fail("target action/token direction not admitted");
   let selected: ObservedReadyRoute | undefined;
   let selection: "registered-route" | "transaction-action";
+  let unclassifiedTargetCalls: { target: string; selector: string; traceAddress: readonly number[] }[] = [];
   let nestedUnmappedCalls: { target: string; selector: string; traceAddress: readonly number[] }[] = [];
   if (expected.routeKey !== undefined) {
     const pinned = candidates.filter(r => r.routeKey === expected.routeKey);
@@ -74,11 +101,10 @@ export function resolveTransactionCaseBinding(input: {
     selected = pinned[0]; selection = "registered-route";
   } else {
     const { calls, frames } = successfulTransactionCalls(evidence);
-    const mutable = calls.filter(c => {
-      const f = frames.get(pathKey(c.traceAddress));
-      return lower(String(f?.action.callType ?? f?.type)) === "call" &&
-        candidates.some(r => same(r.target, c.target));
-    });
+    const mutable = [...frames.values()].filter(f =>
+      lower(String(f.action.callType ?? f.type)) === "call" &&
+      candidates.some(r => same(r.target, f.action.to ?? "")))
+      .map(f => ({ target: String(f.action.to), data: String(f.action.input ?? "0x"), traceAddress: f.path as readonly number[] }));
     const actionCalls = mutable.filter(c => candidates.some(r => r.matchTrace(c.target, c.data.slice(0, 10))));
     const unmapped = mutable.filter(c => !routes.some(r => r.familyId === expected.familyId &&
       same(r.instanceKey, expected.instanceKey ?? "") && r.matchTrace(c.target, c.data.slice(0, 10))) &&
@@ -88,8 +114,13 @@ export function resolveTransactionCaseBinding(input: {
     // unknown outer/sibling action still cannot become a same-pair route.
     const nested = unmapped.filter(c => actionCalls.some(parent =>
       same(c.target, parent.target) && c.traceAddress.length > parent.traceAddress.length && inside(c.traceAddress, parent.traceAddress)));
-    if (nested.length !== unmapped.length)
-      fail("unmapped target selector; explicit action evidence required");
+    const completeLogs = completeFrameAssetLogs(evidence, frames, [expected.tokenIn!, expected.tokenOut!]);
+    const independent = unmapped.filter(c => !nested.includes(c));
+    if (independent.some(c => hasAssetFlow(c, calls, frames, [expected.tokenIn!, expected.tokenOut!])))
+      fail("unmapped target selector with asset flow; explicit action evidence required");
+    if (independent.length && !completeLogs)
+      fail("unattributed target calls; complete frame asset logs required");
+    unclassifiedTargetCalls = independent.map(c => ({ target: c.target, selector: c.data.slice(0, 10), traceAddress: c.traceAddress }));
     nestedUnmappedCalls = nested.map(c => ({ target: c.target, selector: c.data.slice(0, 10), traceAddress: c.traceAddress }));
     const actionRoutes = candidates.filter(r => actionCalls.some(c => r.matchTrace(c.target, c.data.slice(0, 10))));
     const amountRoutes = actionRoutes.filter(r => reference.observed.some((row: MatchedTransactionInput) =>
@@ -102,6 +133,7 @@ export function resolveTransactionCaseBinding(input: {
   return { original: { ...(expected.lineageId ? { lineageId: expected.lineageId } : {}), ...(expected.routeKey ? { routeKey: expected.routeKey } : {}), ...(expected.priorBinding ? { priorBinding: expected.priorBinding } : {}) },
     resolved: { lineageId: selected.lineageId, routeKey: selected.routeKey },
     action: { adapterId: selected.adapterId, ...(selected.direction ? { direction: selected.direction } : {}) }, selection,
+    ...(unclassifiedTargetCalls.length ? { unclassifiedTargetCalls } : {}),
     ...(nestedUnmappedCalls.length ? { nestedUnmappedCalls } : {}),
     changed: expected.lineageId !== selected.lineageId || expected.routeKey !== selected.routeKey };
 }
@@ -164,7 +196,10 @@ export function matchFamilyTransactionInput(input: {
   const transferLog = (c: TransferCall) => transfers.filter(t => t.token === c.token && t.from === c.from && t.to === c.to && t.amount === c.amount);
   const sameTransfer = (a: TransferCall, b: TransferCall) => a.token === b.token && a.from === b.from && a.to === b.to && a.amount === b.amount;
   const mutableCalls = (target: string) => [...frames.values()].filter(f => same(f.action.to ?? "", target) &&
-    lower(String(f.action.callType ?? f.type)) === "call");
+    lower(String(f.action.callType ?? f.type)) === "call" &&
+    (!completeFrameAssetLogs(evidence, frames, routes.flatMap(r => [r.tokenIn, r.tokenOut])) ||
+      routes.some(r => same(r.target, target) && r.matchTrace(target, String(f.action.input ?? "0x").slice(0, 10))) ||
+      hasAssetFlow({ traceAddress: f.path }, calls, frames, routes.flatMap(r => [r.tokenIn, r.tokenOut]))));
   const observed: MatchedTransactionInput[] = [], unresolved: Record<string, unknown>[] = [];
   for (const route of routes) {
     const actionCalls = calls.filter(c => same(c.target, route.target) && route.matchTrace(c.target, c.data.slice(0, 10)));
