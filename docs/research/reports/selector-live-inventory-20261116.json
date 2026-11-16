@@ -1,0 +1,609 @@
+{
+  "schemaVersion": 1,
+  "scope": "Factual selector binding, live touched observation mode, installed-family inventory; no family deletion or activation changes.",
+  "baseCommit": "58c8485172682df859c605a150e4980bfbf02ccb",
+  "implementationCommit": "fc95074c15eb10a60acdfe3fd69aa0cdd4729267",
+  "workspace": "/opt/mev-cloud/family-runtime-20261007",
+  "branch": "codex/family-runtime-actual-20261007",
+  "decisions": {
+    "selector": "Unknown target selectors are not automatically conversion actions. Complete frame-bound asset logs and successful descendant calls distinguish flow-bearing gaps from unclassified no-flow calls. Missing evidence remains incomplete. Unknown burns and empty-calldata calls cannot donate receipt evidence to a known action.",
+    "eventBoundary": "Deposit/Withdraw event labels do not uniquely identify calldata actions. Event absence does not prove that all protocol state is unchanged. No universal logs/trace equivalence claim.",
+    "liveTouched": "New default is logs. This mode starts neither foreground block trace nor background shadow trace, and retains the shared touched pipeline. Trace/logs-shadow remain explicit diagnostic choices. Historical factual/funding trace remains separate.",
+    "cache": "Factual matching requests callTracer withLog in a distinct trace-with-logs-v1 namespace. Ordinary Ready discovery keeps the original shared block archive. Cache is source-hash bound.",
+    "ready": "This patch changes no family JSON/admission definitions. Existing Ready19 is preserved. Future updates should receive the complete enabled-family input; this report does not request unconditional RPC re-attestation."
+  },
+  "inventory": {
+    "installedCatalog": 52,
+    "rootJsonFamilies": 39,
+    "previousEnabled": 37,
+    "previousEnabledJson": 35,
+    "previousEnabledTs": [
+      "flash-loan:balancer-v2",
+      "flash-loan:morpho"
+    ],
+    "outsidePrevious37Json": [
+      {
+        "family": "curve-plain",
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED"
+        },
+        "previous": "0"
+      },
+      {
+        "family": "curve-underlying",
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED"
+        },
+        "previous": "0"
+      },
+      {
+        "family": "custom-swap:ammalgam",
+        "path": "listener/src/searcher/venues/swaps/ammalgam-family/ammalgam.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_AMMALGAM_ENABLED"
+        },
+        "previous": "0"
+      },
+      {
+        "family": "custom-swap:zero1-curve",
+        "path": "listener/src/searcher/venues/swaps/zero1-curve-family/zero1-curve.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_ZERO1_CURVE_ENABLED"
+        },
+        "previous": "0"
+      }
+    ],
+    "outsidePrevious37Ts": [
+      "aqua-swapvm",
+      "balancer-v3",
+      "kyberswap-elastic",
+      "protocol:curve-lp",
+      "protocol:peapods-debond",
+      "protocol:psv",
+      "protocol:set-redemption",
+      "protocol:yearn-auction",
+      "protocol:yieldbasis-lt",
+      "swap:algebra-integral",
+      "vault-spot"
+    ],
+    "allRootJson": [
+      {
+        "family": "balancer-v1",
+        "path": "listener/src/searcher/venues/swaps/balancer-v1-family/balancer-v1.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_BALANCER_V1_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "balancer-v2",
+        "path": "listener/src/searcher/venues/swaps/balancer-v2-family/balancer-v2.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_BALANCER_V2_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "credit:fluid",
+        "path": "listener/src/searcher/venues/credit/fluid-family/fluid.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_FLUID_CREDIT_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "curve-plain",
+        "path": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_CURVE_PLAIN_ENABLED"
+        },
+        "previous": "0"
+      },
+      {
+        "family": "curve-plain-lp",
+        "path": "listener/src/searcher/venues/swaps/curve-plain-lp-family/curve-plain-lp.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_CURVE_PLAIN_LP_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "curve-underlying",
+        "path": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_CURVE_UNDERLYING_ENABLED"
+        },
+        "previous": "0"
+      },
+      {
+        "family": "custom-swap:ammalgam",
+        "path": "listener/src/searcher/venues/swaps/ammalgam-family/ammalgam.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_AMMALGAM_ENABLED"
+        },
+        "previous": "0"
+      },
+      {
+        "family": "custom-swap:angstrom-v4",
+        "path": "listener/src/searcher/venues/swaps/angstrom-v4-family/angstrom-v4.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_ANGSTROM_V4_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "custom-swap:dodo-v2",
+        "path": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_DODO_V2_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "custom-swap:ekubo-router-v1",
+        "path": "listener/src/searcher/venues/swaps/ekubo-family/ekubo.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_EKUBO_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "custom-swap:oneswap",
+        "path": "listener/src/searcher/venues/swaps/oneswap-family/oneswap.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_ONESWAP_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "custom-swap:precision-pool",
+        "path": "listener/src/searcher/venues/swaps/precision-pool-family/precision-pool.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_PRECISION_POOL_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "custom-swap:uniswap-v1",
+        "path": "listener/src/searcher/venues/swaps/uniswap-v1-family/uniswap-v1.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_UNISWAP_V1_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "custom-swap:zero1-curve",
+        "path": "listener/src/searcher/venues/swaps/zero1-curve-family/zero1-curve.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_ZERO1_CURVE_ENABLED"
+        },
+        "previous": "0"
+      },
+      {
+        "family": "ella-exchange",
+        "path": "listener/src/searcher/venues/swaps/ella-exchange-family/ella-exchange.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_ELLA_EXCHANGE_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "fluid-dex",
+        "path": "listener/src/searcher/venues/swaps/fluid-dex-family/fluid-dex.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_FLUID_DEX_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "mooniswap",
+        "path": "listener/src/searcher/venues/swaps/mooniswap-family/mooniswap.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_MOONISWAP_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:astra-multitoken",
+        "path": "listener/src/searcher/venues/protocols/astra-multitoken-family/astra-multitoken.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_ASTRA_MULTITOKEN_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:badger-sett-withdraw",
+        "path": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/badger-sett-withdraw.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_BADGER_SETT_WITHDRAW_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:compound-ctoken",
+        "path": "listener/src/searcher/venues/protocols/compound-ctoken-family/compound-ctoken.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_COMPOUND_CTOKEN_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:eigenpie",
+        "path": "listener/src/searcher/venues/protocols/eigenpie-family/eigenpie.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_EIGENPIE_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:erc4626",
+        "path": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_ERC4626_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:erc4626-silo-redeem",
+        "path": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/erc4626-silo-redeem.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_ERC4626_SILO_REDEEM_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:ethertoken-native-redeem",
+        "path": "listener/src/searcher/venues/protocols/ethertoken-native-redeem-family/ethertoken-native-redeem.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_ETHERTOKEN_NATIVE_REDEEM_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:few-wrapped",
+        "path": "listener/src/searcher/venues/protocols/few-wrapped-family/few-wrapped.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_FEW_WRAPPED_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:goldx",
+        "path": "listener/src/searcher/venues/protocols/goldx-family/goldx.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_GOLDX_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:metronome-hgusdc",
+        "path": "listener/src/searcher/venues/protocols/metronome-hgusdc-family/metronome-hgusdc.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_METRONOME_HGUSDC_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:metronome-synth",
+        "path": "listener/src/searcher/venues/protocols/metronome-synth-family/metronome-synth.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_METRONOME_SYNTH_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:psm",
+        "path": "listener/src/searcher/venues/protocols/psm-family/psm.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_PSM_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:rocksolid",
+        "path": "listener/src/searcher/venues/protocols/rocksolid-family/rocksolid.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_ROCKSOLID_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:self-burn-native",
+        "path": "listener/src/searcher/venues/protocols/self-burn-native-family/self-burn-native.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_SELF_BURN_NATIVE_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:staked-usdat",
+        "path": "listener/src/searcher/venues/protocols/staked-usdat-family/staked-usdat.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_STAKED_USDAT_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:token-conversion",
+        "path": "listener/src/searcher/venues/protocols/token-conversion-family/token-conversion.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_TOKEN_CONVERSION_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:token-migration",
+        "path": "listener/src/searcher/venues/protocols/token-migration-family/token-migration.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_TOKEN_MIGRATION_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "protocol:wsteth",
+        "path": "listener/src/searcher/venues/protocols/wsteth-family/wsteth.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_WSTETH_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "univ2-standard",
+        "path": "listener/src/searcher/venues/swaps/univ2-family/univ2.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_UNIV2_STANDARD_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "univ3-standard",
+        "path": "listener/src/searcher/venues/swaps/univ3-family/univ3.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_UNIV3_STANDARD_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "univ4",
+        "path": "listener/src/searcher/venues/swaps/univ4-family/univ4.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_UNIV4_ENABLED"
+        },
+        "previous": "1"
+      },
+      {
+        "family": "univ4-fee-hook",
+        "path": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/univ4-fee-hook.json",
+        "activation": {
+          "enabled": true,
+          "envKey": "SEARCHER_FAMILY_UNIV4_FEE_HOOK_ENABLED"
+        },
+        "previous": "1"
+      }
+    ],
+    "jsonAllWorkspacesCompared": [
+      "/opt/mev-cloud/work/json-all-20261107",
+      "/opt/mev-cloud/fam-jsonall"
+    ],
+    "comparison": "Current authoritative workspace and work/json-all-20261107 have the same 39 root JSON family IDs. Older fam-jsonall has 38, omitting curve-underlying. Root installation is not full factual acceptance."
+  },
+  "validation": {
+    "targeted": {
+      "tests": 40,
+      "pass": 40,
+      "fail": 0
+    },
+    "sharedOffline": {
+      "tests": 950,
+      "pass": 949,
+      "fail": 0,
+      "skip": 1
+    },
+    "productionBuild": "pass",
+    "capabilityManifestCheck": "pass",
+    "realSamples": [
+      {
+        "directory": "logs/selector-live-review-20261116/real-psm-current",
+        "reportSha256": "fe8aa6c4b9d04db7e82b8258d7cda3d4c84be51315c7965c75bd702be48161de",
+        "familyId": "protocol:psm",
+        "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+        "legId": "protocol:psm--psm--recipient66--0-sell-gem-production-P",
+        "result": "pass",
+        "stages": {
+          "discoveryCheckpoint": "pass",
+          "exact": "pass",
+          "quotedExecution": "pass",
+          "runtimeExecution": "pass",
+          "simulationOutputParity": "pass",
+          "transactionBinding": "action-conflict"
+        },
+        "failureReason": null,
+        "transactionEvidenceCache": {
+          "receipt": "reused",
+          "trace": "read",
+          "canonicalRpcReads": 1
+        },
+        "artifacts": {
+          "ready": {
+            "file": "ready.json",
+            "sha256": "678c0adbc9e2254ffc4601fb219b55e0e7f950c68db68f03e937180128120263"
+          },
+          "transaction": {
+            "file": "transaction-evidence.json",
+            "sha256": "fd1820b6259addfb5ad661e7297af589588e3839d9ecb7f1a2031a9853c00305"
+          },
+          "acceptance": {
+            "file": "acceptance.json",
+            "sha256": "cfd8524c57c0ceafe9a9aba5cc6fae7e3b472794414ca6c38756eadf09a8fad1"
+          }
+        }
+      },
+      {
+        "directory": "logs/selector-live-review-20261116/real-psm-buy",
+        "reportSha256": "03bfb776b9e51f177304b9d84f7c25d3ab1e1cc483e5b8edd8f35e5d435ec832",
+        "familyId": "protocol:psm",
+        "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+        "legId": "protocol:psm--psm--recipient66--7-buy-gem-historical-amount-at-N",
+        "result": "pass",
+        "stages": {
+          "discoveryCheckpoint": "pass",
+          "exact": "pass",
+          "quotedExecution": "pass",
+          "runtimeExecution": "pass",
+          "simulationOutputParity": "pass",
+          "transactionBinding": "matched"
+        },
+        "failureReason": null,
+        "transactionEvidenceCache": {
+          "receipt": "reused",
+          "trace": "reused",
+          "canonicalRpcReads": 1
+        },
+        "artifacts": {
+          "ready": {
+            "file": "ready.json",
+            "sha256": "678c0adbc9e2254ffc4601fb219b55e0e7f950c68db68f03e937180128120263"
+          },
+          "transaction": {
+            "file": "transaction-evidence.json",
+            "sha256": "3c506d36888095278f9f3c560438e421230eda72c6c36c8e443d839ee1814e7e"
+          },
+          "acceptance": {
+            "file": "acceptance.json",
+            "sha256": "947da6d0b967526bfc439bfcd30cae943594b7d459349d34187b32c71f4a063b"
+          }
+        }
+      },
+      {
+        "directory": "logs/selector-live-review-20261116/real-morpho-current",
+        "reportSha256": "ec4fbbfc52ffc1c7ee30f1690ca1a223062b56c9c50f7490b594e703c4b92d89",
+        "familyId": "protocol:erc4626",
+        "transactionHash": "0x844abb56e58a4e33e5b8dcaa27e4cc4dc8ce8d10b531b01d99023b2bd588c545",
+        "legId": "protocol:erc4626--erc4626--0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d--0-deposit-original-event-input",
+        "result": "failed",
+        "stages": {
+          "discoveryCheckpoint": "failed",
+          "exact": "not-run",
+          "quotedExecution": "not-run",
+          "runtimeExecution": "not-run",
+          "simulationOutputParity": "not-run",
+          "transactionBinding": "evidence-incomplete"
+        },
+        "failureReason": "stale fixture: regenerate required (unmapped target selector with asset flow; explicit action evidence required)",
+        "transactionEvidenceCache": {
+          "receipt": "reused",
+          "trace": "reused",
+          "canonicalRpcReads": 1
+        },
+        "artifacts": {
+          "ready": {
+            "file": "ready.json",
+            "sha256": "6a1bfae0a55f2211b19c1aed5d0e1c7008f51a891bca9ab7559bbbdb0b3be73d"
+          },
+          "transaction": {
+            "file": "transaction-evidence.json",
+            "sha256": "6e2db7b1ac24399e91c5c2d1422ee7a5c442a74c7bffcfc21591220757424a69"
+          }
+        }
+      }
+    ],
+    "wholeHistoricalSuite": "Not rerun; prior 198-leg totals are not replaced by this limited validation."
+  },
+  "review": {
+    "reviewer": "review_final_gate",
+    "rounds": 3,
+    "findingsFixed": [
+      "Unknown burn falsely donated to a known redeem",
+      "Empty calldata fallback omitted from ambiguity",
+      "Ordinary cached trace could be mislabeled as frame-log complete"
+    ],
+    "finalResult": "approved after negative regression fixes; review was read-only and did not independently execute chain samples"
+  },
+  "operations": {
+    "previousDryRunService": "mev-dry250-ready-rules-20261116.service",
+    "previousDryRunState": "stopped to end background touched block trace",
+    "newLiveStarted": false,
+    "familyDeletionPerformed": false,
+    "existingSealedLaunchBundles": "Historical bundles retain their frozen source/config. A future launch must use this commit and logs mode, not an old explicit logs-shadow profile."
+  },
+  "toolReconciliation": {
+    "capabilityQuery": [
+      "family",
+      "json",
+      "test",
+      "verification"
+    ],
+    "toolIds": [
+      "listener:test:family-json"
+    ],
+    "selectionManifest": "logs/selector-live-review-20261116/tool-selection.json",
+    "selectionSha256": "05850f96663e699315634ab170e951bfbd6e4082a8e013004eb23c9b5cce5ab6",
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:test:family-json",
+        "descriptor_sha256": "1bd4683318f355d9ce0b5669c6e7fb19fb0e23a880d62869e94ecbbc69a06751",
+        "started_at": "2026-11-16T12:54:54.893Z",
+        "finished_at": "2026-11-16T12:56:05.464Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "1d3b118fc9db88b3fcf40ed7d81502ceb1052190af5e19fca7677099a277e4c9",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "test:family-json",
+          "--"
+        ],
+        "stdout_sha256": "38c2aa0e6ad4b1c55e0e2763d36b871283e936ea883d0f2ea45927a069c0c6a4",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 146580,
+        "stderr_bytes": 0
+      }
+    ],
+    "conclusion": "Indexed shared JSON regression agrees with manual analysis and negative flow-attribution tests. Factual sample outcomes are reported separately."
+  }
+}

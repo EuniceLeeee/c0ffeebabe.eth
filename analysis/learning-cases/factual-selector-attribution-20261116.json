@@ -1,0 +1,191 @@
+{
+  "learning_case_id": "tooldef-20261116-factual-selector-attribution",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "unknown_target_calls_were_all_treated_as_unmapped_actions",
+  "evidence": {
+    "scope": "Family factual test tooling; no profitability claim.",
+    "before": "An unrecognized target CALL could reject a supported action even when the call had no asset movement. Broadly ignoring unknown calls also allowed another call burn to be misattributed.",
+    "after": "Complete frame-owned evidence permits no-flow calls to remain diagnostic. Flow-bearing and insufficiently attributed unknown actions remain gaps. Fallback calls participate in ambiguity.",
+    "report": "docs/research/reports/selector-live-inventory-20261116.json",
+    "independent_review": {
+      "reviewer": "review_final_gate",
+      "rounds": 3,
+      "findingsFixed": [
+        "Unknown burn falsely donated to a known redeem",
+        "Empty calldata fallback omitted from ambiguity",
+        "Ordinary cached trace could be mislabeled as frame-log complete"
+      ],
+      "finalResult": "approved after negative regression fixes; review was read-only and did not independently execute chain samples"
+    }
+  },
+  "tooling_defect": {
+    "tool": "family-transaction-matching.ts / family-transaction-facts.ts",
+    "issue": "Target selector presence was used as action evidence, and a naive filter could erase burn/fallback ambiguity.",
+    "codify_target": "Frame-owned trace logs, negative attribution regression, separate evidence cache",
+    "codify_commit": "fc95074c15eb10a60acdfe3fd69aa0cdd4729267",
+    "status": "fixed"
+  },
+  "validation": {
+    "targeted": {
+      "tests": 40,
+      "pass": 40,
+      "fail": 0
+    },
+    "sharedOffline": {
+      "tests": 950,
+      "pass": 949,
+      "fail": 0,
+      "skip": 1
+    },
+    "productionBuild": "pass",
+    "capabilityManifestCheck": "pass",
+    "realSamples": [
+      {
+        "directory": "logs/selector-live-review-20261116/real-psm-current",
+        "reportSha256": "fe8aa6c4b9d04db7e82b8258d7cda3d4c84be51315c7965c75bd702be48161de",
+        "familyId": "protocol:psm",
+        "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+        "legId": "protocol:psm--psm--recipient66--0-sell-gem-production-P",
+        "result": "pass",
+        "stages": {
+          "discoveryCheckpoint": "pass",
+          "exact": "pass",
+          "quotedExecution": "pass",
+          "runtimeExecution": "pass",
+          "simulationOutputParity": "pass",
+          "transactionBinding": "action-conflict"
+        },
+        "failureReason": null,
+        "transactionEvidenceCache": {
+          "receipt": "reused",
+          "trace": "read",
+          "canonicalRpcReads": 1
+        },
+        "artifacts": {
+          "ready": {
+            "file": "ready.json",
+            "sha256": "678c0adbc9e2254ffc4601fb219b55e0e7f950c68db68f03e937180128120263"
+          },
+          "transaction": {
+            "file": "transaction-evidence.json",
+            "sha256": "fd1820b6259addfb5ad661e7297af589588e3839d9ecb7f1a2031a9853c00305"
+          },
+          "acceptance": {
+            "file": "acceptance.json",
+            "sha256": "cfd8524c57c0ceafe9a9aba5cc6fae7e3b472794414ca6c38756eadf09a8fad1"
+          }
+        }
+      },
+      {
+        "directory": "logs/selector-live-review-20261116/real-psm-buy",
+        "reportSha256": "03bfb776b9e51f177304b9d84f7c25d3ab1e1cc483e5b8edd8f35e5d435ec832",
+        "familyId": "protocol:psm",
+        "transactionHash": "0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72",
+        "legId": "protocol:psm--psm--recipient66--7-buy-gem-historical-amount-at-N",
+        "result": "pass",
+        "stages": {
+          "discoveryCheckpoint": "pass",
+          "exact": "pass",
+          "quotedExecution": "pass",
+          "runtimeExecution": "pass",
+          "simulationOutputParity": "pass",
+          "transactionBinding": "matched"
+        },
+        "failureReason": null,
+        "transactionEvidenceCache": {
+          "receipt": "reused",
+          "trace": "reused",
+          "canonicalRpcReads": 1
+        },
+        "artifacts": {
+          "ready": {
+            "file": "ready.json",
+            "sha256": "678c0adbc9e2254ffc4601fb219b55e0e7f950c68db68f03e937180128120263"
+          },
+          "transaction": {
+            "file": "transaction-evidence.json",
+            "sha256": "3c506d36888095278f9f3c560438e421230eda72c6c36c8e443d839ee1814e7e"
+          },
+          "acceptance": {
+            "file": "acceptance.json",
+            "sha256": "947da6d0b967526bfc439bfcd30cae943594b7d459349d34187b32c71f4a063b"
+          }
+        }
+      },
+      {
+        "directory": "logs/selector-live-review-20261116/real-morpho-current",
+        "reportSha256": "ec4fbbfc52ffc1c7ee30f1690ca1a223062b56c9c50f7490b594e703c4b92d89",
+        "familyId": "protocol:erc4626",
+        "transactionHash": "0x844abb56e58a4e33e5b8dcaa27e4cc4dc8ce8d10b531b01d99023b2bd588c545",
+        "legId": "protocol:erc4626--erc4626--0x2bd3a43863c07b6a01581fada0e1614ca5df0e3d--0-deposit-original-event-input",
+        "result": "failed",
+        "stages": {
+          "discoveryCheckpoint": "failed",
+          "exact": "not-run",
+          "quotedExecution": "not-run",
+          "runtimeExecution": "not-run",
+          "simulationOutputParity": "not-run",
+          "transactionBinding": "evidence-incomplete"
+        },
+        "failureReason": "stale fixture: regenerate required (unmapped target selector with asset flow; explicit action evidence required)",
+        "transactionEvidenceCache": {
+          "receipt": "reused",
+          "trace": "reused",
+          "canonicalRpcReads": 1
+        },
+        "artifacts": {
+          "ready": {
+            "file": "ready.json",
+            "sha256": "6a1bfae0a55f2211b19c1aed5d0e1c7008f51a891bca9ab7559bbbdb0b3be73d"
+          },
+          "transaction": {
+            "file": "transaction-evidence.json",
+            "sha256": "6e2db7b1ac24399e91c5c2d1422ee7a5c442a74c7bffcfc21591220757424a69"
+          }
+        }
+      }
+    ],
+    "wholeHistoricalSuite": "Not rerun; prior 198-leg totals are not replaced by this limited validation."
+  },
+  "tool_reconciliation": {
+    "capabilityQuery": [
+      "family",
+      "json",
+      "test",
+      "verification"
+    ],
+    "toolIds": [
+      "listener:test:family-json"
+    ],
+    "selectionManifest": "logs/selector-live-review-20261116/tool-selection.json",
+    "selectionSha256": "05850f96663e699315634ab170e951bfbd6e4082a8e013004eb23c9b5cce5ab6",
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:test:family-json",
+        "descriptor_sha256": "1bd4683318f355d9ce0b5669c6e7fb19fb0e23a880d62869e94ecbbc69a06751",
+        "started_at": "2026-11-16T12:54:54.893Z",
+        "finished_at": "2026-11-16T12:56:05.464Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "1d3b118fc9db88b3fcf40ed7d81502ceb1052190af5e19fca7677099a277e4c9",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "test:family-json",
+          "--"
+        ],
+        "stdout_sha256": "38c2aa0e6ad4b1c55e0e2763d36b871283e936ea883d0f2ea45927a069c0c6a4",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 146580,
+        "stderr_bytes": 0
+      }
+    ],
+    "conclusion": "Indexed shared JSON regression agrees with manual analysis and negative flow-attribution tests. Factual sample outcomes are reported separately."
+  }
+}
