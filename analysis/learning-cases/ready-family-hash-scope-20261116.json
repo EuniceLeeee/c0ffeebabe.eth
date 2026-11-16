@@ -13,7 +13,9 @@
     "cause": "Runtime dependency inputs included the generator/type emitter and dormant conversion modules. Runtime output and active optional modules were not separated from tooling and unreachable definitions.",
     "independent_review": "Non-author review_final_gate independently approved runtime-entry binding, conservative AST exclusion, complete full-scope boundary, archival reproduction, preserved proof provenance and strict CAS; read-only review, not an independent chain run.",
     "after": "Canonical generation binds generated runtime entries and the actual referenced Family JSON/modules. Legacy evidence receives source-verified equivalence metadata on a copy; ordinary Ready update and startup consume the same resolver. Old memo/proof IDs are retained. Source, input, forced-update and changed-rule guards remain.",
-    "logs": "logs/final-sim-ev-20261116/migration-tests.log; migration-cli-tests.log; migration-offline.log; migration-build-final.log; hash-tool-check.log; ready/migration.log"
+    "logs": "logs/final-sim-ev-20261116/migration-tests.log; migration-cli-tests.log; migration-offline.log; migration-build-final.log; hash-tool-check.log; ready/migration.log",
+    "realArchive": "37 families: 34 equivalent, 3 changed; 129762 retained nominations, 2703 changed-rule nominations; sealed proof fingerprints retained.",
+    "historyCorrection": "2289c46c55a0a010c2fb9e9be8a80f78cd919d0a: migrate only sealed verified references; preserve retired memo records without granting unknown hashes authority; independent reviewer approved and full offline suite passed again."
   },
   "tooling_defect": {
     "tool": "listener:family-capability-manifest:check / declarative dependency collector",
@@ -44,7 +46,7 @@
     },
     "productionBuild": "pass",
     "indexedManifestCheck": "pass",
-    "realReadyUpdate": "pending at code publication"
+    "realReadyUpdate": "Ready18 copy migrated; ordinary update started, 127058 completed outcomes inherited without RPC re-attestation; remaining work still running."
   },
   "tool_reconciliation": {
     "capabilityQuery": [

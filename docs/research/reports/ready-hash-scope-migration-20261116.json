@@ -1,0 +1,986 @@
+{
+  "mode": "apply",
+  "sourceGeneration": 18,
+  "sourceSha256": "30d9427efe27763fae69dc09139edf98d413bf1051be17984165723f01b2c464",
+  "archiveManifestSha256": "0f35fec1e75fab7d8b4879c732fd04585a8cdce636e565382dbc2ca55a34748b",
+  "verifiedSourceFiles": 4180,
+  "rpcRequests": 0,
+  "originalProofsPreserved": true,
+  "rows": [
+    {
+      "familyId": "balancer-v1",
+      "archivedHashes": {
+        "full": "8d09d7d419f353e187c3ee000c4c84de2566f23e89499c4c518cd9f0a0f71c74",
+        "memo": "9627e845187115c04557afd90ffd9d0a25215423f39e0293d3b03e066a8a07f4",
+        "discovery": "c31e292aa59ec571106148e2ad3b3047da6f090c70a3aef2c968ea3b71cb32d6"
+      },
+      "archivedRules": {
+        "full": "0361e4cfb3fe80779da172942e51dc841c292eb48f07b5b50472c3da9a0db47d",
+        "memo": "d186132d8f684d8157cbe19928569127f64f9679816c4fe6c20e38ba6bfce9d2",
+        "discovery": "420bbeb2dfee6516e17304639fc9271a14ffa830baa77d47bbfd00f88f826353"
+      },
+      "currentRules": {
+        "full": "0361e4cfb3fe80779da172942e51dc841c292eb48f07b5b50472c3da9a0db47d",
+        "memo": "d186132d8f684d8157cbe19928569127f64f9679816c4fe6c20e38ba6bfce9d2",
+        "discovery": "420bbeb2dfee6516e17304639fc9271a14ffa830baa77d47bbfd00f88f826353"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 627
+    },
+    {
+      "familyId": "balancer-v2",
+      "archivedHashes": {
+        "full": "5fe3477adbb336e7dee6760cd51a1b21e993b46aa9b0dd5bd1a322a75af44e01",
+        "memo": "73a0cb66b85c4909fcaddd5a8cc4bd95ff916a95ae6f1fbd9e73d79250971d4f",
+        "discovery": "c926b74d88cc518dd924075d8168ffb114aabef2a449d13635369bdf924ba8f7"
+      },
+      "archivedRules": {
+        "full": "b3be841bd81a0cd3942708931fbf512200d24ab465c080bd238b3aa970dde580",
+        "memo": "443c17e14fcd35546b8167657b0aa1333c8625263458926a1e6b8c32a1e0d426",
+        "discovery": "bbf0a1414e88bb976cd6e9f408fe54bf6a4e963f7d34644f3206fc6c9ea2a0ca"
+      },
+      "currentRules": {
+        "full": "b3be841bd81a0cd3942708931fbf512200d24ab465c080bd238b3aa970dde580",
+        "memo": "443c17e14fcd35546b8167657b0aa1333c8625263458926a1e6b8c32a1e0d426",
+        "discovery": "bbf0a1414e88bb976cd6e9f408fe54bf6a4e963f7d34644f3206fc6c9ea2a0ca"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 435
+    },
+    {
+      "familyId": "credit:fluid",
+      "archivedHashes": {
+        "full": "6997c4601c9c6aa804b082877cd1b3158af673449cce64a834e78b572753689d",
+        "memo": "2f148ea559b5479c7b97cc54a4d18ba4c320ba92fe1c2ff3a9d164eee6bb7715",
+        "discovery": "765e5023f4315ae4c98c6256cf0b53efc8c37445eed10829fd79205be807f7af"
+      },
+      "archivedRules": {
+        "full": "fcc223c3d67dd6ab107450bb8bec8619f1df14c4b642b9f2385fcc83a6ad9c51",
+        "memo": "26bf3ff673df4892d54166cad788fbc21bbe46f820cac7e9355d4de6bee66ba4",
+        "discovery": "668bbb86bfb1583888e8ed0318e3f23861010488d035c077414d8b0601fc9d3d"
+      },
+      "currentRules": {
+        "full": "fcc223c3d67dd6ab107450bb8bec8619f1df14c4b642b9f2385fcc83a6ad9c51",
+        "memo": "26bf3ff673df4892d54166cad788fbc21bbe46f820cac7e9355d4de6bee66ba4",
+        "discovery": "668bbb86bfb1583888e8ed0318e3f23861010488d035c077414d8b0601fc9d3d"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 53
+    },
+    {
+      "familyId": "curve-plain-lp",
+      "archivedHashes": {
+        "full": "39928bd86d0119cd3cb15d897743562850a673cc46e66fac4c30409786716913",
+        "memo": "f0a96e993c258f7651515930a40ce9aff0a887ba0a598c70624d8e042a71ca3f",
+        "discovery": "0e90bad26832a077fa30cd71564537cd1f18d81f8916b5540064693727e8f253"
+      },
+      "archivedRules": {
+        "full": "4683905cc21e54d286c24a215b4cc07ec968eb45021cee85660fce29f2271afe",
+        "memo": "fe34cc7eb72cd1f8c0d2d2be41f7c1d897afd843316817102d159678293b59d5",
+        "discovery": "5da95cca81432960f010a63124dcb241d358a313c44a81d7121bccc0b88e2153"
+      },
+      "currentRules": {
+        "full": "570c8a15f27d480ba5a6f9e868a90b539daeeab2d13eb0e10220016836f2cd9b",
+        "memo": "207491e2620f94c39e5ed38c4eaca1968c84bcb5e1234f8e3d8a96ca1100286e",
+        "discovery": "2bc4e6edea503215d7797c7dd11518d242d75608d2239555a68b3985005df5ec"
+      },
+      "equivalent": {
+        "full": false,
+        "memo": false,
+        "discovery": false
+      },
+      "candidates": 301
+    },
+    {
+      "familyId": "custom-swap:angstrom-v4",
+      "archivedHashes": {
+        "full": "1d33b93ef44d0af8dc550d00cd0f3d5a787fea79c92c5e4892c649932cd130fc",
+        "memo": "94ad1dcf6cd4d3b26d27d7c0219783ea466bca1e85fe0dede6e125123758f4ec",
+        "discovery": "e3257c745522d95809b38873afb9a3f939a0eb2446c9e4d44cef280d523f94a6"
+      },
+      "archivedRules": {
+        "full": "96981f4d65f33f720fb81ad2e0eb2d1d2232e3b9959c57ec441a3a2677e96758",
+        "memo": "58fd94c56c5fb2989fbfda454b81f286921984b8c9118b98b7bdad550b439bcd",
+        "discovery": "35da8a88cea0634e7adccce15a2566ddcfeac576403f1f5dc9d4b518413f75f0"
+      },
+      "currentRules": {
+        "full": "96981f4d65f33f720fb81ad2e0eb2d1d2232e3b9959c57ec441a3a2677e96758",
+        "memo": "58fd94c56c5fb2989fbfda454b81f286921984b8c9118b98b7bdad550b439bcd",
+        "discovery": "35da8a88cea0634e7adccce15a2566ddcfeac576403f1f5dc9d4b518413f75f0"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 2
+    },
+    {
+      "familyId": "custom-swap:dodo-v2",
+      "archivedHashes": {
+        "full": "52ad7a8f2f57bc8e81cfed4272d07ff5c233fa33a622d0ae1accee45c6064d22",
+        "memo": "5eb816ed50d9629c67d94d4cd71785ce67dce86b2a61b36f5c60a2ad797b7e05",
+        "discovery": "64936b6344425477f970452f7e86058e0822d3f9a41abf535bb5b091c378cbce"
+      },
+      "archivedRules": {
+        "full": "8c3c03b1036e432fdf4c02631433a7cd3846dab90e152410505b0fd3ca15ce7f",
+        "memo": "f3334a6d3f62c9cb3b039c8e25de21868d89c52d00be953be18952d6766da854",
+        "discovery": "8ac04f0ca1aaf12ed7c670a158832dd4051ce15128be268d90e61a0fab9ab58b"
+      },
+      "currentRules": {
+        "full": "8c3c03b1036e432fdf4c02631433a7cd3846dab90e152410505b0fd3ca15ce7f",
+        "memo": "f3334a6d3f62c9cb3b039c8e25de21868d89c52d00be953be18952d6766da854",
+        "discovery": "8ac04f0ca1aaf12ed7c670a158832dd4051ce15128be268d90e61a0fab9ab58b"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 1130
+    },
+    {
+      "familyId": "custom-swap:ekubo-router-v1",
+      "archivedHashes": {
+        "full": "8f299942d6e3f826a5860f5d13215c432e2d525acf44e4dc778cd4a1b0b6024d",
+        "memo": "0955977d67cfd1e8e63f7e7dcaca67ec75bec83253e655e2a942de66103d667f",
+        "discovery": "8d745acc2be87afecbb82ae69f7c295486116ea1c094cafbd2ec97110093f579"
+      },
+      "archivedRules": {
+        "full": "7a0dcd6b94ab3a20c449492db8082f833a7fb76b22e00a649a62e90b3796f3f4",
+        "memo": "23924e5d6e5e94d71523abc408da86b610d9f6fc20e71a1b7e7840f3e6b6fa5b",
+        "discovery": "341a343a0647327bc36e30ddb87c34768ec79a47079b227cfc5d5c5b3f9f0e2d"
+      },
+      "currentRules": {
+        "full": "7a0dcd6b94ab3a20c449492db8082f833a7fb76b22e00a649a62e90b3796f3f4",
+        "memo": "23924e5d6e5e94d71523abc408da86b610d9f6fc20e71a1b7e7840f3e6b6fa5b",
+        "discovery": "341a343a0647327bc36e30ddb87c34768ec79a47079b227cfc5d5c5b3f9f0e2d"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 44
+    },
+    {
+      "familyId": "custom-swap:oneswap",
+      "archivedHashes": {
+        "full": "ee625c61a1fb085e9aac87f43291ed40d6a10df0c0a1a9664ff71091b4fef696",
+        "memo": "ffbc1261fdd4213accdb83f11abc921a330fecf6e45a882aa90c6f2a6d1c8603",
+        "discovery": "d0fefd8afbaacf4179792f505dbdb499c54f449f4e6fc1625ac32f6f6574736b"
+      },
+      "archivedRules": {
+        "full": "332922655e4aea91e0b72503a74746e295370d9c54586cd663daddb4bd644d84",
+        "memo": "5811e1d25e5f9351b0cfd111dec51a1c38c76a14f88a7f8d1808b12f808baa4a",
+        "discovery": "f8097ae4ae3c50065bb1dd56a87414036f5adad9f1d150bc29f6a9055e409d3c"
+      },
+      "currentRules": {
+        "full": "332922655e4aea91e0b72503a74746e295370d9c54586cd663daddb4bd644d84",
+        "memo": "5811e1d25e5f9351b0cfd111dec51a1c38c76a14f88a7f8d1808b12f808baa4a",
+        "discovery": "f8097ae4ae3c50065bb1dd56a87414036f5adad9f1d150bc29f6a9055e409d3c"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 38
+    },
+    {
+      "familyId": "custom-swap:precision-pool",
+      "archivedHashes": {
+        "full": "13506e4ee9776e30ce9e76d0fd2d984e9a8d33b331e2e1398af7469a3bb4f1a4",
+        "memo": "36c1105bd30b1110c96e277a8196a5d05ca4fa29c23fd0dd592845c845a6f865",
+        "discovery": "f0581d355181aa55c0da97aaa707b87ee7937d259960e05760db0bc7b5719b26"
+      },
+      "archivedRules": {
+        "full": "fef0f0b3212c421dab8f2d60f34f52a979f7e3f66c5ce54bcad1467222e7abff",
+        "memo": "ab11649a50ca12afe4879dee6292351ef4facaed18610c3c154b6ec098f5ce23",
+        "discovery": "075fa56abc0f00901d0e60cfd63783219eb31300ddf7590589487cb4776dd547"
+      },
+      "currentRules": {
+        "full": "fef0f0b3212c421dab8f2d60f34f52a979f7e3f66c5ce54bcad1467222e7abff",
+        "memo": "ab11649a50ca12afe4879dee6292351ef4facaed18610c3c154b6ec098f5ce23",
+        "discovery": "075fa56abc0f00901d0e60cfd63783219eb31300ddf7590589487cb4776dd547"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 13
+    },
+    {
+      "familyId": "custom-swap:uniswap-v1",
+      "archivedHashes": {
+        "full": "835eecac41aadd7bf4c58e4f6bf68b59f22d09d2ef00a1ad768e2d4ca00fb6a9",
+        "memo": "17ea16c80b8913fa5ecd7ab2c916e28d9091a65baf377f721179365571e1ae6d",
+        "discovery": "d3f51a80359ccabd00b92e43ce40cf8e36c32890802782582a0237f8d78cdb17"
+      },
+      "archivedRules": {
+        "full": "2284a7cfa2bae5f0ed1bd9f38b292a364b4d4a6955f069e2386ba21c1880b603",
+        "memo": "1c0304a821e14a76376429f0ea44708778e6d298ce93b08b9a7ac2f0dcbafc39",
+        "discovery": "080ede87227839419decc027dedbfe43bcb2bcc9c4d11a91f220893a2852be9e"
+      },
+      "currentRules": {
+        "full": "2284a7cfa2bae5f0ed1bd9f38b292a364b4d4a6955f069e2386ba21c1880b603",
+        "memo": "1c0304a821e14a76376429f0ea44708778e6d298ce93b08b9a7ac2f0dcbafc39",
+        "discovery": "080ede87227839419decc027dedbfe43bcb2bcc9c4d11a91f220893a2852be9e"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 261
+    },
+    {
+      "familyId": "ella-exchange",
+      "archivedHashes": {
+        "full": "2e56ff0b1fc7b7eb3a2ce6eb0583aca67083406f6f58a58eae7b662bfa0afd0c",
+        "memo": "6b79eb1d8883c060c7266bb768daacfe5ee93f502f2affced94fa43f54703bd7",
+        "discovery": "d85666c5a0e40b88a166e36dbe68c8be0df429918c4a4d67aec7b883e5e7836b"
+      },
+      "archivedRules": {
+        "full": "7c9ded53e7e1a6011df86888f16ca60168a53d9ea5114adc1b4dfbc08fc59766",
+        "memo": "38b76ac93173fdb66e574fab205aa429552f27333ff4a4304572f74f8aff9718",
+        "discovery": "f6a6bddcd26b417c3a993e71486e51dcfc9c1243dba9b32a262d26ba03e42dd5"
+      },
+      "currentRules": {
+        "full": "7c9ded53e7e1a6011df86888f16ca60168a53d9ea5114adc1b4dfbc08fc59766",
+        "memo": "38b76ac93173fdb66e574fab205aa429552f27333ff4a4304572f74f8aff9718",
+        "discovery": "f6a6bddcd26b417c3a993e71486e51dcfc9c1243dba9b32a262d26ba03e42dd5"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 3
+    },
+    {
+      "familyId": "flash-loan:balancer-v2",
+      "archivedHashes": {
+        "full": "f20657dec33c85fcf1e97de7e8ce25f705b14ef1f8d467150fae2e0c8a43bec5",
+        "memo": "8ab95b8174322e41e31fade4b00d0fcc0f5b00241b39c8dec1e55fbbd08b2883",
+        "discovery": "57b12ac13759aea024ed296ddd77549b05bab4e25314e7b9b0af32f1a1116458"
+      },
+      "archivedRules": {
+        "full": "ba60dede27c1bf6db00267bdd1988a434d540dbc557964960d0e09dc5b63fab1",
+        "memo": "49beeb01d1640ea1512ad2d625ec9bf7339ab11419a4c845911981010d027e07",
+        "discovery": "ffcfdb3731ecf60566f062936c99a28907941b9de033ee07d952da84c0c90f79"
+      },
+      "currentRules": {
+        "full": "ba60dede27c1bf6db00267bdd1988a434d540dbc557964960d0e09dc5b63fab1",
+        "memo": "49beeb01d1640ea1512ad2d625ec9bf7339ab11419a4c845911981010d027e07",
+        "discovery": "ffcfdb3731ecf60566f062936c99a28907941b9de033ee07d952da84c0c90f79"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 119
+    },
+    {
+      "familyId": "flash-loan:morpho",
+      "archivedHashes": {
+        "full": "3044a177753cee9bdc784390ea543f1af357bff5c91b5706f5b38149a77f0acd",
+        "memo": "e466ee37c7182e471f2f11193f965f87f81df950a438f6556f1099dabddfa453",
+        "discovery": "d4cd82db3afe82e02b04dc6875b6b6d1f9d997e00e300d6f8387b5cf1880907b"
+      },
+      "archivedRules": {
+        "full": "45f7cadfe1f4f72ed9d61dfdcaa85cc1c35469771af033925a619153a6be401c",
+        "memo": "d51a0659ed18c1f6fde21259ff1357fd8750ae1f637ede4b770232dfe692dd51",
+        "discovery": "d970fd8946ed505817ede5813b1bfb5aecd7ada085f06790791ca59f26cd230f"
+      },
+      "currentRules": {
+        "full": "45f7cadfe1f4f72ed9d61dfdcaa85cc1c35469771af033925a619153a6be401c",
+        "memo": "d51a0659ed18c1f6fde21259ff1357fd8750ae1f637ede4b770232dfe692dd51",
+        "discovery": "d970fd8946ed505817ede5813b1bfb5aecd7ada085f06790791ca59f26cd230f"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 95
+    },
+    {
+      "familyId": "fluid-dex",
+      "archivedHashes": {
+        "full": "2d3ae4a708cfa73ce1384b0162e7db79d47c48d5ae629daf24259675196a8391",
+        "memo": "ab90116315424e43a5cf0275420124b9a180cae801dbd1c2710ff7400e67bb6b",
+        "discovery": "29576f158abb4981e21b498ceedd33fb2f83d2db1a65436684ebb380bb1fd680"
+      },
+      "archivedRules": {
+        "full": "d46e24d19dc5451a89f4d813e61fff6b1e4b4796a968ec177649c8d51b1f09dd",
+        "memo": "83b2d52d8f5cb43f9d3e873b346ac6e14ef162e198b92c16c088d674bcab468b",
+        "discovery": "7ba1b8164f388a42f97ce28364a32cb05a87eadde2b1ede00c4a6e88d0e8fc2a"
+      },
+      "currentRules": {
+        "full": "d46e24d19dc5451a89f4d813e61fff6b1e4b4796a968ec177649c8d51b1f09dd",
+        "memo": "83b2d52d8f5cb43f9d3e873b346ac6e14ef162e198b92c16c088d674bcab468b",
+        "discovery": "7ba1b8164f388a42f97ce28364a32cb05a87eadde2b1ede00c4a6e88d0e8fc2a"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 40
+    },
+    {
+      "familyId": "mooniswap",
+      "archivedHashes": {
+        "full": "1438c4821e3b98c0bf3d048d3eb837698eedf6a476263fd1fca951df1f5f0339",
+        "memo": "676176b7223dc537b3c27d1e54f732973d8de7ecaaaa3dad763bf3e9b7172a86",
+        "discovery": "f3b94d63a6086be8d068f6713805188dce3fbdc849c9b3d28b83748a738f8e43"
+      },
+      "archivedRules": {
+        "full": "4a39c8a210259b02b94e9d702e00e5bb4329944f56ddb10b87b20b0d7ec8ea08",
+        "memo": "7c32082a548ea842ec64e95790373bb3c9f4c07d6574dcb2ef34c41bc4204752",
+        "discovery": "e897c6ec56aeed24b5c49b1ea6527d27d5bcc234937b488328b13c903d0fa92f"
+      },
+      "currentRules": {
+        "full": "4a39c8a210259b02b94e9d702e00e5bb4329944f56ddb10b87b20b0d7ec8ea08",
+        "memo": "7c32082a548ea842ec64e95790373bb3c9f4c07d6574dcb2ef34c41bc4204752",
+        "discovery": "e897c6ec56aeed24b5c49b1ea6527d27d5bcc234937b488328b13c903d0fa92f"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 199
+    },
+    {
+      "familyId": "protocol:astra-multitoken",
+      "archivedHashes": {
+        "full": "8b828fa2739ab7c34b214eefe4457d7d15bd3c39e186e0cb9dffa63eecbe8ca7",
+        "memo": "e2729ce9346681fa0adfde6e5b0279e50a045831adc814373967030dbac8b549",
+        "discovery": "d6fe6aab70eb6e150985ce32a5293c3399126087b6f49e71c53fb32a3c6d16fc"
+      },
+      "archivedRules": {
+        "full": "8a0fd1a9a447821075678ea8718ea92648671bbfdd2ef3152c9b59eff26580f6",
+        "memo": "d9005d8e2cc85be00b85b9615669feee07000d238c149d107b281a1c75db5c19",
+        "discovery": "fbb2dc82bcedd474b8dabaf8332c9561f7f9ceb006e23ee165a3e485162422ca"
+      },
+      "currentRules": {
+        "full": "8a0fd1a9a447821075678ea8718ea92648671bbfdd2ef3152c9b59eff26580f6",
+        "memo": "d9005d8e2cc85be00b85b9615669feee07000d238c149d107b281a1c75db5c19",
+        "discovery": "fbb2dc82bcedd474b8dabaf8332c9561f7f9ceb006e23ee165a3e485162422ca"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 72
+    },
+    {
+      "familyId": "protocol:badger-sett-withdraw",
+      "archivedHashes": {
+        "full": "0296ff43611f015b930caac440726bdea3315b7fd9ad0b6fb3edf6f650b24a2b",
+        "memo": "b682947c8cff44a1dba38963e032e4638fccf7b1f4d5367fe29c3fb3e0cdafd0",
+        "discovery": "e69941fb2f757a3785af2ff3cf5d62fb3e7b68c27ceb5b15270ec88c2ca52ba2"
+      },
+      "archivedRules": {
+        "full": "9046bf44212b927341c595f45ce4ed55bd875e9661790aaa3db244c58c0dee7e",
+        "memo": "64b798334ba7d00ea93cee49a7303db8a4790d36a79cfabe93a099bdf2d29172",
+        "discovery": "4376b44a8447a03cdf998290be48bfd08b170a29641c870a3ebe58c67b8b19c4"
+      },
+      "currentRules": {
+        "full": "9046bf44212b927341c595f45ce4ed55bd875e9661790aaa3db244c58c0dee7e",
+        "memo": "64b798334ba7d00ea93cee49a7303db8a4790d36a79cfabe93a099bdf2d29172",
+        "discovery": "4376b44a8447a03cdf998290be48bfd08b170a29641c870a3ebe58c67b8b19c4"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 1302
+    },
+    {
+      "familyId": "protocol:compound-ctoken",
+      "archivedHashes": {
+        "full": "25238c5d164672190bf15c3a51fbfd09b00d526a31b5b5d7744bae074e8af895",
+        "memo": "f43174c6aba71c20d217a1972950ac8102dbcb09487c3cb8aea6f9f16fe34c3f",
+        "discovery": "4dd7ba84a8893abac15add16c5435ec33eb3decf563f6fa91dfe06e748053701"
+      },
+      "archivedRules": {
+        "full": "5bfab1cf62a0a468b31eac305601d3d3ffde2d499423a8e76c0193d39cf5dc4d",
+        "memo": "85cbeeb7d31aca287c7c407af596c9c1957456f3913de4e56d77f6fd88b0d11d",
+        "discovery": "2931d992d31438f975c40cb1501cff46f352cefa6c76f2a854649692355b5424"
+      },
+      "currentRules": {
+        "full": "5bfab1cf62a0a468b31eac305601d3d3ffde2d499423a8e76c0193d39cf5dc4d",
+        "memo": "85cbeeb7d31aca287c7c407af596c9c1957456f3913de4e56d77f6fd88b0d11d",
+        "discovery": "2931d992d31438f975c40cb1501cff46f352cefa6c76f2a854649692355b5424"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 268
+    },
+    {
+      "familyId": "protocol:eigenpie",
+      "archivedHashes": {
+        "full": "2f9a23ca91e7343ae538e13ef3db8bba71fb68ff202ee0eeb5d49ad262011a73",
+        "memo": "e43b1b3f7e870ac4917e7a0117fa145527d9564fd61b429e776ea81cf8d99c99",
+        "discovery": "2b2bb663c16f4b34104f31acaec098a46e751b243405cbbaed1218b48a894f98"
+      },
+      "archivedRules": {
+        "full": "6b674419a2d58fc6e9e002eb2178825cb1dd94fea9b4223c57ffdfd6f0d022ec",
+        "memo": "c6087d741c52446063c2775eabb83c3c1aeb53f6981c9346c3ba7fdd2ea12ecd",
+        "discovery": "54de4f88caae8df328519d7ccba8e9aec9eb1717a590aa6a421ff2a5d91b8a87"
+      },
+      "currentRules": {
+        "full": "6b674419a2d58fc6e9e002eb2178825cb1dd94fea9b4223c57ffdfd6f0d022ec",
+        "memo": "c6087d741c52446063c2775eabb83c3c1aeb53f6981c9346c3ba7fdd2ea12ecd",
+        "discovery": "54de4f88caae8df328519d7ccba8e9aec9eb1717a590aa6a421ff2a5d91b8a87"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 2
+    },
+    {
+      "familyId": "protocol:erc4626",
+      "archivedHashes": {
+        "full": "432e569c4139a5ab3ea4fcac49c5347d75b52919740d4e2fc4cbc7d07ba23333",
+        "memo": "8a89612013d2a607eee5be9f00eb0485f61889c100ea4456e645f157b24cd045",
+        "discovery": "ac6c1c8c0a949bdc8c10ccaed1863651b5571d86fcff6446e3a48c3b36cee42c"
+      },
+      "archivedRules": {
+        "full": "4d25c904834ff0e89886404b4676ff362ce0c1d8861d9a7a46a52e657eb996a3",
+        "memo": "e1c7ac97b693cf06ee250284ff58b9ee55307283f2726b338174b763c751b40c",
+        "discovery": "dc538be44a13d963b77caa57aa65bba8027315a2727190db6c12670bdb9973c7"
+      },
+      "currentRules": {
+        "full": "f093ab034b2af31d20dde53e0cf2e1cc920895aa4fed727672fbd278beebb12c",
+        "memo": "3050550c337331513e711ade8f00464c49e29e141d3cb634fc86d63f3d8ac620",
+        "discovery": "6328c3ff7fb6920a9e260ec5feb8987b7e259bed4d8d60daf5eae9014daaf084"
+      },
+      "equivalent": {
+        "full": false,
+        "memo": false,
+        "discovery": false
+      },
+      "candidates": 2371
+    },
+    {
+      "familyId": "protocol:erc4626-silo-redeem",
+      "archivedHashes": {
+        "full": "1f778f22a9194630915dc0be7b326c963c068e486fe0d06fecbf9e8a36508441",
+        "memo": "48b6a44f112d5a337a7565a3b81b119ff7a0e003d4371a70e75917ecf1954a54",
+        "discovery": "8ab588971e9fb577ec234ae2f2ee5073b2cb6d996fa31027caccb3ad0ecb9763"
+      },
+      "archivedRules": {
+        "full": "9ec2402fbc2159d197ae178e4c38a27d4df2b23d3204a26c9099a5041d7921ac",
+        "memo": "cbbf2803144736ae9c95e133f08a840b49686d267d768aa89531983f828e8611",
+        "discovery": "07ce8ca5008ea7eb96e3fa370f29f35a0c028a5c59489d771625fd986c4026ee"
+      },
+      "currentRules": {
+        "full": "3a14ca115e495d739c17b213feb3c23d39a572333d6b9c7ee2f012d51619030e",
+        "memo": "31a57916b89613a78ab1a8480633104b323d172367a75a364f96c7d443239a5d",
+        "discovery": "6faec74e7014f8336023fd8ca3fecfd2b10a68670bed191876123d41aee2abd2"
+      },
+      "equivalent": {
+        "full": false,
+        "memo": false,
+        "discovery": false
+      },
+      "candidates": 31
+    },
+    {
+      "familyId": "protocol:ethertoken-native-redeem",
+      "archivedHashes": {
+        "full": "58583b2e14726b80a4ed845040dce3216666bca33cad0a56b2c69064f0d6f8d2",
+        "memo": "dbbfcc4423ea81d87c28a8c5ce488ed5271a471f2e241608fa2f0dc8dcdf95b9",
+        "discovery": "4bc67c1a731c57cfaced26aeea75c70e0958cd2202a5e18984bd244e139df5c8"
+      },
+      "archivedRules": {
+        "full": "7ddd66e512cb9796942a152b649b76c064165d3cecda98d499f5028913960cc8",
+        "memo": "2ff2dcdba7a9df4d127b56cf5d91116bf0099a68f94b1e43b1a187a97375873f",
+        "discovery": "53965699e92455a1fbb14ded7a42f7dfe6ffbf8ea032d2add636bb317fa8523f"
+      },
+      "currentRules": {
+        "full": "7ddd66e512cb9796942a152b649b76c064165d3cecda98d499f5028913960cc8",
+        "memo": "2ff2dcdba7a9df4d127b56cf5d91116bf0099a68f94b1e43b1a187a97375873f",
+        "discovery": "53965699e92455a1fbb14ded7a42f7dfe6ffbf8ea032d2add636bb317fa8523f"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 1322
+    },
+    {
+      "familyId": "protocol:few-wrapped",
+      "archivedHashes": {
+        "full": "6b838f69381fde910e43e43939f1cb23ecbf1ca1947de38746e073a320364b27",
+        "memo": "ee052c0fe11517733046e2723df2be0cfc9f27ba599df07a9766832b78682da2",
+        "discovery": "20b4990f849d445ff5dcec68bccf5920423bc5d643179685feb0e105f26fe77c"
+      },
+      "archivedRules": {
+        "full": "a0543b9da977a102417e6cd7cf0ed87ea5cb2fba05accac0c6743fff097a97ce",
+        "memo": "815435cdf7d257d7c977ae5839c3bcf8b7a0c173366aeb119dd3b3da0c52cf68",
+        "discovery": "ff325db1520928f13185fbafb2074a05a0a45dd2e00a11982b5ff45182bdb265"
+      },
+      "currentRules": {
+        "full": "a0543b9da977a102417e6cd7cf0ed87ea5cb2fba05accac0c6743fff097a97ce",
+        "memo": "815435cdf7d257d7c977ae5839c3bcf8b7a0c173366aeb119dd3b3da0c52cf68",
+        "discovery": "ff325db1520928f13185fbafb2074a05a0a45dd2e00a11982b5ff45182bdb265"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 129
+    },
+    {
+      "familyId": "protocol:goldx",
+      "archivedHashes": {
+        "full": "9fa42576ed3401010f4713211fbae9103585ea3e7ba0bcf99b0a28ecb98a6eab",
+        "memo": "01ed8f29c63c9657e7a075be83bd6d1f3d219e1206716ddb0b25fda7d0205adb",
+        "discovery": "1b3d8e549ef942f84596297d20f734c04950cbc5c753abe70ae55387b3a03778"
+      },
+      "archivedRules": {
+        "full": "9314587be67d0dc2ce1a0eca4348eb0694747b052f7919ce4454ba8141e6ffef",
+        "memo": "6ca42bffa9606658a034e7d003669b7256a27c8a21cb9d19a61dc188fd48e1bc",
+        "discovery": "951382693c9a66c6a746d4e203a4c95067ed0a4e0d983d0db3dec0717a5204fb"
+      },
+      "currentRules": {
+        "full": "9314587be67d0dc2ce1a0eca4348eb0694747b052f7919ce4454ba8141e6ffef",
+        "memo": "6ca42bffa9606658a034e7d003669b7256a27c8a21cb9d19a61dc188fd48e1bc",
+        "discovery": "951382693c9a66c6a746d4e203a4c95067ed0a4e0d983d0db3dec0717a5204fb"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 3772
+    },
+    {
+      "familyId": "protocol:metronome-hgusdc",
+      "archivedHashes": {
+        "full": "9ec469503764cb2c8286f45b28fcfabd8f2fa0844a626cdac87167ef161d95da",
+        "memo": "b0e2c9dd5e5afd2c21b0d21f0b018fbee625ab101f23686a5c2561e4d1b74787",
+        "discovery": "de2553fc53a33fe5eaa9a87193c15d7c60e68cd8fb4217f48558add3f149a45d"
+      },
+      "archivedRules": {
+        "full": "e013ceff03cbbd4d506ad8de2ed3615612db1d7314e6e90f15bd210d732caee1",
+        "memo": "e252caa75a18d198dd705230983ce8f776ca360a89317ad2b522dafeed4203f2",
+        "discovery": "dd24608677618eb549f016fb5c9a34fcf86117775b35315d9cbe44318ba8b74a"
+      },
+      "currentRules": {
+        "full": "e013ceff03cbbd4d506ad8de2ed3615612db1d7314e6e90f15bd210d732caee1",
+        "memo": "e252caa75a18d198dd705230983ce8f776ca360a89317ad2b522dafeed4203f2",
+        "discovery": "dd24608677618eb549f016fb5c9a34fcf86117775b35315d9cbe44318ba8b74a"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 0
+    },
+    {
+      "familyId": "protocol:metronome-synth",
+      "archivedHashes": {
+        "full": "19d7fe1a86f7d0ef04de1cb01d6dbe8c4bcd87561a9fb32ef929b6b7da220db7",
+        "memo": "d71a12c6cb38e9d5a8720303125351381877aaa8aafe93dd88d6aee9aad7fa79",
+        "discovery": "58cadce248b8ce1cac0af632084c707ed3fc57f227ee2883888318a2d0129eb7"
+      },
+      "archivedRules": {
+        "full": "8f625629ca052a1f0ce78403fe7e3746d88afd28e2e977cdceba5703005a71f8",
+        "memo": "2819de63c0a40a74b97d83bd97f3064375879e94edb4f9073ccf05462e70d0e4",
+        "discovery": "3cc84963a1c21142da5f7d5ba884bf9ace3a9d9525b26896c8f8126b4e02f105"
+      },
+      "currentRules": {
+        "full": "8f625629ca052a1f0ce78403fe7e3746d88afd28e2e977cdceba5703005a71f8",
+        "memo": "2819de63c0a40a74b97d83bd97f3064375879e94edb4f9073ccf05462e70d0e4",
+        "discovery": "3cc84963a1c21142da5f7d5ba884bf9ace3a9d9525b26896c8f8126b4e02f105"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 6
+    },
+    {
+      "familyId": "protocol:psm",
+      "archivedHashes": {
+        "full": "c62a46c13d81f98d9c90074a883cfd5c63bc44a09b1c69454626276ccccbcaae",
+        "memo": "63a043d76b3ac61c8ecdb55ad938106c7659633665bb008045a5614832c09985",
+        "discovery": "3ad7e334951c22d76b631bb070010bcb4d53ee10cd6eada0238c38058fb3048c"
+      },
+      "archivedRules": {
+        "full": "251f50aa68528848d62dcc8e2219134065e956442508927393caea4824785532",
+        "memo": "a10625b0f4d0f7622bba648c1d722b57afdb7c397d0b53d417697f1134335179",
+        "discovery": "412dc72b0fc983376df602d39c04663a9bbb91b66696c9f74a5e3412effce3a4"
+      },
+      "currentRules": {
+        "full": "251f50aa68528848d62dcc8e2219134065e956442508927393caea4824785532",
+        "memo": "a10625b0f4d0f7622bba648c1d722b57afdb7c397d0b53d417697f1134335179",
+        "discovery": "412dc72b0fc983376df602d39c04663a9bbb91b66696c9f74a5e3412effce3a4"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 9
+    },
+    {
+      "familyId": "protocol:rocksolid",
+      "archivedHashes": {
+        "full": "efb8889f2078aa44b547c35e350e307d3afe192425531f074c4c67947e82ffe8",
+        "memo": "19664c958725d641deec61df18befda8bcd3acbe9936693331bf8291589961c9",
+        "discovery": "76ed9fbc5dc123345e0c194b0dde4d3e901462c768efed8cd410f3a14b07572d"
+      },
+      "archivedRules": {
+        "full": "45ebffd51a87cde42d85e7a91c449dcdd8fa1ad113e8800de6e9e5643b0fa844",
+        "memo": "c1f68fd9d8d5bf1964eb7e7b40f24c85c65424ced52e19da2fe1f21ffb5ab9cd",
+        "discovery": "d53d3bdaee1b3fb99a68202fc879cc47aa4183d840363f1ad768ce5685abf453"
+      },
+      "currentRules": {
+        "full": "45ebffd51a87cde42d85e7a91c449dcdd8fa1ad113e8800de6e9e5643b0fa844",
+        "memo": "c1f68fd9d8d5bf1964eb7e7b40f24c85c65424ced52e19da2fe1f21ffb5ab9cd",
+        "discovery": "d53d3bdaee1b3fb99a68202fc879cc47aa4183d840363f1ad768ce5685abf453"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 8
+    },
+    {
+      "familyId": "protocol:self-burn-native",
+      "archivedHashes": {
+        "full": "29a832e97f41fa2fe82a56cdbed569aea01a1cf11bad347f7fef944260241b5e",
+        "memo": "ee97d6fbac2f2ffff5ed6397880d41a1f894211dd9b1fb330cfef84916a5e855",
+        "discovery": "c5c85f9d3b85d2f3d39e92aefde9692a0829de89fd84fec384ae1e38f31b96e6"
+      },
+      "archivedRules": {
+        "full": "585b1bd59e5992225a87621b230128c516cf124db44679176b826b8598144bdc",
+        "memo": "1d16c5339d60584e5744a94a214592fb2f0c2537010542c343110bc174b2b778",
+        "discovery": "d88719a5da842f3ced903502989aeb693ab22965ceb87a8dc544db0209e63a65"
+      },
+      "currentRules": {
+        "full": "585b1bd59e5992225a87621b230128c516cf124db44679176b826b8598144bdc",
+        "memo": "1d16c5339d60584e5744a94a214592fb2f0c2537010542c343110bc174b2b778",
+        "discovery": "d88719a5da842f3ced903502989aeb693ab22965ceb87a8dc544db0209e63a65"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 1029
+    },
+    {
+      "familyId": "protocol:staked-usdat",
+      "archivedHashes": {
+        "full": "90eb2c3dcfc03c1ede58c0814753af40e04799d09fccbc36f784f9de3aead320",
+        "memo": "445d7669f3d386d59b4ec36ec6a825ec85540c0f9184f652387486b0d679acd6",
+        "discovery": "64e3a6ac29bac7097c21a150f17292658a34769405d55960bb04dd773f0f9a65"
+      },
+      "archivedRules": {
+        "full": "fe863867a30e24145cdf36d451d8d57f6ac3bf0bae604aceab91b54d0ff418df",
+        "memo": "b2c11abac1c99aafc15f215cccd69fc5250e57c4ccdc7d4b23dbedcb9008a720",
+        "discovery": "9451d631299ef7d1a5b1b18ffc3242083c08d5eb1dfd51135fb42d8a2fa53c21"
+      },
+      "currentRules": {
+        "full": "fe863867a30e24145cdf36d451d8d57f6ac3bf0bae604aceab91b54d0ff418df",
+        "memo": "b2c11abac1c99aafc15f215cccd69fc5250e57c4ccdc7d4b23dbedcb9008a720",
+        "discovery": "9451d631299ef7d1a5b1b18ffc3242083c08d5eb1dfd51135fb42d8a2fa53c21"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 2371
+    },
+    {
+      "familyId": "protocol:token-conversion",
+      "archivedHashes": {
+        "full": "d26cc0631c85dcd9a94e0db320b4319ed4af8556fb8ccc3819b2e13fd492f2a1",
+        "memo": "909228f83b8ad569011815ba0ff201f9f402d09bdc4ebe59ceaee014366ba1e4",
+        "discovery": "6687fb6032a421aeec758a5571e8a557d89ca3a71aeebeeee1316e499bde0f39"
+      },
+      "archivedRules": {
+        "full": "bcaf2696c57431bd960a8e6b0d79e80f71091d91d75047234196e1178a91958a",
+        "memo": "0be86d9e0d8eeb3af22975238cc72f3e2c8260dbc2550d91b0bffd023c20f75b",
+        "discovery": "2313d3b0407c195eeb956ae56b1bb6c7268931bf981e2ff7a717cf43d26a96e2"
+      },
+      "currentRules": {
+        "full": "bcaf2696c57431bd960a8e6b0d79e80f71091d91d75047234196e1178a91958a",
+        "memo": "0be86d9e0d8eeb3af22975238cc72f3e2c8260dbc2550d91b0bffd023c20f75b",
+        "discovery": "2313d3b0407c195eeb956ae56b1bb6c7268931bf981e2ff7a717cf43d26a96e2"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 10836
+    },
+    {
+      "familyId": "protocol:token-migration",
+      "archivedHashes": {
+        "full": "e2f0863d3f80ef39b2300cfcd8dbcaa0681de10e6c534e2295ed792df218ba1d",
+        "memo": "32b082d290fb96ec2572d129dfd66ffbeb7ae1b12a0540535014e20d7e9d1392",
+        "discovery": "eb2fac2861767e503e1f59c390863ef9002ff8ac06ddec41989bb0696d290c3c"
+      },
+      "archivedRules": {
+        "full": "df6c716c44fcf4863de386cad618aec404b50ff416ce8e00871c203534b2ba39",
+        "memo": "523a1a4a32133e1c469c4e14db14adaece5d9a2997cdecf8c0938d79a0a8ad02",
+        "discovery": "e28349b49a54a715846f2a6383fa6d872751a2752d6bd6245b32f772bbb59227"
+      },
+      "currentRules": {
+        "full": "df6c716c44fcf4863de386cad618aec404b50ff416ce8e00871c203534b2ba39",
+        "memo": "523a1a4a32133e1c469c4e14db14adaece5d9a2997cdecf8c0938d79a0a8ad02",
+        "discovery": "e28349b49a54a715846f2a6383fa6d872751a2752d6bd6245b32f772bbb59227"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 3
+    },
+    {
+      "familyId": "protocol:wsteth",
+      "archivedHashes": {
+        "full": "274474cbf5f63a58e82d181c1ec132b0f851359ef8454a6c6c4777c34cd9f027",
+        "memo": "b5bf0a8b6108de5bbcaf11488d177415f257719f3eb9353afcde66c452281c68",
+        "discovery": "ab5d51c0a5bf4cc1190879b531fa76d6bea716fa61e842d16ed7734a3b231f07"
+      },
+      "archivedRules": {
+        "full": "9b47394d2cdf7becc2a6774d678d2accac9be27c99f9bfd040ab4acfcd4cfd0a",
+        "memo": "d2a9186eb7393a496d3aa641416cd39edde0bd13c11f830f6f154596c4dbe452",
+        "discovery": "c486f4db3f565ea4962680128925cff2067bf7b6979b357e78687b8011bc102d"
+      },
+      "currentRules": {
+        "full": "9b47394d2cdf7becc2a6774d678d2accac9be27c99f9bfd040ab4acfcd4cfd0a",
+        "memo": "d2a9186eb7393a496d3aa641416cd39edde0bd13c11f830f6f154596c4dbe452",
+        "discovery": "c486f4db3f565ea4962680128925cff2067bf7b6979b357e78687b8011bc102d"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 129
+    },
+    {
+      "familyId": "univ2-standard",
+      "archivedHashes": {
+        "full": "c4ba4ce063a49e7973976ec1ae9ef791b4c811ed1ca1a4f3db071777a18541d3",
+        "memo": "e58586c6c283b46e7dd43174699f3034eb98fb8f91a44706b0cb7594dc9fef3f",
+        "discovery": "4bf0df36f38ba72e69482c98fd61fbf257e3594e97c3767ae68ca4fbb033ad0b"
+      },
+      "archivedRules": {
+        "full": "6ef129d71829311b99d8ada3135c561eaea686c7b0b9402315ece868d57ce48c",
+        "memo": "e7e96c2cea72663a910219ecc4f8d89f15a9c857a07035c7f41a53e83933cd0f",
+        "discovery": "53670fffd0e538aa5819d2edf82e627510039231dd1098b1c6388a318ef12bbc"
+      },
+      "currentRules": {
+        "full": "6ef129d71829311b99d8ada3135c561eaea686c7b0b9402315ece868d57ce48c",
+        "memo": "e7e96c2cea72663a910219ecc4f8d89f15a9c857a07035c7f41a53e83933cd0f",
+        "discovery": "53670fffd0e538aa5819d2edf82e627510039231dd1098b1c6388a318ef12bbc"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 33866
+    },
+    {
+      "familyId": "univ3-standard",
+      "archivedHashes": {
+        "full": "c9d0bc03db82357e16308153e9189790585440c8a03471fdb34be497dc14cfab",
+        "memo": "d8efdf1dce7f86814ef329a1a80645bc11d7e511783dc235e277cdebcdcd13f4",
+        "discovery": "52e6b85852e35f759b640225d95ac50b3efe0abfbd5692ecb1b4ba65ec9b1fd1"
+      },
+      "archivedRules": {
+        "full": "cd04e7bf1ff803e11712a9e85bc258943afebb7caa897b0af3ecd26bce002f09",
+        "memo": "90617041e0daa81bde5b1be015b27ae58496bfa3e1f07a4d466948c917f668a4",
+        "discovery": "ca9df45150c4d73ec3b4ca406e090d12c3b885d670fc10f7673961a122c6170f"
+      },
+      "currentRules": {
+        "full": "cd04e7bf1ff803e11712a9e85bc258943afebb7caa897b0af3ecd26bce002f09",
+        "memo": "90617041e0daa81bde5b1be015b27ae58496bfa3e1f07a4d466948c917f668a4",
+        "discovery": "ca9df45150c4d73ec3b4ca406e090d12c3b885d670fc10f7673961a122c6170f"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 20698
+    },
+    {
+      "familyId": "univ4",
+      "archivedHashes": {
+        "full": "857966c3a2839df8c2a491fb4d863166585464b5897c67fd3bfffec6c9b5de52",
+        "memo": "f05e43e576f4be72236636fc266e338beedf57f8fd246a31c7c18ba5f88b8f63",
+        "discovery": "66239aee789cef1b6f1a0b5ebed30e4b1d3597319c5cd8e6d81f8907dab7bdc9"
+      },
+      "archivedRules": {
+        "full": "1646f8f0f16f6cb7ccdcd5bfb16e926c763e25ecb58079e4362a1ef787d09f0d",
+        "memo": "f91da2e22a08fc54b80b7dcf0dd46639ac812e56b2d599732b385238346b226b",
+        "discovery": "157e5e6f6cb34ed8af46d686687a9470fe9891ef13578bd8f4e693bea4a72e3d"
+      },
+      "currentRules": {
+        "full": "1646f8f0f16f6cb7ccdcd5bfb16e926c763e25ecb58079e4362a1ef787d09f0d",
+        "memo": "f91da2e22a08fc54b80b7dcf0dd46639ac812e56b2d599732b385238346b226b",
+        "discovery": "157e5e6f6cb34ed8af46d686687a9470fe9891ef13578bd8f4e693bea4a72e3d"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 47808
+    },
+    {
+      "familyId": "univ4-fee-hook",
+      "archivedHashes": {
+        "full": "e945d99e692dd279c53808f564f971d5f2ce53231f8354be8bb96d119d816f5e",
+        "memo": "5f978128ae15e3850615193e75cae32c3e827bf5435ceb25acfe51f8ba7c6838",
+        "discovery": "a210b4e437e7f048f8a365f7bc995fcd27338e5ede28d16ec0fe70fe69e58ce3"
+      },
+      "archivedRules": {
+        "full": "e81dfed043d6336e347f632846b9fc42482ce42f1bc0504ee24654629a0f2508",
+        "memo": "4e322643e3de813293574b771c1848484077c62e79a0b49ddd93495b6713bc84",
+        "discovery": "6c0c06fb6136b1f1a3481289fc501cf02b424542900db5a6d3a2278402e5f5bf"
+      },
+      "currentRules": {
+        "full": "e81dfed043d6336e347f632846b9fc42482ce42f1bc0504ee24654629a0f2508",
+        "memo": "4e322643e3de813293574b771c1848484077c62e79a0b49ddd93495b6713bc84",
+        "discovery": "6c0c06fb6136b1f1a3481289fc501cf02b424542900db5a6d3a2278402e5f5bf"
+      },
+      "equivalent": {
+        "full": true,
+        "memo": true,
+        "discovery": true
+      },
+      "candidates": 370
+    }
+  ],
+  "migratedSha256": "5fe87268e50e5fecd82722007fb60c1b37a32245926b0c1edfce48d038b12b1f",
+  "scopeSummary": {
+    "families": 37,
+    "unchangedFamilies": 34,
+    "unchangedRuleCandidates": 127059,
+    "changedRuleCandidates": 2703
+  },
+  "implementation": {
+    "workspace": "/opt/mev-cloud/family-runtime-20261007",
+    "branch": "codex/family-runtime-actual-20261007",
+    "hashScopeCommit": "b99fa763625eb6a5e6b335c2b040d92aec5202cb",
+    "migrationScopeCommit": "2289c46c55a0a010c2fb9e9be8a80f78cd919d0a",
+    "normalEntrypoints": [
+      "Ready maintenance update",
+      "live startup restoration",
+      "Ready activation"
+    ],
+    "futureGeneration": "canonical manifest generation automatically uses the narrowed dependency inputs; the archive bridge is only for legacy proofs"
+  },
+  "validation": {
+    "offline": {
+      "tests": 947,
+      "passed": 946,
+      "failed": 0,
+      "skipped": 1
+    },
+    "targeted": {
+      "passed": 46,
+      "failed": 0
+    },
+    "maintenanceCli": {
+      "passed": 2,
+      "failed": 0
+    },
+    "historyAndRunner": {
+      "passed": 4,
+      "failed": 0
+    },
+    "buildLive": "pass",
+    "indexedManifestCheck": "pass",
+    "independentReview": "read-only approved; no independent RPC"
+  },
+  "readyUpdate": {
+    "status": "running",
+    "unit": "mev-ready-rules-20261116.service",
+    "pid": 180737,
+    "concurrency": 4,
+    "source": "Ready18 retained candidates and original cutoff; ordinary update command",
+    "chainAcceptance": "not yet complete",
+    "observedAt": "2026-11-16T09:35:57Z",
+    "classes": {
+      "A": 127059,
+      "B": 11,
+      "C": 2703,
+      "D": 0
+    },
+    "inheritedOutcomes": 127058,
+    "inheritedStatuses": {
+      "verified": 71102,
+      "terminalRejected": 46150,
+      "retryable": 9806
+    },
+    "priorVerifiedToReview": 990,
+    "remainingOrdinary": 1725,
+    "forced": 0,
+    "observedProcessed": 127200,
+    "totalCurrentCandidates": 129773,
+    "throttle": {
+      "concurrency": 4,
+      "batchMaxCount": 8
+    },
+    "retainedCandidateScope": "Ready18 partitions plus 11 nominations at the original single-block cutoff",
+    "rescanBlocks": 1,
+    "note": "One unchanged-rule historical row was not accepted directly by the existing reconciliation guards; it remains in ordinary work. Chain update not yet complete."
+  },
+  "limitations": [
+    "Runtime module boundaries remain conservative; this is not arbitrary function-level dead-code analysis.",
+    "Unknown top-level behavior restores the whole module dependency.",
+    "No signing, broadcast, live latency, or profit result is claimed."
+  ],
+  "dryRun": {
+    "status": "not-started",
+    "waitsFor": "completed Ready update",
+    "authorizedBlocks": 250,
+    "profitMode": "positive-gross-profit",
+    "activityMode": "logs-shadow"
+  }
+}
