@@ -264,7 +264,7 @@ for (const [profit, profitMode, valueScale] of [
     if (profit > 0n) {
       assert.equal(evaluation.evaluation.maxBaseFeePerGas, 1000n);
       assert.equal(evaluation.evaluation.gasUnits, 25000n); assert.equal(evaluation.calldata, input.calldata);
-      assert.equal(methods.length, 4);
+      assert.equal(methods.length, 2); // pre-sim fee source, then shared post-sim/EV canonical check
       if (profitMode === "positive-gross-profit" && valueScale === 1n) {
         assert.equal(evaluation.evaluation.bidEth, 24n); // floor(25 * 99%), no gas subtraction.
         assert.equal(evaluation.evaluation.netEvWei, 1n - 25_000_000n);

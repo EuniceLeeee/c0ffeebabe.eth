@@ -1,5 +1,5 @@
 import { Interface, toBeHex } from "ethers";
-import type { InputFundingOverrides } from "../revm-sim-client.js";
+import { RevmFatalError, type InputFundingOverrides } from "../revm-sim-client.js";
 
 export type PinnedNodeRpc = (method: string, params: readonly unknown[]) => Promise<any>;
 const ERC20 = new Interface(["function balanceOf(address) view returns(uint256)"]);
@@ -110,8 +110,23 @@ export class NodeInputFunding {
     // adversarial getter code. Execution still independently checks the balance.
     const witness = token, hint = this.cache.slots.get(key);
     this.cache.slots.delete(key);
-    const balance = await read(account), witnessBalance = await read(witness);
-    const accessed = await trace(account), shared = await trace(witness);
+    // All four reads use the same pinned, unmodified source and have no data
+    // dependency. Let the existing transport scheduler bound their overlap.
+    // Settle the whole cohort before returning (including on failure). A
+    // concurrent source-integrity fault must still reach the source owner;
+    // ordinary failures retain their original precedence.
+    const sourceReads = await Promise.allSettled([
+      read(account), read(witness), trace(account), trace(witness),
+    ] as const);
+    for (const result of sourceReads)
+      if (result.status === "rejected" && result.reason instanceof RevmFatalError) throw result.reason;
+    const [balanceRead, witnessRead, accessedRead, sharedRead] = sourceReads;
+    if (balanceRead.status === "rejected") throw balanceRead.reason;
+    if (witnessRead.status === "rejected") throw witnessRead.reason;
+    if (accessedRead.status === "rejected") throw accessedRead.reason;
+    if (sharedRead.status === "rejected") throw sharedRead.reason;
+    const balance = balanceRead.value, witnessBalance = witnessRead.value;
+    const accessed = accessedRead.value, shared = sharedRead.value;
     // A packed word can contain flags above the observed balance. Its field is
     // learned below, never supplied by a token-specific slot or width hint.
     const slots = [...accessed].filter(([slot, word]) => word >= balance && !shared.has(slot)).map(([slot]) => slot);

@@ -142,10 +142,18 @@ test("a later waiter keeps its full default timeout after the original quote exp
 });
 
 for (const heldMethod of ["eth_getBlockByHash", "debug_traceCall"]) {
-test(`all waiters cancelling removes abandoned ${heldMethod} and permits a clean same-source retry`, async () => {
+test(`all waiters cancelling removes abandoned ${heldMethod} and permits a clean same-source retry`, { timeout: 5000 }, async () => {
   const entered = deferred(), release = deferred();
   const server = await mockNode(async (method, _params, count) => {
-    if (method === heldMethod && count === 1) { entered.resolve(); await release.promise; }
+    if (method !== heldMethod) return;
+    // Both funding traces belong to one concurrent source-read cohort. Wait
+    // for both dispatches so the cancellation count is independent of HTTP
+    // arrival order; only its first trace needs to remain blocked.
+    if (heldMethod === "debug_traceCall" && count === 2) entered.resolve();
+    if (count === 1) {
+      if (heldMethod !== "debug_traceCall") entered.resolve();
+      await release.promise;
+    }
   });
   const c = client(), a = new AbortController(), b = new AbortController();
   try {
@@ -158,7 +166,7 @@ test(`all waiters cancelling removes abandoned ${heldMethod} and permits a clean
     release.resolve();
     assert.equal(server.counts.eth_getBlockByHash, heldMethod === "eth_getBlockByHash" ? 2 : 1);
     assert.equal(server.counts.eth_call, heldMethod === "eth_getBlockByHash" ? 6 : 8);
-    assert.equal(server.counts.debug_traceCall, heldMethod === "eth_getBlockByHash" ? 2 : 3);
+    assert.equal(server.counts.debug_traceCall, heldMethod === "eth_getBlockByHash" ? 2 : 4);
   } finally { release.resolve(); await c.closeAndDrain(); await server.close(); }
 });
 }

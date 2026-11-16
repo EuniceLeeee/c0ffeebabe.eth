@@ -148,9 +148,11 @@ export function createRevmStrictSimulationTransport(input: {
   }
   // Only immutable initialization is reused. Each node simulation starts from
   // the pinned source, never from a previous leg's modified state.
-  let fundingSource = "";
-  let header: Awaited<ReturnType<typeof readBlockScanObservedHeader>> | undefined;
-  const funding = new Map<string, InputFundingOverrides>();
+  let preparation: {
+    readonly sourceKey: string;
+    header?: Awaited<ReturnType<typeof readBlockScanObservedHeader>>;
+    readonly funding: Map<string, InputFundingOverrides>;
+  } | undefined;
   return Object.freeze({
     ...(executorRuntimeCode === undefined ? {} : { executorProgramCodeHash: executorRuntimeCode.keccak256 }),
     ...(counterfactualExecutorCode === undefined ? {} : { counterfactualExecutorCode }),
@@ -167,26 +169,44 @@ export function createRevmStrictSimulationTransport(input: {
       const lease = await owned(() => leaseFor(source), control);
       const pin = leasePin(lease, source);
       const sourceKey = JSON.stringify([source, pin]);
-      if (fundingSource !== sourceKey) { fundingSource = sourceKey; funding.clear(); header = undefined; }
+      // Capture a source-local cache before yielding. An old in-flight request
+      // must never write its header or funding into a newly selected source.
+      const cache = preparation?.sourceKey === sourceKey ? preparation
+        : (preparation = { sourceKey, funding: new Map<string, InputFundingOverrides>() });
       open(control);
-      const observed = header ?? await readBlockScanObservedHeader(rpcUrl, BigInt(pin.chainId), source.number, control);
-      open(control); header = observed;
       const key = JSON.stringify([authority.executor, authority.transactionOrigin, inputToken, inputAmount]);
-      const reusedInputFunding = funding.has(key);
-      let prepared = funding.get(key);
-      if (!prepared) {
-        prepared = await execute({ source, control, callerAuthority: authority,
+      const prepared = cache.funding.get(key);
+      const reusedInputFunding = prepared !== undefined;
+      // These reads depend only on the pinned source, not on one another.
+      // Cache fulfilled values only: each in-flight operation keeps this
+      // invocation's cancellation and deadline rather than a sibling's.
+      const observedTask = (async () => {
+        const observed = cache.header ?? await readBlockScanObservedHeader(rpcUrl, BigInt(pin.chainId), source.number, control);
+        if (observed.hash.toLowerCase() !== source.hash) fatal({ kind: "source-fault" });
+        open(control);
+        cache.header = observed;
+        return observed;
+      })();
+      const fundingTask = prepared === undefined
+        ? Promise.resolve().then(() => execute({ source, control, callerAuthority: authority,
           prefix: { executor, calldata: buildSubscriptCalldata(getBytes(scriptHex)),
             inputToken, inputAmount: BigInt(inputAmount) },
           request: { id: "standalone-input", kind: "eth-call", to: executor, data: "0x",
-            caller: { kind: "executor" }, completion: "return-data" } }, true, true)
-          .then(result => { if (!result.funding) invalid(); return result.funding!; });
-        funding.set(key, prepared!);
-        if (funding.size > 256) funding.delete(funding.keys().next().value!);
-      }
-      const stateOverrides = prepared!;
-      if (observed.hash.toLowerCase() !== source.hash) fatal({ kind: "source-fault" });
+            caller: { kind: "executor" }, completion: "return-data" } }, true, true))
+          .then(result => { if (!result.funding) invalid(); return result.funding!; })
+        : Promise.resolve(prepared);
+      // Join both owned branches even on failure. In particular a late fatal
+      // from input preparation must win over a header error or cancellation.
+      const [observedResult, fundingResult] = await Promise.allSettled([observedTask, fundingTask]);
       open(control);
+      if (observedResult.status === "rejected") throw observedResult.reason;
+      if (fundingResult.status === "rejected") throw fundingResult.reason;
+      if (JSON.stringify([source, leasePin(lease, source)]) !== sourceKey) fatal({ kind: "source-fault" });
+      const observed = observedResult.value, stateOverrides = fundingResult.value;
+      if (prepared === undefined) {
+        cache.funding.set(key, stateOverrides);
+        if (cache.funding.size > 256) cache.funding.delete(cache.funding.keys().next().value!);
+      }
       const inputPreparationMs = performance.now() - started;
       const simulator = new EthSimulateV1Simulator(rpcUrl, executor, authority.transactionOrigin, input.preserveExecutorCode ? undefined : executorRuntimeCode);
       const simStarted = performance.now();

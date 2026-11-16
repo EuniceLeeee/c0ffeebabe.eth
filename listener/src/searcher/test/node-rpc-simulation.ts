@@ -327,9 +327,15 @@ function preparedRequest(url: string) {
 }
 test("pinned node cancellation does not poison later header/code/funding requests; mismatch fails before execution", async () => {
   let headers = 0, code = "0x6000", calls = 0;
+  let entered!: () => void, release!: () => void;
+  const headerEntered = new Promise<void>(resolve => { entered = resolve; });
+  const headerReleased = new Promise<void>(resolve => { release = resolve; });
   const funding = balanceRpc();
   const server = await mockNode(async (method, params) => {
-    if (method === "eth_getBlockByHash") { if (++headers === 1) await new Promise(r => setTimeout(r, 100)); return { number: "0x64", hash: H, parentHash: P, stateRoot: S }; }
+    if (method === "eth_getBlockByHash") {
+      if (++headers === 1) { entered(); await headerReleased; }
+      return { number: "0x64", hash: H, parentHash: P, stateRoot: S };
+    }
     if (method === "eth_chainId") return "0x1";
     if (method === "eth_getCode") { assert.deepEqual(params[1], { blockHash: H, requireCanonical: true }); return code; }
     calls++; return funding.rpc(method, params);
@@ -338,8 +344,9 @@ test("pinned node cancellation does not poison later header/code/funding request
   try {
     const controller = new AbortController();
     const first = client.strictSimulate(preparedRequest(server.url), { signal: controller.signal });
-    setTimeout(() => controller.abort(), 20);
-    await assert.rejects(first);
+    const cancelled = assert.rejects(first);
+    await headerEntered; controller.abort();
+    await cancelled;
     const next = await client.strictSimulate(preparedRequest(server.url));
     assert.equal(next.strict?.outcome?.kind, "InputPrepared");
     assert(headers >= 2);
@@ -348,7 +355,7 @@ test("pinned node cancellation does not poison later header/code/funding request
     await assert.rejects(different.strictSimulate(preparedRequest(server.url)), /differs at source/);
     assert.equal(calls, before); await different.closeAndDrain();
     await assert.rejects(client.strictSimulate({ ...preparedRequest(server.url), blockNumber: 101 }), /source-fault/);
-  } finally { await client.closeAndDrain(); await server.close(); }
+  } finally { release(); await client.closeAndDrain(); await server.close(); }
 });
 
 test("wrapped OOG/invalid remains incomplete, never deterministic revert evidence", () => {

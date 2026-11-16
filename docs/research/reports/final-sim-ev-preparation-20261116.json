@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "scope": "shared final simulation and EV preparation; authorized 250 block dry-run",
+  "baseCommit": "3baf3037cf346fece62f8c78170ea55bdf1990dc",
+  "referenceBase": "28c00d9704f2d87f98f5ccdbdc04aca15941126b",
+  "referenceDisposition": "independently reviewed; all 4 runtime files match current base; compatible patch adopted",
+  "changes": [
+    "Reuse invocation initial canonical header for fee evidence; retain fresh final and pre-submit checks",
+    "Overlap mandatory final simulation with EV dependency preparation; evaluate actual simulated profit and gas",
+    "Read independent pinned funding observations concurrently through existing scheduler; drain and propagate source fatal",
+    "Capture source-local preparation caches so old in-flight work cannot pollute a new source"
+  ],
+  "verification": {
+    "targeted": {
+      "tests": 438,
+      "pass": 438,
+      "fail": 0
+    },
+    "offline": {
+      "tests": 942,
+      "pass": 941,
+      "fail": 0,
+      "skipped": 1
+    },
+    "independent": {
+      "tests": 64,
+      "pass": 64,
+      "fail": 0
+    },
+    "productionBuild": "pass",
+    "capabilityManifestCheck": "running",
+    "diffCheck": "pass"
+  },
+  "dryRunPlan": {
+    "blocks": 250,
+    "previousRun": "live-2026-11-13T10-33-24-633Z-f6a80ba7",
+    "changes": {
+      "dryRun": true,
+      "submission": false,
+      "profitMode": "positive-gross-profit"
+    },
+    "preserved": {
+      "activityMode": "logs-shadow",
+      "effectiveWethInput": "0.002",
+      "resumePrices": false,
+      "catchupSource": "rpc",
+      "familyFlags": "exact previous run"
+    },
+    "acceptance": {
+      "runtime": "250 published ordinary blocks, warm/catch-up excluded; no broadcast; no source-integrity or lifecycle failure",
+      "safety": "retain actual debit, receipts, final simulation, actual gas/profit, canonical and pre-submit gates",
+      "performance": "Report full block and final-sim/EV overlap/drain. Previous run is unpaired context only; controlled tests check RPC read reduction and equivalent results"
+    }
+  },
+  "limitations": [
+    "Started oracle requests must drain even after simulation failure; failed tail may grow",
+    "Package fixed-delay synthetic benchmark is not real-chain performance evidence",
+    "SUBMIT=0 validates evaluation, not gross fallback broadcast",
+    "No production performance pass claimed before real window"
+  ],
+  "evidenceDirectory": "logs/final-sim-ev-20261116"
+}

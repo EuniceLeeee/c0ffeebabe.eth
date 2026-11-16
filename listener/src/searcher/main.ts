@@ -165,7 +165,7 @@ import {
 import {
   MempoolIntakeRefreshSignal,
 } from "./mempool-intake-refresh-signal.js";
-import { computeBidEth, evaluateEv, selectBlockScanProfitEvaluation, valueInEth } from "./ev-evaluator.js";
+import { computeBidEth, evaluateEv, prepareEvEvaluation, selectBlockScanProfitEvaluation, snapshotEvBlockObservation, valueInEth, type EvBlockObservation } from "./ev-evaluator.js";
 import {
   createProfitTokenValuation,
   type ProfitTokenValuation,
@@ -5652,12 +5652,16 @@ async function processOpportunities(
 async function readUncachedLatestBlock(
   provider: ethers.JsonRpcProvider,
   blockTag: "latest" | number = "latest",
-): Promise<{ number: number; hash: string }> {
+): Promise<{ number: number; hash: string; feeObservation?: EvBlockObservation }> {
   const block = await provider.send("eth_getBlockByNumber", [
     blockTag === "latest" ? blockTag : ethers.toQuantity(blockTag), false,
   ]) as {
     number?: unknown;
     hash?: unknown;
+    timestamp?: unknown;
+    baseFeePerGas?: unknown;
+    gasUsed?: unknown;
+    gasLimit?: unknown;
   } | null;
   if (
     typeof block?.number !== "string" ||
@@ -5666,10 +5670,15 @@ async function readUncachedLatestBlock(
   ) {
     throw new Error("latest block response missing a valid number/hash");
   }
-  return {
-    number: ethers.toNumber(block.number),
-    hash: block.hash.toLowerCase(),
-  };
+  const number = ethers.toNumber(block.number), hash = block.hash.toLowerCase();
+  const quantity = (value: unknown): bigint | undefined => typeof value === "string" &&
+    /^0x(?:0|[1-9a-fA-F][0-9a-fA-F]{0,63})$/.test(value) ? BigInt(value) : undefined;
+  const timestamp = quantity(block.timestamp);
+  const feeObservation = snapshotEvBlockObservation({ number, hash,
+    timestamp: timestamp === undefined ? undefined : Number(timestamp),
+    baseFeePerGas: quantity(block.baseFeePerGas), gasUsed: quantity(block.gasUsed), gasLimit: quantity(block.gasLimit),
+  }, number, hash);
+  return { number, hash, ...(feeObservation === undefined ? {} : { feeObservation }) };
 }
 
 async function readLatestBlockAnchor(
@@ -5694,6 +5703,27 @@ async function readLatestBlockAnchor(
     hash: block.hash.toLowerCase(),
     stateRoot: block.stateRoot.toLowerCase(),
   };
+}
+
+export interface BlockScanFinalSimEvTelemetry {
+  readonly sourceBlock: number;
+  readonly sourceBlockHash: string;
+  readonly sourceGeneration: number;
+  /** Runtime task wall time, including any resource admission/queue wait. */
+  readonly simWallMs: number;
+  readonly prepWallMs: number;
+  readonly joinWallMs: number;
+  /** Preparation start through final EV/source readiness; excludes the initial
+   * head verification and later submission work. Never sum overlapping clocks. */
+  readonly pipelineWallMs: number;
+  readonly overlapMs: number;
+  /** After the simulation task settles: remaining preparation, actual-profit
+   * dependency fallback, final canonical read and pure EV arithmetic. */
+  readonly remainingEVWaitMs: number;
+  readonly canonicalCheckMs: number;
+  readonly initialHeaderReused: boolean;
+  readonly oraclePrefetched: boolean;
+  readonly finalCanonicalCheckPerformed: boolean;
 }
 
 export async function maybeSubmitBlockScanAtomic(params: {
@@ -5725,6 +5755,8 @@ export async function maybeSubmitBlockScanAtomic(params: {
   sourceBlockHash: string;
   signal: AbortSignal;
   onFinalSimStart?: (startedAtMs: number) => void;
+  /** Observation only; errors cannot alter the candidate or submission. */
+  onFinalSimEvTelemetry?: (event: BlockScanFinalSimEvTelemetry) => void;
   collectBlindAudit: boolean;
   strategyVersions: {
     strategy_view_version: string;
@@ -5747,6 +5779,17 @@ export async function maybeSubmitBlockScanAtomic(params: {
     evFinishedAtMs: null as number | null,
   };
   let evStartedAt: number | null = null;
+  let pipelineStartedAt: number | null = null;
+  let simStartedAt: number | null = null;
+  let simFinishedAt: number | null = null;
+  let prepStartedAt: number | null = null;
+  let prepFinishedAt: number | null = null;
+  let joinedAt: number | null = null;
+  let evPreparedAt: number | null = null;
+  let canonicalCheckMs = 0;
+  let initialHeaderReused = false;
+  let oraclePrefetched = false;
+  let finalCanonicalCheckPerformed = false;
   let finalSimStatus: BlockScanAtomicResult["finalSimStatus"] = "not-run";
   let selectedProfitMode = params.config.blockScanProfitMode;
   let submissionAttempted = false;
@@ -5897,6 +5940,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
   const targetOffset = params.historicalExecutionMode === "source-block" ? 0 : 1;
   let targetBlock = sourceBlock + targetOffset;
   const handleAtomicError = (err: unknown): BlockScanAtomicResult => {
+    if (err instanceof RevmFatalError) throw err;
     if (signal.aborted) throw signal.reason ?? err;
     if (err instanceof BlockScanPassDeadlineError) {
       const reason = err.stage === "final simulation" ? "final_sim_deadline" : "ev_or_submit_deadline";
@@ -5914,6 +5958,26 @@ export async function maybeSubmitBlockScanAtomic(params: {
     console.log(`[searcher/blockscan] block=${sourceBlock} submit error ring=${ring}: ${error}`);
     drop(targetBlock, "submit", "blockscan_submit_error", error);
     return finish("blockscan_submit_error");
+  };
+  const unusedPreparation = new Error("final simulation no longer needs EV preparation");
+  let preparationUseful = true;
+  const checkEvActive = (): void => {
+    signal.throwIfAborted();
+    if (Date.now() >= passDeadlineAtMs) throw new BlockScanPassDeadlineError("EV preparation");
+    if (!preparationUseful) throw unusedPreparation;
+  };
+  // The shared deadline helper races its input. Own every new EV read until
+  // the raw provider Promise settles, including a late fatal after cancellation.
+  // Providers without abort support can therefore drain until their timeout.
+  const ownEvRead = async <T>(work: Promise<T>, stage: string): Promise<T> => {
+    try {
+      return await awaitBlockScanDeadline(work, passDeadlineAtMs, stage, undefined, signal);
+    } catch (error) {
+      try { await work; } catch (lateError) {
+        if (lateError instanceof RevmFatalError) throw lateError;
+      }
+      throw error;
+    }
   };
   try {
     const latestAtVerify = await awaitBlockScanDeadline(
@@ -5941,26 +6005,88 @@ export async function maybeSubmitBlockScanAtomic(params: {
       drop(targetBlock, "final_verify", "sim_revert_seen_this_live");
       return finish("sim_revert_seen_this_live");
     }
-    timing.finalSimStartedAtMs = Date.now();
-    params.onFinalSimStart?.(timing.finalSimStartedAtMs);
-    finalSimStatus = "failed";
-    const finalSimStarted = performance.now();
-    const sim = await executeFinalSimulationWork({
-      intent: Object.freeze({
-        stage: "fork-final-sim" as const,
-        source: Object.freeze({
-          number: sourceBlock,
-          hash: sourceBlockHash,
-          generation: sourceGeneration,
+    pipelineStartedAt = performance.now();
+    prepStartedAt = performance.now();
+    const evPreparation = prepareEvEvaluation({
+      provider: {
+        getBlock: async (tag) => {
+          checkEvActive();
+          if (tag !== sourceBlock) throw new Error("prepared EV escaped its source");
+          return ownEvRead(params.historicalExecutionMode === "source-block"
+            ? provider.send("eth_getBlockByNumber", [ethers.toQuantity(sourceBlock), false])
+              .then(raw => raw ? parseBlockScanObservedHeader(raw, sourceBlock, 1n) : null)
+            : provider.getBlock(tag), "EV source header preparation");
+        },
+        ...(typeof provider.call !== "function" && params.historicalExecutionMode !== "source-block" ? {} : {
+          call: async (tx: { to: string; data: string; blockTag?: number }) => {
+            checkEvActive();
+            if (tx.blockTag !== sourceBlock) throw new Error("prepared valuation escaped its source");
+            return ownEvRead(params.historicalExecutionMode === "source-block"
+              ? provider.send("eth_call", [{ to: tx.to, data: tx.data }, { blockHash: sourceBlockHash, requireCanonical: true }])
+              : provider.call(tx), "EV oracle preparation");
+          },
         }),
-        generation: sourceGeneration,
-        resolvedPlan: resolved,
-      }),
-      runtime: finalSimulationRuntime,
-    }).finally(() => {
-        timing.finalSimMs += Math.max(0, performance.now() - finalSimStarted);
+      },
+      profitToken: resolved.profitToken,
+      profitHint: resolved.netProfit,
+      policy: { ...config, profitMode: config.blockScanProfitMode },
+      valuation: profitTokenValuation,
+      sourceBlock,
+      sourceBlockHash,
+      feeEnvironment: params.historicalExecutionMode === "source-block" ? { mode: "source-block", sourceBlockHash } : undefined,
+      initialParent: latestAtVerify.feeObservation,
+      checkActive: checkEvActive,
+      onReadError: (error) => {
+        if (error instanceof RevmFatalError || error instanceof BlockScanPassDeadlineError) throw error;
+        checkEvActive();
+      },
+    }).finally(() => { prepFinishedAt = performance.now(); });
+    const simulation = (async () => {
+      timing.finalSimStartedAtMs = Date.now();
+      params.onFinalSimStart?.(timing.finalSimStartedAtMs);
+      finalSimStatus = "failed";
+      const finalSimStarted = performance.now();
+      simStartedAt = finalSimStarted;
+      try {
+        return await executeFinalSimulationWork({
+          intent: Object.freeze({
+            stage: "fork-final-sim" as const,
+            source: Object.freeze({ number: sourceBlock, hash: sourceBlockHash, generation: sourceGeneration }),
+            generation: sourceGeneration,
+            resolvedPlan: resolved,
+          }),
+          runtime: finalSimulationRuntime,
+        });
+      } finally {
+        simFinishedAt = performance.now();
+        timing.finalSimMs += Math.max(0, simFinishedAt - finalSimStarted);
         timing.finalSimFinishedAtMs = Date.now();
-      });
+      }
+    })().then(sim => {
+      if (!sim.success || sim.netProfit <= 0n) preparationUseful = false;
+      return sim;
+    }, error => { preparationUseful = false; throw error; });
+    // The existing runtime owns simulation cancellation/retirement. This join
+    // additionally drains every EV read we started; a sibling cannot hide a
+    // late source-integrity fault behind its ordinary failure.
+    const [simulationResult, preparationResult] = await Promise.allSettled([simulation, evPreparation]);
+    joinedAt = performance.now();
+    for (const result of [simulationResult, preparationResult]) {
+      if (result.status === "rejected" && result.reason instanceof RevmFatalError) throw result.reason;
+    }
+    // Cancellation can arrive while a failed simulation waits for its already
+    // launched preparation to drain. Do not turn that cancellation into a revert.
+    signal.throwIfAborted();
+    if (simulationResult.status === "rejected") throw simulationResult.reason;
+    if (preparationResult.status === "rejected" && preparationResult.reason instanceof BlockScanPassDeadlineError) {
+      throw preparationResult.reason;
+    }
+    const sim = simulationResult.value;
+    if (preparationResult.status === "fulfilled") {
+      initialHeaderReused = preparationResult.value.initialHeaderReused;
+      oraclePrefetched = preparationResult.value.oraclePrefetched;
+    }
+    let evaluatedEv: Awaited<ReturnType<typeof evaluateEv>> | undefined;
     if (params.historicalExecutionMode === "source-block" && sim.success) {
       const evidence = (sim as import("./simulator/source-block.js").SourceBlockSimulationResult).sourceBlockEvidence;
       if (!evidence || evidence.executionMode !== "source-block" || evidence.source.number !== sourceBlock ||
@@ -5983,20 +6109,34 @@ export async function maybeSubmitBlockScanAtomic(params: {
       };
     }
     if (sim.success && sim.netProfit > 0n) {
-      const latestAfterSim = await awaitBlockScanDeadline(
-        readUncachedLatestBlock(provider, params.historicalReadOnly ? sourceBlock : "latest"),
-        passDeadlineAtMs,
-        "post-simulation source-head verification",
-        undefined,
-        signal,
-      );
+      if (preparationResult.status === "rejected") throw preparationResult.reason;
+      let latestAfterSim: Awaited<ReturnType<typeof readUncachedLatestBlock>> | undefined;
+      // Preserve post-simulation EV wall time when preparation is the slower
+      // sibling: its remaining join wait must not disappear from stage totals.
+      timing.evStartedAtMs = timing.finalSimFinishedAtMs ?? Date.now();
+      evStartedAt = simFinishedAt ?? performance.now();
+      evaluatedEv = await preparationResult.value.evaluate(sim.netProfit, sim.gasUsed, async () => {
+        checkEvActive();
+        const started = performance.now();
+        try {
+          latestAfterSim = await ownEvRead(
+            readUncachedLatestBlock(provider, params.historicalReadOnly ? sourceBlock : "latest"),
+            "post-simulation and EV source-head verification",
+          );
+          finalCanonicalCheckPerformed = true;
+          // Only number/hash are needed for the final canonical comparison.
+          // Fee evidence came from the pre-simulation source header/fallback.
+          return Object.freeze({ number: latestAfterSim.number, hash: latestAfterSim.hash });
+        } finally { canonicalCheckMs += Math.max(0, performance.now() - started); }
+      }).finally(() => { evPreparedAt = performance.now(); });
+      if (latestAfterSim === undefined) throw new Error("prepared EV omitted final canonical verification");
       if (
         latestAfterSim.number !== sourceBlock ||
         latestAfterSim.hash !== sourceBlockHash.toLowerCase()
       ) {
         targetBlock = Math.max(sourceBlock, latestAfterSim.number) + targetOffset;
         const error =
-          `source advanced during final simulation ` +
+          `source advanced during final simulation or EV preparation ` +
           `${sourceBlock}/${sourceBlockHash} -> ` +
           `${latestAfterSim.number}/${latestAfterSim.hash}`;
         recordAuditEv({
@@ -6083,34 +6223,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
       return finish("phantom_profit");
     }
 
-    timing.evStartedAtMs = Date.now();
-    evStartedAt = performance.now();
-    const evaluatedEv = await awaitBlockScanDeadline(
-      evaluateEv(
-        params.historicalExecutionMode === "source-block" ? {
-          getBlock: async (tag: number | "latest") => {
-            if (tag !== sourceBlock) throw new Error("source-block EV escaped its source");
-            const raw = await provider.send("eth_getBlockByNumber", [ethers.toQuantity(sourceBlock), false]);
-            return raw ? parseBlockScanObservedHeader(raw, sourceBlock, 1n) : null;
-          },
-          call: async (tx: { to: string; data: string; blockTag?: number }) => {
-            if (tx.blockTag !== sourceBlock) throw new Error("source-block valuation escaped its source");
-            return provider.send("eth_call", [{ to: tx.to, data: tx.data }, { blockHash: sourceBlockHash, requireCanonical: true }]);
-          },
-        } : provider,
-        resolved.profitToken,
-        sim.netProfit,
-        sim.gasUsed,
-        { ...config, profitMode: config.blockScanProfitMode },
-        profitTokenValuation,
-        sourceBlock,
-        params.historicalExecutionMode === "source-block" ? { mode: "source-block", sourceBlockHash } : undefined,
-      ),
-      passDeadlineAtMs,
-      "EV evaluation",
-      undefined,
-      signal,
-    );
+    if (evaluatedEv === undefined) throw new Error("positive final simulation has no prepared EV result");
     const selected = selectBlockScanProfitEvaluation(evaluatedEv,
       { ...config, profitMode: config.blockScanProfitMode }, config.minNetEth);
     selectedProfitMode = selected.profitMode;
@@ -6424,6 +6537,23 @@ export async function maybeSubmitBlockScanAtomic(params: {
     return await submit();
   } catch (err) {
     return handleAtomicError(err);
+  } finally {
+    if (pipelineStartedAt !== null && prepStartedAt !== null) {
+      const end = evPreparedAt ?? joinedAt ?? performance.now();
+      const event: BlockScanFinalSimEvTelemetry = Object.freeze({
+        sourceBlock, sourceBlockHash: sourceBlockHash.toLowerCase(), sourceGeneration,
+        simWallMs: timing.finalSimMs,
+        prepWallMs: Math.max(0, (prepFinishedAt ?? end) - prepStartedAt),
+        joinWallMs: Math.max(0, (joinedAt ?? end) - pipelineStartedAt),
+        pipelineWallMs: Math.max(0, end - pipelineStartedAt),
+        overlapMs: simStartedAt === null || simFinishedAt === null || prepFinishedAt === null ? 0
+          : Math.max(0, Math.min(simFinishedAt, prepFinishedAt) - Math.max(simStartedAt, prepStartedAt)),
+        remainingEVWaitMs: simFinishedAt === null ? 0 : Math.max(0, end - simFinishedAt),
+        canonicalCheckMs, initialHeaderReused, oraclePrefetched, finalCanonicalCheckPerformed,
+      });
+      try { console.log(`[searcher/final-sim-ev-pipeline] ${JSON.stringify(event)}`); } catch { /* Observation only. */ }
+      try { params.onFinalSimEvTelemetry?.(event); } catch { /* Observation only. */ }
+    }
   }
 }
 

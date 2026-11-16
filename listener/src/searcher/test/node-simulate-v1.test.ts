@@ -249,7 +249,9 @@ test("a source change during funding trace prevents any counterfactual balance w
     return block([success(toBeHex(77, 32))]);
   }, header);
   await assert.rejects(new NodeInputFunding(rpc, pin).prepare([{ token: T, to: A, amount: "10" }]), /source-fault/);
-  assert.equal(calls, 2); assert.equal(traces, 1);
+  // Both source traces start together; their failed source checks still
+  // prevent every isolated balance override and all execution.
+  assert.equal(calls, 2); assert.equal(traces, 2);
 });
 
 test("persistent recorder decodes independently measured balances and actual return words", () => {

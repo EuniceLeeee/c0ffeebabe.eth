@@ -52,6 +52,37 @@ interface BaseFeeProvider {
   ): Promise<string>;
 }
 
+type EvParent = Awaited<ReturnType<BaseFeeProvider["getBlock"]>>;
+
+/** A complete source header already observed by this invocation. It is only
+ * the first side of EV's canonical check; the final provider read still runs. */
+export interface EvBlockObservation {
+  readonly number: number;
+  readonly hash: string;
+  readonly timestamp: number;
+  readonly baseFeePerGas: bigint;
+  readonly gasUsed: bigint;
+  readonly gasLimit: bigint;
+}
+
+/** Detach caller-owned fields synchronously. Incomplete or mismatched input
+ * falls back to the ordinary provider read instead of weakening fee checks. */
+export function snapshotEvBlockObservation(
+  value: unknown,
+  sourceBlock: number,
+  sourceBlockHash?: string,
+): EvBlockObservation | undefined {
+  if (value === null || typeof value !== "object" || !Number.isSafeInteger(sourceBlock) || sourceBlock < 0) return undefined;
+  const { number, hash, timestamp, baseFeePerGas, gasUsed, gasLimit } = value as Partial<EvBlockObservation>;
+  if (number !== sourceBlock || typeof hash !== "string" || !BLOCK_HASH.test(hash) ||
+      (sourceBlockHash !== undefined && hash.toLowerCase() !== sourceBlockHash.toLowerCase()) ||
+      !Number.isSafeInteger(timestamp) || timestamp! < 0 ||
+      typeof baseFeePerGas !== "bigint" || baseFeePerGas < 0n ||
+      typeof gasUsed !== "bigint" || gasUsed < 0n ||
+      typeof gasLimit !== "bigint" || gasLimit < 2n || gasUsed > gasLimit) return undefined;
+  return Object.freeze({ number, hash: hash.toLowerCase(), timestamp: timestamp!, baseFeePerGas, gasUsed, gasLimit });
+}
+
 interface EthUsdObservation {
   value: number;
   roundId: bigint;
@@ -145,6 +176,7 @@ async function readPinnedEthUsd(
   provider: BaseFeeProvider,
   sourceBlock: number | undefined,
   sourceTimestamp: number | undefined,
+  onReadError?: (error: unknown) => void,
 ): Promise<EthUsdObservation | null> {
   if (!provider.call) return null;
   try {
@@ -179,7 +211,8 @@ async function readPinnedEthUsd(
     return Number.isFinite(value) && value > 0
       ? { value, roundId, updatedAt }
       : null;
-  } catch {
+  } catch (error) {
+    onReadError?.(error);
     // A production provider that supports eth_call must not silently fall back
     // to a stale static mark. Stablecoin profit is unpriceable until the pinned
     // current-block oracle read succeeds.
@@ -187,16 +220,7 @@ async function readPinnedEthUsd(
   }
 }
 
-export async function evaluateEv(
-  provider: BaseFeeProvider,
-  profitToken: string,
-  netProfit: bigint,
-  measuredGasUsed: bigint,
-  policy: EvPolicy,
-  valuation: ProfitTokenValuation = DEFAULT_PROFIT_TOKEN_VALUATION,
-  sourceBlock?: number,
-  feeEnvironment?: EvFeeEnvironment,
-): Promise<EvEvaluation> {
+function validateEvInputs(policy: EvPolicy, sourceBlock?: number, feeEnvironment?: EvFeeEnvironment): void {
   validatePositiveGrossProfitMode(policy);
   if (feeEnvironment !== undefined && (feeEnvironment.mode !== "source-block" ||
       !BLOCK_HASH.test(feeEnvironment.sourceBlockHash) || !Number.isSafeInteger(sourceBlock) || sourceBlock! < 0)) {
@@ -216,10 +240,15 @@ export async function evaluateEv(
   ) {
     throw new Error("bribeBps must be an integer between 0 and 10000");
   }
-  const needsFeeState = policy.evGate || policy.bribeAllAboveGas || feeEnvironment !== undefined || valuation.source !== undefined;
-  const parentBefore = needsFeeState
-    ? await provider.getBlock(sourceBlock ?? "latest")
-    : null;
+}
+
+function evFeeContext(
+  parentBefore: EvParent,
+  needsFeeState: boolean,
+  valuation: ProfitTokenValuation,
+  sourceBlock?: number,
+  feeEnvironment?: EvFeeEnvironment,
+) {
   const targetBaseFee = feeEnvironment
     ? (typeof parentBefore?.baseFeePerGas === "bigint" && parentBefore.baseFeePerGas >= 0n
       ? parentBefore.baseFeePerGas : null)
@@ -247,22 +276,24 @@ export async function evaluateEv(
   const valuationSourceMatches = valuation.source === undefined ||
     (valuation.source.number === sourceBlock && valuation.source.number === parentBefore?.number &&
       valuation.source.hash.toLowerCase() === sourceBlockHash);
-  const valueWithoutUsd = valuationSourceMatches ? valuation.valueInEth(
-    profitToken,
-    netProfit,
-    Number.NaN,
-  ) : null;
-  const ethUsdObservation = valuationSourceMatches && valuation.source === undefined && valueWithoutUsd === null
-    ? await readPinnedEthUsd(
-        provider,
-        sourceBlock,
-        parentBefore?.timestamp,
-      )
-    : null;
-  const ethUsd = ethUsdObservation?.value ?? null;
+  return { parentBefore, needsFeeState, targetBaseFee, sourceBlockHash, feeStateAvailable, valuationSourceMatches, sourceBlock };
+}
 
+function finishEvEvaluation(
+  context: ReturnType<typeof evFeeContext>,
+  profitToken: string,
+  netProfit: bigint,
+  measuredGasUsed: bigint,
+  policy: EvPolicy,
+  valuation: ProfitTokenValuation,
+  valueWithoutUsd: bigint | null,
+  ethUsdObservation: EthUsdObservation | null,
+  parentAfter: EvParent,
+): EvEvaluation {
+  const { needsFeeState, targetBaseFee, valuationSourceMatches, sourceBlock } = context;
+  let { sourceBlockHash, feeStateAvailable } = context;
+  const ethUsd = ethUsdObservation?.value ?? null;
   if (needsFeeState && sourceBlock !== undefined && feeStateAvailable) {
-    const parentAfter = await provider.getBlock(sourceBlock);
     const hashAfter =
       typeof parentAfter?.hash === "string" && BLOCK_HASH.test(parentAfter.hash)
         ? parentAfter.hash.toLowerCase()
@@ -311,4 +342,127 @@ export async function evaluateEv(
     bidEth,
     netEvWei: expectedProfitEth - gasCostEth - bidEth,
   };
+}
+
+export async function evaluateEv(
+  provider: BaseFeeProvider,
+  profitToken: string,
+  netProfit: bigint,
+  measuredGasUsed: bigint,
+  policy: EvPolicy,
+  valuation: ProfitTokenValuation = DEFAULT_PROFIT_TOKEN_VALUATION,
+  sourceBlock?: number,
+  feeEnvironment?: EvFeeEnvironment,
+  initialParent?: EvBlockObservation,
+): Promise<EvEvaluation> {
+  validateEvInputs(policy, sourceBlock, feeEnvironment);
+  const needsFeeState = policy.evGate || policy.bribeAllAboveGas || feeEnvironment !== undefined || valuation.source !== undefined;
+  const observedParent = sourceBlock === undefined ? undefined : snapshotEvBlockObservation(
+    initialParent, sourceBlock, feeEnvironment?.sourceBlockHash ?? valuation.source?.hash,
+  );
+  const parentBefore = needsFeeState
+    ? observedParent ?? await provider.getBlock(sourceBlock ?? "latest") : null;
+  const context = evFeeContext(parentBefore, needsFeeState, valuation, sourceBlock, feeEnvironment);
+  const valueWithoutUsd = context.valuationSourceMatches ? valuation.valueInEth(profitToken, netProfit, Number.NaN) : null;
+  const ethUsdObservation = context.valuationSourceMatches && valuation.source === undefined && valueWithoutUsd === null
+    ? await readPinnedEthUsd(provider, sourceBlock, parentBefore?.timestamp) : null;
+  const parentAfter = needsFeeState && sourceBlock !== undefined && context.feeStateAvailable
+    ? await provider.getBlock(sourceBlock) : null;
+  return finishEvEvaluation(context, profitToken, netProfit, measuredGasUsed, policy, valuation,
+    valueWithoutUsd, ethUsdObservation, parentAfter);
+}
+
+export interface PreparedEvEvaluation {
+  readonly initialHeaderReused: boolean;
+  readonly oraclePrefetched: boolean;
+  /** Single-use. The callback must perform a fresh canonical read; it is invoked
+   * only after all valuation reads for the actual final-simulation profit settle. */
+  evaluate(
+    netProfit: bigint,
+    measuredGasUsed: bigint,
+    readFinalParent: () => Promise<EvParent>,
+  ): Promise<EvEvaluation>;
+}
+
+/** Prepare only source/fee/valuation dependencies while the mandatory final
+ * simulation runs. A solver profit is a prefetch hint, never a valuation result.
+ * Evidence stays inside this invocation's closure; no caller-supplied prepared
+ * packet or cross-request cache can substitute for the final canonical read. */
+export async function prepareEvEvaluation(input: {
+  provider: BaseFeeProvider;
+  profitToken: string;
+  profitHint: bigint;
+  policy: EvPolicy;
+  valuation: ProfitTokenValuation;
+  sourceBlock: number;
+  sourceBlockHash: string;
+  feeEnvironment?: EvFeeEnvironment;
+  initialParent?: EvBlockObservation;
+  checkActive?: () => void;
+  /** The owner propagates fatal/cancellation/deadline errors; ordinary oracle
+   * failures retain evaluateEv's unpriceable-result behavior. */
+  onReadError?: (error: unknown) => void;
+}): Promise<PreparedEvEvaluation> {
+  const { provider, profitToken, profitHint, sourceBlock, checkActive, onReadError } = input;
+  if (!Number.isSafeInteger(sourceBlock) || sourceBlock < 0 || !BLOCK_HASH.test(input.sourceBlockHash)) {
+    throw new Error("prepared EV requires an explicit source number and hash");
+  }
+  const sourceBlockHash = input.sourceBlockHash.toLowerCase();
+  const policy = Object.freeze({ ...input.policy });
+  const feeEnvironment = input.feeEnvironment === undefined ? undefined : Object.freeze({ ...input.feeEnvironment });
+  const valuation: ProfitTokenValuation = Object.freeze({
+    ...(input.valuation.source === undefined ? {} : { source: Object.freeze({ ...input.valuation.source }) }),
+    // EV does not invoke canValue; retain compatibility with existing minimal
+    // valuation views used by callers of the legacy evaluator.
+    canValue: input.valuation.canValue,
+    valueInEth: input.valuation.valueInEth.bind(input.valuation),
+  });
+  validateEvInputs(policy, sourceBlock, feeEnvironment);
+  checkActive?.();
+  const needsFeeState = policy.evGate || policy.bribeAllAboveGas || feeEnvironment !== undefined || valuation.source !== undefined;
+  const observed = snapshotEvBlockObservation(input.initialParent, sourceBlock, sourceBlockHash);
+  const parent = needsFeeState ? observed ?? await provider.getBlock(sourceBlock) : null;
+  // Detach fallback provider objects as well as the raw-header fast path.
+  const parentBefore: EvParent = parent === null ? null : Object.freeze({
+    number: parent.number, hash: parent.hash, timestamp: parent.timestamp,
+    baseFeePerGas: parent.baseFeePerGas, gasUsed: parent.gasUsed, gasLimit: parent.gasLimit,
+  });
+  checkActive?.();
+  const context = evFeeContext(parentBefore, needsFeeState, valuation, sourceBlock, feeEnvironment);
+  let oraclePrefetched = false;
+  let prefetchedOracle: EthUsdObservation | null = null;
+  if (context.valuationSourceMatches && valuation.source === undefined) {
+    // A generic valuation can depend on amount. A hint failure must not reject
+    // an actual amount that would be valid; only the owner-fenced error escapes.
+    let hintNeedsOracle = false;
+    try { hintNeedsOracle = valuation.valueInEth(profitToken, profitHint, Number.NaN) === null; }
+    catch (error) { onReadError?.(error); }
+    if (hintNeedsOracle) {
+      checkActive?.();
+      oraclePrefetched = true;
+      prefetchedOracle = await readPinnedEthUsd(provider, sourceBlock, parentBefore?.timestamp, onReadError);
+      checkActive?.();
+    }
+  }
+  let consumed = false;
+  return Object.freeze({
+    initialHeaderReused: needsFeeState && observed !== undefined,
+    oraclePrefetched,
+    async evaluate(netProfit: bigint, measuredGasUsed: bigint, readFinalParent: () => Promise<EvParent>) {
+      if (consumed) throw new Error("prepared EV already consumed");
+      consumed = true;
+      checkActive?.();
+      const valueWithoutUsd = context.valuationSourceMatches ? valuation.valueInEth(profitToken, netProfit, Number.NaN) : null;
+      const needsOracle = context.valuationSourceMatches && valuation.source === undefined && valueWithoutUsd === null;
+      const ethUsdObservation = needsOracle ? oraclePrefetched ? prefetchedOracle
+        : await readPinnedEthUsd(provider, sourceBlock, parentBefore?.timestamp, onReadError) : null;
+      checkActive?.();
+      // This read comes after both the simulation (the caller's dependency)
+      // and every oracle dependency, including a hint-missed actual amount.
+      const parentAfter = await readFinalParent();
+      checkActive?.();
+      return finishEvEvaluation(context, profitToken, netProfit, measuredGasUsed, policy, valuation,
+        valueWithoutUsd, ethUsdObservation, parentAfter);
+    },
+  });
 }
