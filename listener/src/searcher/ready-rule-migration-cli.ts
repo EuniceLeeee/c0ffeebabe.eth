@@ -78,13 +78,16 @@ export async function migrateReadyRules(input: {
   const archivedCatalog = await import(pathToFileURL(resolve(archivedRoot, "src/searcher/venues/production-family-composition.ts")).href);
   const archivedRules = await calculateReadyRuleDefinitions({ rootDirectory: archivedRoot, artifact,
     definitionBoundaryHashes: boundaries(archivedCatalog.PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG) });
+  console.log(JSON.stringify({ stage: "archived-rules-calculated", families: Object.keys(archivedRules).length }));
   const currentArtifact = await buildFamilyCapabilityShadowArtifact({ rootDirectory: currentRoot });
   if (!currentArtifact.complete) throw new Error("current Family capability source is incomplete");
+  console.log(JSON.stringify({ stage: "current-manifest-verified" }));
   const currentCatalog = await import("./venues/production-family-composition.js");
   const currentRules = await calculateReadyRuleDefinitions({ rootDirectory: currentRoot, artifact: currentArtifact,
     definitionBoundaryHashes: boundaries(currentCatalog.PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG) });
   const migration = issueReadyRuleMigration({ checkpoint, archivedHashes, archivedRules,
     sourceSha256, archiveManifestSha256: sha(manifestBytes) });
+  console.log(JSON.stringify({ stage: "sealed-Ready-proof-bindings-verified", families: ids.length }));
   const rows = ids.map(familyId => ({ familyId, archivedHashes: archivedHashes[familyId],
     archivedRules: archivedRules[familyId], currentRules: currentRules[familyId] ?? null,
     equivalent: Object.fromEntries(["full", "memo", "discovery"].map(scope => [scope,

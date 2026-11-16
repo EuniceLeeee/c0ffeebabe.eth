@@ -58,7 +58,8 @@ test("all completed statuses inherit under identical rules, while source/input/f
 test("migration requires independently reproduced old definitions and leaves evidence untouched", () => {
   const checkpoint: any = { checkpointFingerprint: origin.checkpointFingerprint, inProgressRun: null,
     readyGeneration: { generation: 18, familyPartitions: { a: { familyDefinitionHash: legacy.a.full,
-      discoveryDefinitionHash: legacy.a.discovery } } },
+      discoveryDefinitionHash: legacy.a.discovery,
+      outcomesByCandidateKey: {v: {status: "verified", memoFingerprint: h("d")}} } } },
     verifiedMemos: { v: { familyId: "a", familyDefinitionHash: legacy.a.memo, memoFingerprint: h("d"),
       validity: { proofSource: { number: 100, hash: "0x" + h("e") }, authorityFingerprint: h("f") } } } };
   const before = JSON.stringify(checkpoint);
@@ -71,4 +72,12 @@ test("migration requires independently reproduced old definitions and leaves evi
   assert.throws(() => issueReadyRuleMigration({ ...input, checkpoint: { ...checkpoint, inProgressRun: {} } }), /completed Ready/);
   assert.throws(() => issueReadyRuleMigration({ ...input, checkpoint: { ...checkpoint,
     verifiedMemos: { v: { ...checkpoint.verifiedMemos.v, familyDefinitionHash: h("0") } } } }), /memo definition/);
+  assert.throws(() => issueReadyRuleMigration({ ...input, checkpoint: { ...checkpoint,
+    verifiedMemos: { v: { ...checkpoint.verifiedMemos.v, memoFingerprint: h("0") } } } }), /memo definition/);
+  const retired = {...checkpoint.verifiedMemos.v, familyDefinitionHash: h("0")};
+  const withHistory = {...checkpoint, verifiedMemos: {...checkpoint.verifiedMemos, retired}};
+  const historical = issueReadyRuleMigration({...input, checkpoint: withHistory});
+  assert.equal(withHistory.verifiedMemos.retired, retired);
+  assert(!historical.bindings.families.a.memo.definitionHashes.includes(h("0")),
+    "retired out-of-scope proofs survive without receiving new rule authority");
 });

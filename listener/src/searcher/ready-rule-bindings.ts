@@ -100,12 +100,18 @@ export function issueReadyRuleMigration(input: {
     families[id] = { full: { rulesHash: rules.full, definitionHashes: [hashes.full] },
       memo: { rulesHash: rules.memo, definitionHashes: [...new Set([hashes.full, hashes.memo])].sort() },
       discovery: { rulesHash: rules.discovery, definitionHashes: [hashes.discovery] } };
+    // The memo store also retains retired results from older generations. Only
+    // this sealed partition's verified outcomes claim the archived definition.
+    // Retired IDs are neither restamped nor added to the compatibility groups.
+    for (const [key, outcome] of Object.entries(partition.outcomesByCandidateKey)) {
+      if (outcome.status !== "verified") continue;
+      const memo = input.checkpoint.verifiedMemos[key];
+      if (!memo || memo.familyId !== id || memo.memoFingerprint !== outcome.memoFingerprint ||
+          !families[id]!.memo.definitionHashes.includes(memo.familyDefinitionHash))
+        throw new Error("archived memo definition differs: " + id);
+    }
   }
   if (!Object.keys(families).length) throw new Error("migration requires sealed Family partitions");
-  for (const memo of Object.values(input.checkpoint.verifiedMemos)) {
-    if (!families[memo.familyId]?.memo.definitionHashes.includes(memo.familyDefinitionHash))
-      throw new Error("archived memo definition differs: " + memo.familyId);
-  }
   const bindings = sealReadyRuleBindings({ version: 1, origin: { generation: ready.generation,
     checkpointFingerprint: input.checkpoint.checkpointFingerprint,
     sourceSha256: input.sourceSha256, archiveManifestSha256: input.archiveManifestSha256 }, families });
