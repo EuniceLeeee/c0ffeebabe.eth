@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Interface, toBeHex, ZeroAddress } from "ethers";
-import { matchFamilyTransactionInput, type ObservedReadyRoute } from "./family-transaction-matching.js";
+import { resolveTransactionCaseBinding, matchFamilyTransactionInput, type ObservedReadyRoute } from "./family-transaction-matching.js";
 import type { ReadyTransactionEvidence } from "../ready-transaction-input.js";
 import type { FamilyTransactionLeg } from "./family-transaction-registry.js";
 
@@ -94,4 +94,48 @@ test("native settlement uses the production route assets; WETH denomination alon
   assert.deepEqual(result.selected.nativeOutputTraceAddresses, [[0, 1]]);
   f.routes[0] = { ...f.routes[0]!, executionAssets: undefined };
   assert.equal(matchFamilyTransactionInput(f).status, "evidence-incomplete");
+});
+
+// Generator regression: current Ready owns lineage, actual action owns route.
+test("case generation follows child lineage without changing input or original fixture", () => {
+  const f = fixture(), before = structuredClone(f.expected);
+  f.routes[0] = { ...f.routes[0]!, lineageId: "child", routeKey: "child-deposit" };
+  const binding = resolveTransactionCaseBinding(f);
+  assert.deepEqual(binding.resolved, { lineageId: "child", routeKey: "child-deposit" });
+  assert.equal(binding.selection, "transaction-action");
+  assert.deepEqual(f.expected, before);
+  assert.equal(matchFamilyTransactionInput(f).status, "direction-not-admitted");
+});
+test("same-pair actions use selector, doubled input never changes action or amount", () => {
+  const f = fixture();
+  f.routes.push({ ...f.routes[0]!, routeKey: "mint", adapterId: "mint", direction: "mint", matchTrace: (_, selector) => selector === "0x94bf804d" });
+  f.expected = { ...f.expected, amountIn: "14" };
+  assert.equal(resolveTransactionCaseBinding(f).resolved.routeKey, "deposit");
+  assert.equal(f.expected.amountIn, "14");
+});
+test("generator rejects unsupported selectors instead of choosing the same token pair", () => {
+  const f = fixture();
+  (f.evidence.rawTrace as any[])[1].action.input = "0x94bf804d" + "00".repeat(64);
+  assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector/);
+});
+test("ambiguous current action does not fall back to old lineage or first route", () => {
+  const f = fixture(); f.routes.push({ ...f.routes[0]!, routeKey: "second", lineageId: "child" });
+  assert.throws(() => resolveTransactionCaseBinding(f), /route absent or ambiguous/);
+});
+test("an explicit missing route cannot be silently replaced by a successful direction", () => {
+  const f = fixture(); f.expected = { ...f.expected, routeKey: "old-mint" };
+  assert.throws(() => resolveTransactionCaseBinding(f), /action cannot be substituted/);
+});
+test("explicit simulation actions preserve nonhistorical variants and only refresh lineage", () => {
+  const f = fixture(); f.expected = { ...f.expected, tokenIn: pool, tokenOut: asset, routeKey: "redeem" };
+  f.routes[1] = { ...f.routes[1]!, lineageId: "child" };
+  assert.deepEqual(resolveTransactionCaseBinding(f).resolved, { routeKey: "redeem", lineageId: "child" });
+  assert.equal(matchFamilyTransactionInput(f).status, "direction-not-admitted");
+});
+
+test("vault ERC20 authorization is auxiliary, not an unknown conversion action", () => {
+  const f = fixture(), approvals = new Interface(["function approve(address,uint256)"]);
+  f.evidence = { ...f.evidence, rawTrace: [...f.evidence.rawTrace as any[],
+    frame(pool, holder, approvals.encodeFunctionData("approve", [A(19), 7n]), [1])] };
+  assert.equal(resolveTransactionCaseBinding(f).resolved.routeKey, "deposit");
 });

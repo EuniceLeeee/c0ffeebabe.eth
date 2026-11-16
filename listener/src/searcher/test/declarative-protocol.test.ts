@@ -1,3 +1,4 @@
+import { erc4626Children } from "./declarative-test-children.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getAddress, toBeHex, ZeroAddress } from "ethers";
@@ -13,7 +14,7 @@ const address = (n: number) => getAddress(toBeHex(n, 20));
 const source = { number: 100, hash: toBeHex(100, 32), generation: 1 };
 const executor = address(91), recipient = address(92);
 const makeRuntime = (definition: any = clone(root)) =>
-  createDeclarativeProtocolRuntime(definition, [clone(custodian), clone(infinifi)]);
+  createDeclarativeProtocolRuntime(definition, erc4626Children());
 type Runtime = ReturnType<typeof makeRuntime>;
 
 function fixture(runtime: Runtime, variant: "standard" | "custodian" | "infinifi" = "standard") {

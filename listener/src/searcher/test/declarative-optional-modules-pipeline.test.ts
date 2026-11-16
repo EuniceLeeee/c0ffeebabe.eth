@@ -1,3 +1,4 @@
+import { erc4626Children } from "./declarative-test-children.js";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
@@ -13,7 +14,7 @@ import infinifi from "../venues/protocols/erc4626-family/infinifi.json";
 import { oracleModuleFixture, oracleFixtureTarget, oracleFixtureArgument, oracleFixtureData } from "./declarative-optional-modules-fixture.js";
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
-function runtime(doc: any = clone(definition), children = [clone(custodian), clone(infinifi)]) {
+function runtime(doc: any = clone(definition), children = erc4626Children()) {
   return createDeclarativeProtocolRuntime(doc, children);
 }
 function declarations(compiled: ReturnType<typeof runtime>) {
@@ -72,7 +73,7 @@ test("variant overrides and incomplete or falsely owned victim modules fail clos
   const doc: any = clone(definition);
   doc.modules = { ...doc.modules, oracleVictim: oracleModuleFixture(doc.manifest.ownedActionAdapterIds[0]) };
   const child: any = clone(custodian); child.modules = { oracleVictim: {} };
-  assert.throws(() => runtime(doc, [child, clone(infinifi)]), /root-only/);
+  assert.throws(() => runtime(doc, erc4626Children().map(value => value.id === child.id ? child : value)), /root-only/);
   doc.standard.modules = { oracleVictim: {} };
   assert.throws(() => runtime(doc), /root-only/);
   delete doc.standard.modules;

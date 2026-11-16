@@ -8,6 +8,8 @@ import { loadFamilyJsonSamples } from "./protocol-json-samples.js";
 import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
 import { readFamilyTransaction, familyTransactionLegMissing, type FamilyTransaction, type FamilyTransactionLeg } from "./family-transaction-registry.js";
 
+import type { ReadyTransactionEvidence } from "../ready-transaction-input.js";
+import { resolveTransactionCaseBinding, type ObservedReadyRoute } from "./family-transaction-matching.js";
 import { validateTransactionStateSelection, type TransactionStateSelection } from "./family-transaction-source.js";
 
 const fixtures = fileURLToPath(new URL("./fixtures", import.meta.url));
@@ -30,15 +32,15 @@ export function transactionTestActors(leg: FamilyTransactionLeg) {
 
 /** Historical output is deliberately excluded. Only current quote/simulation
  * effects determine the result for this immutable input seed. */
-export function transactionSimulationCase(transaction: FamilyTransaction, leg: FamilyTransactionLeg, stateSelection?: TransactionStateSelection) {
+export function transactionSimulationCase(transaction: FamilyTransaction, leg: FamilyTransactionLeg, stateSelection?: TransactionStateSelection, binding?: { lineageId: string; routeKey: string }) {
   assert.notEqual(leg.domain, "funding", "Funding uses its own production capabilities");
   assert.deepEqual(familyTransactionLegMissing(leg), [], "incomplete simulation seed");
   assert(transaction.legs.some(item => isDeepStrictEqual(item, leg)), "transaction does not register this leg");
   return parseProtocolJsonAcceptanceCase({ version: 1, familyId: leg.familyId, domain: leg.domain,
-    instanceKey: leg.instanceKey, lineageId: leg.lineageId, source: validateTransactionStateSelection(leg.source!, stateSelection).executionSource, ...transactionTestActors(leg),
+    instanceKey: leg.instanceKey, lineageId: binding?.lineageId ?? leg.lineageId, source: validateTransactionStateSelection(leg.source!, stateSelection).executionSource, ...transactionTestActors(leg),
     transactionHash: transaction.transactionHash, trials: [{ id: leg.id, tokenIn: leg.tokenIn, tokenOut: leg.tokenOut,
       amountIn: leg.amountIn, inputToleranceRawUnits: 0, outputToleranceRawUnits: 1,
-      ...(leg.routeKey ? { routeKey: leg.routeKey } : {}), ...(leg.credit ? { credit: leg.credit } : {}) }] });
+      ...(binding?.routeKey || leg.routeKey ? { routeKey: binding?.routeKey ?? leg.routeKey } : {}), ...(leg.credit ? { credit: leg.credit } : {}) }] });
 }
 
 export function registerTransactionAcceptanceSample(sample: unknown, transactionPath: string, legId: string,
@@ -52,6 +54,28 @@ export function registerTransactionAcceptanceSample(sample: unknown, transaction
   const token = Object.freeze({ kind: "transaction" as const, ...pin, transactionHash: transaction.transactionHash, legId });
   authorities.set(token, { sample: JSON.parse(JSON.stringify(sample)), pins: [pin] });
   return token;
+}
+
+/** Current binding is derived from authenticated Ready/TX evidence, never a
+ * caller-authored replacement sample. The original registry remains pinned. */
+export async function registerReadyTransactionAcceptanceSample(transactionPath: string, legId: string,
+  readyPath: string, evidencePath: string, stateSelection: TransactionStateSelection) {
+  const root = realpathSync(resolve(fixtures, "family-transactions")), path = realpathSync(transactionPath);
+  assert.equal(resolve(path, ".."), root, "transaction seed must be in the centralized registry");
+  const transaction = readFamilyTransaction(path), leg = transaction.legs.find(item => item.id === legId);
+  assert(leg && (leg.domain === "protocol" || leg.domain === "swap"));
+  const { UniverseRebuildCheckpointStore } = await import("../universe-rebuild-checkpoint.js");
+  const { transactionReadyRoutes } = await import("./family-json-ready.js");
+  const envelope = await new UniverseRebuildCheckpointStore({ path: readyPath }).load();
+  assert(envelope, "Ready checkpoint unavailable");
+  const evidence = JSON.parse(readFileSync(evidencePath, "utf8")) as ReadyTransactionEvidence;
+  const binding = resolveTransactionCaseBinding({ transactionHash: transaction.transactionHash, expected: leg, evidence,
+    routes: await transactionReadyRoutes(envelope, { source: stateSelection.executionSource, ...transactionTestActors(leg) }) });
+  const sample = transactionSimulationCase(transaction, leg, stateSelection, binding.resolved);
+  const pins = [path, realpathSync(readyPath), realpathSync(evidencePath)].map(path => ({ path, sha256: sha(readFileSync(path)) }));
+  const registration = Object.freeze({ kind: "transaction" as const, ...pins[0]!, transactionHash: transaction.transactionHash, legId });
+  authorities.set(registration, { sample: JSON.parse(JSON.stringify(sample)), pins });
+  return { sample, registration, binding };
 }
 
 /** Registration is input evidence, never an execution result. A later-added

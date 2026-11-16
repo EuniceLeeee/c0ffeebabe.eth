@@ -1,3 +1,4 @@
+import { erc4626Children } from "./declarative-test-children.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { toBeHex } from "ethers";
@@ -107,7 +108,7 @@ test("evidence-only APIs do not evaluate the flow's final expression", () => {
 });
 
 function runtimeFixture() {
-  const runtime = createDeclarativeProtocolRuntime(root, [custodian, infinifi]);
+  const runtime = createDeclarativeProtocolRuntime(root, erc4626Children());
   const descriptor: any = { familyId: root.scope.family, lineageId: runtime.variants[0].document.lineageId,
     instanceKey: address(1), vault: address(1), share: address(1), asset: address(2),
     verifiedDirections: { deposit: true, redeem: true }, runtimeRequirements: [] };

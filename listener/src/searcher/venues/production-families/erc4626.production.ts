@@ -8,7 +8,8 @@ import type { FamilyTypes } from "../../generated/declarative-family-types/erc46
 import definition from "../protocols/erc4626-family/erc4626.json";
 import child0 from "../protocols/erc4626-family/custodian.json";
 import child1 from "../protocols/erc4626-family/infinifi.json";
+import child2 from "../protocols/erc4626-family/morpho-vault-v2.json";
 
 export const activation = defineFamilyActivation({"enabled":true,"envKey":"SEARCHER_FAMILY_ERC4626_ENABLED"});
 
-export const plugin = defineProtocolFamily(compileDeclarativeProtocol<FamilyTypes>(definition, [child0, child1]));
+export const plugin = defineProtocolFamily(compileDeclarativeProtocol<FamilyTypes>(definition, [child0, child1, child2]));

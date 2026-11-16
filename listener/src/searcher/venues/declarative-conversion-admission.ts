@@ -141,8 +141,8 @@ function effectPrograms(spec: ConversionAdmission) {
 export function expandConversionAdmission(raw: ConversionAdmission) {
   validateDeclarativeValue(raw);
   if (raw.version !== 1 || !["runtime-template", "registry-pointer"].includes(raw.match.kind)
-      || !["surface", "dependencies"].includes(raw.samples.stage) || raw.samples.directions.length !== 2
-      || new Set(raw.samples.directions).size !== 2) throw new Error("invalid conversion admission definition");
+      || !["surface", "dependencies"].includes(raw.samples.stage) || raw.samples.directions.length === 0
+      || new Set(raw.samples.directions).size !== raw.samples.directions.length) throw new Error("invalid conversion admission definition");
   const exact = (value: V, fields: readonly string[], label: string): void => {
     if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(key => !fields.includes(key)))
       throw new Error(`invalid conversion ${label}`);

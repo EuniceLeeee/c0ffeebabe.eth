@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { familyTestSourceFingerprint } from "../../../scripts/test-family.mjs";
 import { familyTransactionDirectory, familyTransactionInputFingerprint, familyTransactionLegMissing,
   getInstalledTransactionFamilies, readFamilyTransaction, type FamilyTransaction, type FamilyTransactionLeg } from "./family-transaction-registry.js";
-import { registerTransactionAcceptanceSample, transactionSimulationCase, transactionTestActors } from "./protocol-json-sample-registration.js";
+import { registerTransactionAcceptanceSample, registerReadyTransactionAcceptanceSample, transactionSimulationCase, transactionTestActors } from "./protocol-json-sample-registration.js";
 import { prepareFamilyReady, assertAcceptanceReadyTarget, readFamilyTransactionEvidence, transactionReadyRoutes } from "./family-json-ready.js";
 import { acceptanceSourceFingerprint, assertAcceptanceHeader, assertAcceptanceReceipt, openFamilyAcceptanceRuntimeContext, openProtocolJsonAcceptanceContext } from "./protocol-json-acceptance-context.js";
 import { basicRouteAcceptanceStages, verifyBasicRouteAcceptance } from "./protocol-json-basic-facts.js";
@@ -23,7 +23,7 @@ import { JsonRpcProvider } from "ethers";
 import { selectTransactionExecutionSource, validateTransactionStateSelection, type TransactionStateSelection } from "./family-transaction-source.js";
 
 import { familyFactCacheDirectory } from "./family-transaction-cache.js";
-import { matchFamilyTransactionInput } from "./family-transaction-matching.js";
+import { matchFamilyTransactionInput, resolveTransactionCaseBinding } from "./family-transaction-matching.js";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const REPO = resolve(ROOT, "..");
@@ -154,7 +154,12 @@ export async function verifyFamilyTransactionFactsReport(reportPath: string, tra
     await verifyFundingAcceptanceReport(sample, raw, family);
     assert.deepEqual(report.stages, { ...fundingAcceptanceStages(sample, raw), discoveryCheckpoint: { status: "pass", ...target } });
   } else {
-    const sample = transactionSimulationCase(transaction, leg, stateSelection), target = await assertAcceptanceReadyTarget(envelope, sample);
+    const current = leg.domain === "protocol" || leg.domain === "swap"
+      ? resolveTransactionCaseBinding({ transactionHash: transaction.transactionHash, expected: leg,
+        evidence: read(evidenceFile(reportPath, report.evidence.transaction)),
+        routes: await transactionReadyRoutes(envelope, { source: stateSelection.executionSource, ...transactionTestActors(leg) }) }) : undefined;
+    if (current) assert.deepEqual(report.caseBinding, current, "reported case binding differs from Ready/TX evidence");
+    const sample = transactionSimulationCase(transaction, leg, stateSelection, current?.resolved), target = await assertAcceptanceReadyTarget(envelope, sample);
     assert.deepEqual(raw.source, target.source, "execution source differs from target checkpoint");
     assert.deepEqual(report.stages, { discoveryCheckpoint: { status: "pass", ...target },
       ...verifyBasicRouteAcceptance(sample, raw, installed.ordinaryRuntimeLeg),
@@ -240,7 +245,8 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
           ...(stateSelection.mode === "parent" ? { stateSelection } : {}) },
         executorCodeMode: mode as "deployed" | "counterfactual", simulationMethod: method as "debug_traceCall" | "eth_simulateV1" });
     assert(envelope, "Ready checkpoint unavailable");
-    if (requestedStage !== "ready" && (leg.domain === "protocol" || leg.domain === "swap")) {
+    let prepared: Awaited<ReturnType<typeof registerReadyTransactionAcceptanceSample>> | undefined;
+    if (leg.domain === "protocol" || leg.domain === "swap") {
       stage = "transactionBinding";
       const rpc = read(rpcFile);
       assert(typeof rpc.MAINNET_RPC_URL === "string", "RPC configuration lacks MAINNET_RPC_URL");
@@ -264,14 +270,19 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
         console.log(json({ result: report.result, binding: report.stages.transactionBinding, report: reportPath }));
         return { exitCode: 0, reportPath, report };
       }
+      stage = "discoveryCheckpoint";
+      prepared = await registerReadyTransactionAcceptanceSample(transactionPath, leg.id, readyPath, transactionEvidencePath, stateSelection);
+      report.caseBinding = prepared.binding;
+      save(resolve(out, "simulation-case.json"), prepared.sample);
+      checkpoint();
     } else if (requestedStage === "match") throw new Error("TX action matching currently requires an ordinary Swap/Protocol route");
     stage = "discoveryCheckpoint";
     if (requestedStage === "ready") {
       const target = leg.domain === "funding"
         ? await assertFundingTransactionReady({ envelope, sample: transactionFundingCase(transaction, leg, stateSelection) })
-        : await assertAcceptanceReadyTarget(envelope, transactionSimulationCase(transaction, leg, stateSelection));
+        : await assertAcceptanceReadyTarget(envelope, prepared?.sample ?? transactionSimulationCase(transaction, leg, stateSelection));
       report.stages.discoveryCheckpoint = { status: "pass", ...target };
-      report.evidence = { ready: fileEvidence(readyPath) };
+      report.evidence = { ...report.evidence, ready: fileEvidence(readyPath) };
       report.result = "ready-only"; checkpoint();
       console.log(json({ result: report.result, familyId: leg.familyId, legId: leg.id, report: reportPath }));
       return { exitCode: 0, reportPath, report };
@@ -290,9 +301,9 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
       raw.diagnostics = context.counters(); raw.evidence = context.evidence; save(rawPath, raw);
       report.stages = { ...report.stages, ...fundingAcceptanceStages(sample, raw), discoveryCheckpoint: { status: "pass", ...target } };
     } else {
-      const sample = transactionSimulationCase(transaction, leg, stateSelection), target = await assertAcceptanceReadyTarget(envelope, sample);
+      const sample = prepared?.sample ?? transactionSimulationCase(transaction, leg, stateSelection), target = await assertAcceptanceReadyTarget(envelope, sample);
       report.stages.discoveryCheckpoint = { status: "pass", ...target }; checkpoint();
-      const registration = registerTransactionAcceptanceSample(sample, transactionPath, leg.id, undefined, stateSelection);
+      const registration = prepared?.registration ?? registerTransactionAcceptanceSample(sample, transactionPath, leg.id, undefined, stateSelection);
       stage = "execution";
       const routeContext = await openProtocolJsonAcceptanceContext({ ...input, domain: leg.domain }); context = routeContext;
       await runProtocolJsonAcceptance(sample, routeContext, raw, () => save(rawPath, raw), registration);
@@ -306,7 +317,7 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     // This entry verifies one selected action. Broader settlement/route coverage
     // remains in acceptance.json; it is not evidence of failure of this action.
     if (leg.domain === "funding") assert.equal(raw.result, "pass", JSON.stringify({ failure: raw.failure, stages: report.stages }));
-    else verifyBasicRouteAcceptance(transactionSimulationCase(transaction, leg, stateSelection), raw, installed.ordinaryRuntimeLeg);
+    else verifyBasicRouteAcceptance(prepared?.sample ?? transactionSimulationCase(transaction, leg, stateSelection), raw, installed.ordinaryRuntimeLeg);
     report.result = "pass"; checkpoint(); stage = "evidenceVerification";
     await verifyFamilyTransactionFactsReport(reportPath, transaction, leg);
   } catch (error) {

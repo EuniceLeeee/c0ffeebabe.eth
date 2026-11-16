@@ -1,3 +1,4 @@
+import { erc4626Children } from "./declarative-test-children.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getAddress, toBeHex, Interface } from "ethers";
@@ -17,7 +18,7 @@ const result = (id: string, n: bigint, bound = source): any => ({ id, ok: true, 
 const request = (id: string, amount: any) => ({ id, kind: "eth-call", to: "$target", data: op("encode", "preview", "preview", [amount]), completion: "return-data" });
 const decoded = (id: string) => op("word", op("get", op("returned", id), "data"));
 function fixture(doc: any = clone(root)) {
-  const runtime = createDeclarativeProtocolRuntime(doc, [clone(custodian), clone(infinifi)]);
+  const runtime = createDeclarativeProtocolRuntime(doc, erc4626Children());
   const descriptor: any = { familyId: root.scope.family, lineageId: runtime.variants[0]!.document.lineageId,
     instanceKey: address(1).toLowerCase(), vault: address(1), asset: address(2), share: address(1),
     verifiedDirections: { deposit: true, redeem: true }, runtimeRequirements: [], tokens: [address(1), address(2), address(3)] };

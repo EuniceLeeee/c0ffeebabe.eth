@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { getAddress, JsonRpcProvider, toBeHex, toQuantity } from "ethers";
+import { Interface, getAddress, JsonRpcProvider, toBeHex, toQuantity } from "ethers";
 import { RuntimeAmountProgram, runtimeProgramScript } from "../../adapters/runtime-amount-program.js";
 import { concatBytes } from "../../encoder.js";
 import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
@@ -300,7 +300,7 @@ async function withFactsMainFixture(run: (input: any) => Promise<void>, parent =
       blockNumber: toBeHex(leg.source!.number), blockHash: leg.source!.hash, transactionIndex: "0x0", status: "0x1", logs: [] };
     if (method === "trace_transaction") return [{ type: "call", traceAddress: [], subtraces: 0,
       transactionHash: transaction.transactionHash, blockNumber: leg.source!.number, blockHash: leg.source!.hash,
-      action: { from: address(80), to: leg.instanceKey, input: "0x12345678", callType: "call", gas: "0xffff", value: "0x0" },
+      action: { from: address(80), to: leg.instanceKey, input: new Interface(["function swap(uint256,uint256,address,bytes)"]).encodeFunctionData("swap", [0n, 1n, address(80), "0x"]), callType: "call", gas: "0xffff", value: "0x0" },
       result: { output: "0x", gasUsed: "0x1" } }];
     throw new Error("offline fixture execution boundary: " + method);
   };
@@ -325,7 +325,7 @@ test("actual facts runner keeps historical mismatch as reference and reaches exe
     const normal = await execute();
     assert(normal.report.stages.transactionBinding, JSON.stringify(normal.report.failure));
     assert.deepEqual(normal.report.originalTransactionInput, { status: "reference-only", required: false });
-    assert.equal(normal.report.stages.transactionBinding.status, "action-not-observed");
+    assert.equal(normal.report.stages.transactionBinding.status, "evidence-incomplete");
     assert.equal(normal.report.stages.discoveryCheckpoint.status, "pass");
     assert.equal(normal.report.failure.stage, "execution", "current admitted route must get past historical matching");
     assert.equal(normal.report.result, "failed", "the fixture does not supply execution proof");
@@ -343,9 +343,9 @@ test("match-only remains strict and retained reference evidence cannot be forged
     const matched = await execute("match"), reportPath = matched.reportPath;
     assert(matched.report.stages.transactionBinding, JSON.stringify(matched.report.failure));
     assert.equal(matched.report.result, "incomplete"); assert.equal(matched.report.failure.stage, "transactionBinding");
-    assert.equal(matched.report.stages.transactionBinding.status, "action-not-observed");
+    assert.equal(matched.report.stages.transactionBinding.status, "evidence-incomplete");
     const binding = await verifyFamilyTransactionBindingReport(reportPath, transaction, leg);
-    assert.equal(binding.status, "action-not-observed");
+    assert.equal(binding.status, "evidence-incomplete");
     const original = readFileSync(reportPath, "utf8");
     for (const mutate of [
       (r: any) => { r.originalTransactionInput.required = true; },

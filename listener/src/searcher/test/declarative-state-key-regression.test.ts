@@ -1,3 +1,4 @@
+import { erc4626Children } from "./declarative-test-children.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { toBeHex } from "ethers";
@@ -10,7 +11,7 @@ import infinifi from "../venues/protocols/erc4626-family/infinifi.json";
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const op = (op: string, ...args: any[]) => ({ op, args });
 function fixture(document: any) {
-  const runtime = createDeclarativeProtocolRuntime(document, [clone(custodian), clone(infinifi)]);
+  const runtime = createDeclarativeProtocolRuntime(document, erc4626Children());
   const descriptor: any = { familyId: root.scope.family, lineageId: runtime.variants[0]!.document.lineageId,
     instanceKey: toBeHex(1, 20), vault: toBeHex(1, 20), asset: toBeHex(2, 20), share: toBeHex(1, 20),
     verifiedDirections: { deposit: true, redeem: true }, runtimeRequirements: [] };
@@ -47,9 +48,9 @@ test("trial-state transitions cannot register unsupported retained source-read e
   const math = createDeclarativeMathRegistry([{ id: "fixture:state", version: 1, validateInput() {},
     evaluate(value: any) { return { amountOut: value.amount, state: { reserve: (value.reserve as bigint) - (value.amount as bigint) } }; },
     validateOutput() {} }]);
-  assert.throws(() => createDeclarativeProtocolRuntime(document, [clone(custodian), clone(infinifi)], { math }), /retained|retain|trial/i);
+  assert.throws(() => createDeclarativeProtocolRuntime(document, erc4626Children(), { math }), /retained|retain|trial/i);
   delete document.standard.exact.retainReadEvidence;
-  assert.doesNotThrow(() => createDeclarativeProtocolRuntime(document, [clone(custodian), clone(infinifi)], { math }));
+  assert.doesNotThrow(() => createDeclarativeProtocolRuntime(document, erc4626Children(), { math }));
 });
 
 test("route caching requires deeply frozen descriptors and cannot retain a revoked mutable direction", () => {

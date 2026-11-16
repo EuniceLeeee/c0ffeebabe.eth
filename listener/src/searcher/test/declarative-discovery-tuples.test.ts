@@ -1,3 +1,4 @@
+import { erc4626Children } from "./declarative-test-children.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash } from "node:crypto";
@@ -89,7 +90,7 @@ const routeCall = (rows: unknown[] = hops) => call(router.encodeFunctionData("ro
 
 function catalog(spec: DeclarativeMappedDiscovery) {
   const doc: any = clone(root); doc.discovery.definition = spec; doc.protocol.candidateKinds = ["observed-call", "standalone-contract"];
-  const runtime = createDeclarativeProtocolRuntime(doc, [clone(custodian), clone(infinifi)]);
+  const runtime = createDeclarativeProtocolRuntime(doc, erc4626Children());
   const plugin = defineProtocolFamily(runtime.definition);
   const entries = FAMILY_CAPABILITY_NAMES.map(capability => ({ familyId: plugin.manifest.familyId, capability,
     contractVersion: "discovery-fixture", contentHash: createHash("sha256").update(`fixture:${capability}`).digest("hex"),

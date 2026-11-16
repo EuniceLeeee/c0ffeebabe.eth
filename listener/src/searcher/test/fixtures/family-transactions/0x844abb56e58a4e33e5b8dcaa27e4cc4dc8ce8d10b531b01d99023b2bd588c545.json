@@ -116,7 +116,7 @@
         "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
       },
       "instanceKey": "0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf",
-      "lineageId": "erc4626:standalone-standard-behavior",
+      "lineageId": "erc4626:morpho-vault-v2",
       "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       "tokenOut": "0x56bfa6f53669B836D1E0Dfa5e99706b12c373ecf",
       "amountIn": "997538799",
@@ -131,7 +131,13 @@
           "sha256": "cef7046bdb116224eb39f7e9b9ba0f273abaced8ea4804d8e4d7127f1c0caa89",
           "jsonPointer": "/trials/0"
         }
-      ]
+      ],
+      "routeKey": "protocol:erc4626\u001f0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf\u001fdeposit",
+      "priorBinding": {
+        "id": "protocol:erc4626--erc4626--0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf--0-deposit-original-event-input",
+        "amountScope": "0-deposit-original-event-input",
+        "lineageId": "erc4626:standalone-standard-behavior"
+      }
     },
     {
       "id": "protocol:erc4626--erc4626--0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf--1-deposit-twice-original-event-input",
@@ -142,7 +148,7 @@
         "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
       },
       "instanceKey": "0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf",
-      "lineageId": "erc4626:standalone-standard-behavior",
+      "lineageId": "erc4626:morpho-vault-v2",
       "tokenIn": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       "tokenOut": "0x56bfa6f53669B836D1E0Dfa5e99706b12c373ecf",
       "amountIn": "1995077598",
@@ -157,7 +163,13 @@
           "sha256": "cef7046bdb116224eb39f7e9b9ba0f273abaced8ea4804d8e4d7127f1c0caa89",
           "jsonPointer": "/trials/1"
         }
-      ]
+      ],
+      "routeKey": "protocol:erc4626\u001f0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf\u001fdeposit",
+      "priorBinding": {
+        "id": "protocol:erc4626--erc4626--0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf--1-deposit-twice-original-event-input",
+        "amountScope": "1-deposit-twice-original-event-input",
+        "lineageId": "erc4626:standalone-standard-behavior"
+      }
     },
     {
       "id": "protocol:erc4626--erc4626--0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf--2-redeem-original-event-input",
@@ -168,7 +180,7 @@
         "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
       },
       "instanceKey": "0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf",
-      "lineageId": "erc4626:standalone-standard-behavior",
+      "lineageId": "erc4626:morpho-vault-v2",
       "tokenIn": "0x56bfa6f53669B836D1E0Dfa5e99706b12c373ecf",
       "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       "amountIn": "972446750109258533995",
@@ -183,7 +195,13 @@
           "sha256": "cef7046bdb116224eb39f7e9b9ba0f273abaced8ea4804d8e4d7127f1c0caa89",
           "jsonPointer": "/trials/2"
         }
-      ]
+      ],
+      "routeKey": "protocol:erc4626\u001f0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf\u001fredeem",
+      "priorBinding": {
+        "id": "protocol:erc4626--erc4626--0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf--2-redeem-original-event-input",
+        "amountScope": "2-redeem-original-event-input",
+        "lineageId": "erc4626:standalone-standard-behavior"
+      }
     },
     {
       "id": "protocol:erc4626--erc4626--0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf--3-redeem-twice-original-event-input",
@@ -194,7 +212,7 @@
         "hash": "0xfb0b285ac85827d9245a4dadd0e153e2f9f7cd3397a60ae3846648dd86c05897"
       },
       "instanceKey": "0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf",
-      "lineageId": "erc4626:standalone-standard-behavior",
+      "lineageId": "erc4626:morpho-vault-v2",
       "tokenIn": "0x56bfa6f53669B836D1E0Dfa5e99706b12c373ecf",
       "tokenOut": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
       "amountIn": "1944893500218517067990",
@@ -209,7 +227,13 @@
           "sha256": "cef7046bdb116224eb39f7e9b9ba0f273abaced8ea4804d8e4d7127f1c0caa89",
           "jsonPointer": "/trials/3"
         }
-      ]
+      ],
+      "routeKey": "protocol:erc4626\u001f0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf\u001fredeem",
+      "priorBinding": {
+        "id": "protocol:erc4626--erc4626--0x56bfa6f53669b836d1e0dfa5e99706b12c373ecf--3-redeem-twice-original-event-input",
+        "amountScope": "3-redeem-twice-original-event-input",
+        "lineageId": "erc4626:standalone-standard-behavior"
+      }
     }
   ]
 }

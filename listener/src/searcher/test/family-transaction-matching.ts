@@ -10,6 +10,14 @@ const TOKEN = new Interface([
   "function transfer(address to,uint256 amount)",
   "function transferFrom(address from,address to,uint256 amount)",
 ]);
+const ASSET_ADMIN = new Interface(["function approve(address,uint256)", "function transfer(address,uint256)", "function transferFrom(address,address,uint256)"]);
+const auxiliaryAssetCall = (target: string, data: string, leg: FamilyTransactionLeg) => {
+  if (![leg.tokenIn, leg.tokenOut].some(token => token?.toLowerCase() === target.toLowerCase())) return false;
+  try {
+    const parsed = ASSET_ADMIN.parseTransaction({ data });
+    return parsed !== null && ASSET_ADMIN.encodeFunctionData(parsed.fragment, parsed.args).toLowerCase() === data.toLowerCase();
+  } catch { return false; }
+};
 const lower = (s: string) => s.toLowerCase();
 const same = (a: string, b: string) => lower(a) === lower(b);
 const pathKey = (p: readonly number[]) => JSON.stringify(p);
@@ -36,6 +44,58 @@ export interface MatchedTransactionInput {
   inputEvidence: { kind: "transfer-call" | "prepaid-transfer" | "burn" | "native-call-value"; logIndex?: number; traceAddress?: readonly number[] };
   outputLogIndices: readonly number[];
   nativeOutputTraceAddresses: readonly (readonly number[])[];
+}
+
+/** Resolve only mutable Ready binding fields. The TX/instance/tokens/amount are
+ * immutable seeds. Explicit routes remain explicit simulation actions; legacy
+ * unpinned routes must be identified by an actual successful internal call. */
+export function resolveTransactionCaseBinding(input: {
+  transactionHash: string; evidence: ReadyTransactionEvidence;
+  routes: readonly ObservedReadyRoute[]; expected: FamilyTransactionLeg;
+}) {
+  const { expected, routes, evidence } = input;
+  // Also validates the TX/source and keeps the original attribution untouched.
+  const reference = matchFamilyTransactionInput(input);
+  const candidates = routes.filter(r => r.familyId === expected.familyId &&
+    same(r.instanceKey, expected.instanceKey ?? "") && same(r.tokenIn, expected.tokenIn ?? "") &&
+    same(r.tokenOut, expected.tokenOut ?? ""));
+  const fail = (reason: string): never => { throw Object.assign(
+    new Error(`stale fixture: regenerate required (${reason})`),
+    { evidence: { original: reference.expected, candidates: candidates.map(({ matchTrace, ...r }) => r), reference } }); };
+  if (!routes.some(r => r.familyId === expected.familyId && same(r.instanceKey, expected.instanceKey ?? "")))
+    fail("target instance did not produce one admitted Ready identity/route");
+  if (!candidates.length) fail("target action/token direction not admitted");
+  let selected: ObservedReadyRoute | undefined;
+  let selection: "registered-route" | "transaction-action";
+  if (expected.routeKey !== undefined) {
+    const pinned = candidates.filter(r => r.routeKey === expected.routeKey);
+    if (pinned.length !== 1) fail("registered route absent or ambiguous; action cannot be substituted");
+    selected = pinned[0]; selection = "registered-route";
+  } else {
+    const { calls, frames } = successfulTransactionCalls(evidence);
+    const mutable = calls.filter(c => {
+      const f = frames.get(pathKey(c.traceAddress));
+      return lower(String(f?.action.callType ?? f?.type)) === "call" &&
+        candidates.some(r => same(r.target, c.target));
+    });
+    // An unknown action on the target cannot disappear because a supported
+    // route happens to have the same pair. Never reinterpret mint as deposit.
+    if (mutable.some(c => !routes.some(r => r.familyId === expected.familyId &&
+      same(r.instanceKey, expected.instanceKey ?? "") && r.matchTrace(c.target, c.data.slice(0, 10))) &&
+      !auxiliaryAssetCall(c.target, c.data, expected)))
+      fail("unmapped target selector; explicit action evidence required");
+    const actionRoutes = candidates.filter(r => mutable.some(c => r.matchTrace(c.target, c.data.slice(0, 10))));
+    const amountRoutes = actionRoutes.filter(r => reference.observed.some((row: MatchedTransactionInput) =>
+      row.familyId === r.familyId && same(row.instanceKey, r.instanceKey) && row.routeKey === r.routeKey && row.amountIn === expected.amountIn));
+    const unique = amountRoutes.length === 1 ? amountRoutes : actionRoutes;
+    if (unique.length !== 1) fail("TX action/selector route absent or ambiguous");
+    selected = unique[0]; selection = "transaction-action";
+  }
+  assert(selected);
+  return { original: { ...(expected.lineageId ? { lineageId: expected.lineageId } : {}), ...(expected.routeKey ? { routeKey: expected.routeKey } : {}), ...(expected.priorBinding ? { priorBinding: expected.priorBinding } : {}) },
+    resolved: { lineageId: selected.lineageId, routeKey: selected.routeKey },
+    action: { adapterId: selected.adapterId, ...(selected.direction ? { direction: selected.direction } : {}) }, selection,
+    changed: expected.lineageId !== selected.lineageId || expected.routeKey !== selected.routeKey };
 }
 
 /** Retain the production decoder and receipt binding. Additionally discard a

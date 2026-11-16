@@ -89,7 +89,7 @@ test("declared raw-state pricing missing dependencies never falls back to quote 
   const runtime = createDeclarativeProtocolRuntime(definition);
   assert.equal(runtime.moduleCoverage[0].modules.find((row: any) => row.key === "pricingProjection")?.state, "blocked");
   const pricing = runtime.definition.pricing;
-  for (const operation of [() => pricing.current.requirements({ descriptor: {} } as any),
-    () => pricing.current.buildRequests({ descriptor: {} } as any),
-    () => pricing.current.deriveMids({ descriptor: {}, snapshot: {}, routes: [] } as any)]) assert.throws(operation, /pricingProjection/);
+  for (const operation of [() => pricing.current.requirements({ descriptor: { lineageId: definition.standard.lineageId } } as any),
+    () => pricing.current.buildRequests({ descriptor: { lineageId: definition.standard.lineageId } } as any),
+    () => pricing.current.deriveMids({ descriptor: { lineageId: definition.standard.lineageId }, snapshot: {}, routes: [] } as any)]) assert.throws(operation, /pricingProjection/);
 });

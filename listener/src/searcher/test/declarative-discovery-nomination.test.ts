@@ -1,3 +1,4 @@
+import { erc4626Children } from "./declarative-test-children.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Interface, getAddress, toBeHex, keccak256 } from "ethers";
@@ -66,14 +67,14 @@ test("empty JSON candidateSources omits the plugin property without relaxing exp
   for (const spec of [legacy, mapped()]) {
     const d = compileDeclarativeDiscovery<any>(spec);
     assert.equal(Object.hasOwn(d, "candidateSources"), false);
-    const plugin = () => compileDeclarativeProtocol(existingDefinition, [custodianDefinition, infinifiDefinition]);
+    const plugin = () => compileDeclarativeProtocol(existingDefinition, erc4626Children());
     assert.doesNotThrow(() => defineProtocolFamily({ ...plugin(), discovery: d } as any));
     assert.throws(() => defineProtocolFamily({ ...plugin(), discovery: { ...d, candidateSources: [] } } as any), /non-empty/);
     assert.throws(() => defineProtocolFamily({ ...plugin(), discovery: { ...d, candidateSources: ["unknown"] } } as any), /unsupported discovery candidateSource/);
   }
   for (const invalid of [null, {}, "", ["unknown"], ["observed-interaction", "observed-interaction"]]) {
     const d = compileDeclarativeDiscovery<any>({ ...legacy, candidateSources: invalid } as any);
-    assert.throws(() => defineProtocolFamily({ ...compileDeclarativeProtocol(existingDefinition, [custodianDefinition, infinifiDefinition]), discovery: d } as any), /candidateSource/);
+    assert.throws(() => defineProtocolFamily({ ...compileDeclarativeProtocol(existingDefinition, erc4626Children()), discovery: d } as any), /candidateSource/);
   }
 });
 

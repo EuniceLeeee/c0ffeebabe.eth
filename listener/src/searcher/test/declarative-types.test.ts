@@ -1,3 +1,4 @@
+import { erc4626Children, erc4626ChildFiles } from "./declarative-test-children.js";
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -65,7 +66,7 @@ test("type metadata rejects executable text, type escapes and invalid references
 });
 
 test("root and child type metadata generate the complete ERC contract without Staked coupling", async () => {
-  const rendered = renderDeclarativeFamilyTypes(root.types, [custodian.types, infinifi.types]);
+  const rendered = renderDeclarativeFamilyTypes(root.types, erc4626Children().map(child => child.types));
   const saved = await readFile(new URL("../generated/declarative-family-types/erc4626.generated.ts", import.meta.url), "utf8");
   assert.equal(rendered, saved);
   for (const name of ["Erc4626Candidate", "Erc4626BaseEvidence", "Erc4626ActiveEvidence", "Erc4626IdentityEvidence",
@@ -83,7 +84,7 @@ test("root and child type metadata generate the complete ERC contract without St
   });
   const updated = structuredClone(custodian.types);
   updated.definitions.CustodianBinding.fields.asset.type = "boolean";
-  assert.notEqual(renderDeclarativeFamilyTypes(root.types, [updated, infinifi.types]), saved);
+  assert.notEqual(renderDeclarativeFamilyTypes(root.types, erc4626Children().map(child => child.id === custodian.id ? updated : child.types)), saved);
 });
 
 test("isolated production generation checks typed output, stale data, orphan files and symlink escapes", async () => {
@@ -92,7 +93,7 @@ test("isolated production generation checks typed output, stale data, orphan fil
   try {
     await mkdir(join(venues, "protocols/erc4626-family"), { recursive: true });
     await mkdir(join(venues, "production-families"), { recursive: true });
-    for (const [name, data] of [["erc4626", root], ["custodian", custodian], ["infinifi", infinifi]] as const)
+    for (const [name, data] of [["erc4626", root], ...erc4626ChildFiles.map(row => [row.file.replace(/^\.\//, "").replace(/\.json$/, ""), row.definition])] as const)
       await writeFile(join(venues, `protocols/erc4626-family/${name}.json`), JSON.stringify(data));
     for (const path of ["src/searcher/venues/declarative-protocol.ts", "src/searcher/venues/declarative-types.ts", "src/searcher/build-declarative-production.ts"])
       await writeFile(join(listener, path), "// isolated generation dependency\n");

@@ -162,7 +162,7 @@ export async function assertAcceptanceReadyTarget(envelope: StartupCheckpointEnv
   assert(wiring.isReadyMemoDefinitionCurrent?.(memo), "case Ready definition is stale");
   const instance = wiring.rehydrateVerifiedInstance({ memo, cutoff: ready.cutoff }) as import("../venues/adapter-family-runtime.js").PreparedFamilyInstance;
   assert.equal(instance.familyId, sample.familyId); assert(sameKey(instance.instanceKey, sample.instanceKey));
-  assert.equal(instance.descriptor.lineageId, sample.lineageId, "case lineage differs from admitted instance");
+  assert.equal(instance.descriptor.lineageId, sample.lineageId, "stale fixture: regenerate required (case lineage differs from admitted instance)");
   const [{ projectFamilyRouteGraph }, { prepareCreditFamilyRoutes, projectCreditRouteGraph }] = await Promise.all([
     import("../adapter-family-graph-runtime.js"), import("../adapter-credit-runtime.js"),
   ]);
@@ -181,7 +181,7 @@ export async function assertAcceptanceReadyTarget(envelope: StartupCheckpointEnv
     } else {
       const routes = instance.routes.filter(route => sameKey(route.tokenIn, trial.tokenIn) && sameKey(route.tokenOut, trial.tokenOut) &&
         (trial.routeKey === undefined || route.routeKey === trial.routeKey));
-      assert.equal(routes.length, 1, "case direction/route is absent or ambiguous in admitted instance");
+      assert.equal(routes.length, 1, "stale fixture: regenerate required (case direction/route is absent or ambiguous in admitted instance)");
       const route = routes[0]!;
       const handle = instance.routeHandles.find(item => item.routeKey === route.routeKey); assert(handle, "route handle missing");
       expected = projectFamilyRouteGraph({ family: family as import("../venues/family-capability-catalog.js").LoadedFamilyPlugin,

@@ -377,6 +377,44 @@
           {"let": "source", "value": {"op": "source", "args": [{"op": "filter", "args": ["$results", "r", "$r.ok"]}]}},
           {"let": "code", "value": {"op": "code", "args": ["base-vault-code"]}},
           {
+            "return": {
+              "op": "expression",
+              "args": [
+                "invalidBase",
+                {
+                  "ids": [
+                    "base-vault-code"
+                  ]
+                }
+              ]
+            },
+            "when": {
+              "op": "some",
+              "args": [
+                {
+                  "op": "coalesce",
+                  "args": [
+                    "$constants.excludedVaultCodeHashes",
+                    []
+                  ]
+                },
+                "excluded",
+                {
+                  "op": "eq",
+                  "args": [
+                    "$excluded",
+                    {
+                      "op": "codeHash",
+                      "args": [
+                        "$code"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
             "return": {"op": "expression", "args": ["invalidBase", {"ids": ["base-asset", "base-total-assets", "base-total-supply"]}]},
             "when": {"op": "ne", "args": [{"op": "shape", "args": ["base-asset"]}, "returned"]}
           },

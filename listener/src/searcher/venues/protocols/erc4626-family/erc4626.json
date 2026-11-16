@@ -8,7 +8,7 @@
   "manifest": {
     "familyId": "protocol:erc4626",
     "domain": "protocol",
-    "ownedActionAdapterIds": ["erc4626-deposit", "erc4626-redeem"],
+    "ownedActionAdapterIds": ["erc4626-deposit", "erc4626-mint", "erc4626-redeem", "erc4626-withdraw"],
     "requiredInfraActionAdapterIds": ["erc20-approve"],
     "allowedTaxonomy": [
       {"slotKind": "protocol", "protocolAction": "wrap"},
@@ -17,10 +17,11 @@
     "supportedLineages": [
       "erc4626:standalone-standard-behavior",
       "erc4626:frax-custodian-sync-conversion",
-      "erc4626:infinifi-gateway-staking"
+      "erc4626:infinifi-gateway-staking",
+      "erc4626:morpho-vault-v2"
     ],
     "poolAdapterIds": ["erc4626"],
-    "edgeAdapterIds": ["erc4626-deposit", "erc4626-redeem"],
+    "edgeAdapterIds": ["erc4626-deposit", "erc4626-mint", "erc4626-redeem", "erc4626-withdraw"],
     "requiresProtocolEdgesFlag": true
   },
   "discovery": {
@@ -75,9 +76,18 @@
       "parameters": {
         "constants": {
           "actor": "0x000000000000000000000000000000000000face",
-          "caller": {"kind": "verified-actor", "evidenceId": "erc4626-probe-actor"},
+          "caller": {
+            "kind": "verified-actor",
+            "evidenceId": "erc4626-probe-actor"
+          },
           "zero": "0x0000000000000000000000000000000000000000",
-          "samples": ["1000000", "1000000000000000000"],
+          "samples": [
+            "1000000",
+            "1000000000000000000"
+          ],
+          "excludedVaultCodeHashes": [
+            "0xb87264448eb495fa597c09eb4a576b7d6f029cb98957d3cb2491904a39abd8e9"
+          ],
           "implementationSlot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
           "maskedCodePattern": "^0x[0-9a-fA-F]{2976}$",
           "maskedAdminOffset": 16,
@@ -89,19 +99,46 @@
           "maskedTemplateHash": "0x834029e91a0eb94f478b72d8f8d0924a57de0dc6046e828a543fc421bd6270d7",
           "maskedImplementationHash": "0x51c008b264124ad667f58a8595b86745a657419baac327c1d1f335bc95b953a7",
           "getterBindings": [
-            {"offsets": [11189, 11230, 11551]},
             {
-              "offsets": [3508, 8461, 9878, 11665],
+              "offsets": [
+                11189,
+                11230,
+                11551
+              ]
+            },
+            {
+              "offsets": [
+                3508,
+                8461,
+                9878,
+                11665
+              ],
               "getter": "getStrcOracle",
               "requestId": "standard-staked-getStrcOracle"
             },
             {
-              "offsets": [1439, 6190, 6667, 7579, 7646, 7723, 7813, 12524, 12584],
+              "offsets": [
+                1439,
+                6190,
+                6667,
+                7579,
+                7646,
+                7723,
+                7813,
+                12524,
+                12584
+              ],
               "getter": "getWithdrawalQueue",
               "requestId": "standard-staked-getWithdrawalQueue"
             }
           ],
-          "maskedByteChecks": [{"offset": 15, "size": 1, "value": "0x7f"}]
+          "maskedByteChecks": [
+            {
+              "offset": 15,
+              "size": 1,
+              "value": "0x7f"
+            }
+          ]
         },
         "calls": {
           "inputAsset": "asset",
@@ -169,18 +206,73 @@
     "draft": {
       "familyId": "$identity.familyId",
       "lineageId": "$identity.lineageId",
-      "instanceKey": {"op": "lower", "args": [{"op": "address", "args": ["$identity.subject"]}]},
+      "instanceKey": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$identity.subject"
+            ]
+          }
+        ]
+      },
       "provenance": "$identity.provenance",
-      "runtimeRequirements": [{"kind": "source-state", "freshness": "pinned-block"}],
-      "vault": {"op": "address", "args": ["$identity.subject"]},
-      "asset": {"op": "address", "args": ["$identity.asset"]},
+      "runtimeRequirements": [
+        {
+          "kind": "source-state",
+          "freshness": "pinned-block"
+        }
+      ],
+      "vault": {
+        "op": "address",
+        "args": [
+          "$identity.subject"
+        ]
+      },
+      "asset": {
+        "op": "address",
+        "args": [
+          "$identity.asset"
+        ]
+      },
       "share": {
         "op": "address",
-        "args": [{"op": "coalesce", "args": ["$identity.custodian.share", "$identity.subject"]}]
+        "args": [
+          {
+            "op": "coalesce",
+            "args": [
+              "$identity.custodian.share",
+              "$identity.subject"
+            ]
+          }
+        ]
       },
       "custodian": "$identity.custodian",
       "infinifi": "$identity.infinifi",
-      "verifiedDirections": "$identity.verifiedDirections"
+      "morpho": "$identity.morpho",
+      "verifiedDirections": {
+        "op": "if",
+        "args": [
+          {
+            "op": "defined",
+            "args": [
+              "$identity.morpho"
+            ]
+          },
+          {
+            "op": "merge",
+            "args": [
+              "$identity.verifiedDirections",
+              {
+                "withdraw": "$identity.morpho.withdrawVerified",
+                "mint": "$identity.morpho.mintVerified"
+              }
+            ]
+          },
+          "$identity.verifiedDirections"
+        ]
+      }
     },
     "bindingProjection": {
       "vault": {"op": "lower", "args": [{"op": "address", "args": ["$descriptor.vault"]}]},
@@ -211,6 +303,28 @@
         "tokenOut": "$descriptor.asset",
         "adapterId": "erc4626-redeem",
         "taxonomy": {"slotKind": "protocol", "protocolAction": "redeem"}
+      },
+      {
+        "id": "withdraw",
+        "enabled": "$descriptor.verifiedDirections.withdraw",
+        "tokenIn": "$descriptor.share",
+        "tokenOut": "$descriptor.asset",
+        "adapterId": "erc4626-withdraw",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      },
+      {
+        "id": "mint",
+        "enabled": "$descriptor.verifiedDirections.mint",
+        "tokenIn": "$descriptor.asset",
+        "tokenOut": "$descriptor.share",
+        "adapterId": "erc4626-mint",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "wrap"
+        }
       }
     ],
     "graphVenue": {
@@ -235,14 +349,54 @@
         "token": {
           "op": "if",
           "args": [
-            {"op": "eq", "args": ["$route.direction", "deposit"]},
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "deposit"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "mint"
+                  ]
+                }
+              ]
+            },
             "$route.tokenOut",
             "$route.tokenIn"
           ]
         },
         "direction": {
           "op": "if",
-          "args": [{"op": "eq", "args": ["$route.direction", "deposit"]}, "increase", "decrease"]
+          "args": [
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "deposit"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "mint"
+                  ]
+                }
+              ]
+            },
+            "increase",
+            "decrease"
+          ]
         }
       }
     ]
@@ -257,6 +411,7 @@
       "share": "$descriptor.share",
       "custodian": "$descriptor.custodian",
       "infinifi": "$descriptor.infinifi",
+      "morpho": "$descriptor.morpho",
       "verifiedDirections": "$descriptor.verifiedDirections",
       "runtimeRequirements": "$descriptor.runtimeRequirements",
       "routes": "$routes"
@@ -337,7 +492,25 @@
     "sampleAmount": {
       "op": "if",
       "args": [
-        {"op": "eq", "args": ["$route.direction", "deposit"]},
+        {
+          "op": "or",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "deposit"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "mint"
+              ]
+            }
+          ]
+        },
         "$descriptor.oneAsset",
         "$descriptor.oneShare"
       ]
@@ -390,6 +563,13 @@
     "match": {
       "op": "and",
       "args": [
+        {
+          "op": "eq",
+          "args": [
+            "$descriptor.lineageId",
+            "erc4626:standalone-standard-behavior"
+          ]
+        },
         {"op": "not", "args": [{"op": "defined", "args": ["$descriptor.custodian"]}]},
         {"op": "not", "args": [{"op": "defined", "args": ["$descriptor.infinifi"]}]}
       ]
@@ -542,7 +722,7 @@
       ]
     }
   },
-  "variantFiles": ["./custodian.json", "./infinifi.json"],
+  "variantFiles": ["./custodian.json", "./infinifi.json", "./morpho-vault-v2.json"],
   "actionAdapters": [
     {
       "descriptor": {
@@ -563,6 +743,21 @@
     },
     {
       "descriptor": {
+        "adapterId": "erc4626-mint",
+        "lineage": "erc4626",
+        "edgeKind": "protocol",
+        "action": "mint",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function mint(uint256,address)"
+        }
+      ]
+    },
+    {
+      "descriptor": {
         "adapterId": "erc4626-redeem",
         "lineage": "erc4626",
         "edgeKind": "protocol",
@@ -575,6 +770,21 @@
         {
           "target": "0x3f04b65ddbd87f9ce0a2e7eb24d80e7fb87625b5",
           "signature": "function unstake(address,uint256)"
+        }
+      ]
+    },
+    {
+      "descriptor": {
+        "adapterId": "erc4626-withdraw",
+        "lineage": "erc4626",
+        "edgeKind": "protocol",
+        "action": "withdraw",
+        "canSendValue": false,
+        "leavesStandingPositionDefault": false
+      },
+      "traces": [
+        {
+          "signature": "function withdraw(uint256,address,address)"
         }
       ]
     }
@@ -750,8 +960,18 @@
           },
           "redeem": {
             "type": "boolean"
+          },
+          "withdraw": {
+            "type": "boolean"
+          },
+          "mint": {
+            "type": "boolean"
           }
-        }
+        },
+        "optional": [
+          "withdraw",
+          "mint"
+        ]
       },
       "Erc4626Identity": {
         "type": "object",
@@ -765,6 +985,9 @@
           "custodian": {
             "ref": "CustodianBinding"
           },
+          "morpho": {
+            "ref": "MorphoVaultV2Binding"
+          },
           "asset": {
             "type": "string"
           },
@@ -774,7 +997,8 @@
         },
         "optional": [
           "infinifi",
-          "custodian"
+          "custodian",
+          "morpho"
         ]
       },
       "Erc4626Descriptor": {
@@ -788,6 +1012,9 @@
           },
           "custodian": {
             "ref": "CustodianBinding"
+          },
+          "morpho": {
+            "ref": "MorphoVaultV2Binding"
           },
           "vault": {
             "type": "string"
@@ -804,7 +1031,8 @@
         },
         "optional": [
           "infinifi",
-          "custodian"
+          "custodian",
+          "morpho"
         ]
       },
       "Erc4626Route": {
@@ -823,6 +1051,12 @@
               },
               {
                 "literal": "redeem"
+              },
+              {
+                "literal": "withdraw"
+              },
+              {
+                "literal": "mint"
               }
             ]
           },
@@ -832,7 +1066,13 @@
                 "literal": "erc4626-deposit"
               },
               {
+                "literal": "erc4626-mint"
+              },
+              {
                 "literal": "erc4626-redeem"
+              },
+              {
+                "literal": "erc4626-withdraw"
               }
             ]
           }
@@ -846,6 +1086,9 @@
           },
           "custodian": {
             "ref": "CustodianBinding"
+          },
+          "morpho": {
+            "ref": "MorphoVaultV2Binding"
           },
           "instanceKey": {
             "ref": "InstanceKey"
@@ -861,7 +1104,8 @@
         },
         "optional": [
           "infinifi",
-          "custodian"
+          "custodian",
+          "morpho"
         ]
       },
       "Erc4626PricingStatic": {
@@ -915,6 +1159,12 @@
               },
               {
                 "literal": "redeem"
+              },
+              {
+                "literal": "withdraw"
+              },
+              {
+                "literal": "mint"
               }
             ]
           },
@@ -924,12 +1174,16 @@
           "amountOut": {
             "type": "bigint"
           },
+          "previewShares": {
+            "type": "bigint"
+          },
           "bindingFingerprint": {
             "type": "string"
           }
         },
         "optional": [
-          "executor"
+          "executor",
+          "previewShares"
         ]
       },
       "Erc4626ImplementationExclusionEvidence": {

@@ -18,6 +18,7 @@ export interface FamilyTransactionLeg {
   readonly tokenOut?: string;
   readonly amountIn?: string;
   readonly routeKey?: string;
+  readonly priorBinding?: { readonly id: string; readonly amountScope: string; readonly lineageId?: string; readonly routeKey?: string };
   readonly amountScope: string;
   readonly actors?: { readonly executor: string; readonly owner: string };
   readonly credit?: { readonly debtBps: number };
@@ -55,6 +56,10 @@ export function parseFamilyTransaction(value: unknown): FamilyTransaction {
     for (const key of ["instanceKey", "lineageId", "routeKey"]) assert(leg[key] === undefined || nonempty(leg[key]), `invalid ${key}`);
     for (const key of ["tokenIn", "tokenOut"]) assert(leg[key] === undefined || address(leg[key]), `invalid ${key}`);
     for (const key of ["amountIn", "historicalAmountOut"]) assert(leg[key] === undefined || uint(leg[key]), `invalid ${key}`);
+    if (leg.priorBinding !== undefined) {
+      assert(object(leg.priorBinding) && nonempty(leg.priorBinding.id) && nonempty(leg.priorBinding.amountScope), "invalid prior binding");
+      for (const key of ["lineageId", "routeKey"]) assert(leg.priorBinding[key] === undefined || nonempty(leg.priorBinding[key]), `invalid prior ${key}`);
+    }
     if (leg.source !== undefined) assert(object(leg.source) && Number.isSafeInteger(leg.source.number) && leg.source.number >= 0 && hash(leg.source.hash), "invalid source pin");
     if (leg.actors !== undefined) assert(object(leg.actors) && address(leg.actors.executor) && address(leg.actors.owner) && leg.actors.executor.toLowerCase() !== leg.actors.owner.toLowerCase(), "invalid isolated test actors");
     if (leg.credit !== undefined) assert(leg.domain === "credit" && object(leg.credit) && Number.isSafeInteger(leg.credit.debtBps) && leg.credit.debtBps > 0 && leg.credit.debtBps <= 10_000, "invalid Credit test policy");
@@ -67,7 +72,7 @@ export function parseFamilyTransaction(value: unknown): FamilyTransaction {
 }
 
 export function familyTransactionLegMissing(leg: FamilyTransactionLeg): string[] {
-  const missing = ["source", "instanceKey", "lineageId", "tokenIn", "tokenOut", "amountIn"]
+  const missing = ["source", "instanceKey", ...(["credit", "funding"].includes(leg.domain) ? ["lineageId"] : []), "tokenIn", "tokenOut", "amountIn"]
     .filter(key => (leg as any)[key] === undefined);
   if (leg.amountIn !== undefined && BigInt(leg.amountIn) === 0n) missing.push("positive amountIn");
   if (leg.domain === "credit" && leg.credit === undefined) missing.push("credit.debtBps");

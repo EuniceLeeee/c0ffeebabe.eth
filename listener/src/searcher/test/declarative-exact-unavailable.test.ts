@@ -1,3 +1,4 @@
+import { erc4626Children } from "./declarative-test-children.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { toBeHex } from "ethers";
@@ -32,7 +33,7 @@ function document(): any {
   return doc;
 }
 function setup(doc = document(), fields: Record<string, unknown> = {}) {
-  const runtime = createDeclarativeProtocolRuntime(doc, [clone(custodian), clone(infinifi)], { math });
+  const runtime = createDeclarativeProtocolRuntime(doc, erc4626Children(), { math });
   const descriptor: any = { familyId: root.scope.family, lineageId: runtime.variants[0]!.document.lineageId,
     instanceKey: address(1), vault: address(1), asset: address(2), share: address(1),
     verifiedDirections: { deposit: true, redeem: true }, runtimeRequirements: [], ...fields };

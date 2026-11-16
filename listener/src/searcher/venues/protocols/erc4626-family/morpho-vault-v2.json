@@ -1,0 +1,2353 @@
+{
+  "version": 1,
+  "id": "morpho-vault-v2",
+  "lineageId": "erc4626:morpho-vault-v2",
+  "abi": {
+    "vault": [
+      "function asset() view returns (address)",
+      "function decimals() view returns (uint8)",
+      "function totalAssets() view returns (uint256)",
+      "function totalSupply() view returns (uint256)",
+      "function previewDeposit(uint256) view returns (uint256)",
+      "function previewRedeem(uint256) view returns (uint256)",
+      "function previewWithdraw(uint256) view returns (uint256)",
+      "function previewMint(uint256) view returns (uint256)",
+      "function maxDeposit(address) view returns (uint256)",
+      "function maxMint(address) view returns (uint256)",
+      "function maxWithdraw(address) view returns (uint256)",
+      "function maxRedeem(address) view returns (uint256)",
+      "function deposit(uint256,address) returns (uint256)",
+      "function redeem(uint256,address,address) returns (uint256)",
+      "function withdraw(uint256,address,address) returns (uint256)",
+      "function mint(uint256,address) returns (uint256)"
+    ],
+    "token": [
+      "function decimals() view returns (uint8)",
+      "function balanceOf(address) view returns (uint256)",
+      "function approve(address,uint256) returns (bool)",
+      "function allowance(address,address) view returns (uint256)"
+    ],
+    "events": [
+      "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
+      "event Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)"
+    ]
+  },
+  "constants": {
+    "actor": "0x000000000000000000000000000000000000face",
+    "caller": {
+      "kind": "verified-actor",
+      "evidenceId": "erc4626-probe-actor"
+    },
+    "zero": "0x0000000000000000000000000000000000000000",
+    "runtimeCodeHash": "0xb87264448eb495fa597c09eb4a576b7d6f029cb98957d3cb2491904a39abd8e9",
+    "sampleAssets": "1000000",
+    "sampleShares": "1000000000000000000"
+  },
+  "expressions": {},
+  "match": {
+    "$defined": [
+      "$descriptor.morpho"
+    ]
+  },
+  "context": {
+    "vault": "$descriptor.vault"
+  },
+  "boundState": "$descriptor.morpho",
+  "inputs": [
+    "prefix",
+    "surface",
+    "code",
+    "vault"
+  ],
+  "admission": {
+    "version": 1,
+    "requestPrefix": "morphoV2",
+    "retryPrefix": "morpho_v2_unavailable:",
+    "match": {
+      "phase": "runtime",
+      "kind": "runtime-template",
+      "requirements": {
+        "transports": [
+          "get-code"
+        ]
+      },
+      "sourceFailure": "retry",
+      "templateProgram": "vaultV2Code",
+      "codeRequestId": "morphoV2-code",
+      "candidateValue": "$candidate.vault",
+      "mismatchReason": "morpho_v2_runtime_not_matched",
+      "reads": [
+        {
+          "id": "morphoV2-code",
+          "code": "$candidate.vault"
+        }
+      ]
+    },
+    "surface": {
+      "requirements": {
+        "transports": [
+          "get-code",
+          "eth-call"
+        ]
+      },
+      "sourceFailure": "retry",
+      "decode": {
+        "$program": [
+          "morphoSurface",
+          {
+            "prefix": "morphoV2",
+            "vault": "$candidate.vault"
+          }
+        ]
+      },
+      "reads": [
+        {
+          "id": "morphoV2-code",
+          "code": "$candidate.vault"
+        },
+        {
+          "id": "morphoV2-asset",
+          "call": {
+            "abi": "vault",
+            "function": "asset",
+            "args": []
+          },
+          "target": "$candidate.vault"
+        },
+        {
+          "id": "morphoV2-decimals",
+          "call": {
+            "abi": "vault",
+            "function": "decimals",
+            "args": []
+          },
+          "target": "$candidate.vault"
+        }
+      ]
+    },
+    "dependencies": {
+      "requirements": {
+        "transports": [
+          "get-code",
+          "eth-call"
+        ]
+      },
+      "sourceFailure": "retry",
+      "decode": {
+        "$program": [
+          "morphoDependencies",
+          {
+            "prefix": "morphoV2",
+            "surface": "$evidence.surface"
+          }
+        ]
+      },
+      "permission": null,
+      "reads": [
+        {
+          "id": "morphoV2-code",
+          "code": "$candidate.vault"
+        },
+        {
+          "id": "morphoV2-asset-decimals",
+          "call": {
+            "abi": "token",
+            "function": "decimals",
+            "args": []
+          },
+          "target": "$evidence.surface.asset"
+        },
+        {
+          "id": "morphoV2-max-withdraw",
+          "call": {
+            "abi": "vault",
+            "function": "maxWithdraw",
+            "args": [
+              {
+                "$address": [
+                  "$constants.actor"
+                ]
+              }
+            ]
+          },
+          "target": "$candidate.vault"
+        },
+        {
+          "id": "morphoV2-max-mint",
+          "call": {
+            "abi": "vault",
+            "function": "maxMint",
+            "args": [
+              {
+                "$address": [
+                  "$constants.actor"
+                ]
+              }
+            ]
+          },
+          "target": "$candidate.vault"
+        },
+        {
+          "id": "morphoV2-max-deposit",
+          "call": {
+            "abi": "vault",
+            "function": "maxDeposit",
+            "args": [
+              {
+                "$address": [
+                  "$constants.actor"
+                ]
+              }
+            ]
+          },
+          "target": "$candidate.vault"
+        },
+        {
+          "id": "morphoV2-max-redeem",
+          "call": {
+            "abi": "vault",
+            "function": "maxRedeem",
+            "args": [
+              {
+                "$address": [
+                  "$constants.actor"
+                ]
+              }
+            ]
+          },
+          "target": "$candidate.vault"
+        },
+        {
+          "each": "$evidence.samples",
+          "as": "sample",
+          "reads": [
+            {
+              "id": {
+                "$join": [
+                  [
+                    "morphoV2-preview-",
+                    "$sample.direction"
+                  ],
+                  ""
+                ]
+              },
+              "call": {
+                "abi": "vault",
+                "function": {
+                  "$if": [
+                    {
+                      "$eq": [
+                        "$sample.direction",
+                        "deposit"
+                      ]
+                    },
+                    "previewDeposit",
+                    {
+                      "$if": [
+                        {
+                          "$eq": [
+                            "$sample.direction",
+                            "redeem"
+                          ]
+                        },
+                        "previewRedeem",
+                        {
+                          "$if": [
+                            {
+                              "$eq": [
+                                "$sample.direction",
+                                "mint"
+                              ]
+                            },
+                            "previewMint",
+                            "previewWithdraw"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "args": [
+                  "$sample.amount"
+                ]
+              },
+              "target": "$candidate.vault"
+            }
+          ]
+        }
+      ]
+    },
+    "samples": {
+      "stage": "surface",
+      "directions": [
+        "deposit",
+        "redeem",
+        "mint",
+        "withdraw"
+      ],
+      "select": {
+        "$program": [
+          "morphoSample",
+          {
+            "surface": "$surface",
+            "direction": "$direction"
+          }
+        ]
+      },
+      "quote": {
+        "$word": [
+          {
+            "$get": [
+              {
+                "$returned": [
+                  {
+                    "$join": [
+                      [
+                        "morphoV2-preview-",
+                        "$sample.direction"
+                      ],
+                      ""
+                    ]
+                  }
+                ]
+              },
+              "data"
+            ]
+          }
+        ]
+      },
+      "quoteUsable": {
+        "$gt": [
+          "$sample.expected",
+          {
+            "$uint": [
+              "0"
+            ]
+          }
+        ]
+      },
+      "unavailableReason": "morpho_v2_sample_unavailable",
+      "capacityReason": "morpho_v2_capacity_unavailable"
+    },
+    "active": {
+      "requirements": {
+        "transports": [
+          "effect-delta-simulation"
+        ],
+        "caller": "verified-actor",
+        "effects": [
+          "return-data",
+          "revert-data",
+          "token-delta",
+          "total-supply-delta",
+          "logs"
+        ]
+      },
+      "sourceFailure": "retry",
+      "source": "$evidence.surface.source",
+      "binding": "$evidence.morpho",
+      "bindingField": "morpho",
+      "carriedSurface": true,
+      "unavailableReason": "morpho_v2_execution_unavailable",
+      "requestId": {
+        "$join": [
+          [
+            "morphoV2-active-",
+            "$sample.direction"
+          ],
+          ""
+        ]
+      },
+      "expectedReturn": "$sample.expected",
+      "returnValue": {
+        "$word": [
+          "$result.data"
+        ]
+      },
+      "returnError": "Morpho VaultV2 return amount mismatch",
+      "tokenDeltas": [
+        {
+          "token": "$surface.share",
+          "account": {
+            "$address": [
+              "$constants.actor"
+            ]
+          },
+          "delta": {
+            "$if": [
+              {
+                "$or": [
+                  {
+                    "$eq": [
+                      "$sample.direction",
+                      "deposit"
+                    ]
+                  },
+                  {
+                    "$eq": [
+                      "$sample.direction",
+                      "mint"
+                    ]
+                  }
+                ]
+              },
+              {
+                "$if": [
+                  {
+                    "$or": [
+                      {
+                        "$eq": [
+                          "$sample.direction",
+                          "mint"
+                        ]
+                      },
+                      {
+                        "$eq": [
+                          "$sample.direction",
+                          "withdraw"
+                        ]
+                      }
+                    ]
+                  },
+                  "$sample.amount",
+                  "$sample.expected"
+                ]
+              },
+              {
+                "$sub": [
+                  {
+                    "$uint": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "$if": [
+                      {
+                        "$or": [
+                          {
+                            "$eq": [
+                              "$sample.direction",
+                              "mint"
+                            ]
+                          },
+                          {
+                            "$eq": [
+                              "$sample.direction",
+                              "withdraw"
+                            ]
+                          }
+                        ]
+                      },
+                      "$sample.expected",
+                      "$sample.amount"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "token": "$surface.asset",
+          "account": {
+            "$address": [
+              "$constants.actor"
+            ]
+          },
+          "delta": {
+            "$if": [
+              {
+                "$or": [
+                  {
+                    "$eq": [
+                      "$sample.direction",
+                      "deposit"
+                    ]
+                  },
+                  {
+                    "$eq": [
+                      "$sample.direction",
+                      "mint"
+                    ]
+                  }
+                ]
+              },
+              {
+                "$sub": [
+                  {
+                    "$uint": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "$if": [
+                      {
+                        "$or": [
+                          {
+                            "$eq": [
+                              "$sample.direction",
+                              "mint"
+                            ]
+                          },
+                          {
+                            "$eq": [
+                              "$sample.direction",
+                              "withdraw"
+                            ]
+                          }
+                        ]
+                      },
+                      "$sample.expected",
+                      "$sample.amount"
+                    ]
+                  }
+                ]
+              },
+              {
+                "$if": [
+                  {
+                    "$or": [
+                      {
+                        "$eq": [
+                          "$sample.direction",
+                          "mint"
+                        ]
+                      },
+                      {
+                        "$eq": [
+                          "$sample.direction",
+                          "withdraw"
+                        ]
+                      }
+                    ]
+                  },
+                  "$sample.amount",
+                  "$sample.expected"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "supplyDeltas": [
+        {
+          "token": "$surface.vault",
+          "delta": {
+            "$if": [
+              {
+                "$or": [
+                  {
+                    "$eq": [
+                      "$sample.direction",
+                      "deposit"
+                    ]
+                  },
+                  {
+                    "$eq": [
+                      "$sample.direction",
+                      "mint"
+                    ]
+                  }
+                ]
+              },
+              {
+                "$if": [
+                  {
+                    "$or": [
+                      {
+                        "$eq": [
+                          "$sample.direction",
+                          "mint"
+                        ]
+                      },
+                      {
+                        "$eq": [
+                          "$sample.direction",
+                          "withdraw"
+                        ]
+                      }
+                    ]
+                  },
+                  "$sample.amount",
+                  "$sample.expected"
+                ]
+              },
+              {
+                "$sub": [
+                  {
+                    "$uint": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "$if": [
+                      {
+                        "$or": [
+                          {
+                            "$eq": [
+                              "$sample.direction",
+                              "mint"
+                            ]
+                          },
+                          {
+                            "$eq": [
+                              "$sample.direction",
+                              "withdraw"
+                            ]
+                          }
+                        ]
+                      },
+                      "$sample.expected",
+                      "$sample.amount"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "events": [
+        {
+          "address": "$surface.vault",
+          "abi": "events",
+          "name": {
+            "$if": [
+              {
+                "$or": [
+                  {
+                    "$eq": [
+                      "$sample.direction",
+                      "deposit"
+                    ]
+                  },
+                  {
+                    "$eq": [
+                      "$sample.direction",
+                      "mint"
+                    ]
+                  }
+                ]
+              },
+              "Deposit",
+              "Withdraw"
+            ]
+          },
+          "fields": {
+            "$merge": [
+              {
+                "sender": {
+                  "$address": [
+                    "$constants.actor"
+                  ]
+                },
+                "owner": {
+                  "$address": [
+                    "$constants.actor"
+                  ]
+                },
+                "assets": {
+                  "$if": [
+                    {
+                      "$or": [
+                        {
+                          "$eq": [
+                            "$sample.direction",
+                            "deposit"
+                          ]
+                        },
+                        {
+                          "$eq": [
+                            "$sample.direction",
+                            "mint"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "$if": [
+                        {
+                          "$or": [
+                            {
+                              "$eq": [
+                                "$sample.direction",
+                                "mint"
+                              ]
+                            },
+                            {
+                              "$eq": [
+                                "$sample.direction",
+                                "withdraw"
+                              ]
+                            }
+                          ]
+                        },
+                        "$sample.expected",
+                        "$sample.amount"
+                      ]
+                    },
+                    {
+                      "$if": [
+                        {
+                          "$or": [
+                            {
+                              "$eq": [
+                                "$sample.direction",
+                                "mint"
+                              ]
+                            },
+                            {
+                              "$eq": [
+                                "$sample.direction",
+                                "withdraw"
+                              ]
+                            }
+                          ]
+                        },
+                        "$sample.amount",
+                        "$sample.expected"
+                      ]
+                    }
+                  ]
+                },
+                "shares": {
+                  "$if": [
+                    {
+                      "$or": [
+                        {
+                          "$eq": [
+                            "$sample.direction",
+                            "deposit"
+                          ]
+                        },
+                        {
+                          "$eq": [
+                            "$sample.direction",
+                            "mint"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "$if": [
+                        {
+                          "$or": [
+                            {
+                              "$eq": [
+                                "$sample.direction",
+                                "mint"
+                              ]
+                            },
+                            {
+                              "$eq": [
+                                "$sample.direction",
+                                "withdraw"
+                              ]
+                            }
+                          ]
+                        },
+                        "$sample.amount",
+                        "$sample.expected"
+                      ]
+                    },
+                    {
+                      "$if": [
+                        {
+                          "$or": [
+                            {
+                              "$eq": [
+                                "$sample.direction",
+                                "mint"
+                              ]
+                            },
+                            {
+                              "$eq": [
+                                "$sample.direction",
+                                "withdraw"
+                              ]
+                            }
+                          ]
+                        },
+                        "$sample.expected",
+                        "$sample.amount"
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "$if": [
+                  {
+                    "$or": [
+                      {
+                        "$eq": [
+                          "$sample.direction",
+                          "deposit"
+                        ]
+                      },
+                      {
+                        "$eq": [
+                          "$sample.direction",
+                          "mint"
+                        ]
+                      }
+                    ]
+                  },
+                  {},
+                  {
+                    "receiver": {
+                      "$address": [
+                        "$constants.actor"
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "error": "Morpho VaultV2 synchronous lifecycle event missing"
+        }
+      ],
+      "proofHash": {
+        "$hash": [
+          {
+            "source": "$observedSource",
+            "binding": "$evidence.binding",
+            "samples": "$evidence.samples",
+            "directions": "$directions",
+            "results": {
+              "$map": [
+                {
+                  "$filter": [
+                    "$results",
+                    "r",
+                    "$r.ok"
+                  ]
+                },
+                "r",
+                {
+                  "id": "$r.id",
+                  "completion": "$r.completion",
+                  "effects": {
+                    "$effects": [
+                      "$r.effects"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "reads": [
+        {
+          "each": "$evidence.samples",
+          "as": "sample",
+          "reads": [
+            {
+              "simulation": {
+                "id": {
+                  "$join": [
+                    [
+                      "morphoV2-active-",
+                      "$sample.direction"
+                    ],
+                    ""
+                  ]
+                },
+                "required": false,
+                "kind": "effect-delta-simulation",
+                "preCalls": {
+                  "$map": [
+                    [
+                      {
+                        "$uint": [
+                          "0"
+                        ]
+                      },
+                      {
+                        "$if": [
+                          {
+                            "$or": [
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "mint"
+                                ]
+                              },
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "withdraw"
+                                ]
+                              }
+                            ]
+                          },
+                          "$sample.expected",
+                          "$sample.amount"
+                        ]
+                      }
+                    ],
+                    "quantity",
+                    {
+                      "caller": "$constants.caller",
+                      "to": {
+                        "$if": [
+                          {
+                            "$or": [
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "deposit"
+                                ]
+                              },
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "mint"
+                                ]
+                              }
+                            ]
+                          },
+                          "$evidence.surface.asset",
+                          "$evidence.surface.share"
+                        ]
+                      },
+                      "data": {
+                        "$encode": [
+                          "token",
+                          "approve",
+                          [
+                            "$evidence.surface.vault",
+                            "$quantity"
+                          ]
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "call": {
+                  "caller": "$constants.caller",
+                  "to": "$evidence.surface.vault",
+                  "data": {
+                    "$encode": [
+                      "vault",
+                      "$sample.direction",
+                      {
+                        "$if": [
+                          {
+                            "$or": [
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "deposit"
+                                ]
+                              },
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "mint"
+                                ]
+                              }
+                            ]
+                          },
+                          [
+                            "$sample.amount",
+                            {
+                              "$address": [
+                                "$constants.actor"
+                              ]
+                            }
+                          ],
+                          [
+                            "$sample.amount",
+                            {
+                              "$address": [
+                                "$constants.actor"
+                              ]
+                            },
+                            {
+                              "$address": [
+                                "$constants.actor"
+                              ]
+                            }
+                          ]
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "overrideIntent": {
+                  "caller": "$constants.caller",
+                  "tokenBalances": [
+                    {
+                      "token": {
+                        "$if": [
+                          {
+                            "$or": [
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "deposit"
+                                ]
+                              },
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "mint"
+                                ]
+                              }
+                            ]
+                          },
+                          "$evidence.surface.asset",
+                          "$evidence.surface.share"
+                        ]
+                      },
+                      "amount": {
+                        "$if": [
+                          {
+                            "$or": [
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "mint"
+                                ]
+                              },
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "withdraw"
+                                ]
+                              }
+                            ]
+                          },
+                          "$sample.expected",
+                          "$sample.amount"
+                        ]
+                      }
+                    },
+                    {
+                      "token": {
+                        "$if": [
+                          {
+                            "$or": [
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "deposit"
+                                ]
+                              },
+                              {
+                                "$eq": [
+                                  "$sample.direction",
+                                  "mint"
+                                ]
+                              }
+                            ]
+                          },
+                          "$evidence.surface.share",
+                          "$evidence.surface.asset"
+                        ]
+                      },
+                      "amount": {
+                        "$uint": [
+                          "0"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "observeTokenBalances": [
+                  {
+                    "token": "$evidence.surface.share",
+                    "account": "$constants.caller"
+                  },
+                  {
+                    "token": "$evidence.surface.asset",
+                    "account": "$constants.caller"
+                  },
+                  {
+                    "token": "$evidence.surface.asset",
+                    "account": "$evidence.surface.vault"
+                  }
+                ],
+                "observe": [
+                  "return-data",
+                  "revert-data",
+                  "token-delta",
+                  "total-supply-delta",
+                  "logs"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "identity": {
+      "bindingField": "morpho",
+      "subject": {
+        "op": "address",
+        "args": [
+          "$candidate.vault"
+        ]
+      },
+      "provenanceKind": "erc4626-morpho-vault-v2-active-proof"
+    }
+  },
+  "models": {
+    "vaultV2Code": {
+      "fields": [],
+      "checks": [
+        {
+          "condition": {
+            "$matches": [
+              "$code",
+              "^0x[0-9a-fA-F]+$"
+            ]
+          },
+          "error": "Morpho VaultV2 runtime code missing"
+        },
+        {
+          "condition": {
+            "$eq": [
+              {
+                "$codeHash": [
+                  "$code"
+                ]
+              },
+              "$constants.runtimeCodeHash"
+            ]
+          },
+          "error": "Morpho VaultV2 runtime code hash mismatch"
+        }
+      ],
+      "output": {
+        "codeHash": {
+          "$codeHash": [
+            "$code"
+          ]
+        }
+      }
+    },
+    "morphoSurface": {
+      "fields": [
+        {
+          "name": "observedSource",
+          "value": {
+            "$source": [
+              {
+                "$map": [
+                  "$results",
+                  "row",
+                  {
+                    "$successful": [
+                      "$row.id"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "asset",
+          "value": {
+            "$addressWord": [
+              {
+                "$get": [
+                  {
+                    "$returned": [
+                      {
+                        "$join": [
+                          [
+                            "morphoV2",
+                            "-",
+                            "asset"
+                          ],
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  "data"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "shareDecimals",
+          "value": {
+            "$number": [
+              {
+                "$word": [
+                  {
+                    "$get": [
+                      {
+                        "$returned": [
+                          {
+                            "$join": [
+                              [
+                                "morphoV2",
+                                "-",
+                                "decimals"
+                              ],
+                              ""
+                            ]
+                          }
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "runtimeCodeHash",
+          "value": {
+            "$codeHash": [
+              {
+                "$code": [
+                  {
+                    "$join": [
+                      [
+                        "morphoV2",
+                        "-",
+                        "code"
+                      ],
+                      ""
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "checks": [
+            {
+              "condition": {
+                "$and": [
+                  {
+                    "$not": [
+                      {
+                        "$sameAddress": [
+                          "$asset",
+                          "$constants.zero"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "$not": [
+                      {
+                        "$sameAddress": [
+                          "$asset",
+                          "$vault"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "$lte": [
+                      "$shareDecimals",
+                      36
+                    ]
+                  },
+                  {
+                    "$eq": [
+                      "$runtimeCodeHash",
+                      "$constants.runtimeCodeHash"
+                    ]
+                  }
+                ]
+              },
+              "error": "Morpho VaultV2 surface binding mismatch"
+            }
+          ]
+        }
+      ],
+      "output": {
+        "source": "$observedSource",
+        "vault": {
+          "op": "address",
+          "args": [
+            "$vault"
+          ]
+        },
+        "share": {
+          "op": "address",
+          "args": [
+            "$vault"
+          ]
+        },
+        "asset": "$asset",
+        "shareDecimals": "$shareDecimals",
+        "runtimeCodeHash": "$runtimeCodeHash"
+      }
+    },
+    "morphoDependencies": {
+      "fields": [
+        {
+          "name": "observedSource",
+          "value": {
+            "$source": [
+              {
+                "$map": [
+                  "$results",
+                  "row",
+                  {
+                    "$successful": [
+                      "$row.id"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "runtimeCodeHash",
+          "value": {
+            "$codeHash": [
+              {
+                "$code": [
+                  {
+                    "$join": [
+                      [
+                        "morphoV2",
+                        "-",
+                        "code"
+                      ],
+                      ""
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "assetDecimals",
+          "value": {
+            "$number": [
+              {
+                "$word": [
+                  {
+                    "$get": [
+                      {
+                        "$returned": [
+                          {
+                            "$join": [
+                              [
+                                "morphoV2",
+                                "-",
+                                "asset-decimals"
+                              ],
+                              ""
+                            ]
+                          }
+                        ]
+                      },
+                      "data"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "maxWithdraw",
+          "value": {
+            "$word": [
+              {
+                "$get": [
+                  {
+                    "$returned": [
+                      {
+                        "$join": [
+                          [
+                            "morphoV2",
+                            "-",
+                            "max-withdraw"
+                          ],
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  "data"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "maxMint",
+          "value": {
+            "$word": [
+              {
+                "$get": [
+                  {
+                    "$returned": [
+                      {
+                        "$join": [
+                          [
+                            "morphoV2",
+                            "-",
+                            "max-mint"
+                          ],
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  "data"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "maxDeposit",
+          "value": {
+            "$word": [
+              {
+                "$get": [
+                  {
+                    "$returned": [
+                      {
+                        "$join": [
+                          [
+                            "morphoV2",
+                            "-",
+                            "max-deposit"
+                          ],
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  "data"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "maxRedeem",
+          "value": {
+            "$word": [
+              {
+                "$get": [
+                  {
+                    "$returned": [
+                      {
+                        "$join": [
+                          [
+                            "morphoV2",
+                            "-",
+                            "max-redeem"
+                          ],
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  "data"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "previewWithdraw",
+          "value": {
+            "$word": [
+              {
+                "$get": [
+                  {
+                    "$returned": [
+                      {
+                        "$join": [
+                          [
+                            "morphoV2",
+                            "-",
+                            "preview-withdraw"
+                          ],
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  "data"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "previewMint",
+          "value": {
+            "$word": [
+              {
+                "$get": [
+                  {
+                    "$returned": [
+                      {
+                        "$join": [
+                          [
+                            "morphoV2",
+                            "-",
+                            "preview-mint"
+                          ],
+                          ""
+                        ]
+                      }
+                    ]
+                  },
+                  "data"
+                ]
+              }
+            ]
+          },
+          "checks": [
+            {
+              "condition": {
+                "$assertSource": [
+                  "$observedSource",
+                  "$surface.source"
+                ]
+              },
+              "error": "Morpho VaultV2 dependency source mismatch"
+            },
+            {
+              "condition": {
+                "$eq": [
+                  "$runtimeCodeHash",
+                  "$constants.runtimeCodeHash"
+                ]
+              },
+              "error": "Morpho VaultV2 runtime changed during admission"
+            },
+            {
+              "condition": {
+                "$lte": [
+                  "$assetDecimals",
+                  36
+                ]
+              },
+              "error": "Morpho VaultV2 asset decimals unsupported"
+            },
+            {
+              "condition": {
+                "$lte": [
+                  "$surface.shareDecimals",
+                  36
+                ]
+              },
+              "error": "Morpho VaultV2 share decimals unsupported"
+            }
+          ]
+        }
+      ],
+      "output": {
+        "proofSource": "$surface.source",
+        "vault": "$surface.vault",
+        "share": "$surface.share",
+        "asset": "$surface.asset",
+        "shareDecimals": "$surface.shareDecimals",
+        "assetDecimals": "$assetDecimals",
+        "runtimeCodeHash": "$runtimeCodeHash",
+        "maxWithdraw": "$maxWithdraw",
+        "maxMint": "$maxMint",
+        "maxDeposit": "$maxDeposit",
+        "maxRedeem": "$maxRedeem",
+        "previewWithdraw": "$previewWithdraw",
+        "previewMint": "$previewMint"
+      }
+    },
+    "morphoSample": {
+      "fields": [
+        {
+          "name": "deposit",
+          "value": {
+            "$or": [
+              {
+                "$eq": [
+                  "$direction",
+                  "deposit"
+                ]
+              },
+              {
+                "$eq": [
+                  "$direction",
+                  "withdraw"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "amount",
+          "value": {
+            "$if": [
+              "$deposit",
+              {
+                "$uint": [
+                  "$constants.sampleAssets"
+                ]
+              },
+              {
+                "$uint": [
+                  "$constants.sampleShares"
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "output": {
+        "direction": "$direction",
+        "amount": "$amount"
+      }
+    }
+  },
+  "requestSets": {},
+  "pricing": {
+    "refreshPolicy": "on-touch",
+    "requirements": {
+      "transports": [
+        "eth-call"
+      ]
+    },
+    "dependencies": [
+      "$descriptor.vault",
+      "$descriptor.asset",
+      "$descriptor.share"
+    ],
+    "mutationAddresses": [
+      "$descriptor.vault"
+    ]
+  },
+  "exact": {
+    "methodId": "morpho-vault-v2-preview",
+    "requirements": {
+      "transports": [
+        "eth-call"
+      ]
+    },
+    "checks": [
+      {
+        "condition": {
+          "$or": [
+            {
+              "$eq": [
+                "$direction",
+                "deposit"
+              ]
+            },
+            {
+              "$eq": [
+                "$direction",
+                "redeem"
+              ]
+            },
+            {
+              "$eq": [
+                "$direction",
+                "withdraw"
+              ]
+            },
+            {
+              "$eq": [
+                "$direction",
+                "mint"
+              ]
+            }
+          ]
+        },
+        "error": "Morpho VaultV2 exact direction unsupported"
+      }
+    ],
+    "protectedAddresses": [
+      "$descriptor.vault",
+      "$descriptor.share",
+      "$descriptor.asset"
+    ],
+    "evidence": {
+      "$merge": [
+        {
+          "kind": "erc4626-preview",
+          "source": "$source",
+          "vault": "$descriptor.vault",
+          "direction": "$direction",
+          "amountIn": "$amountIn",
+          "amountOut": "$amountOut",
+          "bindingFingerprint": "$route.bindingRef.fingerprint"
+        }
+      ]
+    }
+  },
+  "readPrograms": {
+    "quote": {
+      "requests": [
+        {
+          "id": "$requestId",
+          "kind": "eth-call",
+          "to": "$descriptor.vault",
+          "data": {
+            "$encode": [
+              "vault",
+              {
+                "$if": [
+                  {
+                    "$or": [
+                      {
+                        "$eq": [
+                          "$direction",
+                          "deposit"
+                        ]
+                      },
+                      {
+                        "$eq": [
+                          "$direction",
+                          "mint"
+                        ]
+                      }
+                    ]
+                  },
+                  "previewDeposit",
+                  "previewRedeem"
+                ]
+              },
+              [
+                "$amountIn"
+              ]
+            ]
+          },
+          "completion": "return-data"
+        }
+      ],
+      "result": {
+        "$uint": [
+          {
+            "$decode": [
+              "vault",
+              {
+                "$if": [
+                  {
+                    "$or": [
+                      {
+                        "$eq": [
+                          "$direction",
+                          "deposit"
+                        ]
+                      },
+                      {
+                        "$eq": [
+                          "$direction",
+                          "mint"
+                        ]
+                      }
+                    ]
+                  },
+                  "previewDeposit",
+                  "previewRedeem"
+                ]
+              },
+              {
+                "$get": [
+                  {
+                    "$returned": [
+                      "$requestId"
+                    ]
+                  },
+                  "data"
+                ]
+              },
+              0
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": [
+      "$descriptor.vault",
+      "$descriptor.share",
+      "$descriptor.asset"
+    ],
+    "contextChecks": [
+      {
+        "condition": {
+          "$or": [
+            {
+              "$eq": [
+                "$direction",
+                "deposit"
+              ]
+            },
+            {
+              "$eq": [
+                "$direction",
+                "redeem"
+              ]
+            },
+            {
+              "$eq": [
+                "$direction",
+                "withdraw"
+              ]
+            },
+            {
+              "$eq": [
+                "$direction",
+                "mint"
+              ]
+            }
+          ]
+        },
+        "error": "Morpho VaultV2 conversion direction unsupported"
+      }
+    ],
+    "steps": [
+      {
+        "id": "preview",
+        "static": true,
+        "when": {
+          "$or": [
+            {
+              "$eq": [
+                "$direction",
+                "withdraw"
+              ]
+            },
+            {
+              "$eq": [
+                "$direction",
+                "mint"
+              ]
+            }
+          ]
+        },
+        "call": {
+          "target": "$descriptor.vault",
+          "signature": {
+            "$if": [
+              {
+                "$eq": [
+                  "$direction",
+                  "withdraw"
+                ]
+              },
+              "function previewRedeem(uint256) view returns(uint256)",
+              "function previewDeposit(uint256) view returns(uint256)"
+            ]
+          },
+          "args": [
+            {
+              "runtime": "amountIn"
+            }
+          ],
+          "save": {
+            "previewAmount": 0
+          }
+        }
+      },
+      {
+        "id": "standard",
+        "when": {
+          "$or": [
+            {
+              "$eq": [
+                "$direction",
+                "deposit"
+              ]
+            },
+            {
+              "$eq": [
+                "$direction",
+                "redeem"
+              ]
+            }
+          ]
+        },
+        "approval": {
+          "token": "$route.tokenIn",
+          "spender": "$descriptor.vault",
+          "mode": "ensure",
+          "when": {
+            "$eq": [
+              "$direction",
+              "deposit"
+            ]
+          }
+        },
+        "call": {
+          "target": "$descriptor.vault",
+          "signature": {
+            "$if": [
+              {
+                "$eq": [
+                  "$direction",
+                  "deposit"
+                ]
+              },
+              "function deposit(uint256,address) returns(uint256)",
+              "function redeem(uint256,address,address) returns(uint256)"
+            ]
+          },
+          "args": {
+            "$if": [
+              {
+                "$eq": [
+                  "$direction",
+                  "deposit"
+                ]
+              },
+              [
+                {
+                  "runtime": "amountIn"
+                },
+                "$recipient"
+              ],
+              [
+                {
+                  "runtime": "amountIn"
+                },
+                "$recipient",
+                "$executor"
+              ]
+            ]
+          },
+          "save": {
+            "output": 0
+          }
+        }
+      },
+      {
+        "id": "specified",
+        "when": {
+          "$or": [
+            {
+              "$eq": [
+                "$direction",
+                "withdraw"
+              ]
+            },
+            {
+              "$eq": [
+                "$direction",
+                "mint"
+              ]
+            }
+          ]
+        },
+        "approval": {
+          "token": "$route.tokenIn",
+          "spender": "$descriptor.vault",
+          "mode": "exact-clear",
+          "requireBool": true,
+          "verifyAllowance": true,
+          "when": {
+            "$eq": [
+              "$direction",
+              "mint"
+            ]
+          },
+          "amount": {
+            "runtime": "amountIn"
+          }
+        },
+        "call": {
+          "target": "$descriptor.vault",
+          "signature": {
+            "$if": [
+              {
+                "$eq": [
+                  "$direction",
+                  "withdraw"
+                ]
+              },
+              "function withdraw(uint256,address,address) returns(uint256)",
+              "function mint(uint256,address) returns(uint256)"
+            ]
+          },
+          "args": {
+            "$if": [
+              {
+                "$eq": [
+                  "$direction",
+                  "withdraw"
+                ]
+              },
+              [
+                {
+                  "runtime": "previewAmount"
+                },
+                "$recipient",
+                "$executor"
+              ],
+              [
+                {
+                  "runtime": "previewAmount"
+                },
+                "$recipient"
+              ]
+            ]
+          },
+          "save": {
+            "output": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "output"
+              },
+              "operator": "eq",
+              "right": {
+                "runtime": "amountIn"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient",
+        "equals": {
+          "$if": [
+            {
+              "$or": [
+                {
+                  "$eq": [
+                    "$direction",
+                    "withdraw"
+                  ]
+                },
+                {
+                  "$eq": [
+                    "$direction",
+                    "mint"
+                  ]
+                }
+              ]
+            },
+            {
+              "runtime": "previewAmount"
+            },
+            {
+              "runtime": "output"
+            }
+          ]
+        },
+        "minimum": "$minAmountOut"
+      },
+      {
+        "kind": "supply",
+        "token": "$descriptor.share",
+        "direction": {
+          "$if": [
+            {
+              "$or": [
+                {
+                  "$eq": [
+                    "$direction",
+                    "deposit"
+                  ]
+                },
+                {
+                  "$eq": [
+                    "$direction",
+                    "mint"
+                  ]
+                }
+              ]
+            },
+            "increase",
+            "decrease"
+          ]
+        },
+        "equals": {
+          "$if": [
+            {
+              "$eq": [
+                "$direction",
+                "mint"
+              ]
+            },
+            {
+              "runtime": "previewAmount"
+            },
+            {
+              "$if": [
+                {
+                  "$eq": [
+                    "$direction",
+                    "deposit"
+                  ]
+                },
+                {
+                  "runtime": "output"
+                },
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenIn",
+        "account": "$recipient",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-native",
+        "when": "$directSettlement"
+      }
+    ]
+  },
+  "modules": {
+    "pricingFlow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "price",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": {
+            "$flatMap": [
+              "$routes",
+              "route",
+              [
+                {
+                  "id": {
+                    "$join": [
+                      [
+                        "morpho-price-",
+                        "$route.direction"
+                      ],
+                      ""
+                    ]
+                  },
+                  "kind": "eth-call",
+                  "to": {
+                    "$address": [
+                      "$descriptor.vault"
+                    ]
+                  },
+                  "data": {
+                    "$encode": [
+                      "vault",
+                      {
+                        "$if": [
+                          {
+                            "$or": [
+                              {
+                                "$eq": [
+                                  "$route.direction",
+                                  "deposit"
+                                ]
+                              },
+                              {
+                                "$eq": [
+                                  "$route.direction",
+                                  "mint"
+                                ]
+                              }
+                            ]
+                          },
+                          "previewDeposit",
+                          "previewRedeem"
+                        ]
+                      },
+                      [
+                        {
+                          "$if": [
+                            {
+                              "$or": [
+                                {
+                                  "$eq": [
+                                    "$route.direction",
+                                    "deposit"
+                                  ]
+                                },
+                                {
+                                  "$eq": [
+                                    "$route.direction",
+                                    "mint"
+                                  ]
+                                }
+                              ]
+                            },
+                            "$descriptor.oneAsset",
+                            "$descriptor.oneShare"
+                          ]
+                        }
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ]
+            ]
+          },
+          "result": {
+            "source": {
+              "$source": [
+                {
+                  "$filter": [
+                    "$results",
+                    "r",
+                    "$r.ok"
+                  ]
+                }
+              ]
+            },
+            "quotes": {
+              "$objectFromEntries": [
+                {
+                  "$map": [
+                    "$routes",
+                    "route",
+                    [
+                      "$route.routeKey",
+                      {
+                        "amountIn": {
+                          "$if": [
+                            {
+                              "$or": [
+                                {
+                                  "$eq": [
+                                    "$route.direction",
+                                    "deposit"
+                                  ]
+                                },
+                                {
+                                  "$eq": [
+                                    "$route.direction",
+                                    "mint"
+                                  ]
+                                }
+                              ]
+                            },
+                            "$descriptor.oneAsset",
+                            "$descriptor.oneShare"
+                          ]
+                        },
+                        "amountOut": {
+                          "$word": [
+                            {
+                              "$get": [
+                                {
+                                  "$returned": [
+                                    {
+                                      "$join": [
+                                        [
+                                          "morpho-price-",
+                                          "$route.direction"
+                                        ],
+                                        ""
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "data"
+                              ]
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "result": "$steps.price"
+    }
+  },
+  "types": {
+    "version": 1,
+    "definitions": {
+      "MorphoVaultV2Binding": {
+        "type": "object",
+        "fields": {
+          "proofSource": {
+            "ref": "CanonicalSource"
+          },
+          "vault": {
+            "type": "string"
+          },
+          "share": {
+            "type": "string"
+          },
+          "asset": {
+            "type": "string"
+          },
+          "shareDecimals": {
+            "type": "number"
+          },
+          "assetDecimals": {
+            "type": "number"
+          },
+          "runtimeCodeHash": {
+            "type": "string"
+          },
+          "maxWithdraw": {
+            "type": "bigint"
+          },
+          "maxMint": {
+            "type": "bigint"
+          },
+          "maxDeposit": {
+            "type": "bigint"
+          },
+          "maxRedeem": {
+            "type": "bigint"
+          },
+          "previewWithdraw": {
+            "type": "bigint"
+          },
+          "previewMint": {
+            "type": "bigint"
+          }
+        }
+      }
+    }
+  }
+}

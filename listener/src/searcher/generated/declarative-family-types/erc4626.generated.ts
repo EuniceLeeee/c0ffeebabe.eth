@@ -1,5 +1,5 @@
 // Generated from Family JSON type metadata. Do not edit.
-// Type schema SHA-256: 84eead1549c41c9bd4d465c68adbd06dfd579bb8b1bf6606bb2f56551b028cd3
+// Type schema SHA-256: 987d6a54e3019c3dd2218fa652305d593a441a3a12ba7e516e15852e075ae2c8
 import type { InstanceKey } from "../../venues/adapter-family-identifiers.js";
 import type { CompiledInstanceDescriptor, FamilyCandidate, FamilyRouteDescriptor, VerifiedIdentity } from "../../venues/adapter-family-plugin.js";
 import type { CanonicalSource } from "../../venues/adapter-request-program.js";
@@ -59,6 +59,7 @@ export type Erc4626Candidate = FamilyCandidate & {
 export type Erc4626Descriptor = CompiledInstanceDescriptor & {
   readonly infinifi?: InfiniFiBinding;
   readonly custodian?: CustodianBinding;
+  readonly morpho?: MorphoVaultV2Binding;
   readonly vault: string;
   readonly asset: string;
   readonly share: string;
@@ -93,15 +94,17 @@ export type Erc4626ExactEvidence = {
   readonly executor?: string;
   readonly source: CanonicalSource;
   readonly vault: string;
-  readonly direction: ("deposit") | ("redeem");
+  readonly direction: ("deposit") | ("redeem") | ("withdraw") | ("mint");
   readonly amountIn: bigint;
   readonly amountOut: bigint;
+  readonly previewShares?: bigint;
   readonly bindingFingerprint: string;
 };
 
 export type Erc4626Identity = VerifiedIdentity & {
   readonly infinifi?: InfiniFiBinding;
   readonly custodian?: CustodianBinding;
+  readonly morpho?: MorphoVaultV2Binding;
   readonly asset: string;
   readonly verifiedDirections: Erc4626VerifiedDirections;
 };
@@ -122,6 +125,7 @@ export type Erc4626PricingDescriptor = Erc4626PricingDraft & Erc4626PricingStati
 export type Erc4626PricingDraft = {
   readonly infinifi?: InfiniFiBinding;
   readonly custodian?: CustodianBinding;
+  readonly morpho?: MorphoVaultV2Binding;
   readonly instanceKey: InstanceKey;
   readonly vault: string;
   readonly routes: ReadonlyArray<Erc4626Route>;
@@ -134,13 +138,15 @@ export type Erc4626PricingStatic = {
 
 export type Erc4626Route = FamilyRouteDescriptor & {
   readonly target: string;
-  readonly direction: ("deposit") | ("redeem");
-  readonly adapterId: ("erc4626-deposit") | ("erc4626-redeem");
+  readonly direction: ("deposit") | ("redeem") | ("withdraw") | ("mint");
+  readonly adapterId: ("erc4626-deposit") | ("erc4626-mint") | ("erc4626-redeem") | ("erc4626-withdraw");
 };
 
 export type Erc4626VerifiedDirections = {
   readonly deposit: boolean;
   readonly redeem: boolean;
+  readonly withdraw?: boolean;
+  readonly mint?: boolean;
 };
 
 export type InfiniFiBinding = InfiniFiSurface & {
@@ -167,6 +173,22 @@ export type InfiniFiSurface = {
   readonly shareDecimals: number;
   readonly vaultCodeHash: string;
   readonly gatewayCodeHash: string;
+};
+
+export type MorphoVaultV2Binding = {
+  readonly proofSource: CanonicalSource;
+  readonly vault: string;
+  readonly share: string;
+  readonly asset: string;
+  readonly shareDecimals: number;
+  readonly assetDecimals: number;
+  readonly runtimeCodeHash: string;
+  readonly maxWithdraw: bigint;
+  readonly maxMint: bigint;
+  readonly maxDeposit: bigint;
+  readonly maxRedeem: bigint;
+  readonly previewWithdraw: bigint;
+  readonly previewMint: bigint;
 };
 
 export type FamilyTypes = {

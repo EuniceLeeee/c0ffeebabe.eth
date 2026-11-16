@@ -1,3 +1,4 @@
+import { erc4626Children } from "./declarative-test-children.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getAddress, toBeHex, Interface } from "ethers";
@@ -13,7 +14,7 @@ const address = (value: number) => getAddress(toBeHex(value, 20));
 const source = { number: 100, hash: toBeHex(100, 32), generation: 1 };
 const op = (op: string, ...args: any[]) => ({ op, args });
 function fixture(document: any = clone(root), options: Parameters<typeof createDeclarativeProtocolRuntime>[2] = {}) {
-  const runtime = createDeclarativeProtocolRuntime(document, [clone(custodian), clone(infinifi)], options);
+  const runtime = createDeclarativeProtocolRuntime(document, erc4626Children(), options);
   const descriptor: any = { familyId: root.scope.family, lineageId: runtime.variants[0]!.document.lineageId,
     instanceKey: address(1).toLowerCase(), vault: address(1), asset: address(2), share: address(1),
     verifiedDirections: { deposit: true, redeem: true }, runtimeRequirements: [] };
@@ -35,7 +36,7 @@ const quoteFlow = () => ({ version: 1, sourceKind: "view",
     decode: [{ return: decoded("flow-quote") }] },
 ], result: "$steps.quote" });
 
-test("unmodified three production JSONs keep runtime bytes, directions and quote requests with empty extension blocks", () => {
+test("installed variants keep runtime bytes, directions and existing module coverage with empty root extension blocks", () => {
   const before = fixture();
   const doc: any = clone(root); doc.modules = { math: {}, quoteFlow: {}, pricingFlow: {} };
   const after = fixture(doc);
@@ -44,8 +45,8 @@ test("unmodified three production JSONs keep runtime bytes, directions and quote
   assert.deepEqual(program(before).program.buildRequests(before.input), program(after).program.buildRequests(after.input));
   assert.equal(before.runtime.definition.execution.buildRuntimeLeg!(before.input as any)!.program,
     after.runtime.definition.execution.buildRuntimeLeg!(after.input as any)!.program);
-  for (const variant of after.runtime.moduleCoverage)
-    assert(variant.modules.every(module => module.state === "undefined"));
+  assert.deepEqual(after.runtime.moduleCoverage, before.runtime.moduleCoverage);
+  assert(after.runtime.moduleCoverage.find(row => row.variant === root.standard.id)!.modules.every(module => module.state === "undefined"));
   assert.equal(Object.hasOwn(root, "modules"), false);
 });
 

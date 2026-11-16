@@ -19,7 +19,7 @@ test("simulation seeds need no historical output, original call state, or origin
 });
 test("missing identity/source cannot become an executable case", () => {
   const raw: any = seed(); delete raw.legs[0].lineageId; delete raw.legs[0].source;
-  assert.deepEqual(familyTransactionLegMissing(parseFamilyTransaction(raw).legs[0]!), ["source", "lineageId"]);
+  assert.deepEqual(familyTransactionLegMissing(parseFamilyTransaction(raw).legs[0]!), ["source"]);
   raw.legs[0].amountIn = "0";
   assert(familyTransactionLegMissing(parseFamilyTransaction(raw).legs[0]!).includes("positive amountIn"));
 });
@@ -76,8 +76,8 @@ test("central TX registry preserves every existing priced trial with its own ide
       const prior = JSON.parse(readFileSync(resolve(directory, sample.casePath), "utf8"));
       for (const trial of prior.trials) {
         const matches = registry.legs.filter(row => row.transaction.transactionHash === prior.transactionHash.toLowerCase() &&
-          row.leg.familyId === family.familyId && row.leg.instanceKey === prior.instanceKey && row.leg.lineageId === prior.lineageId &&
-          row.leg.amountScope === trial.id && row.leg.tokenIn === trial.tokenIn && row.leg.tokenOut === trial.tokenOut && row.leg.amountIn === trial.amountIn);
+          row.leg.familyId === family.familyId && row.leg.instanceKey === prior.instanceKey && (row.leg.priorBinding?.lineageId ?? row.leg.lineageId) === prior.lineageId &&
+          (row.leg.priorBinding?.amountScope ?? row.leg.amountScope) === trial.id && row.leg.tokenIn === trial.tokenIn && row.leg.tokenOut === trial.tokenOut && row.leg.amountIn === trial.amountIn);
         assert.equal(matches.length, 1, `lost/duplicated original trial ${family.familyId}/${trial.id}`);
         assert.deepEqual(matches[0]!.leg.source, prior.source);
       }
@@ -91,7 +91,7 @@ test("checked-in seeds retain installed identities and reproducible provenance",
     const family = installed.find(family => family.familyId === row.leg.familyId);
     if (family) {
       assert.equal(row.leg.domain, family.domain);
-      if (row.leg.lineageId) assert(family.lineages.includes(row.leg.lineageId as any));
+      // Historical lineage is reference-only; the Ready-bound generator validates current identity.
       if (!row.missing.length && row.leg.domain === "funding") assert.equal(row.leg.instanceKey, `${row.leg.familyId}\u001f${row.leg.tokenIn!.toLowerCase()}`);
     }
     assert(row.leg.provenance && row.leg.provenance.length > 0, "seed requires a recorded source");
@@ -129,7 +129,7 @@ test("primary source snapshots retain matching transaction pins and distinguish 
       row.leg.familyId === caseExpectation.familyId && row.leg.instanceKey === (observed.instanceKey ?? caseExpectation.instanceKey));
     assert(row, "primary observation must remain registered");
     assert.deepEqual(row.leg.source, observed.source);
-    assert.equal(row.leg.lineageId, caseExpectation.lineageId);
+    assert.equal(row.leg.priorBinding?.lineageId ?? row.leg.lineageId, caseExpectation.lineageId);
     assert.equal(caseExpectation.requiresFreshDiscovery, true, "source snapshots cannot pre-approve Discovery");
     if (snapshot.kind === "primary-explorer-transaction-pin") {
       assert.equal(observed.amountIn, undefined, "component controls are not observed transaction amounts");
