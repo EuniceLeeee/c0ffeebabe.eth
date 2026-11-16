@@ -28,7 +28,7 @@
       "fail": 0
     },
     "productionBuild": "pass",
-    "capabilityManifestCheck": "running",
+    "capabilityManifestCheck": "pass",
     "diffCheck": "pass"
   },
   "dryRunPlan": {
@@ -47,10 +47,11 @@
       "familyFlags": "exact previous run"
     },
     "acceptance": {
-      "runtime": "250 published ordinary blocks, warm/catch-up excluded; no broadcast; no source-integrity or lifecycle failure",
+      "runtime": "250 source heights after startup catch-up, matching prior bounded window semantics; gaps count toward source window and observed ordinary passes are reported separately; no broadcast",
       "safety": "retain actual debit, receipts, final simulation, actual gas/profit, canonical and pre-submit gates",
       "performance": "Report full block and final-sim/EV overlap/drain. Previous run is unpaired context only; controlled tests check RPC read reduction and equivalent results"
-    }
+    },
+    "status": "not-started-ready-preflight-blocked"
   },
   "limitations": [
     "Started oracle requests must drain even after simulation failure; failed tail may grow",
@@ -58,5 +59,13 @@
     "SUBMIT=0 validates evaluation, not gross fallback broadcast",
     "No production performance pass claimed before real window"
   ],
-  "evidenceDirectory": "logs/final-sim-ev-20261116"
+  "evidenceDirectory": "logs/final-sim-ev-20261116",
+  "readyPreflight": {
+    "generation": 18,
+    "result": "rejected-stale-family-definitions",
+    "cause": "Changes since prior release to shared declarative-conversion-admission.ts and sampled-conversion-flow.json are included in all declarative capability closures. Current installed catalog validates, but retained execution-family proof hashes differ. Funding-only families remain current.",
+    "introducedByThisOptimization": false,
+    "action": "No proof hash bypass or old proof rewritten. Baseline choice pending: prior release plus optimization versus current Family definitions plus Ready update.",
+    "evidence": "logs/final-sim-ev-20261116/ready/definition-audit.json"
+  }
 }
