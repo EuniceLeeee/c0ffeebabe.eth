@@ -1,0 +1,52 @@
+{
+  "learning_case_id": "tooldef-20261116-family-facts-ready-action-binding",
+  "status": "manual_required",
+  "strategy_kind": "unknown",
+  "edge_kinds": [
+    "swap",
+    "protocol"
+  ],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "Static fixture lineage and same-pair route ambiguity prevented current Ready binding. A blanket unknown-selector guard then incorrectly rejected nested settlement calls. Genuine unsupported actions remain fail-closed.",
+  "evidence": {
+    "report": "docs/research/reports/family-facts-fixture-alignment-20261116.json",
+    "rawReport": {
+      "path": "logs/morpho-fixture-align-20261116/all-facts-final/report.json",
+      "sha256": "c81ef0daa3ed36714c4f06df494f2fe03051833bbeab75979894b95fb81cc735",
+      "bytes": 1761180
+    },
+    "scope": "Supplied historical TX acceptance-tool diagnosis only. No lane classification or production opportunity closure is claimed; the tooling defect itself is codified.",
+    "unitBefore": {
+      "path": "logs/morpho-fixture-align-20261116/nested-binding-before.log",
+      "sha256": "b5b1bfd84be25620794d2013a0aed89c316a312f6c64770c4a7bafed33a9b442",
+      "bytes": 3755
+    },
+    "unitAfter": {
+      "path": "logs/morpho-fixture-align-20261116/nested-binding-final.log",
+      "sha256": "db99ae114c0fcda2ef7679996db428adb9997d108928f3698c7d1fa6ff2a6ad9",
+      "bytes": 2119
+    },
+    "fluidBefore": {
+      "path": "logs/morpho-fixture-align-20261116/all-facts/0080/report.json",
+      "sha256": "fc7ec3d8d5c24e0603baae6b4e08de9dca41b20eb2027791fa21af03a6d14457",
+      "bytes": 13026
+    },
+    "fluidAfter": {
+      "path": "logs/morpho-fixture-align-20261116/nested-fluid-after/report.json",
+      "sha256": "e0378112547b8d811a81d755a17758d6f629f7506c663eb1dbab7904f4d5f745",
+      "bytes": 9846
+    }
+  },
+  "tooling_defect": {
+    "tool": "listener:test",
+    "issue": "Ready/TX action binding treated nested settlement callbacks as unsupported primary actions.",
+    "evidence": "docs/research/reports/family-facts-fixture-alignment-20261116.json: saved Fluid/V4 traces, regression failure-to-pass, and same-state dual-execution flips",
+    "codify_target": "family-transaction-matching.ts and shared regression suite",
+    "codify_commit": "e680bfa871aff3cc340d25f945303f7dbc29f88f",
+    "status": "codified"
+  },
+  "created_at": "2026-11-16T04:34:18.263031+00:00",
+  "updated_at": "2026-11-16T04:34:18.263031+00:00"
+}
