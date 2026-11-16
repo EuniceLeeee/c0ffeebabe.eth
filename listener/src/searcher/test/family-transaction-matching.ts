@@ -67,6 +67,7 @@ export function resolveTransactionCaseBinding(input: {
   if (!candidates.length) fail("target action/token direction not admitted");
   let selected: ObservedReadyRoute | undefined;
   let selection: "registered-route" | "transaction-action";
+  let nestedUnmappedCalls: { target: string; selector: string; traceAddress: readonly number[] }[] = [];
   if (expected.routeKey !== undefined) {
     const pinned = candidates.filter(r => r.routeKey === expected.routeKey);
     if (pinned.length !== 1) fail("registered route absent or ambiguous; action cannot be substituted");
@@ -78,13 +79,19 @@ export function resolveTransactionCaseBinding(input: {
       return lower(String(f?.action.callType ?? f?.type)) === "call" &&
         candidates.some(r => same(r.target, c.target));
     });
-    // An unknown action on the target cannot disappear because a supported
-    // route happens to have the same pair. Never reinterpret mint as deposit.
-    if (mutable.some(c => !routes.some(r => r.familyId === expected.familyId &&
+    const actionCalls = mutable.filter(c => candidates.some(r => r.matchTrace(c.target, c.data.slice(0, 10))));
+    const unmapped = mutable.filter(c => !routes.some(r => r.familyId === expected.familyId &&
       same(r.instanceKey, expected.instanceKey ?? "") && r.matchTrace(c.target, c.data.slice(0, 10))) &&
-      !auxiliaryAssetCall(c.target, c.data, expected)))
+      !auxiliaryAssetCall(c.target, c.data, expected));
+    // A supported invocation may call back into its target while settling.
+    // Keep those descendants as evidence, not separate claimed actions. An
+    // unknown outer/sibling action still cannot become a same-pair route.
+    const nested = unmapped.filter(c => actionCalls.some(parent =>
+      same(c.target, parent.target) && c.traceAddress.length > parent.traceAddress.length && inside(c.traceAddress, parent.traceAddress)));
+    if (nested.length !== unmapped.length)
       fail("unmapped target selector; explicit action evidence required");
-    const actionRoutes = candidates.filter(r => mutable.some(c => r.matchTrace(c.target, c.data.slice(0, 10))));
+    nestedUnmappedCalls = nested.map(c => ({ target: c.target, selector: c.data.slice(0, 10), traceAddress: c.traceAddress }));
+    const actionRoutes = candidates.filter(r => actionCalls.some(c => r.matchTrace(c.target, c.data.slice(0, 10))));
     const amountRoutes = actionRoutes.filter(r => reference.observed.some((row: MatchedTransactionInput) =>
       row.familyId === r.familyId && same(row.instanceKey, r.instanceKey) && row.routeKey === r.routeKey && row.amountIn === expected.amountIn));
     const unique = amountRoutes.length === 1 ? amountRoutes : actionRoutes;
@@ -95,6 +102,7 @@ export function resolveTransactionCaseBinding(input: {
   return { original: { ...(expected.lineageId ? { lineageId: expected.lineageId } : {}), ...(expected.routeKey ? { routeKey: expected.routeKey } : {}), ...(expected.priorBinding ? { priorBinding: expected.priorBinding } : {}) },
     resolved: { lineageId: selected.lineageId, routeKey: selected.routeKey },
     action: { adapterId: selected.adapterId, ...(selected.direction ? { direction: selected.direction } : {}) }, selection,
+    ...(nestedUnmappedCalls.length ? { nestedUnmappedCalls } : {}),
     changed: expected.lineageId !== selected.lineageId || expected.routeKey !== selected.routeKey };
 }
 

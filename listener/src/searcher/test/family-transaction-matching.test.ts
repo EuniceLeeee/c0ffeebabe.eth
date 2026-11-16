@@ -139,3 +139,35 @@ test("vault ERC20 authorization is auxiliary, not an unknown conversion action",
     frame(pool, holder, approvals.encodeFunctionData("approve", [A(19), 7n]), [1])] };
   assert.equal(resolveTransactionCaseBinding(f).resolved.routeKey, "deposit");
 });
+
+
+test("known action keeps nested unmapped calls as evidence without rejecting its route", () => {
+  const f = fixture();
+  f.evidence = { ...f.evidence, rawTrace: [...f.evidence.rawTrace as any[],
+    frame(pool, A(10), "0xad207501", [0, 1, 0])] };
+  const binding = resolveTransactionCaseBinding(f);
+  assert.equal(binding.resolved.routeKey, "deposit");
+  assert.deepEqual(binding.nestedUnmappedCalls, [{ target: pool, selector: "0xad207501", traceAddress: [0, 1, 0] }]);
+});
+
+test("known nested action cannot excuse an unsupported outer action", () => {
+  const f = fixture();
+  (f.evidence.rawTrace as any[])[0].action.to = pool;
+  assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector/);
+});
+
+test("known action cannot hide a separate unsupported action on the same instance", () => {
+  const f = fixture();
+  f.evidence = { ...f.evidence, rawTrace: [...f.evidence.rawTrace as any[],
+    frame(pool, holder, "0x94bf804d" + "00".repeat(64), [1])] };
+  assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector/);
+});
+
+
+test("known action cannot cover an unknown call at a different candidate target", () => {
+  const f = fixture();
+  f.routes.push({ ...f.routes[0]!, target: A(20), routeKey: "other-target", matchTrace: () => false });
+  f.evidence = { ...f.evidence, rawTrace: [...f.evidence.rawTrace as any[],
+    frame(A(20), pool, "0xad207501", [0, 1])] };
+  assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector/);
+});
