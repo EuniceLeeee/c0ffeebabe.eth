@@ -1,0 +1,62 @@
+{
+  "learning_case_id": "tooldef-20261116-ready-family-hash-scope",
+  "status": "manual_required",
+  "strategy_kind": "block-scan",
+  "edge_kinds": [],
+  "trigger": "competitor_not_seen",
+  "comparable": false,
+  "primary_gap": "manual_required",
+  "gap_detail": "inactive_family_modules_and_generator_sources_invalidated_unrelated_ready_proofs",
+  "evidence": {
+    "scope": "Ready rule hash and archived-evidence migration only; no profitability or production latency claim.",
+    "before": "Ready18 stored memo IDs were reproduced from its pinned release. Changes to conversion admission and the production generator invalidated unrelated JSON Families through overbroad capability dependencies.",
+    "cause": "Runtime dependency inputs included the generator/type emitter and dormant conversion modules. Runtime output and active optional modules were not separated from tooling and unreachable definitions.",
+    "independent_review": "Non-author review_final_gate independently approved runtime-entry binding, conservative AST exclusion, complete full-scope boundary, archival reproduction, preserved proof provenance and strict CAS; read-only review, not an independent chain run.",
+    "after": "Canonical generation binds generated runtime entries and the actual referenced Family JSON/modules. Legacy evidence receives source-verified equivalence metadata on a copy; ordinary Ready update and startup consume the same resolver. Old memo/proof IDs are retained. Source, input, forced-update and changed-rule guards remain.",
+    "logs": "logs/final-sim-ev-20261116/migration-tests.log; migration-cli-tests.log; migration-offline.log; migration-build-final.log; hash-tool-check.log; ready/migration.log"
+  },
+  "tooling_defect": {
+    "tool": "listener:family-capability-manifest:check / declarative dependency collector",
+    "issue": "Unrelated generator or unused optional module changes were treated as changes to all installed JSON Family runtime rules.",
+    "evidence": "Pinned Ready18 archived source audit and real common-runner checkpoint inheritance regression.",
+    "codify_target": "Declarative dependency roots/module pruning, Ready compatibility bridge and normal consumers",
+    "codify_commit": "b99fa763625eb6a5e6b335c2b040d92aec5202cb",
+    "status": "fixed"
+  },
+  "replay_gate": {
+    "command": "cd listener && npm test -- --offline && npm run family-capability-manifest:check",
+    "expected_transition": "Generator and unrelated Ready orchestration edits preserve hashes; active rules change hashes. Equivalent verified/rejected/retryable outcomes inherit with zero attestation calls; explicit retry still executes."
+  },
+  "validation": {
+    "targeted": {
+      "pass": 46,
+      "fail": 0
+    },
+    "readyCli": {
+      "pass": 2,
+      "fail": 0
+    },
+    "offline": {
+      "tests": 947,
+      "pass": 946,
+      "fail": 0,
+      "skip": 1
+    },
+    "productionBuild": "pass",
+    "indexedManifestCheck": "pass",
+    "realReadyUpdate": "pending at code publication"
+  },
+  "tool_reconciliation": {
+    "capabilityQuery": [
+      "capability",
+      "manifest"
+    ],
+    "toolIds": [
+      "listener:family-capability-manifest:check"
+    ],
+    "selectionManifest": "logs/final-sim-ev-20261116/hash-tool-selection.json",
+    "selectionSha256": "a303da6b9b095206901783d3d57c7a917549e070f65febc6e10b5acf8091edda",
+    "exitCode": 0,
+    "conclusion": "Canonical check accepts the regenerated narrowed dependencies; manual diagnosis and regression agree."
+  }
+}
