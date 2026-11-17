@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -45,6 +45,13 @@ import { redactToolOutput } from "../../analysis/src/tool-run-security.js";
 import { PrerequisiteCache, type PrerequisiteManifest } from "./prerequisite-cache.js";
 
 const sha256 = (v: string | Buffer) => createHash("sha256").update(v).digest("hex");
+/** Ready checkpoints may exceed Node's single-read 2 GiB limit. Hash every
+ * binding and the final immutability check without buffering the whole file. */
+export async function benchmarkFileSha256(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest("hex");
+}
 export interface Head { number: number; hash: string }
 export type LiveBenchmarkStage = "effective-update" | "sim-amount" | "live-enumeration";
 type LiveDiagnostic = NonNullable<Parameters<BlockScanRuntimeLoop["runHead"]>[2]>;
@@ -342,8 +349,9 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
   const git = (...a: string[]) => execFileSync("git", a, { cwd: repo, encoding: "utf8" }).trim();
   const sourcePaths = git("ls-files", "--cached", "--others", "--exclude-standard", "listener/src", "listener/benchmarks", "listener/package.json", "listener/package-lock.json", "analysis/src/tool-run-security.ts")
     .split("\n").filter(Boolean).sort();
-  const bindings = [...new Set([...sourcePaths.map(p => resolve(repo, p)), args.ready, args.heads, executablePath, ...(codePath ? [realpathSync(codePath)] : [])])]
-    .map(path => ({ path, sha256: sha256(readFileSync(path)) }));
+  const bindings: Array<{ path: string; sha256: string }> = [];
+  for (const path of new Set([...sourcePaths.map(p => resolve(repo, p)), args.ready, args.heads, executablePath,
+    ...(codePath ? [realpathSync(codePath)] : [])])) bindings.push({ path, sha256: await benchmarkFileSha256(path) });
   const readySha256 = bindings.find(b => b.path === args.ready)!.sha256;
   const cfg = resolveBlockScanCoreConfig(env);
   const settings = resolveBlockScanLiveStageSettings(env, cfg.maxCandidates);
@@ -625,7 +633,7 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
         finally { runtimeControl.detach(); state.stop(); provider.destroy(); }
       }
     }
-    for (const b of bindings) assert.equal(sha256(readFileSync(b.path)), b.sha256, "benchmark input/source changed during run");
+    for (const b of bindings) assert.equal(await benchmarkFileSha256(b.path), b.sha256, "benchmark input/source changed during run");
     if (args.prepareCache) {
       assert(records.length === heads.length && records.every(r => r.status === "completed"), "incomplete capture cannot become a reusable cache");
       const manifest = inputCache!.save(args.prepareCache, { compatibility, heads: capturedHeads,
