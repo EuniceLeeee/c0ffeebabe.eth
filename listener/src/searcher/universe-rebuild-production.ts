@@ -66,6 +66,7 @@ import type { FamilyCapabilityIdentitySet } from
 import { FamilyCapabilityCatalog, capabilityManifestHash, isPricedFamily } from "./venues/family-capability-catalog.js";
 import type { FamilyId } from "./venues/adapter-family-identifiers.js";
 import { projectCandidatePoolIdentity } from "./venues/candidate-pool-identity.js";
+import { indexKnownUniV4PoolKeys, knownUniV4NominationPoolKey } from "./ready-univ4-pool-key-reuse.js";
 
 /**
  * Production wiring for the durable universe rebuild (audit §6/§9). The
@@ -3835,6 +3836,7 @@ export function createRebuildWiring(input?: {
         }
       };
       const knownMaterializations = new Set<string>();
+      const knownV4PoolKeys = indexKnownUniV4PoolKeys(reverseInput.knownCandidates);
       for (const raw of reverseInput.knownCandidates) {
         if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
           continue;
@@ -3842,7 +3844,7 @@ export function createRebuildWiring(input?: {
         const candidate = raw as Readonly<Record<string, unknown>>;
         const familyId = candidateFamilyId(candidate);
         const key = materializationKey(familyId, candidate);
-        if (key !== null) knownMaterializations.add(key);
+        if (key !== null && candidate[DISCOVERY_RETRYABLE_FIELD] === undefined) knownMaterializations.add(key);
       }
       const nominations: {
         readonly familyId: FamilyId;
@@ -3850,6 +3852,7 @@ export function createRebuildWiring(input?: {
         readonly retryableCandidate: Readonly<Record<string, unknown>>;
       }[] = [];
       const seen = new Set<string>();
+      let excludedByKnownPoolKey = 0;
       for (const raw of reverseInput.observations) {
         if (
           typeof raw === "object" && raw !== null &&
@@ -3900,11 +3903,19 @@ export function createRebuildWiring(input?: {
             continue;
           }
           seen.add(key);
+          const manager = log.address.toLowerCase();
+          const poolKey = knownUniV4NominationPoolKey({ keys: knownV4PoolKeys, discovery,
+            manager, poolId, source: reverseInput.cutoff });
+          if (poolKey === null) {
+            excludedByKnownPoolKey++;
+            continue;
+          }
           const nomination = Object.freeze({
-            address: log.address.toLowerCase(),
+            address: manager,
             opaque: Object.freeze({
               adapter: match.familyId,
               poolId,
+              ...(poolKey === undefined ? {} : { poolKey }),
             }),
             evidence: Object.freeze({
               ...(log.transactionHash === undefined
@@ -3949,6 +3960,8 @@ export function createRebuildWiring(input?: {
           }));
         }
       }
+      if (excludedByKnownPoolKey > 0)
+        console.log("[universe-rebuild/reverse-binding] excluded by known PoolKey=" + excludedByKnownPoolKey);
       if (nominations.length === 0) return Object.freeze([]);
       // executeCatalogReverseBindings admits ONE verified observation per
       // Family and early-stops (its contract is one candidate at a time, the
