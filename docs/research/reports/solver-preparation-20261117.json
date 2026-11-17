@@ -1,0 +1,126 @@
+{
+  "baseCommit": "853d6d88b9725b3638447d49bce8d821f246212e",
+  "scope": "solver construction, compilation and simulation preparation; no live launch or Ready mutation",
+  "policy": {
+    "seed": "initial p awaited before coarse/refine",
+    "callbackRevertOrNonpositiveAtP": "funded-only for remaining amounts in this solve",
+    "sourceFailure": "abort, not economic failure",
+    "nextSolve": "try p again",
+    "tradeoff": "larger callback may have succeeded; this is a search policy, not a structural impossibility proof"
+  },
+  "implemented": [
+    "per-solve runtime leg and fixed settlement preparation",
+    "bounded pure normal-flow byte templates with explicit amount/return offsets",
+    "immutable issued simulation-input ownership avoids redundant internal canonical reconstruction",
+    "queue/construction/compile/prepare/validation/RPC/decode timings",
+    "seed callback mode selection"
+  ],
+  "validation": {
+    "targeted": {
+      "pass": 55,
+      "fail": 0
+    },
+    "sharedFamilyRegression": {
+      "total": 950,
+      "pass": 949,
+      "fail": 0,
+      "skip": 1
+    },
+    "ethSimulateV1": "local HTTP, wire, immutable input, forgery/tamper, cancellation and local EVM checks pass",
+    "buildLive": "pass",
+    "runtimeHarness": {
+      "total": 172,
+      "pass": 130,
+      "fail": 42,
+      "baselineFail": 42,
+      "sameFailureNames": true,
+      "newFailures": 0
+    },
+    "largeFileHashRegression": "pass",
+    "readyCompatibilityRegression": "pass",
+    "independentReview": "read-only non-author review, no actionable correctness findings"
+  },
+  "performance": {
+    "targetMs": 800,
+    "targetMeasured": false,
+    "heads": [
+      26427336,
+      26427337,
+      26427338
+    ],
+    "oldLiveSolverMedianMs": 3659,
+    "newSolverMedianMs": null,
+    "historicalBenchmark": "did not reach sizing; baseline prerequisite capture failed due provider throughput 429",
+    "forwardedPrerequisiteRequests": 19892,
+    "throttledObservations": 2434,
+    "unresolvedThrottles": 134,
+    "reuseIncompleteCapture": false
+  },
+  "ready": {
+    "mutated": false,
+    "memoRuleHashChangedInstalledFamilies": [
+      "balancer-v1",
+      "balancer-v2",
+      "credit:fluid",
+      "curve-plain",
+      "curve-plain-lp",
+      "curve-underlying",
+      "custom-swap:ammalgam",
+      "custom-swap:angstrom-v4",
+      "custom-swap:dodo-v2",
+      "custom-swap:ekubo-router-v1",
+      "custom-swap:oneswap",
+      "custom-swap:precision-pool",
+      "custom-swap:uniswap-v1",
+      "custom-swap:zero1-curve",
+      "ella-exchange",
+      "fluid-dex",
+      "mooniswap",
+      "protocol:astra-multitoken",
+      "protocol:badger-sett-withdraw",
+      "protocol:compound-ctoken",
+      "protocol:eigenpie",
+      "protocol:erc4626",
+      "protocol:erc4626-silo-redeem",
+      "protocol:ethertoken-native-redeem",
+      "protocol:few-wrapped",
+      "protocol:goldx",
+      "protocol:metronome-hgusdc",
+      "protocol:metronome-synth",
+      "protocol:psm",
+      "protocol:rocksolid",
+      "protocol:self-burn-native",
+      "protocol:staked-usdat",
+      "protocol:token-conversion",
+      "protocol:token-migration",
+      "protocol:wsteth",
+      "univ2-standard",
+      "univ3-standard",
+      "univ4",
+      "univ4-fee-hook"
+    ],
+    "followup": "affected rules require Ready validation before new-code startup; do not bypass original proof/source checks"
+  },
+  "toolingFixes": [
+    {
+      "learning_case_id": "solver-benchmark-large-ready-20261117",
+      "tooling_defect": {
+        "tool": "listener:benchmark:sim-amount",
+        "issue": "whole-file hashing exceeds 2 GiB",
+        "status": "codified",
+        "codify_commit": "4ececf964500e1e6dc87ffc0928ed13ff3617a14"
+      }
+    },
+    {
+      "learning_case_id": "solver-benchmark-ready-rules-20261117",
+      "tooling_defect": {
+        "tool": "listener:benchmark:sim-amount",
+        "issue": "legacy manual hash check omitted production sealed-rule compatibility and pricing-projection predicate",
+        "status": "codified",
+        "codify_commit": "2d651d6882a1121b68bf5b5fa2df765d039d97a1",
+        "evidence": "same Ready19 passed production rules, graph edges 148787; compatible/changed/unbound/missing-projection/tampered-binding regression pass",
+        "independent_review": "confirmed from production main, wiring and sealed binding validation"
+      }
+    }
+  ]
+}

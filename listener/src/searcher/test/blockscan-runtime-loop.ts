@@ -2096,7 +2096,7 @@ test("Anvil preparation belongs to the pass, while cancelled leases drain before
       directFinalSimulation: undefined, blockScanExecutionWorkers: [worker], allExecutionWorkers: [worker],
       runtimeSourceBlock: 101, exactSourceBlockHash: hash(101), exactSource: source(1),
       backgroundFinalSimForks: preparations, passSignal: pass.signal, passDeadlineAtMs: deadlineAtMs,
-      createTrialLimiter, startBlockScanBackgroundFork,
+      createTrialLimiter, startBlockScanBackgroundFork, performance,
       async forkExecutionWorker(_worker: unknown, _index: number, input: any) {
         forks++;
         if (cancelDuringPreparation && forks === 1) await gate.promise;

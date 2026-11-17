@@ -173,7 +173,8 @@ test(`production selector retains funded actual-amount fallback at tolerance=${t
     { strictSession: session, deferPhase2Sim: true, quoteToleranceRawUnits: tolerance, gssMaxTries: 0,
       deadlineAtMs: Date.now() + 10000 });
   assert.equal(selected.root.adapterId, "fixture-funding"); assert(funded > 0);
-  assert.equal(deferred, maximum ? 0 : funded); assert.equal(exact, 0); assert.equal(quoted, 0);
+  assert.equal(funded, 4, "all original amount points still run funded");
+  assert.equal(deferred, maximum ? 0 : 1, "only the initial p tries a failing callback"); assert.equal(exact, 0); assert.equal(quoted, 0);
   assert(events.filter(e => e.type === "sim_amount_construction").every(e => e.mode === "runtime-actual"));
 });
 
@@ -192,4 +193,61 @@ test("settlement binds each prefix quote to its actual intermediate or debt rece
   assert(root);
   assert.deepEqual(requested.filter(([, r]) => r.kind === "quote-output"),
     [[0, { kind: "quote-output", recipient: executor }], [1, { kind: "quote-output", recipient: debtRecipient }]]);
+});
+
+// The ABI hash fixture checks the declared head/tail template against the
+// original general ABI encoder, including values that change every amount byte.
+test("prepared route witness preserves ABI bytes across amounts and snapshots mutable input", async () => {
+  const { prepareRuntimeSettlementFlowHash, runtimeSettlementFlowHash } = await import("../../adapters/runtime-amount-program.js");
+  const route = legs();
+  const prepared = prepareRuntimeSettlementFlowHash(route);
+  for (const amount of [1n, 255n, 256n, 10n ** 18n, (1n << 255n) - 2n]) {
+    assert.equal(prepared(amount, amount + 1n), runtimeSettlementFlowHash(amount, amount + 1n, route));
+  }
+  const expected = prepared(100n, 101n);
+  (route[0] as any).program = "0x010000";
+  assert.equal(prepared(100n, 101n), expected);
+  assert.throws(() => prepared(-1n, 1n));
+  assert.throws(() => prepared(1n, 1n << 256n));
+});
+
+test("prepared callback programs reuse only fixed requests and keep per-amount guards", async () => {
+  const { prepareRuntimeSettlement } = await import("../simulator/runtime-settlement.js");
+  const calls: string[] = [];
+  const prepare = prepareRuntimeSettlement({ legs: legs(), executor, build(index, request) {
+    calls.push(request.kind); return builder(index, request);
+  } });
+  assert(prepare);
+  for (const amount of [1n, 100n, 1000n]) {
+    const actual = prepare(amount, 1n);
+    const fresh = buildRuntimeSettlementRoot({ legs: legs(), executor, amount, minimumProfit: 1n, build: builder });
+    assert.deepEqual(actual, fresh);
+    assert.equal(actual!.amount, amount);
+    assert.equal(actual!.params.minimumReturn, amount + 1n);
+  }
+  assert.deepEqual(calls, ["quote-output", "direct-output", "deferred-input", "deferred-input", "deferred-input"]);
+});
+
+test("funded byte template cannot retain another amount, mask, route or caller-mutated output", () => {
+  const route = legs();
+  const node: any = { adapterId: "runtime-amount-flow", target: executor, tokenIn: a, tokenOut: a, amount: 1n,
+    children: [], params: { legs: JSON.stringify(route), minimumReturn: 2n, quoteToleranceRawUnits: 0n } };
+  const encode = () => runtimeAmountFlowAdapter.encode(node, executor, new Uint8Array());
+  const original = encode(); original.fill(0);
+  for (const amount of [1n, 255n, 256n, 10n ** 18n, ethers.MaxUint256 - 1n]) {
+    node.amount = amount; node.params.minimumReturn = amount + 1n;
+    const bytes = encode();
+    assert.equal(bytes[0], 0x0c);
+    assert.equal(BigInt(ethers.hexlify(bytes.slice(4, 36))), amount);
+    const programLength = ethers.getBytes(route[0]!.program).length;
+    const lastReturn = 4 + 32 + 1 + 75 + programLength + 40;
+    assert.equal(BigInt(ethers.hexlify(bytes.slice(lastReturn, lastReturn + 32))), amount + 1n);
+  }
+  node.params.minimumReturn = node.amount - 1n; assert.throws(encode);
+  node.params.minimumReturn = node.amount + 1n;
+  node.tokenOut = b; assert.throws(encode);
+  node.tokenOut = a;
+  node.params.legs = JSON.stringify([{ ...route[0], inputMode: "invalid" }, route[1]]); assert.throws(encode);
+  node.params.legs = JSON.stringify([{ ...route[0], inputMode: "maximum" }, route[1]]);
+  const masked = encode(); assert.equal(masked[36], 0x42); assert.equal(masked[37], 1);
 });

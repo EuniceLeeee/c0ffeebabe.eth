@@ -285,9 +285,75 @@ test(`capability-based callback composition: ${outcome}; no chain-external Exact
     await selector.solve(f.plan, f.state, f.probe, f.opts);
     assert.deepEqual([...new Set(seen.map(x => x.amount))].sort((a, b) => Number(a - b)), [10n, 100n, 1000n, 10000n]);
     for (const amount of [10n, 100n, 1000n, 10000n]) assert.deepEqual(seen.filter(x => x.amount === amount).map(x => x.mode),
-      outcome === "success" ? ["callback"] : outcome === "revert" ? ["callback", "funded"] : ["funded"]);
+      outcome === "success" ? ["callback"] : outcome === "revert" && amount === 10n ? ["callback", "funded"] : ["funded"]);
   }
   assert.equal(f.quotes.length, 0); assert.equal(f.builds.length, 0);
   if (outcome === "blocked-prefix" || outcome === "disabled") assert.equal(requested.length, 0);
   else assert.deepEqual(requested.slice(0, 3), ["quote-output", "direct-output", "deferred-input"]);
+});
+
+
+test("route preparation is once per solve, never shared across concurrent solves or evidence changes", async () => {
+  const f = fixture(); let builds = 0;
+  f.session.buildRuntimeAmountLeg = ({ runtimeEvidence }: any) => {
+    builds++;
+    return { actionAdapterId: "fixture-owned", program: runtimeEvidence[0]?.program ?? "0x010001" };
+  };
+  const selector = createBlockScanSimAmountSelector({ source, executor, async simulate(plan) {
+    const actual = JSON.parse(plan.root.children[0]!.params.legs as string);
+    assert(actual.every((leg: any) => leg.program === "0x010001"));
+    return f.result(1n);
+  } });
+  await Promise.all([selector.solve(f.plan, f.state, f.probe, f.opts), selector.solve(f.plan, f.state, f.probe, f.opts)]);
+  assert.equal(builds, 4, "two solves each build two fixed legs, independent of amount count");
+  await selector.solve(f.plan, f.state, f.probe, { ...f.opts, runtimeEvidence: [] });
+  assert.equal(builds, 6, "later solve prepares again even with identical route/source");
+});
+
+for (const outcome of ["revert", "nonpositive"] as const)
+test(`seed callback ${outcome} selects funded trials for this solve, including larger profitable callbacks`, async () => {
+  const f = fixture(), calls: Array<[bigint, boolean]> = [], buildCounts = new Map<string, number>();
+  const events: Record<string, unknown>[] = [];
+  let rejectSeed = true;
+  f.session.buildRuntimeAmountLeg = ({ edge, settlement }: any) => {
+    const kind = settlement?.kind ?? "plain";
+    buildCounts.set(kind, (buildCounts.get(kind) ?? 0) + 1);
+    return { actionAdapterId: "fixture-owned", program: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()),
+      settlement: edge === f.plan.tokenPath.edges[0] ? { quoteOutput: true, directOutput: true } : { deferredInput: addr("2") } };
+  };
+  const selector = createBlockScanSimAmountSelector({ source, executor, record: event => events.push(event), async simulate(plan) {
+    const deferred = typeof plan.root.params.settlementProgram === "string";
+    calls.push([plan.flashAmount, deferred]);
+    if (deferred && plan.flashAmount === 10n && rejectSeed) return { ...f.result(0n),
+      ...(outcome === "revert" ? { failure: { kind: "revert" as const, code: "TRANSACTION_REVERTED", cause: Error("seed revert") } } : {}) };
+    return f.result(deferred ? 20n : 5n);
+  } });
+  await selector.solve(f.plan, f.state, f.probe, f.opts);
+  assert.deepEqual(calls.filter(([amount]) => amount === 10n), [[10n, true], [10n, false]]);
+  for (const amount of [100n, 1000n, 10000n]) assert.deepEqual(calls.filter(([a])=>a===amount), [[amount, false]]);
+  assert.equal(buildCounts.get("plain"), 2);
+  assert.equal(buildCounts.get("quote-output"), 1);
+  assert.equal(buildCounts.get("direct-output"), 1);
+  assert.equal(buildCounts.get("deferred-input"), 1);
+  assert.equal(events.filter(e => e.type === "sim_amount_funding_policy").length, 1);
+  calls.length = 0; rejectSeed = false;
+  await selector.solve(f.plan, f.state, f.probe, f.opts);
+  for (const amount of [10n, 100n, 1000n, 10000n]) assert.deepEqual(calls.filter(([a])=>a===amount), [[amount, true]],
+    "new solve re-evaluates p, even for identical route and source");
+});
+
+
+test("a later callback failure does not override the successful seed policy for sibling amounts", async () => {
+  const f = fixture(), calls: Array<[bigint, boolean]> = [];
+  f.session.buildRuntimeAmountLeg = ({ edge }: any) => ({ actionAdapterId: "fixture-owned",
+    program: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()),
+    settlement: edge === f.plan.tokenPath.edges[0] ? { quoteOutput: true, directOutput: true } : { deferredInput: addr("2") } });
+  const selector = createBlockScanSimAmountSelector({ source, executor, async simulate(plan) {
+    const deferred = typeof plan.root.params.settlementProgram === "string";
+    calls.push([plan.flashAmount, deferred]);
+    return f.result(deferred && plan.flashAmount === 100n ? 0n : 5n);
+  } });
+  await selector.solve(f.plan, f.state, f.probe, f.opts);
+  assert.deepEqual(calls.filter(([a]) => a === 100n), [[100n, true], [100n, false]]);
+  for (const amount of [10n, 1000n, 10000n]) assert.deepEqual(calls.filter(([a])=>a===amount), [[amount, true]]);
 });

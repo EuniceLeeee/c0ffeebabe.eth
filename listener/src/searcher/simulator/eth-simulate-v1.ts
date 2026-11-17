@@ -1,3 +1,4 @@
+import type { SimulationPhaseTiming } from "./sim-amount-selector.js";
 import { appendFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -48,6 +49,7 @@ function observerCode(profitToken: string, executor: string): string {
 }
 
 type Context = {
+  onSimulationTiming?: (timing: SimulationPhaseTiming) => void;
   source: CanonicalSource;
   header: BlockScanObservedHeader;
   signal: AbortSignal;
@@ -71,6 +73,10 @@ export type StartupPrefixExecutionResult = Readonly<{
   receipts: readonly StartupPrefixReceipt[];
   failure?: { hop: number; callTarget: string; reason: string };
 }>;
+function reportPhase(context: Pick<Context, "onSimulationTiming">, timing: SimulationPhaseTiming): void {
+  try { context.onSimulationTiming?.(timing); } catch { /* Diagnostics cannot change execution. */ }
+}
+
 type SimulationRpc = (id: number, method: "eth_call" | "eth_simulateV1", params: readonly unknown[]) => Promise<unknown>;
 
 type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> } : T;
@@ -100,7 +106,9 @@ export function buildEthSimulateV1ExecutionInput(input: {
   diagnosticKey?: string;
   executionEntry?: "raw";
 }) {
-  return freezeInput(prepareExecutionInput(input));
+  const prepared = freezeInput(prepareExecutionInput(input));
+  issuedExecutionInputs.add(prepared);
+  return prepared;
 }
 
 type PreparationInput = {
@@ -203,7 +211,11 @@ function prepareLegacyExecutionInput({ source, header, executor, owner, profitTo
  * Returns a new frozen canonical snapshot, never caller-owned RPC parameters.
  * This checks consistency/policy, not authenticity of the original recording.
  */
+const issuedExecutionInputs = new WeakSet<object>();
 export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulateV1ExecutionInput {
+  // Only this module's deeply frozen, owned canonical snapshots are trusted.
+  // JSON copies, forged frozen objects and caller-owned payloads still rebuild.
+  if (value !== null && typeof value === "object" && issuedExecutionInputs.has(value)) return value as EthSimulateV1ExecutionInput;
   try {
     const saved = record(value), source = record(saved?.source), header = record(saved?.sourceHeader);
     if (!saved || ![1, 2, 3, 4, 5, 6, 7, 8].includes(saved.schemaVersion as number) || !source || !header ||
@@ -233,6 +245,7 @@ export function validateEthSimulateV1ExecutionInput(value: unknown): EthSimulate
         ? saved.diagnosticKey : "invalid" } : {}),
     }));
     if (!isDeepStrictEqual(value, canonical)) throw new Error();
+    issuedExecutionInputs.add(canonical);
     return canonical;
   } catch {
     // Never echo untrusted saved data (or a decoder's unsanitized cause).
@@ -332,7 +345,10 @@ export class EthSimulateV1Simulator {
     // compilation needs no timer/listener; replay checks the deadline again.
     if (signal.aborted) throw new StateCallAbortedError("final simulation signal aborted", "signal");
     if (Date.now() >= deadlineAtMs) throw new StateCallAbortedError("final simulation deadline aborted", "deadline");
+    const compileStart = performance.now();
     const scriptHex = bytesToHex(compilePlan(plan.root, this.executor));
+    reportPhase(context, { phase: "compile", wallMs: performance.now() - compileStart });
+    const prepareStart = performance.now();
     const input = buildEthSimulateV1ExecutionInput({ source, header, executor: this.executor,
       owner: this.owner, profitToken, scriptHex,
       ...(this.preferRawEntry && canUseRawExecuteCalldata(getBytes(scriptHex)) ? { executionEntry: "raw" as const } : {}),
@@ -340,12 +356,14 @@ export class EthSimulateV1Simulator {
       ...(this.chainExecutorRuntimeCode ? { chainExecutorRuntimeCode: this.chainExecutorRuntimeCode } : {}),
       ...((this.executorRuntimeCode && supportsHopDiagnostics(this.executorRuntimeCode.code)) || this.chainExecutorRuntimeCode
         ? { diagnosticKey: `0x${randomBytes(32).toString("hex")}` } : {}) });
-    return this.simulateExecutionInput(input, { signal, deadlineAtMs });
+    reportPhase(context, { phase: "prepare", wallMs: performance.now() - prepareStart });
+    return this.simulateExecutionInput(input, { signal, deadlineAtMs, onSimulationTiming: context.onSimulationTiming });
   }
 
   /** Read-only diagnostic replay. Production still owns the latest-head gate. */
   async simulateExecutionInput(input: EthSimulateV1ExecutionInput,
-    control: { signal: AbortSignal; deadlineAtMs: number }): Promise<EthSimulateV1SimulationResult> {
+    control: { signal: AbortSignal; deadlineAtMs: number; onSimulationTiming?: Context["onSimulationTiming"] }): Promise<EthSimulateV1SimulationResult> {
+    const validationStart = performance.now();
     const saved = validateEthSimulateV1ExecutionInput(input);
     if (saved.executor.toLowerCase() !== this.executor.toLowerCase() ||
         saved.owner.toLowerCase() !== this.owner.toLowerCase()) {
@@ -357,6 +375,7 @@ export class EthSimulateV1Simulator {
     if ("chainExecutorRuntimeCode" in saved && !isDeepStrictEqual(saved.chainExecutorRuntimeCode, this.chainExecutorRuntimeCode)) {
       throw new Error("final simulation execution input chain executor code mismatch");
     }
+    reportPhase(control, { phase: "validate", wallMs: performance.now() - validationStart });
     const { signal, deadlineAtMs } = control;
     if (!Number.isSafeInteger(deadlineAtMs) || !signal) {
       throw new Error("invalid final simulation control or profit token");
@@ -372,6 +391,8 @@ export class EthSimulateV1Simulator {
       const legacyPre = "preBalanceParams" in saved
         ? balance(await request(1, "eth_call", saved.preBalanceParams)) : undefined;
       const raw = await request(sameBlock ? 1 : 2, "eth_simulateV1", simulateParams);
+      const decodeStart = performance.now();
+      try {
       const block = checkedBlock(raw, pinnedBlock.blockHash, blockOverrides, sameBlock ? 3 : 2);
       const calls = simulateParams[0].blockStateCalls[0].calls;
       const main = parseCall(block.calls[sameBlock ? 1 : 0], TX_GAS);
@@ -406,6 +427,7 @@ export class EthSimulateV1Simulator {
       return { ...codeEvidence, success: grossProfit > 0n, profitToken, grossProfit,
         gasUsed: grossProfit > 0n ? quantity(main.gasUsed) : 0n,
         netProfit: grossProfit, calldata, scriptHex };
+      } finally { reportPhase(control, { phase: "decode", wallMs: performance.now() - decodeStart }); }
     });
   }
 
@@ -490,7 +512,7 @@ export class EthSimulateV1Simulator {
     });
   }
 
-  private async withRpc<T>(control: Pick<Context, "signal" | "deadlineAtMs">,
+  private async withRpc<T>(control: Pick<Context, "signal" | "deadlineAtMs" | "onSimulationTiming">,
     operation: (request: SimulationRpc) => Promise<T>): Promise<T> {
     const { signal, deadlineAtMs } = control;
     if (!signal || !Number.isSafeInteger(deadlineAtMs)) throw new Error("invalid final simulation control");
@@ -516,7 +538,13 @@ export class EthSimulateV1Simulator {
       assertOpen();
       let response;
       try {
-        response = await postJsonRpc(this.rpcUrl, { jsonrpc: "2.0", id, method, params }, controller.signal);
+        response = await postJsonRpc(this.rpcUrl, { jsonrpc: "2.0", id, method, params }, controller.signal,
+          control.onSimulationTiming ? timing => reportPhase(control, { phase: "rpc",
+            wallMs: timing.settledAtMs - timing.startedAtMs,
+            ...(timing.responseEndedAtMs !== null && timing.requestFlushedAtMs !== null
+              ? { wireMs: timing.responseEndedAtMs - timing.requestFlushedAtMs } : {}),
+            ...(timing.socketAssignedAtMs !== null ? { socketWaitMs: timing.socketAssignedAtMs - timing.startedAtMs } : {}),
+            reusedSocket: timing.reusedSocket }) : undefined);
       } catch (error) {
         assertOpen();
         if (error instanceof SyntaxError) throw new SyntaxError("final simulation response contained invalid JSON");

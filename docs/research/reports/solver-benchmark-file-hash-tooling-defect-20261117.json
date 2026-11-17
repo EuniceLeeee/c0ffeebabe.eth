@@ -1,0 +1,23 @@
+{
+  "learning_case_id": "solver-benchmark-large-ready-20261117",
+  "status": "applied",
+  "comparable": false,
+  "gap_detail": "tooling_defect; benchmark input loading, not a solver latency verdict",
+  "tooling_defect": {
+    "tool": "listener:benchmark:sim-amount",
+    "issue": "Both initial binding and final integrity recheck read entire Ready into one Buffer, failing above 2 GiB before sizing",
+    "evidence": {
+      "readyBytes": 3148296082,
+      "observedError": "File size (3148296082) is greater than 2 GiB",
+      "reproduction": "logs/solver-opt-20261117/large-ready-original-read-failure.json; canonical failed invocation receipts in baseline-tools.json",
+      "independentReview": "Non-author confirmed both whole-file reads and bounded streaming replacement",
+      "regression": "listener/benchmarks/file-hash.test.ts; sparse 2 GiB +17 with nonzero markers across chunk boundaries, independent expected digest, small-file parity, mutation and missing-file errors; pass"
+    },
+    "codify_target": "listener/benchmarks/live-stage.ts",
+    "codify_commit": "4ececf964500e1e6dc87ffc0928ed13ff3617a14",
+    "status": "codified"
+  },
+  "limitations": [
+    "Historical full-size run started after repair; benchmark completion and solver latency are separate evidence."
+  ]
+}

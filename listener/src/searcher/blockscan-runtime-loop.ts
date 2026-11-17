@@ -4259,8 +4259,10 @@ export class BlockScanRuntimeLoop {
       const amountWorkers = [...blockScanExecutionWorkers];
       const limitAmountTrials = createTrialLimiter(directFinalSimulation
         ? Math.max(1, Math.floor(this.deps.solverQuoteConcurrency)) : amountWorkers.length);
-      const simulateAmount = (plan: ResolvedPlan, control: TrialControl): Promise<SimulationResult> =>
-        limitAmountTrials(control, async () => {
+      const simulateAmount = (plan: ResolvedPlan, control: TrialControl): Promise<SimulationResult> => {
+        const queuedAt = performance.now();
+        return limitAmountTrials(control, async () => {
+          try { control.onSimulationTiming?.({ phase: "simulation-queue", wallMs: performance.now() - queuedAt }); } catch { /* diagnostics */ }
           control.signal.throwIfAborted();
           if (this.deps.isShuttingDown()) throw new Error("block-scan shutdown");
           if (directFinalSimulation) {
@@ -4301,6 +4303,7 @@ export class BlockScanRuntimeLoop {
             amountWorkers.push(worker);
           }
         });
+      };
       const solvePlan = async (
         index: number,
         solver: Solver,

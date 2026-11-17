@@ -266,6 +266,21 @@ export function runtimeSettlementFlowHash(amount: bigint, minimumReturn: bigint,
     [amount, minimumReturn, legs],
   ));
 }
+/** ABI layout is fixed: two uint256 heads followed by the tuple-array offset
+ * and tail. Encode the immutable route once; only the two declared words vary. */
+export function prepareRuntimeSettlementFlowHash(legs: readonly { tokenIn: string; tokenOut: string; program: string }[]) {
+  const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["uint256", "uint256", "tuple(address tokenIn,address tokenOut,bytes program)[]"], [0n, 0n, legs]);
+  const tail = encoded.slice(2 + 64 * 2);
+  return (amount: bigint, minimumReturn: bigint) => ethers.keccak256(
+    ethers.toBeHex(amount, 32) + ethers.toBeHex(minimumReturn, 32).slice(2) + tail);
+}
+
+// Pure byte templates only; no state, quote, identity or execution verdict is
+// cached. Bound retained programs independently of how many sources are seen.
+const flowTemplates = new Map<string, { bytes: Uint8Array; returnOffset: number }>();
+const FLOW_TEMPLATE_LIMIT = 32;
+
 export const runtimeAmountFlowAdapter: ActionAdapter = {
   id: "runtime-amount-flow", isWrapper: false, field2Offset: null,
   descriptor: { adapterId: "runtime-amount-flow", lineage: "erc20-infra", edgeKind: null,
@@ -276,13 +291,21 @@ export const runtimeAmountFlowAdapter: ActionAdapter = {
     const tolerance = node.params.quoteToleranceRawUnits ?? 0n;
     if (typeof tolerance !== "bigint") throw new Error("runtime flow tolerance type");
     assertExecutionRounding(tolerance);
-    const legs = JSON.parse(node.params.legs) as { tokenIn: string; tokenOut: string; program: string; inputMode?: "maximum" }[];
-    if (!Array.isArray(legs) || !legs.length || legs.length > 6) throw new Error("runtime flow length");
-    let token = node.tokenIn.toLowerCase();
     const minimumReturn = node.params.minimumReturn;
     if (typeof minimumReturn !== "bigint" || minimumReturn < node.amount || minimumReturn > ethers.MaxUint256) {
       throw new Error("runtime flow return constraint");
     }
+    const templateKey = JSON.stringify([node.tokenIn, node.tokenOut, tolerance.toString(), node.params.legs]);
+    const cached = node.params.settlementProgram === undefined ? flowTemplates.get(templateKey) : undefined;
+    if (cached) {
+      const bytes = cached.bytes.slice();
+      bytes.set(uint256ToBytes(node.amount), 4);
+      bytes.set(uint256ToBytes(minimumReturn), cached.returnOffset);
+      return bytes;
+    }
+    const legs = JSON.parse(node.params.legs) as { tokenIn: string; tokenOut: string; program: string; inputMode?: "maximum" }[];
+    if (!Array.isArray(legs) || !legs.length || legs.length > 6) throw new Error("runtime flow length");
+    let token = node.tokenIn.toLowerCase();
     let maximumInputMask = 0;
     const records = legs.map((leg, index) => {
       if (leg.inputMode !== undefined && leg.inputMode !== "maximum") throw new Error("runtime input mode");
@@ -309,6 +332,13 @@ export const runtimeAmountFlowAdapter: ActionAdapter = {
     const data = concatBytes(uint256ToBytes(node.amount),
       new Uint8Array([legs.length | (Number(tolerance) << 7) | (maximumInputMask ? 0x40 : 0)]),
       maximumInputMask ? new Uint8Array([maximumInputMask]) : new Uint8Array(), ...records);
-    return concatBytes(new Uint8Array([0x0c]), uint24ToBytes(data.length), data);
+    const bytes = concatBytes(new Uint8Array([0x0c]), uint24ToBytes(data.length), data);
+    // Header + all previous records + the last record's two addresses. These
+    // offsets come from this encoder, never a search for matching values.
+    const returnOffset = 4 + 32 + 1 + (maximumInputMask ? 1 : 0) +
+      records.slice(0, -1).reduce((n, record) => n + record.length, 0) + 40;
+    if (flowTemplates.size >= FLOW_TEMPLATE_LIMIT) flowTemplates.delete(flowTemplates.keys().next().value!);
+    flowTemplates.set(templateKey, { bytes: bytes.slice(), returnOffset });
+    return bytes;
   },
 };

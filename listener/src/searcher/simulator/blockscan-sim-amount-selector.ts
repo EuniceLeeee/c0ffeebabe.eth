@@ -11,7 +11,7 @@ import type { CanonicalSource } from "../venues/adapter-request-program.js";
 import type { SimulationResult } from "./botvm-simulator.js";
 import { createSimAmountSelector, type createTrialLimiter, type TrialControl } from "./sim-amount-selector.js";
 import type { AmountSimulation } from "./sim-amount-search.js";
-import { buildRuntimeSettlementRoot } from "./runtime-settlement.js";
+import { prepareRuntimeSettlement } from "./runtime-settlement.js";
 
 /** Strict runtime programs pass actual receipts between hops without Exact.
  * Unsupported routes retain strict quoted construction; actual execution
@@ -30,11 +30,21 @@ export function createBlockScanSimAmountSelector(input: {
   /** Paired execution benchmark control, not an independent search policy. */
   callbackSettlement?: boolean;
 }) {
+  // createSimAmountSelector issues fresh options for each solve. Weak ownership
+  // prevents reuse across sources, concurrent solves or changed runtime evidence.
+  const routes = new WeakMap<object, {
+    legs: Array<import("../../adapters/runtime-amount-program.js").RuntimeAmountLeg & { tokenIn: string; tokenOut: string }> | null;
+    legsJson: string; unsupported: number | null;
+    settlement: ReturnType<typeof prepareRuntimeSettlement>;
+    callbackRejectedAtSeed: boolean;
+  }>();
   return createSimAmountSelector({
     record: input.record,
     evaluate(plan, amount, state, probe, opts, control) {
       const run = input.runTrial ?? (async (_control: TrialControl, work: () => Promise<AmountSimulation<ResolvedPlan>>) => work());
+      const queuedAt = performance.now();
       return run(control, async () => {
+        const queueMs = performance.now() - queuedAt;
         const session = opts.strictSession!;
         if (plan.opportunity.kind !== "block-scan-arb" ||
             probe.executor.toLowerCase() !== input.executor.toLowerCase() ||
@@ -48,21 +58,30 @@ export function createBlockScanSimAmountSelector(input: {
           flashToken: plan.opportunity.flashToken.toLowerCase(), amount: amount.toString() };
         try {
           const quoteStart = performance.now();
-          const legs = input.runtimeAmounts === false || !session.buildRuntimeAmountLeg ? null : plan.tokenPath.edges.map(edge => {
-            const leg = session.buildRuntimeAmountLeg({ edge, executor: input.executor, runtimeEvidence: opts.runtimeEvidence ?? [] });
-            return leg === null ? null : { ...leg, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut };
-          });
-          const runtimeLegs = legs !== null && legs.every(leg => leg !== null) ? legs : null;
-          const settlement = input.callbackSettlement === false || !runtimeLegs ||
-              !runtimeLegs.at(-1)?.settlement?.deferredInput ||
-              plan.tokenPath.edges.some(edge => session.blocksPrefixInversion(edge)) ? null : buildRuntimeSettlementRoot({
-            legs: runtimeLegs, amount, minimumProfit: plan.opportunity.targetNetProfit ?? 1n, executor: input.executor,
-            build: (index, request) => session.buildRuntimeAmountLeg({ edge: plan.tokenPath.edges[index]!, executor: input.executor,
-              runtimeEvidence: opts.runtimeEvidence ?? [], settlement: request }),
-          });
+          let prepared = routes.get(opts);
+          const preparedHit = prepared !== undefined;
+          if (!prepared) {
+            const legs = input.runtimeAmounts === false || !session.buildRuntimeAmountLeg ? null : plan.tokenPath.edges.map(edge => {
+              const leg = session.buildRuntimeAmountLeg({ edge, executor: input.executor, runtimeEvidence: opts.runtimeEvidence ?? [] });
+              return leg === null ? null : { ...leg, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut };
+            });
+            const runtimeLegs = legs !== null && legs.every(leg => leg !== null) ? legs : null;
+            prepared = { callbackRejectedAtSeed: false, legs: runtimeLegs, legsJson: JSON.stringify(runtimeLegs), unsupported: legs?.filter(leg => leg === null).length ?? null,
+              settlement: input.callbackSettlement === false || !runtimeLegs ||
+                !runtimeLegs.at(-1)?.settlement?.deferredInput ||
+                plan.tokenPath.edges.some(edge => session.blocksPrefixInversion(edge)) ? null : prepareRuntimeSettlement({
+                  legs: runtimeLegs, executor: input.executor,
+                  build: (index, request) => session.buildRuntimeAmountLeg({ edge: plan.tokenPath.edges[index]!, executor: input.executor,
+                    runtimeEvidence: opts.runtimeEvidence ?? [], settlement: request }),
+                }) };
+            routes.set(opts, prepared);
+          }
+          const runtimeLegs = prepared.legs;
+          const settlement = prepared.callbackRejectedAtSeed ? null
+            : prepared.settlement?.(amount, plan.opportunity.targetNetProfit ?? 1n) ?? null;
           input.record?.({ type: "sim_amount_construction", mode: runtimeLegs ? "runtime-actual" : "quoted",
             ...identity,
-            hops: plan.tokenPath.edges.length, unsupportedLegs: legs?.filter(leg => leg === null).length ?? null });
+            hops: plan.tokenPath.edges.length, unsupportedLegs: prepared.unsupported, preparedHit, callbackRejectedAtSeed: prepared.callbackRejectedAtSeed, queueMs, preparationMs: performance.now() - quoteStart });
           const propagated = runtimeLegs ? null : await propagateAmountsWithRawOutputs(plan.tokenPath, amount, controlledState, {
             executor: input.executor, strictSession: session, runtimeEvidence: opts.runtimeEvidence ?? [],
             adapterWorkControl: control, safetyBps: opts.quoteSafetyBps ?? 10000n,
@@ -82,7 +101,7 @@ export function createBlockScanSimAmountSelector(input: {
               asset: plan.opportunity.flashToken, amount, minProfit: plan.opportunity.targetNetProfit ?? 1n,
               children: [{ adapterId: "runtime-amount-flow", target: input.executor,
                 tokenIn: plan.opportunity.flashToken, tokenOut: plan.opportunity.flashToken, amount,
-                params: { legs: JSON.stringify(runtimeLegs), quoteToleranceRawUnits: tolerance, minimumReturn: amount + (plan.opportunity.targetNetProfit ?? 1n) }, children: [] }],
+                params: { legs: prepared.legsJson, quoteToleranceRawUnits: tolerance, minimumReturn: amount + (plan.opportunity.targetNetProfit ?? 1n) }, children: [] }],
             }) : await buildResolvedPlanFromPath(plan.tokenPath, plan.opportunity.flashToken, amount,
               propagated!.amounts, input.executor, controlledState, plan.opportunity.targetNetProfit ?? 1n,
               action, propagated!.rawOutputs, session, propagated!.exactHandles, tolerance);
@@ -91,7 +110,9 @@ export function createBlockScanSimAmountSelector(input: {
               netProfit: 0n, templateName: plan.templateName };
             const simStart = performance.now();
             let sim: SimulationResult;
-            try { sim = await input.simulate(candidate, control); }
+            try { sim = await input.simulate(candidate, { ...control,
+              onSimulationTiming: input.record ? timing => input.record!({ type: "sim_amount_phase", ...identity,
+                settlementMode: action === null ? "deferred-input" : "funded", ...timing }) : undefined }); }
             finally { if (opts.timing) opts.timing.simMs += performance.now() - simStart; }
             control.signal.throwIfAborted();
             input.record?.({ type: "sim_amount_execution", mode: runtimeLegs ? "runtime-actual" : "quoted",
@@ -104,7 +125,17 @@ export function createBlockScanSimAmountSelector(input: {
             }
             if (!sim.success) {
               if ((sim.failure?.kind === "revert" && sim.failure.code === "TRANSACTION_REVERTED") ||
-                  (!sim.failure && sim.netProfit <= 0n)) continue;
+                  (!sim.failure && sim.netProfit <= 0n)) {
+                // searchSimAmounts awaits p before starting coarse/refine trials.
+                // This is a per-solve funding policy, not a proof that all larger
+                // amounts would revert. Keep their search through verified funding.
+                if (action === null && amount === plan.opportunity.searchSeed.searchCenter) {
+                  prepared.callbackRejectedAtSeed = true;
+                  input.record?.({ type: "sim_amount_funding_policy", ...identity,
+                    mode: "funded", reason: sim.failure ? "seed-callback-reverted" : "seed-callback-nonpositive" });
+                }
+                continue;
+              }
               // Preserve infrastructure identity: never score RPC/source faults as zero.
               throw sim.failure?.cause ?? new Error("non-economic amount simulation failure");
             }

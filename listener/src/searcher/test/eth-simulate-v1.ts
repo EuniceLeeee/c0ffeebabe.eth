@@ -206,6 +206,13 @@ try {
         gasPrice: target.baseFeePerGas }, probe] }],
     validation: false, traceTransfers: false, returnFullTransactions: false,
   }, pin] }];
+  assert.equal(validateEthSimulateV1ExecutionInput(prepared), prepared, "internally issued canonical input is reused");
+  const externalCopy = JSON.parse(JSON.stringify(prepared));
+  const validatedCopy = validateEthSimulateV1ExecutionInput(externalCopy);
+  assert.notEqual(validatedCopy, externalCopy, "external payload still rebuilt into owned frozen storage");
+  assert.equal(validateEthSimulateV1ExecutionInput(validatedCopy), validatedCopy);
+  const forgedFrozen = Object.freeze({ ...externalCopy, calldata: "0x1234" });
+  assert.throws(() => validateEthSimulateV1ExecutionInput(forgedFrozen), sanitized);
   assert.equal(prepared.schemaVersion, 3);
   assert(!Object.hasOwn(prepared, "preBalanceParams"));
   assert.deepEqual(requests, Array.from({ length: 3 }, () => expectedWire[0]));
@@ -698,6 +705,14 @@ try {
   assert.equal(requests.length, count, "no delayed retry or fallback");
   assert(requests.every(req => req.method === "eth_call" || req.method === "eth_simulateV1" || diagnosticRequests.has(req)));
   await assert.rejects(new EthSimulateV1Simulator(`invalid:${secret}`, executor, owner).simulate(plan, context()), sanitized);
+  reset(result());
+  const phases: any[] = [];
+  await simulator.simulate(plan, { ...context(), onSimulationTiming: event => phases.push(event) });
+  assert.deepEqual(phases.map(x => x.phase), ["compile", "prepare", "validate", "rpc", "decode"]);
+  assert(phases.every(x => x.wallMs >= 0));
+  assert(phases.find(x => x.phase === "rpc").wireMs >= 0);
+  reset(result());
+  await simulator.simulate(plan, { ...context(), onSimulationTiming: () => { throw new Error("broken observer"); } });
   console.log("eth-simulate-v1: PASS (local HTTP, exact wire/results, pure frozen JSON replay, tamper rejection, fees, reverts, malformed data, cancellation, no fallback)");
 } finally {
   const closed = new Promise<void>(resolve => server.close(() => resolve()));

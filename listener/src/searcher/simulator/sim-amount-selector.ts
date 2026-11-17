@@ -4,7 +4,12 @@ import { searchSimAmounts, type AmountSimulation } from "./sim-amount-search.js"
 type Plan = Parameters<Solver["solve"]>[0];
 type State = Parameters<Solver["solve"]>[1];
 type Probe = Parameters<Solver["solve"]>[2];
-export type TrialControl = { signal: AbortSignal; deadlineAtMs: number };
+export type SimulationPhaseTiming = {
+  phase: "simulation-queue" | "compile" | "prepare" | "validate" | "rpc" | "decode";
+  wallMs: number; wireMs?: number; socketWaitMs?: number; reusedSocket?: boolean;
+};
+export type TrialControl = { signal: AbortSignal; deadlineAtMs: number;
+  onSimulationTiming?: (timing: SimulationPhaseTiming) => void };
 
 export class SimAmountNoOpportunityError extends Error {
   constructor(readonly status: "complete" | "p-nonpositive" | "deadline") {
@@ -23,6 +28,8 @@ export function createSimAmountSelector(input: {
   let sequence = 0;
   return {
     async solve(plan, state, probe, opts = {}) {
+      // A fresh options identity scopes producer preparation to this solve only.
+      opts = { ...opts };
       const searchId = ++sequence;
       const record = (event: Record<string, unknown>) => input.record?.({ ...event, searchId });
       const settings = opts as SolveOptions & { blockScanAmountGrid?: string };
