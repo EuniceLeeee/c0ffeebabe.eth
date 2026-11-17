@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { ethers } from "ethers";
 import { RuntimeAmountProgram, runtimeDeferredOpeningFloor, runtimeDeferredPayment,
-  runtimeAmountFlowAdapter, type RuntimeAmountLeg, type RuntimeSettlementRequest } from "../../adapters/runtime-amount-program.js";
-import { buildRuntimeSettlementRoot } from "../simulator/runtime-settlement.js";
+  runtimeAmountFlowAdapter, runtimeSettlementFlowHash, type RuntimeAmountLeg, type RuntimeSettlementRequest } from "../../adapters/runtime-amount-program.js";
+import { buildRuntimeSettlementRoot, prepareRuntimeSettlementFlowHash } from "../simulator/runtime-settlement.js";
 import { createBlockScanSimAmountSelector } from "../simulator/blockscan-sim-amount-selector.js";
 import { inspectRuntime, type RuntimeCall } from "./runtime-program-testkit.js";
 
@@ -197,8 +197,7 @@ test("settlement binds each prefix quote to its actual intermediate or debt rece
 
 // The ABI hash fixture checks the declared head/tail template against the
 // original general ABI encoder, including values that change every amount byte.
-test("prepared route witness preserves ABI bytes across amounts and snapshots mutable input", async () => {
-  const { prepareRuntimeSettlementFlowHash, runtimeSettlementFlowHash } = await import("../../adapters/runtime-amount-program.js");
+test("prepared route witness preserves ABI bytes across amounts and snapshots mutable input", () => {
   const route = legs();
   const prepared = prepareRuntimeSettlementFlowHash(route);
   for (const amount of [1n, 255n, 256n, 10n ** 18n, (1n << 255n) - 2n]) {
@@ -228,7 +227,7 @@ test("prepared callback programs reuse only fixed requests and keep per-amount g
   assert.deepEqual(calls, ["quote-output", "direct-output", "deferred-input", "deferred-input", "deferred-input"]);
 });
 
-test("funded byte template cannot retain another amount, mask, route or caller-mutated output", () => {
+test("funded flow encoding preserves amount, mask and route across calls", () => {
   const route = legs();
   const node: any = { adapterId: "runtime-amount-flow", target: executor, tokenIn: a, tokenOut: a, amount: 1n,
     children: [], params: { legs: JSON.stringify(route), minimumReturn: 2n, quoteToleranceRawUnits: 0n } };

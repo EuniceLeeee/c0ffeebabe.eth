@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { RuntimeAmountProgram, prepareRuntimeSettlementFlowHash, withRuntimeHopContext, type RuntimeAmountLeg, type RuntimeSettlementRequest } from "../../adapters/runtime-amount-program.js";
+import { RuntimeAmountProgram, withRuntimeHopContext, type RuntimeAmountLeg, type RuntimeSettlementRequest } from "../../adapters/runtime-amount-program.js";
 import type { ResolvedPlanNode } from "../../shared/types/plan.js";
 
 type Leg = RuntimeAmountLeg & { readonly tokenIn: string; readonly tokenOut: string };
@@ -15,6 +15,16 @@ type SettlementInput = {
 export function buildRuntimeSettlementRoot(input: SettlementInput & { amount: bigint; minimumProfit: bigint }): ResolvedPlanNode | null {
   if (input.amount <= 0n || input.minimumProfit < 1n) return null;
   return prepareRuntimeSettlement(input)?.(input.amount, input.minimumProfit) ?? null;
+}
+
+/** ABI layout is fixed: two uint256 heads followed by the tuple-array offset
+ * and tail. Encode the immutable route once; only the two declared words vary. */
+export function prepareRuntimeSettlementFlowHash(legs: readonly { tokenIn: string; tokenOut: string; program: string }[]) {
+  const encoded = ethers.AbiCoder.defaultAbiCoder().encode(
+    ["uint256", "uint256", "tuple(address tokenIn,address tokenOut,bytes program)[]"], [0n, 0n, legs]);
+  const tail = encoded.slice(2 + 64 * 2);
+  return (amount: bigint, minimumReturn: bigint) => ethers.keccak256(
+    ethers.toBeHex(amount, 32) + ethers.toBeHex(minimumReturn, 32).slice(2) + tail);
 }
 
 /** Prepare only amount-independent capability/quote/recipient programs. Every
