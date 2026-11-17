@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createOpaqueNominationCollector } from './ready-opaque-nominations.mjs';
 import { compileReadyDiscovery, readyDiscoveryJob, openReadyDiscoveryJob, decodeSqlDiscoveryRow } from './ready-bigquery-sql.mjs';
 import { parseReadyWindow, resolveReadyWindow, renderEthereumInputs, refreshReadyRawTable, renderRawWindow, runWindowQuery } from './ready-bigquery-window.mjs';
-import { applyReadyLiveFamilyFlags, enableReadyFamilies } from './ready-family-activation.mjs';
+import { applyReadyLiveFamilyFlags } from './ready-family-activation.mjs';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statfsSync, unlinkSync, realpathSync, renameSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -167,10 +167,10 @@ export async function main(argv = process.argv.slice(2)) {
     BOTVM_ADDRESS: profile.executor, BOTVM_OWNER: profile.wallet, SEARCHER_REBUILD_REVM_TIMEOUT_MS: '60000' });
   // Candidate jobs use the same resolved activations as live: entry defaults
   // with any process environment overrides. A saved config is an explicit
-  // replay input. Keep the legacy whole-table Ready rebuild behavior.
+  // replay input. Whole-table and windowed Ready use the same active catalog.
   const configuredActivations = args['live-config'] !== undefined
     ? applyReadyLiveFamilyFlags(root, JSON.parse(readFileSync(args['live-config'], 'utf8')))
-    : selection || args['candidates-only'] ? null : enableReadyFamilies(root);
+    : null;
   const { createRebuildWiring, rebuildFamilyInstanceDedupeKey } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-production.ts'));
   const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog,
     PRODUCTION_STRICT_SHADOW_FAMILY_LOAD: load } = await import(pathToFileURL(root + '/listener/src/searcher/venues/production-family-composition.ts'));

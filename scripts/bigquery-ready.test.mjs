@@ -84,6 +84,9 @@ export function createRebuildWiring(input) { return {
   writeFileSync(root + '/listener/src/searcher/venues/production-family-composition.ts', withOpaque
     ? `export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[{plugin:{manifest:{familyId:'opaque'},discovery:{reverseBinding:{kind:'implementation'},logPatterns:[{id:'pool-id',emitter:{mode:'singleton-indexed-bytes32',address:'shared-emitter',topicIndex:1,fromBlock:0}}]}}}],matches:o=>o.topics.length===2?[{familyId:'opaque',patternId:'pool-id'}]:[]};`
     : 'export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[],matches:()=>[]};');
+  writeFileSync(root + '/listener/src/searcher/venues/production-family-composition.ts',
+    readFileSync(root + '/listener/src/searcher/venues/production-family-composition.ts', 'utf8') +
+    '\nexport const PRODUCTION_STRICT_SHADOW_FAMILY_LOAD = { plugins: [] };');
   writeFileSync(root + '/listener/src/searcher/universe-rebuild-checkpoint.ts', `import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 export class UniverseRebuildCheckpointStore {
  constructor(input){this.path=input.path;}
@@ -443,4 +446,56 @@ test('live Family flags disable missing entries and reject unavailable enabled e
     assert.equal(env.SEARCHER_FAMILY_UNLISTED_ENABLED, '0');
     assert.throws(() => applyReadyLiveFamilyFlags(f.root, {...flags, SEARCHER_FAMILY_ABSENT_ENABLED:'1'}, env), /missing from the current checkout/);
   } finally { rmSync(f.root, { recursive:true, force:true }); }
+});
+
+
+test('whole-table Ready and candidates-only preserve entry defaults and explicit disables', async () => {
+  const definitions = [
+    ['DEFAULT_ON', true], ['DEFAULT_OFF', false],
+    ['OVERRIDE_ON', false], ['OVERRIDE_OFF', true],
+  ];
+  const keys = definitions.map(([name]) => 'SEARCHER_FAMILY_' + name + '_ENABLED');
+  const original = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const oldFetch = globalThis.fetch;
+  try {
+    for (const candidatesOnly of [false, true]) {
+      const f = fixture();
+      try {
+        for (const key of keys) delete process.env[key];
+        process.env[keys[2]] = '1';
+        process.env[keys[3]] = '0';
+        globalThis.fetch = f.fetcher;
+        const dir = f.root + '/listener/src/searcher/venues/production-families';
+        for (const [name, enabled] of definitions) {
+          writeFileSync(dir + '/' + name + '.production.ts',
+            'defineFamilyActivation(' + JSON.stringify({ enabled, envKey: 'SEARCHER_FAMILY_' + name + '_ENABLED' }) + ')');
+        }
+        writeFileSync(f.root + '/listener/src/searcher/venues/production-family-composition.ts', `
+const entries = ${JSON.stringify(definitions)}.map(([familyId, defaultEnabled]) => {
+  const envKey = 'SEARCHER_FAMILY_' + familyId + '_ENABLED';
+  return { familyId, activation: {envKey, enabled: process.env[envKey] === undefined ? defaultEnabled : process.env[envKey] === '1'} };
+});
+const plugins = entries.filter(entry => entry.activation.enabled);
+export const PRODUCTION_STRICT_SHADOW_FAMILY_LOAD = {plugins};
+export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG = {
+  listAll: () => plugins.map(entry => ({plugin: {manifest: {familyId: entry.familyId}}})), matches: () => []
+};
+`);
+        await main([...f.argv, ...(candidatesOnly ? ['--candidates-only'] : [])]);
+        const identity = JSON.parse(readFileSync(f.out + '/run-identity.json', 'utf8'));
+        assert.deepEqual(identity.activations, [keys[0], keys[2]]);
+        assert.deepEqual(identity.familyIds, ['DEFAULT_ON', 'OVERRIDE_ON']);
+        assert.equal(identity.activationSource, 'production-entry');
+        assert.equal(process.env[keys[3]], '0', 'Ready must not re-enable a disabled Family');
+        assert.equal(process.env[keys[1]], undefined, 'entry default must remain authoritative');
+        if (candidatesOnly) assert.deepEqual(JSON.parse(readFileSync(f.out + '/nominations.json', 'utf8')).familyIds, identity.familyIds);
+        else assert(existsSync(f.out + '/checkpoint.json'));
+      } finally { rmSync(f.root, {recursive:true, force:true}); }
+    }
+  } finally {
+    globalThis.fetch = oldFetch;
+    for (const [key, value] of Object.entries(original)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
 });

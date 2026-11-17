@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "baseCommit": "87bf01f25d2032faadb740a203edb82b8e42c427",
+  "policy": "Load all installed families, apply entry defaults and explicit environment overrides, then use the enabled catalog for full Ready. Counts are an audit snapshot, not a runtime allowlist.",
+  "previousRunConfig": "logs/final-sim-ev-20261116/dry-run/attempt-2026-11-16T10-33-27-963Z/config.json",
+  "previousEnabled": [
+    "balancer-v1",
+    "balancer-v2",
+    "credit:fluid",
+    "curve-plain-lp",
+    "custom-swap:angstrom-v4",
+    "custom-swap:dodo-v2",
+    "custom-swap:ekubo-router-v1",
+    "custom-swap:oneswap",
+    "custom-swap:precision-pool",
+    "custom-swap:uniswap-v1",
+    "ella-exchange",
+    "flash-loan:balancer-v2",
+    "flash-loan:morpho",
+    "fluid-dex",
+    "mooniswap",
+    "protocol:astra-multitoken",
+    "protocol:badger-sett-withdraw",
+    "protocol:compound-ctoken",
+    "protocol:eigenpie",
+    "protocol:erc4626",
+    "protocol:erc4626-silo-redeem",
+    "protocol:ethertoken-native-redeem",
+    "protocol:few-wrapped",
+    "protocol:goldx",
+    "protocol:metronome-hgusdc",
+    "protocol:metronome-synth",
+    "protocol:psm",
+    "protocol:rocksolid",
+    "protocol:self-burn-native",
+    "protocol:staked-usdat",
+    "protocol:token-conversion",
+    "protocol:token-migration",
+    "protocol:wsteth",
+    "univ2-standard",
+    "univ3-standard",
+    "univ4",
+    "univ4-fee-hook"
+  ],
+  "additionalEnabled": [
+    "curve-plain",
+    "curve-underlying",
+    "custom-swap:ammalgam",
+    "custom-swap:zero1-curve"
+  ],
+  "currentEnabled": [
+    "balancer-v1",
+    "balancer-v2",
+    "credit:fluid",
+    "curve-plain",
+    "curve-plain-lp",
+    "curve-underlying",
+    "custom-swap:ammalgam",
+    "custom-swap:angstrom-v4",
+    "custom-swap:dodo-v2",
+    "custom-swap:ekubo-router-v1",
+    "custom-swap:oneswap",
+    "custom-swap:precision-pool",
+    "custom-swap:uniswap-v1",
+    "custom-swap:zero1-curve",
+    "ella-exchange",
+    "flash-loan:balancer-v2",
+    "flash-loan:morpho",
+    "fluid-dex",
+    "mooniswap",
+    "protocol:astra-multitoken",
+    "protocol:badger-sett-withdraw",
+    "protocol:compound-ctoken",
+    "protocol:eigenpie",
+    "protocol:erc4626",
+    "protocol:erc4626-silo-redeem",
+    "protocol:ethertoken-native-redeem",
+    "protocol:few-wrapped",
+    "protocol:goldx",
+    "protocol:metronome-hgusdc",
+    "protocol:metronome-synth",
+    "protocol:psm",
+    "protocol:rocksolid",
+    "protocol:self-burn-native",
+    "protocol:staked-usdat",
+    "protocol:token-conversion",
+    "protocol:token-migration",
+    "protocol:wsteth",
+    "univ2-standard",
+    "univ3-standard",
+    "univ4",
+    "univ4-fee-hook"
+  ],
+  "currentDisabled": [
+    "aqua-swapvm",
+    "balancer-v3",
+    "kyberswap-elastic",
+    "protocol:curve-lp",
+    "protocol:peapods-debond",
+    "protocol:psv",
+    "protocol:set-redemption",
+    "protocol:yearn-auction",
+    "protocol:yieldbasis-lt",
+    "swap:algebra-integral",
+    "vault-spot"
+  ],
+  "counts": {
+    "installed": 52,
+    "previous": 37,
+    "added": 4,
+    "enabled": 41,
+    "disabled": 11
+  },
+  "changes": [
+    "set-redemption entry default changed to false; other ten excluded entries already default false",
+    "whole-table BigQuery Ready no longer force-enables installed families; date/block/candidates and full-table use the same activated catalog"
+  ],
+  "validation": {
+    "bigqueryAndActivationHelpers": {
+      "tests": 26,
+      "pass": 26,
+      "fail": 0
+    },
+    "regression": "New whole-table test fails on old code because disabled families are force-enabled; passes after removing that override.",
+    "productionSnapshot": {
+      "sha256": "0279e755b77bd763da47c3c3b5a82eee741f0c9db16810102b79757f68b09131",
+      "catalogMatchesEnabled": true
+    },
+    "productionActivation": "PASS: 52 independent entry switches; registry closure; full artifact fail-closed (before artifact regeneration); post-generation actual catalog snapshot also matches 41 enabled / 11 disabled.",
+    "generatedCapabilityArtifact": "Regenerated successfully after detecting stale solver-dependency hashes; production catalog import passed."
+  },
+  "operations": {
+    "readyStarted": false,
+    "liveStarted": false,
+    "oldReadyModified": false
+  },
+  "toolReconciliation": {
+    "query": [
+      "activation",
+      "family"
+    ],
+    "manifest": "logs/ready20-20261117/checks/tools.json",
+    "manifestSha256": "846a1a7f20825e0905d7a077bf71054b38ba179068e1e87017628ea3f7301f7a",
+    "executions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:production-family-activation",
+        "descriptor_sha256": "c49d9e4eb5a2a67662e623114ad1cea7f6d508792e995d41546306a21f448eb9",
+        "started_at": "2026-11-17T04:30:41.373Z",
+        "finished_at": "2026-11-17T04:30:43.119Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "914342cc06b172340fe69681fa9a6b676eea1d30c12237f24fb5af51fe835093",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:production-family-activation",
+          "--",
+          "--snapshot"
+        ],
+        "stdout_sha256": "d2b7f2135d1650827834a31118463850eedc8222dc50e4880fe24dd873a97450",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 17776,
+        "stderr_bytes": 0
+      }
+    ]
+  },
+  "recovery": {
+    "gitDirectory": "/opt/mev-cloud/git/family-runtime-20261007.git",
+    "restoredHead": "87bf01f25d2032faadb740a203edb82b8e42c427",
+    "workingFilesPreserved": true,
+    "reason": "Concurrent authorized log cleanup also removed the old Git directory located under logs; recovered complete branch history from existing Git objects and the original commit bundle."
+  },
+  "plannedReadyUpdate": {
+    "baseGeneration": 19,
+    "scope": "all installed minus disabled; no hardcoded family whitelist",
+    "newCandidates": "production discovery over 2026-10-10 through 2026-11-09, combined with retained enabled-family candidates; opaque nominations reverse-bound by production wiring",
+    "mode": "existing checkpoint update, automatic hash reconciliation",
+    "attestationConcurrency": 32,
+    "rpcBatchStart": "4 x 8",
+    "signingOrBroadcast": false
+  }
+}
