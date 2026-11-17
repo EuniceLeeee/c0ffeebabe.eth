@@ -15,6 +15,7 @@ import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
  * build: --checkpoint PATH --archive DIR --from-block N --to-block N [--families FILE] [--candidates FILE]
  * update: --checkpoint PATH --archive DIR [--families FILE] [--candidates FILE]
  *         [--force-update | --force-retryable | --revalidate-proofs HASH]
+ *         [--previous-candidates FILE] (shrink a paused explicit candidate selection)
  *         [--test-executor-runtime HASH] (explicit historical test context)
  * Families is the complete desired array of installed Family IDs; omission uses
  * the currently enabled catalog. Candidates is the complete desired array of
@@ -34,9 +35,12 @@ export async function runReadyFamilyMaintenance(argv: readonly string[]): Promis
       continue;
     }
     const value = argv[++i];
-    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--families", "--candidates", "--expect-update", "--revalidate-proofs", "--test-executor-runtime"].includes(key) ||
+    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--families", "--candidates", "--previous-candidates", "--expect-update", "--revalidate-proofs", "--test-executor-runtime"].includes(key) ||
       value === undefined || value.startsWith("--") || options.has(key)) throw new Error("invalid Ready maintenance option");
     options.set(key, value);
+  }
+  if (options.has("--previous-candidates") && (mode !== "update" || !options.has("--candidates"))) {
+    throw new Error("--previous-candidates requires update mode and --candidates");
   }
   if (options.has("--expect-update") && (mode !== "update" || options.get("--expect-update") !== "family-set")) {
     throw new Error("--expect-update family-set requires update mode");
@@ -99,6 +103,10 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   const testExecutorProvisioning = runtimeCode ? { owner: transactionOrigin, runtimeCode } : undefined;
   const store = new UniverseRebuildCheckpointStore({ path: checkpointPath });
   const incumbent = await store.load();
+  const previousCandidatesPath = options.get("--previous-candidates");
+  if (previousCandidatesPath && !incumbent?.inProgressRun?.reviewInputFingerprint) {
+    throw new Error("--previous-candidates requires a paused Ready review");
+  }
   const ruleCompatibility = await readyRuleCompatibilityFor(incumbent?.readyGeneration?.ruleBindings);
   const common = { rpcUrl, ruleCompatibility, executionIdentity: { executor, transactionOrigin },
     ...(testExecutorProvisioning && { testExecutorProvisioning }),
@@ -213,13 +221,21 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
         else if (receipt.sourceKind === "catalog-activity-union") previousPlans.activity = receipt.queryFingerprint;
         else throw new Error("paused Ready review has an unsupported source receipt");
       }
-      // Do not silently change proof runtime, caller, source, force policy or
-      // an unrecorded candidate file. Only sealed rule/plan changes reconcile.
+      // Only allow a changed file when the old file binds the original review,
+      // and the new one removes candidates without replacing any snapshots.
+      let previousSelection = reviewInput.selection;
+      if (previousCandidatesPath) {
+        const previousFile = await readFile(resolve(previousCandidatesPath));
+        previousSelection = createHash("sha256").update(previousFile).digest("hex");
+        assertReadyCandidateSubset(pending.candidatesByKey, selected);
+      }
       if (!pending.familyDefinitionHashes || readyMaintenanceReviewFingerprint({ ...reviewInput,
         definitions: Object.entries(pending.familyDefinitionHashes), sourcePlans: previousPlans,
+        selection: previousSelection,
       }) !== pending.reviewInputFingerprint) throw new Error("cannot resume Ready review with changed proof context or candidate file");
       replacesInputFingerprint = pending.reviewInputFingerprint;
-      log("reconciling paused review with current Family definitions; compatible completed outcomes remain reusable");
+      if (previousCandidatesPath) log(JSON.stringify({ phase: "candidate-scope-reduced", before: pending.candidateCount, after: keys!.size }));
+      log("reconciling paused review with current input; compatible completed outcomes remain reusable");
     }
     await verifyArchivedInputs();
   }
@@ -236,6 +252,21 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   resolveStrictReadyRuntime(ready);
   log(JSON.stringify({ status: "reviewed-ready", generation: ready.generation,
     accounting: ready.candidateAccounting, activeInstances: ready.activeInstanceKeys.length, broadcast: false }));
+}
+
+/** Resume can remove sealed candidates, but changing retained inputs requires
+ * a separate review rather than silently reusing the paused outcome. */
+export function assertReadyCandidateSubset(
+  previous: Readonly<Record<string, unknown>>,
+  selected: ReadonlyMap<string, Readonly<Record<string, unknown>>>,
+): void {
+  for (const group of selected.values()) {
+    for (const [key, snapshot] of Object.entries(group)) {
+      if (!Object.hasOwn(previous, key) || canonicalJson(previous[key]) !== canonicalJson(snapshot)) {
+        throw new Error("replacement Ready selection changes a retained candidate: " + key);
+      }
+    }
+  }
 }
 
 /** Complete desired membership, not an add/remove command. Catalog validation

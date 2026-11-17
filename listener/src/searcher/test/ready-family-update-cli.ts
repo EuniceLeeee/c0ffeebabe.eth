@@ -3,11 +3,12 @@ import { createHash } from "node:crypto";
 import { createRebuildWiring } from "../universe-rebuild-production.js";
 import { canonicalJson, canonicalJsonFingerprint } from "../universe-rebuild-checkpoint.js";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isFamilySetOnlyReadyUpdate, assertReadyStageManifest, parseReadyFamilyIds, readyFamilyNeedsSupplement,
-  readyMaintenanceReviewFingerprint, runReadyFamilyMaintenance, withReadyMaintenanceLease } from "../ready-family-update-cli.js";
+  assertReadyCandidateSubset, readyMaintenanceReviewFingerprint, runReadyFamilyMaintenance, withReadyMaintenanceLease } from "../ready-family-update-cli.js";
 import type { ReadyFamilyPartition } from "../universe-rebuild-checkpoint.js";
 
 const directory = await mkdtemp(join(tmpdir(), "ready-maintenance-test-"));
@@ -169,3 +170,11 @@ try {
   assert.notEqual(v1.readyDiscoveryInputFingerprint!(), plain.readyDiscoveryInputFingerprint!(), "a changed reverse-binding call environment still invalidates discovery");
   assert.equal(provisioned.familyDefinitionHash!("univ3-standard"), plain.familyDefinitionHash!("univ3-standard"));
 }
+
+
+test("paused candidate selection may remove rows but cannot change or add retained rows", () => {
+  const prior = { first: { familyId: "swap:a", address: "one" }, second: { familyId: "swap:a", address: "two" } };
+  assert.doesNotThrow(() => assertReadyCandidateSubset(prior, new Map([["swap:a", { first: prior.first }]])));
+  assert.throws(() => assertReadyCandidateSubset(prior, new Map([["swap:a", { first: prior.second }]])), /changes a retained candidate/);
+  assert.throws(() => assertReadyCandidateSubset(prior, new Map([["swap:a", { added: prior.first }]])), /changes a retained candidate/);
+});
