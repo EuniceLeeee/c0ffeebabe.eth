@@ -1193,6 +1193,7 @@ export async function rebuildUniverse(
     }
     const accepted = new Set<string>();
     const inheritedWrites: { readonly outcome: RunOutcome }[] = [];
+    let supersededProofsToReview = 0;
     const currentCandidates = new Map(candidates.map(candidate => [input.familyCandidateKey(candidate), candidate] as const));
     const admit = (key: string, row: RunOutcome): void => {
       accepted.add(key);
@@ -1207,7 +1208,17 @@ export async function rebuildUniverse(
       const memo = attestationCheckpoint.verifiedMemos[key];
       if (!memo || memo.familyInstanceKey !== row.familyInstanceKey || memo.memoFingerprint !== row.memoFingerprint) {
         const parentRow = parent?.familyPartitions?.[candidateFamilyIds[key] ?? ""]?.outcomesByCandidateKey[key];
-        if (parentRow?.status === "verified") throw new Error("inherited verified outcome lost its sealed memo: " + key);
+        if (parentRow?.status === "verified") {
+          // An interrupted review can replace the memo for a published key
+          // before it promotes a new Ready. If those rules are abandoned,
+          // the old outcome still needs a matching proof before reuse.
+          const superseded = review !== undefined && incumbentRun !== null && memo !== undefined &&
+            memo.familyCandidateKey === key && memo.familyId === candidateFamilyIds[key] &&
+            memo.familyInstanceKey === parentRow.familyInstanceKey &&
+            input.isReadyMemoDefinitionCurrent?.(memo) === false;
+          if (!superseded) throw new Error("inherited verified outcome lost its sealed memo: " + key);
+          supersededProofsToReview++;
+        }
         // Compatibility operations may have evicted an inactive historical
         // memo. An index entry without its evidence returns to normal work.
         inherited.delete(key);
@@ -1246,6 +1257,7 @@ export async function rebuildUniverse(
       removed: sameSealedInput ? 0 : reconciliation?.removed ?? 0,
       inherited: accepted.size, priorVerified: priorVerified.length, remaining: ordinary.length,
       forced: forcedKeys.size,
+      ...(supersededProofsToReview > 0 ? { supersededProofsToReview } : {}),
     }));
     const strictPrevious: unknown[] = [];
     await runPhase(priorVerified, "review", strictPrevious);
