@@ -9,7 +9,7 @@ import { parseArgs } from "node:util";
 import { ethers } from "ethers";
 import { atBlockJson, parseHistoricalExecutorRuntimeCode } from "../src/searcher/blockscan-at-block-cli.js";
 import { activeReadyMemos, UniverseRebuildCheckpointStore } from "../src/searcher/universe-rebuild-checkpoint.js";
-import { createRebuildWiring, familyDefinitionHash, familyMemoDefinitionHash } from "../src/searcher/universe-rebuild-production.js";
+import { createRebuildWiring, readyRuleCompatibilityFor } from "../src/searcher/universe-rebuild-production.js";
 import { resolveStrictReadyRuntime } from "../src/searcher/strict-ready-runtime.js";
 import { assertReadyFamilyActivation } from "../src/searcher/universe-rebuild-runner.js";
 import { assertFamilyActivationEnvironment } from "../src/searcher/venues/production-families/activation.js";
@@ -365,10 +365,11 @@ export async function runLiveStageBenchmark(stage: LiveBenchmarkStage, argv = pr
   const { ready, graph } = resolveStrictReadyRuntime(envelope.readyGeneration);
   const topologyKey = `strict-ready:${ready.generation}:${ready.graphHash}`;
   const identity = { executor: executor.toLowerCase(), transactionOrigin: owner.toLowerCase() };
-  const wiring = createRebuildWiring({ rpcUrl, executionIdentity: identity });
+  const wiring = createRebuildWiring({ rpcUrl, executionIdentity: identity,
+    ruleCompatibility: await readyRuleCompatibilityFor(envelope.readyGeneration.ruleBindings) });
   const memos = activeReadyMemos(envelope);
   assertReadyFamilyActivation(memos, wiring.isFamilyEnabled);
-  for (const memo of memos) assert([familyDefinitionHash(memo.familyId), familyMemoDefinitionHash(memo.familyId)].includes(memo.familyDefinitionHash),
+  for (const memo of memos) assert(wiring.isReadyMemoDefinitionCurrent!(memo),
     `Ready requires selective revalidation: ${memo.familyId}; benchmark will not drop or bypass it`);
   const producerReserved = settings.stateRpcBatchConcurrency;
   const transportCapacity = producerReserved + settings.exactRpcBatchConcurrency;
