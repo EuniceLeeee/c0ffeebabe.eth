@@ -179,5 +179,40 @@
     "attestationConcurrency": 32,
     "rpcBatchStart": "4 x 8",
     "signingOrBroadcast": false
+  },
+  "candidateQueryFix": {
+    "cause": "Version-1 JSON discovery closure includes generator provenance; importing every closure file as a runtime manifest pulls Node-only dependencies into SQL.",
+    "change": "Resolve the declared manifest binding and validate discovery source/export and closure membership; keep complete provenance without executing the generator.",
+    "regression": "Actual 41-family SQL compilation failed before; all 52 packaged family UDF/production parity passes after.",
+    "tests": {
+      "passed": 11,
+      "families": 52,
+      "transactions": 489,
+      "candidates": 231,
+      "opaque": 4
+    },
+    "toolManifestSha256": "717697fcffe49955ac5aa176b1c26112aaef5f372d2bde94835d5ec9750f9528",
+    "toolExecutions": [
+      {
+        "schema_version": 1,
+        "tool_id": "listener:searcher:adapter-family-discovery-continuity-composition",
+        "descriptor_sha256": "58d6a71c809e31b70eb5fbf883691bb429c020c36e454fdc2145dfbb9478f88e",
+        "started_at": "2026-11-17T04:39:36.784Z",
+        "finished_at": "2026-11-17T04:39:38.177Z",
+        "exit_code": 0,
+        "cwd": "listener",
+        "argv_sha256": "4162590ceafa735ef137cbc259e24f2d7a6e61836cf7519d0c23ac097d499e47",
+        "argv_redacted": [
+          "npm",
+          "run",
+          "searcher:adapter-family-discovery-continuity-composition",
+          "--"
+        ],
+        "stdout_sha256": "fc3058f8fe9cc99b74b28a55e864649ad41d0b24500e4101004a38a24d823fd2",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 222,
+        "stderr_bytes": 0
+      }
+    ]
   }
 }

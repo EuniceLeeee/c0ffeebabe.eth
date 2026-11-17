@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { scanDiscoveryPackages, buildDiscoveryUdf, declarativeBinding } from './ready-discovery-udf-build.mjs';
+import { scanDiscoveryPackages, buildDiscoveryUdf, declarativeBinding, boundManifestSource } from './ready-discovery-udf-build.mjs';
 
 function fixture(t) {
   const dir=realpathSync(mkdtempSync(join(tmpdir(),'mev-discovery-udf-test-')));
@@ -92,4 +92,23 @@ test('JSON compiler binds the actual production root and exact ordered child clo
   assert.throws(()=>declarativeBinding(root,f.source),/Duplicate JSON/);
   f.save(definition,{...raw,scope:{family:'synthetic:wrong'}});
   assert.throws(()=>declarativeBinding(root,f.source),/scope mismatch/);
+});
+
+
+test('bound JSON uses its declared manifest, not generator provenance in the closure', t => {
+  const f = fixture(t), definition = join(f.source, 'src/bound.json');
+  const generator = join(f.source, 'src/generator.ts');
+  writeFileSync(generator, "import {readFile} from 'node:fs/promises'; export const generate = readFile;\n");
+  const raw = {version: 1, scope: {family: 'synthetic:bound'},
+    discovery: {binding: {module: './discovery.js', export: 'arbitraryDiscovery'}},
+    manifest: {binding: {module: './manifest.js', export: 'arbitraryManifest'}}};
+  f.save(definition, raw);
+  const root = {familyId: 'synthetic:bound', entrySourceFile: join(f.source, 'src/discovery.ts'),
+    entryExport: 'arbitraryDiscovery', additionalSourceFiles: [generator, definition, join(f.source, 'src/manifest.ts')]};
+  assert.deepEqual(boundManifestSource(root), {path: join(f.source, 'src/manifest.ts'), export: 'arbitraryManifest'});
+  assert.throws(() => boundManifestSource({...root, additionalSourceFiles: [generator, definition]}), /absent from capability closure/);
+  assert.throws(() => boundManifestSource({...root, entryExport: 'wrong'}), /discovery export differs/);
+  f.save(definition, {...raw, manifest: {binding: {module: '../outside.js', export: 'invalid'}}});
+  assert.throws(() => boundManifestSource(root), /Invalid bound capability/);
+  assert.equal(boundManifestSource({...root, additionalSourceFiles: [join(f.source, 'src/manifest.ts')]}), null);
 });

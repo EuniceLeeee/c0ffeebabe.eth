@@ -109,6 +109,28 @@ export function declarativeBinding(root, sourceRoot) {
   return {definition,children,production:matches[0]};
 }
 
+// Version-1 JSON binds handwritten capability exports. Its closure also records
+// generator provenance, which is not a runtime manifest and must not enter SQL.
+export function boundManifestSource(root) {
+  const definitions = root.additionalSourceFiles.filter(file => file.endsWith('.json'))
+    .map(file => ({file, document: json(file)}))
+    .filter(({document}) => document.version === 1 && document.scope?.family === root.familyId);
+  if (!definitions.length) return null;
+  assert.equal(definitions.length, 1, 'Ambiguous bound Family definition');
+  const {file, document} = definitions[0];
+  const resolveBinding = binding => {
+    assert(binding && typeof binding.module === 'string' && binding.module.startsWith('./') &&
+      /^[A-Za-z_$][\w$]*$/.test(binding.export), 'Invalid bound capability');
+    return {path: realpathSync(resolve(dirname(file), binding.module.replace(/\.js$/, '.ts'))), export: binding.export};
+  };
+  const discovery = resolveBinding(document.discovery?.binding);
+  assert.equal(discovery.path, root.entrySourceFile, 'Bound discovery source differs');
+  assert.equal(discovery.export, root.entryExport, 'Bound discovery export differs');
+  const manifest = resolveBinding(document.manifest?.binding);
+  assert(root.additionalSourceFiles.includes(manifest.path), 'Bound manifest absent from capability closure');
+  return manifest;
+}
+
 function sourceExtractor(path, extracts) {
   const content=readFileSync(path,'utf8');
   const ast=ts.createSourceFile(path,content,ts.ScriptTarget.Latest,true,path.endsWith('.ts')?ts.ScriptKind.TS:ts.ScriptKind.JS);
@@ -174,8 +196,14 @@ export async function buildDiscoveryUdf(options) {
       tuples.push(`{plugin:compile${i}(definition${i},[${binding.children.map((_,j)=>`child${i}_${j}`).join(',')}])}`);
     } else {
       imports.push(`import {${root.entryExport} as discovery${i}} from ${JSON.stringify(root.entrySourceFile)};`);
-      const namespaces=root.additionalSourceFiles.map((file,j)=>{const name='manifestSource'+i+'_'+j;imports.push(`import * as ${name} from ${JSON.stringify(file)};`);return name;});
-      tuples.push(`{plugin:{discovery:discovery${i},manifest:findManifest(${JSON.stringify(root.familyId)},[${namespaces.join(',')}])}}`);
+      const bound = boundManifestSource(root);
+      if (bound) {
+        imports.push(`import {${bound.export} as manifest${i}} from ${JSON.stringify(bound.path)};`);
+        tuples.push(`{plugin:{discovery:discovery${i},manifest:findManifest(${JSON.stringify(root.familyId)},[{manifest:manifest${i}}])}}`);
+      } else {
+        const namespaces=root.additionalSourceFiles.map((file,j)=>{const name='manifestSource'+i+'_'+j;imports.push(`import * as ${name} from ${JSON.stringify(file)};`);return name;});
+        tuples.push(`{plugin:{discovery:discovery${i},manifest:findManifest(${JSON.stringify(root.familyId)},[${namespaces.join(',')}])}}`);
+      }
     }
   }
   const methods=['digest','candidateForFamilyObservation','candidateForFamilyCallObservation','adapterLabelForFamily',
