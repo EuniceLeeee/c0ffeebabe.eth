@@ -91,6 +91,12 @@ export type UnifiedObservation =
       readonly sender?: string;
       readonly data: string;
       readonly transactionHash?: string;
+      /** Supplied call-frame coordinates; retaining these never requests traces. */
+      readonly traceAddress?: readonly number[];
+      /** Source-bound input evidence, interpreted only by the owning declaration. */
+      readonly opaque?: CanonicalValue;
+      /** Historical nomination anchor when admission executes at a later source. */
+      readonly evidenceSource?: CanonicalSource;
     }
   | {
       readonly kind: "log";
@@ -192,6 +198,7 @@ export interface RouteCaptureVector {
 export interface FundingCaptureVector {
   readonly kind: "funding";
   readonly assets: readonly string[];
+  readonly bindings?: readonly FundingExecutionBinding[];
   readonly amount: bigint;
   readonly minProfit: bigint;
 }
@@ -516,6 +523,12 @@ export interface IdentityStepInput<
   /** Central execution policy, snapshotted once per identity invocation.
    * Missing in isolated fixtures means exact comparison. Never a percentage. */
   readonly executionRoundingRawUnits?: bigint;
+  /** Current central caller authority; never historical sender or JSON data. */
+  readonly executor?: string;
+  readonly transactionOrigin?: string;
+  /** Current invocation cutoff supplied by the central runtime. Historical
+   * discovery observations do not establish the source of binding reads. */
+  readonly source?: CanonicalSource;
 }
 
 export type IdentityRejectReason = string;
@@ -566,6 +579,9 @@ export interface IdentitySemantics<
 > {
   /** Recheck identity/instance bindings before memo reuse at a new rebuild cutoff. */
   readonly memoReuse?: "recheck-identity";
+  /** Statically bounded sequential rounds in a composed binding/proof program.
+   * Explicit caller limits remain authoritative. Omitted preserves the default. */
+  readonly requiredReadRounds?: number;
   readonly variants: readonly IdentityVariant<Candidate, Identity, unknown>[];
   identityKey(identity: Identity): string;
 }
@@ -703,8 +719,18 @@ export interface FamilyGraphProjection {
   readonly routeActionAdapterId: string;
   /** Actual call/settlement target, which may differ from identity subject. */
   readonly executionTarget: string;
+  /** Bound pool/manager address used by receipts; never substituted into calldata. */
+  readonly observationTarget?: string;
+  /** Typed logical resource ID used by receipts, distinct from execution identity. */
+  readonly observationPoolId?: string;
   /** Stable venue identity without leaking protocol fields into TokenEdge. */
   readonly venueIdentity: CanonicalValue;
+  /** Shared mutable resource across selectors/directions, independent of route identity. */
+  readonly stateResourceKey?: string;
+  /** Complete physical resource set for a composite execution route. */
+  readonly stateResourceKeys?: readonly string[];
+  /** Current executability and price are supplied by the funded startup table. */
+  readonly executionVerification?: "startup-simulation";
   /** Identifies a central score/ranking row; the Family never supplies score. */
   readonly centralScoreKey?: string;
 }
@@ -1437,8 +1463,9 @@ export interface SwapDomainSemantics<
   Descriptor extends CompiledInstanceDescriptor = CompiledInstanceDescriptor,
   Route extends FamilyRouteDescriptor = FamilyRouteDescriptor,
 > {
-  readonly landedEvents: LandedEventSpec;
-  readonly observation: SwapObservationSpec;
+  /** Optional receipt semantics. Execution-only swap routes need neither. */
+  readonly landedEvents?: LandedEventSpec;
+  readonly observation?: SwapObservationSpec;
   /** Family-owned receipt batching/decoding projected into the detector. */
   readonly receiptObservation?: SwapObservationCapability;
   readonly victimSupport:
@@ -1462,7 +1489,9 @@ export type ProtocolCandidateKind =
 
 export interface ProtocolDomainSemantics {
   readonly candidateKinds: readonly ProtocolCandidateKind[];
-  readonly activeBehaviorProof: "required";
+  /** Parameter binding may be read-free only when every route defers execution
+   * admission and pricing to the central funded startup simulation. */
+  readonly activeBehaviorProof: "required" | "startup-simulation";
   readonly oracleVictim?: OracleVictimSpec;
 }
 
@@ -1472,7 +1501,25 @@ export interface ProtocolDomainSemantics {
  * plan. Keeping this shape separate prevents a flash provider from inventing
  * token routes, mids or an exact quote merely to enter the catalog.
  */
+/** Selector-owned resource binding retained from observed input through Ready and issuance. */
+export interface FundingExecutionBinding {
+  readonly chainId: number;
+  readonly provider: string;
+  readonly selector: string;
+  readonly signature: string;
+  readonly asset: string;
+  readonly tokenId?: string;
+  readonly poolId?: string;
+  readonly poolNamespace?: string;
+  readonly arguments?: readonly CanonicalValue[];
+  readonly immutableParameters?: readonly { readonly path: readonly number[]; readonly type: string; readonly value: CanonicalValue }[];
+}
+
 export interface FundingSourceDescriptor {
+  readonly binding?: FundingExecutionBinding;
+  readonly liquidityHolder?: string;
+  /** Physical balance capacity: excludes execution selector/family. */
+  readonly liquidityResourceKey?: string;
   readonly fundingId: string;
   readonly instanceKey: string;
   readonly provider: string;
@@ -1482,6 +1529,11 @@ export interface FundingSourceDescriptor {
 }
 
 export interface FundingOfferDescriptor {
+  readonly binding?: FundingExecutionBinding;
+  readonly liquidityHolder?: string;
+  readonly liquidityResourceKey?: string;
+  readonly feeRate?: bigint;
+  readonly feeScale?: bigint;
   readonly fundingId: string;
   readonly asset: string;
   readonly maxBorrow: bigint;
@@ -1503,11 +1555,11 @@ export interface FundingLiquiditySemantics<
   Source extends FundingSourceDescriptor,
   Evidence,
 > {
-  sources(assets: readonly string[]): readonly Source[];
+  sources(assets: readonly string[], bindings?: readonly FundingExecutionBinding[]): readonly Source[];
   readonly program: RequestProgram<
     FundingLiquidityProgramInput<Source>,
     Evidence
-  >;
+  > & Pick<DependentRequestProgram<FundingLiquidityProgramInput<Source>, Evidence>, "buildDependentProgram">;
   deriveOffers(input: {
     readonly evidence: Evidence;
     readonly sources: readonly Source[];
@@ -1522,15 +1574,31 @@ export interface FundingBorrowBuildInput {
 }
 
 export interface FundingRepaymentSemantics {
-  readonly target: string;
-  readonly liquidityHolder: string;
+  /** Optional metadata for isolated historical definitions. Native funding binds these per offer. */
+  readonly target?: string;
+  readonly liquidityHolder?: string;
   readonly mode: "approve-pull" | "transfer";
-  readonly paramShape: "none" | "tokens-and-amounts";
+  readonly paramShape?: "none" | "tokens-and-amounts";
+  /** Resource metadata for one encoder-validated selected funding root. This
+   * projection carries no liquidity or execution authority. */
+  executionResource?(input: {
+    readonly node: import("../../types.js").ResolvedPlanNode;
+    readonly executor: string;
+  }): FundingExecutionResource;
   buildBorrowFragment(input: FundingBorrowBuildInput): PlanFragment;
   buildRepaymentFragment(input: {
     readonly offer: FundingOfferDescriptor;
     readonly amount: bigint;
   }): PlanFragment;
+}
+
+export interface FundingExecutionResource {
+  readonly fundingId: string;
+  readonly target: string;
+  readonly liquidityHolder: string;
+  readonly liquidityResourceKey: string;
+  readonly asset: string;
+  readonly amount: bigint;
 }
 
 export interface FundingDomainSemantics<
@@ -2227,6 +2295,9 @@ function installSynchronousGuards(
       funding.liquidity.program,
       "funding.liquidity.program",
     );
+    if (funding.liquidity.program.buildDependentProgram !== undefined) {
+      guardSynchronousMethod(funding.liquidity.program, "buildDependentProgram", "funding.liquidity.program.buildDependentProgram");
+    }
     guardSynchronousMethod(
       funding.liquidity,
       "deriveOffers",
@@ -2242,6 +2313,9 @@ function installSynchronousGuards(
       "buildRepaymentFragment",
       "funding.repayment.buildRepaymentFragment",
     );
+    if (funding.repayment.executionResource !== undefined) {
+      guardSynchronousMethod(funding.repayment, "executionResource", "funding.repayment.executionResource");
+    }
     for (const action of fundingPlugin.actionAdapters) {
       assertBoundFamilyOwnedAction(action);
     }
@@ -2253,6 +2327,9 @@ function installSynchronousGuards(
     : domain === "swap"
     ? pluginForDomain(plugin, "swap")
     : pluginForDomain(plugin, "protocol");
+  const startupSimulationProof = domain === "protocol" &&
+    pluginForDomain(plugin, "protocol").protocol.activeBehaviorProof === "startup-simulation";
+  const identityActiveProof = domain === "credit" || domain === "protocol" && !startupSimulationProof;
 
   guardSynchronousMethod(
     routedPlugin.discovery,
@@ -2277,7 +2354,7 @@ function installSynchronousGuards(
       variant,
       "requirements",
       `${label}.requirements`,
-      domain === "protocol" || domain === "credit"
+      identityActiveProof
         ? requireActiveProofRequirements
         : undefined,
     );
@@ -2285,7 +2362,7 @@ function installSynchronousGuards(
       variant,
       "buildRequests",
       `${label}.buildRequests`,
-      domain === "protocol" || domain === "credit"
+      identityActiveProof
         ? requireActiveProofRequests
         : undefined,
     );
@@ -2293,7 +2370,7 @@ function installSynchronousGuards(
       variant,
       "decode",
       `${label}.decode`,
-      domain === "protocol" || domain === "credit"
+      identityActiveProof
         ? requireActiveProofEvidence
         : undefined,
     );
@@ -2301,7 +2378,7 @@ function installSynchronousGuards(
       variant,
       "decide",
       `${label}.decide`,
-      domain === "protocol" || domain === "credit"
+      identityActiveProof
         ? requireActiveProofDecision
         : undefined,
     );
@@ -2339,6 +2416,7 @@ function installSynchronousGuards(
     routedPlugin.routes,
     "projectGraph",
     "routes.projectGraph",
+    startupSimulationProof ? requireStartupSimulationProjection : undefined,
   );
 
   if (domain === "credit") {
@@ -2437,8 +2515,8 @@ function installSynchronousGuards(
 
   if (domain === "swap") {
     const swap = pluginForDomain(plugin, "swap").swap;
-    guardSynchronousMethod(swap.landedEvents, "classify", "swap.landedEvents.classify");
-    guardSynchronousMethod(swap.observation, "decode", "swap.observation.decode");
+    if (swap.landedEvents !== undefined) guardSynchronousMethod(swap.landedEvents, "classify", "swap.landedEvents.classify");
+    if (swap.observation !== undefined) guardSynchronousMethod(swap.observation, "decode", "swap.observation.decode");
     if (swap.poolMaterialization !== undefined) {
       guardSynchronousMethod(
         swap.poolMaterialization,
@@ -2572,6 +2650,13 @@ function assertNonThenable(value: unknown, label: string): void {
   }
   if (typeof then === "function") {
     throw new Error(`${label} returned a thenable; it must be synchronous`);
+  }
+}
+
+function requireStartupSimulationProjection(result: unknown): void {
+  if (result === null || typeof result !== "object" ||
+      (result as { readonly executionVerification?: unknown }).executionVerification !== "startup-simulation") {
+    throw new Error("parameter-only binding requires startup-simulation on every graph route");
   }
 }
 
@@ -2879,8 +2964,10 @@ function validateFundingCaptureVector(vector: FamilyCaptureVector): void {
   }
   assertExactKeys(
     vector,
-    ["amount", "assets", "kind", "minProfit"],
+    ["amount", "assets", "bindings", "kind", "minProfit"],
     "funding capture vector",
+    true,
+    ["amount", "assets", "kind", "minProfit"],
   );
   if (!Array.isArray(vector.assets) || vector.assets.length === 0) {
     throw new Error("funding capture assets must be non-empty");
@@ -3259,10 +3346,12 @@ function fundingDomainBoundary(
   funding: FamilyPluginForDomain<"funding">["funding"],
 ): CanonicalValue {
   return {
-    target: funding.repayment.target,
-    liquidityHolder: funding.repayment.liquidityHolder,
+    binding: funding.repayment.target === undefined ? "selector-resource-per-offer" : "static-provider",
+    target: funding.repayment.target ?? null,
+    liquidityHolder: funding.repayment.liquidityHolder ?? null,
     repayment: funding.repayment.mode,
-    paramShape: funding.repayment.paramShape,
+    paramShape: funding.repayment.paramShape ?? null,
+    executionResource: funding.repayment.executionResource !== undefined,
   };
 }
 
@@ -3850,13 +3939,17 @@ function validateIdentity(
   assertPlainRecord(identity, "identity semantics");
   assertExactKeys(
     identity,
-    ["identityKey", "memoReuse", "variants"],
+    ["identityKey", "memoReuse", "requiredReadRounds", "variants"],
     "identity semantics",
     false,
     ["identityKey", "variants"],
   );
   if (identity.memoReuse !== undefined && identity.memoReuse !== "recheck-identity") {
     throw new Error("identity.memoReuse must be recheck-identity when declared");
+  }
+  if (identity.requiredReadRounds !== undefined && (!Number.isSafeInteger(identity.requiredReadRounds) ||
+      identity.requiredReadRounds < 1 || identity.requiredReadRounds > 256)) {
+    throw new Error("identity.requiredReadRounds must be a bounded integer from 1 to 256");
   }
   assertSynchronousFunction(identity.identityKey, "identity.identityKey");
   if (!Array.isArray(identity.variants) || identity.variants.length === 0) {
@@ -4412,6 +4505,7 @@ function validateFundingDomain(
     funding.liquidity.program,
     "funding.liquidity.program",
     false,
+    true,
   );
   assertSynchronousFunction(
     funding.liquidity.deriveOffers,
@@ -4428,14 +4522,14 @@ function validateFundingDomain(
       "mode",
       "paramShape",
       "target",
+      "executionResource",
     ],
     "funding.repayment",
+    true,
+    ["buildBorrowFragment", "buildRepaymentFragment", "mode"],
   );
-  nonemptyString(funding.repayment.target, "funding repayment target");
-  nonemptyString(
-    funding.repayment.liquidityHolder,
-    "funding repayment liquidityHolder",
-  );
+  if (funding.repayment.target !== undefined) nonemptyString(funding.repayment.target, "funding repayment target");
+  if (funding.repayment.liquidityHolder !== undefined) nonemptyString(funding.repayment.liquidityHolder, "funding repayment liquidityHolder");
   if (
     funding.repayment.mode !== "approve-pull" &&
     funding.repayment.mode !== "transfer"
@@ -4443,6 +4537,7 @@ function validateFundingDomain(
     throw new Error(`${manifest.familyId} has unsupported funding repayment mode`);
   }
   if (
+    funding.repayment.paramShape !== undefined &&
     funding.repayment.paramShape !== "none" &&
     funding.repayment.paramShape !== "tokens-and-amounts"
   ) {
@@ -4456,6 +4551,9 @@ function validateFundingDomain(
     funding.repayment.buildRepaymentFragment,
     "funding.repayment.buildRepaymentFragment",
   );
+  if (funding.repayment.executionResource !== undefined) {
+    assertSynchronousFunction(funding.repayment.executionResource, "funding.repayment.executionResource");
+  }
 }
 
 function validateCreditDomain(
@@ -4557,33 +4655,35 @@ function validateSwapDomain(
     "replay",
     "victimSupport",
   ], "swap domain semantics", true, [
-    "landedEvents",
-    "observation",
-    "receiptObservation",
     "victimSupport",
   ]);
   const patternIds = new Set(discoveryPatternIds(discovery));
-  assertExactKeys(
+  if (swap.landedEvents !== undefined) {
+    assertExactKeys(
     swap.landedEvents,
     ["classify", "patternIds"],
     "swap.landedEvents",
   );
   validatePatternConsumer(swap.landedEvents, "swap.landedEvents", patternIds);
   assertSynchronousFunction(swap.landedEvents.classify, "swap.landedEvents.classify");
-  assertExactKeys(
+  }
+  if (swap.observation !== undefined) {
+    assertExactKeys(
     swap.observation,
     ["decode", "patternIds"],
     "swap.observation",
   );
   validatePatternConsumer(swap.observation, "swap.observation", patternIds);
   assertSynchronousFunction(swap.observation.decode, "swap.observation.decode");
-  if (swap.receiptObservation === undefined) {
-    throw new Error("swap.receiptObservation is required");
   }
+  if (swap.victimSupport !== "none" && swap.receiptObservation === undefined) {
+    throw new Error("swap victim support requires receiptObservation");
+  }
+  if (swap.receiptObservation !== undefined) {
   assertPlainRecord(swap.receiptObservation, "swap.receiptObservation");
   if (
     !Array.isArray(swap.receiptObservation.topics) ||
-    swap.receiptObservation.topics.length === 0 ||
+    (swap.receiptObservation.topics.length === 0 && !swap.receiptObservation.anonymousLogs?.length) ||
     swap.receiptObservation.topics.some((topic) =>
       typeof topic !== "string" || !ethers.isHexString(topic, 32)
     ) ||
@@ -4596,6 +4696,7 @@ function validateSwapDomain(
     swap.receiptObservation.canonicalIntakeTargets,
     "swap.receiptObservation canonicalIntakeTargets",
   );
+  }
   if (swap.poolMaterialization !== undefined) {
     assertExactKeys(
       swap.poolMaterialization,
@@ -4703,8 +4804,8 @@ function validateProtocolDomain(
     true,
     ["activeBehaviorProof", "candidateKinds"],
   );
-  if (protocol.activeBehaviorProof !== "required") {
-    throw new Error("protocol activeBehaviorProof must be required");
+  if (protocol.activeBehaviorProof !== "required" && protocol.activeBehaviorProof !== "startup-simulation") {
+    throw new Error("protocol activeBehaviorProof must be required or startup-simulation");
   }
   const candidates = stringSet(protocol.candidateKinds, "protocol candidateKinds", true);
   const known = new Set<ProtocolCandidateKind>([

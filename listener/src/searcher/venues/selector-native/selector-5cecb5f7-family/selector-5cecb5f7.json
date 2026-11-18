@@ -1,0 +1,5133 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x5cecb5f7",
+  "signature": "function add_liquidity(uint256[3], uint256, bool, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": false,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_5CECB5F7_ENABLED"
+  },
+  "programs": [
+    {
+      "parameters": [
+        {
+          "path": [
+            0,
+            0
+          ],
+          "role": "amountIn"
+        },
+        {
+          "path": [
+            1
+          ],
+          "role": "minimumOut"
+        },
+        {
+          "path": [
+            3
+          ],
+          "role": "recipient"
+        }
+      ],
+      "values": {
+        "abi": {
+          "lp": [
+            "function lp_token() view returns(address)"
+          ],
+          "token": [
+            "function token() view returns(address)"
+          ],
+          "coinU": [
+            "function coins(uint256) view returns(address)"
+          ],
+          "coinI": [
+            "function coins(int128) view returns(address)"
+          ],
+          "basePool": [
+            "function base_pool() view returns(address)"
+          ],
+          "metaPool": [
+            "function pool() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "parameters",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "lp",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "lp",
+                      "lp_token",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "token",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "token",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "coinU",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "coinU",
+                      "coins",
+                      [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "coinI",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "coinI",
+                      "coins",
+                      [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "basePool",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "basePool",
+                      "base_pool",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "metaPool",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "metaPool",
+                      "pool",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                }
+              ],
+              "result": {
+                "coin": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "defined",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "coinU"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "coinU",
+                                        "coins",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "coinU"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "ne",
+                              "args": [
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "coinU"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "coinU",
+                                            "coins",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "coinU"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "0x0000000000000000000000000000000000000000"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "coinU"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "coinU",
+                                        "coins",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "coinU"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "and",
+                              "args": [
+                                {
+                                  "op": "defined",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "coinI"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "coinI",
+                                            "coins",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "coinI"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "ne",
+                                  "args": [
+                                    {
+                                      "op": "lower",
+                                      "args": [
+                                        {
+                                          "op": "if",
+                                          "args": [
+                                            {
+                                              "op": "eq",
+                                              "args": [
+                                                {
+                                                  "op": "shape",
+                                                  "args": [
+                                                    "coinI"
+                                                  ]
+                                                },
+                                                "returned"
+                                              ]
+                                            },
+                                            {
+                                              "op": "decodeCanonical",
+                                              "args": [
+                                                "coinI",
+                                                "coins",
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    {
+                                                      "op": "returned",
+                                                      "args": [
+                                                        "coinI"
+                                                      ]
+                                                    },
+                                                    "data"
+                                                  ]
+                                                },
+                                                0
+                                              ]
+                                            },
+                                            null
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "0x0000000000000000000000000000000000000000"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "coinI"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "coinI",
+                                            "coins",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "coinI"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            null
+                          ]
+                        },
+                        {
+                          "op": "coalesce",
+                          "args": [
+                            "$scope.tokenIn",
+                            null
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "lp": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "defined",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "lp"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "lp",
+                                        "lp_token",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "lp"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "ne",
+                              "args": [
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "lp"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "lp",
+                                            "lp_token",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "lp"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "0x0000000000000000000000000000000000000000"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "lp"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "lp",
+                                        "lp_token",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "lp"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "and",
+                              "args": [
+                                {
+                                  "op": "defined",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "token"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "token",
+                                            "token",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "token"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "ne",
+                                  "args": [
+                                    {
+                                      "op": "lower",
+                                      "args": [
+                                        {
+                                          "op": "if",
+                                          "args": [
+                                            {
+                                              "op": "eq",
+                                              "args": [
+                                                {
+                                                  "op": "shape",
+                                                  "args": [
+                                                    "token"
+                                                  ]
+                                                },
+                                                "returned"
+                                              ]
+                                            },
+                                            {
+                                              "op": "decodeCanonical",
+                                              "args": [
+                                                "token",
+                                                "token",
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    {
+                                                      "op": "returned",
+                                                      "args": [
+                                                        "token"
+                                                      ]
+                                                    },
+                                                    "data"
+                                                  ]
+                                                },
+                                                0
+                                              ]
+                                            },
+                                            null
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "0x0000000000000000000000000000000000000000"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "token"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "token",
+                                            "token",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "token"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            null
+                          ]
+                        },
+                        {
+                          "op": "coalesce",
+                          "args": [
+                            "$scope.tokenOut",
+                            {
+                              "op": "coalesce",
+                              "args": [
+                                "$target",
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "basePool": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "basePool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "basePool",
+                                    "base_pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "basePool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "basePool"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "basePool",
+                                        "base_pool",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "basePool"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "basePool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "basePool",
+                                    "base_pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "basePool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    null
+                  ]
+                },
+                "metaPool": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "metaPool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "metaPool",
+                                    "pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "metaPool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "metaPool"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "metaPool",
+                                        "pool",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "metaPool"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "metaPool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "metaPool",
+                                    "pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "metaPool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    null
+                  ]
+                },
+                "hasTokenGetter": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "token"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "token",
+                                    "token",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "token"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "token"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "token",
+                                        "token",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "token"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "token"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "token",
+                                    "token",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "token"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    null
+                  ]
+                }
+              }
+            }
+          ],
+          "result": "$steps.parameters"
+        },
+        "descriptor": {
+          "coin": "$binding.coin",
+          "lp": "$binding.lp",
+          "basePool": "$binding.basePool",
+          "metaPool": "$binding.metaPool",
+          "hasTokenGetter": "$binding.hasTokenGetter",
+          "index": {
+            "op": "uint",
+            "args": [
+              "0"
+            ]
+          },
+          "tokenIn": {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$binding.coin",
+                  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                ]
+              },
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "$binding.coin"
+            ]
+          },
+          "tokenOut": "$binding.lp"
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$descriptor.args",
+                            0
+                          ]
+                        }
+                      ]
+                    },
+                    3
+                  ]
+                },
+                {
+                  "op": "every",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$descriptor.args",
+                        0
+                      ]
+                    },
+                    "amount",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$index",
+                            {
+                              "op": "number",
+                              "args": [
+                                "$descriptor.index"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$amount",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$amount",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$descriptor.basePool"
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$descriptor.metaPool"
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$descriptor.hasTokenGetter"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "routes": {
+        "directions": [
+          {
+            "id": "mint",
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "convert"
+            },
+            "executionAssets": {
+              "input": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.coin",
+                      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    ]
+                  },
+                  "native",
+                  "erc20"
+                ]
+              },
+              "output": "erc20"
+            }
+          }
+        ]
+      },
+      "dependencies": [
+        "$descriptor.lp",
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$descriptor.coin",
+                "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              ]
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "$descriptor.coin"
+          ]
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$descriptor.basePool"
+              ]
+            },
+            "$descriptor.basePool",
+            "$target"
+          ]
+        }
+      ],
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true,
+          "directOutputWhen": {
+            "op": "not",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$route.executionAssets.input",
+                  "native"
+                ]
+              }
+            ]
+          }
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "executeErc20",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.executionAssets.input",
+                    "native"
+                  ]
+                }
+              ]
+            },
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": false,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function add_liquidity(uint256[3],uint256,bool,address)",
+              "args": [
+                [
+                  {
+                    "runtime": "amountIn"
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ],
+                "$minAmountOut",
+                false,
+                "$recipient"
+              ],
+              "value": {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            }
+          },
+          {
+            "id": "executeNative",
+            "call": {
+              "target": "$target",
+              "signature": "function add_liquidity(uint256[3],uint256,bool,address)",
+              "args": [
+                [
+                  {
+                    "runtime": "amountIn"
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ],
+                "$minAmountOut",
+                false,
+                "$recipient"
+              ],
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.executionAssets.input",
+                      "native"
+                    ]
+                  },
+                  {
+                    "runtime": "amountIn"
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              }
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.executionAssets.input",
+                "native"
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$descriptor.coin",
+                          "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                        ]
+                      },
+                      "native",
+                      "erc20"
+                    ]
+                  },
+                  "native"
+                ]
+              },
+              [
+                {
+                  "kind": "debit",
+                  "asset": "native",
+                  "account": "$executor",
+                  "equals": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ],
+              [
+                {
+                  "kind": "debit",
+                  "token": "$route.tokenIn",
+                  "account": "$executor",
+                  "equals": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ]
+            ]
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "erc20",
+                  "native"
+                ]
+              },
+              [
+                {
+                  "kind": "credit",
+                  "asset": "native",
+                  "account": "$executor",
+                  "minimum": "$minAmountOut"
+                }
+              ],
+              [
+                {
+                  "kind": "credit",
+                  "token": "$route.tokenOut",
+                  "account": "$recipient",
+                  "minimum": "$minAmountOut"
+                }
+              ]
+            ]
+          },
+          {
+            "kind": "unchanged-native",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.executionAssets.input",
+                    "native"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          }
+        ]
+      },
+      "meta": {
+        "sourceFamily": "curve-lp",
+        "migrationKey": "curve-lp:fixed3:booleanReceiver:mint:0",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    },
+    {
+      "parameters": [
+        {
+          "path": [
+            0,
+            1
+          ],
+          "role": "amountIn"
+        },
+        {
+          "path": [
+            1
+          ],
+          "role": "minimumOut"
+        },
+        {
+          "path": [
+            3
+          ],
+          "role": "recipient"
+        }
+      ],
+      "values": {
+        "abi": {
+          "lp": [
+            "function lp_token() view returns(address)"
+          ],
+          "token": [
+            "function token() view returns(address)"
+          ],
+          "coinU": [
+            "function coins(uint256) view returns(address)"
+          ],
+          "coinI": [
+            "function coins(int128) view returns(address)"
+          ],
+          "basePool": [
+            "function base_pool() view returns(address)"
+          ],
+          "metaPool": [
+            "function pool() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "parameters",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "lp",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "lp",
+                      "lp_token",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "token",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "token",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "coinU",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "coinU",
+                      "coins",
+                      [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "1"
+                          ]
+                        }
+                      ]
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "coinI",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "coinI",
+                      "coins",
+                      [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "1"
+                          ]
+                        }
+                      ]
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "basePool",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "basePool",
+                      "base_pool",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "metaPool",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "metaPool",
+                      "pool",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                }
+              ],
+              "result": {
+                "coin": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "defined",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "coinU"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "coinU",
+                                        "coins",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "coinU"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "ne",
+                              "args": [
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "coinU"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "coinU",
+                                            "coins",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "coinU"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "0x0000000000000000000000000000000000000000"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "coinU"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "coinU",
+                                        "coins",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "coinU"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "and",
+                              "args": [
+                                {
+                                  "op": "defined",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "coinI"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "coinI",
+                                            "coins",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "coinI"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "ne",
+                                  "args": [
+                                    {
+                                      "op": "lower",
+                                      "args": [
+                                        {
+                                          "op": "if",
+                                          "args": [
+                                            {
+                                              "op": "eq",
+                                              "args": [
+                                                {
+                                                  "op": "shape",
+                                                  "args": [
+                                                    "coinI"
+                                                  ]
+                                                },
+                                                "returned"
+                                              ]
+                                            },
+                                            {
+                                              "op": "decodeCanonical",
+                                              "args": [
+                                                "coinI",
+                                                "coins",
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    {
+                                                      "op": "returned",
+                                                      "args": [
+                                                        "coinI"
+                                                      ]
+                                                    },
+                                                    "data"
+                                                  ]
+                                                },
+                                                0
+                                              ]
+                                            },
+                                            null
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "0x0000000000000000000000000000000000000000"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "coinI"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "coinI",
+                                            "coins",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "coinI"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            null
+                          ]
+                        },
+                        {
+                          "op": "coalesce",
+                          "args": [
+                            "$scope.tokenIn",
+                            null
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "lp": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "defined",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "lp"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "lp",
+                                        "lp_token",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "lp"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "ne",
+                              "args": [
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "lp"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "lp",
+                                            "lp_token",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "lp"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "0x0000000000000000000000000000000000000000"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "lp"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "lp",
+                                        "lp_token",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "lp"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "and",
+                              "args": [
+                                {
+                                  "op": "defined",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "token"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "token",
+                                            "token",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "token"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "ne",
+                                  "args": [
+                                    {
+                                      "op": "lower",
+                                      "args": [
+                                        {
+                                          "op": "if",
+                                          "args": [
+                                            {
+                                              "op": "eq",
+                                              "args": [
+                                                {
+                                                  "op": "shape",
+                                                  "args": [
+                                                    "token"
+                                                  ]
+                                                },
+                                                "returned"
+                                              ]
+                                            },
+                                            {
+                                              "op": "decodeCanonical",
+                                              "args": [
+                                                "token",
+                                                "token",
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    {
+                                                      "op": "returned",
+                                                      "args": [
+                                                        "token"
+                                                      ]
+                                                    },
+                                                    "data"
+                                                  ]
+                                                },
+                                                0
+                                              ]
+                                            },
+                                            null
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "0x0000000000000000000000000000000000000000"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "token"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "token",
+                                            "token",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "token"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            null
+                          ]
+                        },
+                        {
+                          "op": "coalesce",
+                          "args": [
+                            "$scope.tokenOut",
+                            {
+                              "op": "coalesce",
+                              "args": [
+                                "$target",
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "basePool": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "basePool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "basePool",
+                                    "base_pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "basePool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "basePool"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "basePool",
+                                        "base_pool",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "basePool"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "basePool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "basePool",
+                                    "base_pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "basePool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    null
+                  ]
+                },
+                "metaPool": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "metaPool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "metaPool",
+                                    "pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "metaPool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "metaPool"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "metaPool",
+                                        "pool",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "metaPool"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "metaPool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "metaPool",
+                                    "pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "metaPool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    null
+                  ]
+                },
+                "hasTokenGetter": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "token"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "token",
+                                    "token",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "token"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "token"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "token",
+                                        "token",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "token"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "token"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "token",
+                                    "token",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "token"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    null
+                  ]
+                }
+              }
+            }
+          ],
+          "result": "$steps.parameters"
+        },
+        "descriptor": {
+          "coin": "$binding.coin",
+          "lp": "$binding.lp",
+          "basePool": "$binding.basePool",
+          "metaPool": "$binding.metaPool",
+          "hasTokenGetter": "$binding.hasTokenGetter",
+          "index": {
+            "op": "uint",
+            "args": [
+              "1"
+            ]
+          },
+          "tokenIn": {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$binding.coin",
+                  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                ]
+              },
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "$binding.coin"
+            ]
+          },
+          "tokenOut": "$binding.lp"
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$descriptor.args",
+                            0
+                          ]
+                        }
+                      ]
+                    },
+                    3
+                  ]
+                },
+                {
+                  "op": "every",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$descriptor.args",
+                        0
+                      ]
+                    },
+                    "amount",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$index",
+                            {
+                              "op": "number",
+                              "args": [
+                                "$descriptor.index"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$amount",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$amount",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$descriptor.basePool"
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$descriptor.metaPool"
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$descriptor.hasTokenGetter"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "routes": {
+        "directions": [
+          {
+            "id": "mint",
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "convert"
+            },
+            "executionAssets": {
+              "input": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.coin",
+                      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    ]
+                  },
+                  "native",
+                  "erc20"
+                ]
+              },
+              "output": "erc20"
+            }
+          }
+        ]
+      },
+      "dependencies": [
+        "$descriptor.lp",
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$descriptor.coin",
+                "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              ]
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "$descriptor.coin"
+          ]
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$descriptor.basePool"
+              ]
+            },
+            "$descriptor.basePool",
+            "$target"
+          ]
+        }
+      ],
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true,
+          "directOutputWhen": {
+            "op": "not",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$route.executionAssets.input",
+                  "native"
+                ]
+              }
+            ]
+          }
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "executeErc20",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.executionAssets.input",
+                    "native"
+                  ]
+                }
+              ]
+            },
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": false,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function add_liquidity(uint256[3],uint256,bool,address)",
+              "args": [
+                [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "runtime": "amountIn"
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ],
+                "$minAmountOut",
+                false,
+                "$recipient"
+              ],
+              "value": {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            }
+          },
+          {
+            "id": "executeNative",
+            "call": {
+              "target": "$target",
+              "signature": "function add_liquidity(uint256[3],uint256,bool,address)",
+              "args": [
+                [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "runtime": "amountIn"
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ],
+                "$minAmountOut",
+                false,
+                "$recipient"
+              ],
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.executionAssets.input",
+                      "native"
+                    ]
+                  },
+                  {
+                    "runtime": "amountIn"
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              }
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.executionAssets.input",
+                "native"
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$descriptor.coin",
+                          "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                        ]
+                      },
+                      "native",
+                      "erc20"
+                    ]
+                  },
+                  "native"
+                ]
+              },
+              [
+                {
+                  "kind": "debit",
+                  "asset": "native",
+                  "account": "$executor",
+                  "equals": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ],
+              [
+                {
+                  "kind": "debit",
+                  "token": "$route.tokenIn",
+                  "account": "$executor",
+                  "equals": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ]
+            ]
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "erc20",
+                  "native"
+                ]
+              },
+              [
+                {
+                  "kind": "credit",
+                  "asset": "native",
+                  "account": "$executor",
+                  "minimum": "$minAmountOut"
+                }
+              ],
+              [
+                {
+                  "kind": "credit",
+                  "token": "$route.tokenOut",
+                  "account": "$recipient",
+                  "minimum": "$minAmountOut"
+                }
+              ]
+            ]
+          },
+          {
+            "kind": "unchanged-native",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.executionAssets.input",
+                    "native"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          }
+        ]
+      },
+      "meta": {
+        "sourceFamily": "curve-lp",
+        "migrationKey": "curve-lp:fixed3:booleanReceiver:mint:1",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    },
+    {
+      "parameters": [
+        {
+          "path": [
+            0,
+            2
+          ],
+          "role": "amountIn"
+        },
+        {
+          "path": [
+            1
+          ],
+          "role": "minimumOut"
+        },
+        {
+          "path": [
+            3
+          ],
+          "role": "recipient"
+        }
+      ],
+      "values": {
+        "abi": {
+          "lp": [
+            "function lp_token() view returns(address)"
+          ],
+          "token": [
+            "function token() view returns(address)"
+          ],
+          "coinU": [
+            "function coins(uint256) view returns(address)"
+          ],
+          "coinI": [
+            "function coins(int128) view returns(address)"
+          ],
+          "basePool": [
+            "function base_pool() view returns(address)"
+          ],
+          "metaPool": [
+            "function pool() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "parameters",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "lp",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "lp",
+                      "lp_token",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "token",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "token",
+                      "token",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "coinU",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "coinU",
+                      "coins",
+                      [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "2"
+                          ]
+                        }
+                      ]
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "coinI",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "coinI",
+                      "coins",
+                      [
+                        {
+                          "op": "uint",
+                          "args": [
+                            "2"
+                          ]
+                        }
+                      ]
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "basePool",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "basePool",
+                      "base_pool",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                },
+                {
+                  "id": "metaPool",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "metaPool",
+                      "pool",
+                      []
+                    ]
+                  },
+                  "completion": "return-or-revert-data",
+                  "required": false
+                }
+              ],
+              "result": {
+                "coin": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "defined",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "coinU"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "coinU",
+                                        "coins",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "coinU"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "ne",
+                              "args": [
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "coinU"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "coinU",
+                                            "coins",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "coinU"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "0x0000000000000000000000000000000000000000"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "coinU"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "coinU",
+                                        "coins",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "coinU"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "and",
+                              "args": [
+                                {
+                                  "op": "defined",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "coinI"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "coinI",
+                                            "coins",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "coinI"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "ne",
+                                  "args": [
+                                    {
+                                      "op": "lower",
+                                      "args": [
+                                        {
+                                          "op": "if",
+                                          "args": [
+                                            {
+                                              "op": "eq",
+                                              "args": [
+                                                {
+                                                  "op": "shape",
+                                                  "args": [
+                                                    "coinI"
+                                                  ]
+                                                },
+                                                "returned"
+                                              ]
+                                            },
+                                            {
+                                              "op": "decodeCanonical",
+                                              "args": [
+                                                "coinI",
+                                                "coins",
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    {
+                                                      "op": "returned",
+                                                      "args": [
+                                                        "coinI"
+                                                      ]
+                                                    },
+                                                    "data"
+                                                  ]
+                                                },
+                                                0
+                                              ]
+                                            },
+                                            null
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "0x0000000000000000000000000000000000000000"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "coinI"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "coinI",
+                                            "coins",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "coinI"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            null
+                          ]
+                        },
+                        {
+                          "op": "coalesce",
+                          "args": [
+                            "$scope.tokenIn",
+                            null
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "lp": {
+                  "op": "coalesce",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "defined",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "lp"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "lp",
+                                        "lp_token",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "lp"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "ne",
+                              "args": [
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "lp"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "lp",
+                                            "lp_token",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "lp"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "0x0000000000000000000000000000000000000000"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "lp"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "lp",
+                                        "lp_token",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "lp"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        null
+                      ]
+                    },
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "and",
+                              "args": [
+                                {
+                                  "op": "defined",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "token"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "token",
+                                            "token",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "token"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "op": "ne",
+                                  "args": [
+                                    {
+                                      "op": "lower",
+                                      "args": [
+                                        {
+                                          "op": "if",
+                                          "args": [
+                                            {
+                                              "op": "eq",
+                                              "args": [
+                                                {
+                                                  "op": "shape",
+                                                  "args": [
+                                                    "token"
+                                                  ]
+                                                },
+                                                "returned"
+                                              ]
+                                            },
+                                            {
+                                              "op": "decodeCanonical",
+                                              "args": [
+                                                "token",
+                                                "token",
+                                                {
+                                                  "op": "get",
+                                                  "args": [
+                                                    {
+                                                      "op": "returned",
+                                                      "args": [
+                                                        "token"
+                                                      ]
+                                                    },
+                                                    "data"
+                                                  ]
+                                                },
+                                                0
+                                              ]
+                                            },
+                                            null
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    "0x0000000000000000000000000000000000000000"
+                                  ]
+                                }
+                              ]
+                            },
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "if",
+                                      "args": [
+                                        {
+                                          "op": "eq",
+                                          "args": [
+                                            {
+                                              "op": "shape",
+                                              "args": [
+                                                "token"
+                                              ]
+                                            },
+                                            "returned"
+                                          ]
+                                        },
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "token",
+                                            "token",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "token"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        null
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            null
+                          ]
+                        },
+                        {
+                          "op": "coalesce",
+                          "args": [
+                            "$scope.tokenOut",
+                            {
+                              "op": "coalesce",
+                              "args": [
+                                "$target",
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "basePool": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "basePool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "basePool",
+                                    "base_pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "basePool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "basePool"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "basePool",
+                                        "base_pool",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "basePool"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "basePool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "basePool",
+                                    "base_pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "basePool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    null
+                  ]
+                },
+                "metaPool": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "metaPool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "metaPool",
+                                    "pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "metaPool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "metaPool"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "metaPool",
+                                        "pool",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "metaPool"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "metaPool"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "metaPool",
+                                    "pool",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "metaPool"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    null
+                  ]
+                },
+                "hasTokenGetter": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "defined",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "token"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "token",
+                                    "token",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "token"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "if",
+                                  "args": [
+                                    {
+                                      "op": "eq",
+                                      "args": [
+                                        {
+                                          "op": "shape",
+                                          "args": [
+                                            "token"
+                                          ]
+                                        },
+                                        "returned"
+                                      ]
+                                    },
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "token",
+                                        "token",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "token"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    null
+                                  ]
+                                }
+                              ]
+                            },
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                {
+                                  "op": "eq",
+                                  "args": [
+                                    {
+                                      "op": "shape",
+                                      "args": [
+                                        "token"
+                                      ]
+                                    },
+                                    "returned"
+                                  ]
+                                },
+                                {
+                                  "op": "decodeCanonical",
+                                  "args": [
+                                    "token",
+                                    "token",
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        {
+                                          "op": "returned",
+                                          "args": [
+                                            "token"
+                                          ]
+                                        },
+                                        "data"
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                },
+                                null
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    null
+                  ]
+                }
+              }
+            }
+          ],
+          "result": "$steps.parameters"
+        },
+        "descriptor": {
+          "coin": "$binding.coin",
+          "lp": "$binding.lp",
+          "basePool": "$binding.basePool",
+          "metaPool": "$binding.metaPool",
+          "hasTokenGetter": "$binding.hasTokenGetter",
+          "index": {
+            "op": "uint",
+            "args": [
+              "2"
+            ]
+          },
+          "tokenIn": {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$binding.coin",
+                  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                ]
+              },
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              "$binding.coin"
+            ]
+          },
+          "tokenOut": "$binding.lp"
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$descriptor.args",
+                            0
+                          ]
+                        }
+                      ]
+                    },
+                    3
+                  ]
+                },
+                {
+                  "op": "every",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$descriptor.args",
+                        0
+                      ]
+                    },
+                    "amount",
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$index",
+                            {
+                              "op": "number",
+                              "args": [
+                                "$descriptor.index"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$amount",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$amount",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$descriptor.basePool"
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$descriptor.metaPool"
+                      ]
+                    },
+                    {
+                      "op": "defined",
+                      "args": [
+                        "$descriptor.hasTokenGetter"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "routes": {
+        "directions": [
+          {
+            "id": "mint",
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "convert"
+            },
+            "executionAssets": {
+              "input": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.coin",
+                      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                    ]
+                  },
+                  "native",
+                  "erc20"
+                ]
+              },
+              "output": "erc20"
+            }
+          }
+        ]
+      },
+      "dependencies": [
+        "$descriptor.lp",
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$descriptor.coin",
+                "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              ]
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "$descriptor.coin"
+          ]
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$descriptor.basePool"
+              ]
+            },
+            "$descriptor.basePool",
+            "$target"
+          ]
+        }
+      ],
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true,
+          "directOutputWhen": {
+            "op": "not",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$route.executionAssets.input",
+                  "native"
+                ]
+              }
+            ]
+          }
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "executeErc20",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.executionAssets.input",
+                    "native"
+                  ]
+                }
+              ]
+            },
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": false,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function add_liquidity(uint256[3],uint256,bool,address)",
+              "args": [
+                [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "runtime": "amountIn"
+                  }
+                ],
+                "$minAmountOut",
+                false,
+                "$recipient"
+              ],
+              "value": {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            }
+          },
+          {
+            "id": "executeNative",
+            "call": {
+              "target": "$target",
+              "signature": "function add_liquidity(uint256[3],uint256,bool,address)",
+              "args": [
+                [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  },
+                  {
+                    "runtime": "amountIn"
+                  }
+                ],
+                "$minAmountOut",
+                false,
+                "$recipient"
+              ],
+              "value": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.executionAssets.input",
+                      "native"
+                    ]
+                  },
+                  {
+                    "runtime": "amountIn"
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              }
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.executionAssets.input",
+                "native"
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$descriptor.coin",
+                          "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                        ]
+                      },
+                      "native",
+                      "erc20"
+                    ]
+                  },
+                  "native"
+                ]
+              },
+              [
+                {
+                  "kind": "debit",
+                  "asset": "native",
+                  "account": "$executor",
+                  "equals": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ],
+              [
+                {
+                  "kind": "debit",
+                  "token": "$route.tokenIn",
+                  "account": "$executor",
+                  "equals": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ]
+            ]
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "erc20",
+                  "native"
+                ]
+              },
+              [
+                {
+                  "kind": "credit",
+                  "asset": "native",
+                  "account": "$executor",
+                  "minimum": "$minAmountOut"
+                }
+              ],
+              [
+                {
+                  "kind": "credit",
+                  "token": "$route.tokenOut",
+                  "account": "$recipient",
+                  "minimum": "$minAmountOut"
+                }
+              ]
+            ]
+          },
+          {
+            "kind": "unchanged-native",
+            "when": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.executionAssets.input",
+                    "native"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          }
+        ]
+      },
+      "meta": {
+        "sourceFamily": "curve-lp",
+        "migrationKey": "curve-lp:fixed3:booleanReceiver:mint:2",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    }
+  ]
+}

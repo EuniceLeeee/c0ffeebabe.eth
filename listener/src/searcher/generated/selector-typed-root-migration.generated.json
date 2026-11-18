@@ -1,0 +1,69 @@
+{
+  "baseCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "rows": [
+    {
+      "selector": "0xee9c79da",
+      "signature": "function debond(uint256, address[], uint8[])",
+      "sourceFamily": "peapods-debond",
+      "recipe": "typed:peapods-debond:single-asset",
+      "file": "listener/src/searcher/venues/selector-native/selector-ee9c79da-family/selector-ee9c79da.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x93316212",
+      "signature": "function swap(address, address, address) returns (uint256)",
+      "sourceFamily": "vault-spot",
+      "recipe": "typed:vault-spot:pretransfer-accounted",
+      "file": "listener/src/searcher/venues/selector-native/selector-93316212-family/selector-93316212.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x95991276",
+      "signature": "function sellGem(address, uint256)",
+      "sourceFamily": "psv",
+      "recipe": "typed:psv:sellGem",
+      "file": "listener/src/searcher/venues/selector-native/selector-95991276-family/selector-95991276.json",
+      "enabledByDefault": true
+    },
+    {
+      "selector": "0x8d7ef9bb",
+      "signature": "function buyGem(address, uint256)",
+      "sourceFamily": "psv",
+      "recipe": "typed:psv:buyGem",
+      "file": "listener/src/searcher/venues/selector-native/selector-8d7ef9bb-family/selector-8d7ef9bb.json",
+      "enabledByDefault": true
+    },
+    {
+      "selector": "0x4d44e663",
+      "signature": "function take(address) returns (uint256)",
+      "sourceFamily": "yearn-auction",
+      "recipe": "typed:yearn-auction:take-1",
+      "file": "listener/src/searcher/venues/selector-native/selector-4d44e663-family/selector-4d44e663.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x52180208",
+      "signature": "function take(address, uint256) returns (uint256)",
+      "sourceFamily": "yearn-auction",
+      "recipe": "typed:yearn-auction:take-2",
+      "file": "listener/src/searcher/venues/selector-native/selector-52180208-family/selector-52180208.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x8033d687",
+      "signature": "function take(address, uint256, address) returns (uint256)",
+      "sourceFamily": "yearn-auction",
+      "recipe": "typed:yearn-auction:take-3",
+      "file": "listener/src/searcher/venues/selector-native/selector-8033d687-family/selector-8033d687.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x66ae5880",
+      "signature": "function take(address, uint256, address, bytes) returns (uint256)",
+      "sourceFamily": "yearn-auction",
+      "recipe": "typed:yearn-auction:take-4",
+      "file": "listener/src/searcher/venues/selector-native/selector-66ae5880-family/selector-66ae5880.json",
+      "enabledByDefault": false
+    }
+  ]
+}

@@ -36,19 +36,16 @@ test("case format is data-only, protocol-generic, normalized and immutable", () 
   assert.equal(parseProtocolJsonAcceptanceCase(minimal).trials.length, 1);
 });
 
-test("Swap cases require an explicit domain while legacy Protocol cases remain unchanged", () => {
+test("opaque selector keys accept explicit domains; only runtime manifests own domain semantics", () => {
   const legacy = parseProtocolJsonAcceptanceCase(caseData()); assert.equal(legacy.domain, undefined);
-  for (const familyId of ["balancer-v1", "custom-swap:dodo-v2", "swap:algebra-integral"]) {
-    const raw = { ...caseData(), domain: "swap", familyId };
-    const parsed = parseProtocolJsonAcceptanceCase(raw); assert.equal(parsed.domain, "swap");
-    assert.equal(parsed.familyId, familyId); assert(Object.isFrozen(parsed));
-    const { domain: _domain, ...withoutDomain } = raw;
-    assert.throws(() => parseProtocolJsonAcceptanceCase(withoutDomain), /domain/);
+  for (const familyId of ["balancer-v1", "custom-swap:dodo-v2", "swap:algebra-integral", "execution:0x6e553f65:abi-0123456789abcdef"]) {
+    for (const domain of ["swap", "protocol"]) {
+      const parsed = parseProtocolJsonAcceptanceCase({ ...caseData(), domain, familyId });
+      assert.equal(parsed.domain, domain); assert.equal(parsed.familyId, familyId); assert(Object.isFrozen(parsed));
+    }
   }
-  assert.equal(parseProtocolJsonAcceptanceCase({ ...caseData(), domain: "protocol" }).domain, "protocol");
-  for (const [domain, familyId] of [["swap", "protocol:fixture"], ["swap", "credit:fixture"],
-    ["swap", "funding:fixture"], ["protocol", "balancer-v1"], ["credit", "protocol:fixture"],
-    [null, "protocol:fixture"], ["swap", "../fixture"], ["swap", " fixture"], ["protocol", "protocol::fixture"]])
+  for (const [domain, familyId] of [[null, "protocol:fixture"], ["funding", "funding:fixture"],
+    ["swap", "../fixture"], ["swap", " fixture"], ["protocol", "protocol::fixture"]])
     assert.throws(() => parseProtocolJsonAcceptanceCase({ ...caseData(), domain, familyId }), /domain/);
 });
 
@@ -67,7 +64,7 @@ test("case JSON cannot decide admission, rejection, success or execution code", 
     (d: any) => { d.descriptor = {}; }, (d: any) => { d.admitted = true; },
     (d: any) => { d.binding = { module: "evil" }; }, (d: any) => { d.trials[0].expected = "reject"; },
     (d: any) => { d.trials[0].passed = true; }, (d: any) => { d.trials[0].handler = () => true; },
-    (d: any) => { d.familyId = "swap:fixture"; }, (d: any) => { d.version = 2; },
+    (d: any) => { d.familyId = "swap::fixture"; }, (d: any) => { d.version = 2; },
     (d: any) => { d.source.generation = 3; }, (d: any) => { d.source.hash = "0x1234"; },
     (d: any) => { d.source.number = 1.5; }, (d: any) => { d.executor = toBeHex(0, 20); },
     (d: any) => { d.trials.push(structuredClone(d.trials[0])); }, (d: any) => { d.trials = []; },

@@ -17,7 +17,7 @@ const edges = Object.freeze([[weth, address(1)], [address(1), weth], [weth, addr
     const edge = { tokenIn: tokenIn!, tokenOut: tokenOut!, adapterId: `disabled-test-${n}`, target: address(100 + n),
       instanceKey: `instance-${n}`, executionVariantKey: `variant-${n}`, slotKind: "swap" as const,
       ...deriveEdgeTaxonomy("swap") };
-    return Object.freeze({ ...edge, canonicalEdgeId: blockScanEdgeKey(edge) });
+    return Object.freeze({ ...edge, canonicalEdgeId: blockScanEdgeKey(edge) as NonNullable<TokenEdge["canonicalEdgeId"]> });
   }));
 const key = blockScanEdgeKey(edges[0]!);
 function pricing(n: number, graphEdges: readonly TokenEdge[] = edges) {

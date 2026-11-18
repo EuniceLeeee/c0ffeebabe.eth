@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x852a12e3",
+  "signature": "function redeemUnderlying(uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_852A12E3_ENABLED"
+  },
+  "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

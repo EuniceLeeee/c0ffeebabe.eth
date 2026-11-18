@@ -1,0 +1,400 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x441a3e70",
+  "signature": "function withdraw(uint256, uint256) returns (uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": false,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_441A3E70_ENABLED"
+  },
+  "programs": [
+    {
+      "parameters": [
+        {
+          "path": [
+            0
+          ],
+          "role": "amountIn"
+        },
+        {
+          "path": [
+            1
+          ],
+          "role": "minimumOut"
+        }
+      ],
+      "values": {
+        "abi": {
+          "events": [
+            "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)"
+          ],
+          "asset": [
+            "function ASSET_TOKEN() view returns(address)"
+          ],
+          "stable": [
+            "function STABLECOIN() view returns(address)"
+          ],
+          "cryptopool": [
+            "function CRYPTOPOOL() view returns(address)"
+          ],
+          "amm": [
+            "function amm() view returns(address)"
+          ],
+          "staker": [
+            "function staker() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "parameters",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "asset",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "asset",
+                      "ASSET_TOKEN",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                },
+                {
+                  "id": "stable",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "stable",
+                      "STABLECOIN",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                },
+                {
+                  "id": "cryptopool",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "cryptopool",
+                      "CRYPTOPOOL",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                },
+                {
+                  "id": "amm",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "amm",
+                      "amm",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                },
+                {
+                  "id": "staker",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "staker",
+                      "staker",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                }
+              ],
+              "result": {
+                "asset": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "asset",
+                            "ASSET_TOKEN",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "asset"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "stable": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "stable",
+                            "STABLECOIN",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "stable"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "cryptopool": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "cryptopool",
+                            "CRYPTOPOOL",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "cryptopool"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "amm": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "amm",
+                            "amm",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "amm"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "staker": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "staker",
+                            "staker",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "staker"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "result": "$steps.parameters"
+        },
+        "descriptor": {
+          "asset": "$binding.asset",
+          "stable": "$binding.stable",
+          "cryptopool": "$binding.cryptopool",
+          "amm": "$binding.amm",
+          "staker": "$binding.staker",
+          "tokenIn": "$target",
+          "tokenOut": "$binding.asset"
+        }
+      },
+      "routes": {
+        "resources": [
+          {
+            "target": "$target"
+          },
+          {
+            "target": "$descriptor.cryptopool"
+          },
+          {
+            "target": "$descriptor.amm"
+          }
+        ]
+      },
+      "dependencies": [
+        "$descriptor.asset",
+        "$descriptor.stable",
+        "$descriptor.cryptopool",
+        "$descriptor.amm",
+        "$descriptor.staker"
+      ],
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": [
+          "$target",
+          "$descriptor.asset",
+          "$descriptor.stable",
+          "$descriptor.cryptopool",
+          "$descriptor.amm",
+          "$descriptor.staker"
+        ],
+        "steps": [
+          {
+            "id": "execute",
+            "call": {
+              "target": "$target",
+              "signature": "function withdraw(uint256,uint256) returns(uint256)",
+              "args": [
+                {
+                  "runtime": "amountIn"
+                },
+                "$minAmountOut"
+              ],
+              "save": {
+                "output": 0
+              }
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "minimum": "$minAmountOut",
+            "equals": {
+              "runtime": "output"
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$descriptor.stable",
+            "account": "$executor"
+          }
+        ]
+      },
+      "meta": {
+        "sourceFamily": "yieldbasis-lt",
+        "migrationKey": "yieldbasis-lt:withdraw:executor",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { historicalCandidateSelection, cleanupHistoricalResources, historicalContinuationIdentity } from "../blockscan-at-block-cli.js";
+import { historicalCandidateSelection, cleanupHistoricalResources, historicalContinuationIdentity, historicalTouchedAnchor } from "../blockscan-at-block-cli.js";
 import { blockScanRouteId } from "../blockscan-route-identity.js";
 import { test } from "node:test";
 import { ethers } from "ethers";
@@ -22,6 +22,24 @@ import { historicalBaselineData, writeHistoricalBenchmarkBaseline, readHistorica
   historicalBenchmarkSummary, assertHistoricalSamplingPolicy } from "../blockscan-historical-benchmark.js";
 
 const base = ["--ready", "ready.json", "--block", "123", "--out", "logs/new-run"];
+test("historical activity obtains actual missing transaction coverage and rejects a changed canonical header", async () => {
+  const hash = (value: number) => ethers.toBeHex(value, 32);
+  const hint = { number: 123, hash: hash(123), parentHash: hash(122) };
+  const complete = { ...hint, timestamp: 1, baseFeePerGas: 1n, gasUsed: 1n, gasLimit: 100n,
+    transactionHashes: [hash(124)], passiveTouchedAddresses: [ethers.toBeHex(125, 20)] };
+  let reads = 0;
+  const read = async () => { reads++; return complete; };
+  const anchor = await historicalTouchedAnchor(hint, read);
+  assert.equal(reads, 1); assert.deepEqual(anchor.transactionHashes, complete.transactionHashes);
+  assert.deepEqual(anchor.passiveTouchedAddresses, complete.passiveTouchedAddresses);
+  assert.notStrictEqual(anchor.transactionHashes, complete.transactionHashes);
+  await historicalTouchedAnchor(complete, read); assert.equal(reads, 1, "already observed coverage is reused");
+  await historicalTouchedAnchor(undefined, read); assert.equal(reads, 2);
+  for (const altered of [{ number: 124 }, { hash: hash(999) }, { parentHash: hash(999) }])
+    await assert.rejects(historicalTouchedAnchor(hint, async () => ({ ...complete, ...altered })), /changed/);
+  await assert.rejects(historicalTouchedAnchor(hint, async () => ({ ...complete, transactionHashes: undefined }) as never),
+    /lacks full header transaction hashes/);
+});
 test("historical continuation binds a bigint sampling policy without serializing raw bigint", () => {
   const policy = { spreadBps: 0, fixedWethInput: 20_000_000_000_000_000n, cascade: false };
   const first = historicalContinuationIdentity("baseline", policy);
@@ -41,7 +59,7 @@ test("historical cleanup drains every resource even when evidence writes fail", 
   assert.deepEqual(calls, [1, 2, 3], "original run failure is preserved without skipping final cleanup");
 });
 test("expired run deadline cannot let unref-only cleanup silently exit zero", () => {
-  const url = new URL("../blockscan-at-block-cli.ts", import.meta.url).href;
+  const url = new URL("../historical-resource-cleanup.ts", import.meta.url).href;
   const child = spawnSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
     import { cleanupHistoricalResources } from ${JSON.stringify(url)};
     await new Promise(resolve => setTimeout(resolve, 1)); // run deadline already fired

@@ -6,6 +6,7 @@
  */
 import type { TokenEdge } from "../planner/token-graph.js";
 import { v4PoolId } from "../planner/token-graph.js";
+import { edgeObservationIdentity } from "../venues/route-observation-identity.js";
 import type { PoolStateCache } from "../solver/pool-state-cache.js";
 import {
   readAnyWarmMid,
@@ -71,6 +72,7 @@ function legacyReader(
 }
 
 function edgeVenueIdentity(edge: TokenEdge): string {
+  if (edge.observationTarget !== undefined || edge.observationPoolId !== undefined) return edgeObservationIdentity(edge);
   if (edge.poolId) return edge.poolId.toLowerCase();
   if (edge.v4PoolKey) return v4PoolId(edge.v4PoolKey).toLowerCase();
   return edge.target.toLowerCase();

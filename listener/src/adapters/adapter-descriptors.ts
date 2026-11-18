@@ -1,6 +1,6 @@
 import type { EdgeKind } from "../searcher/strategy-taxonomy.js";
 import type { FundingLineageId } from
-  "../searcher/venues/funding/funding-capability.js";
+  "../searcher/venues/funding-capability.js";
 
 export type Lineage =
   | "univ2" | "univ3" | "univ4" | "curve" | "balancer-flash" | "morpho-flash"

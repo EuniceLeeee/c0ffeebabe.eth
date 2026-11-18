@@ -17,7 +17,7 @@ function fixture(mode: "positive-ev" | "positive-gross-profit" = "positive-gross
   const sent: Array<{ profitMode?: string; bribeWei?: bigint }> = [];
   const rejected = new BlockScanSimRejectCache(), coordinator = new SubmissionCoordinator();
   const preference = new SubmissionPreference<BlockScanAtomicResult>({ signal: controller.signal, deadlineAtMs });
-  const runtime = createFinalSimulationWorkRuntime<ResolvedPlan, SimulationResult, null>({
+  const runtime = createFinalSimulationWorkRuntime<null, ResolvedPlan, SimulationResult>({
     reservedResources: [{ id: "mock", value: null }],
     runner: { async simulate(input) { simulations++; return { success: true, profitToken: address,
       grossProfit: input.resolvedPlan.netProfit, netProfit: input.resolvedPlan.netProfit, gasUsed: 100n,
@@ -58,7 +58,7 @@ test("production atomic path sends later positive EV and discards an earlier gro
   const f = fixture();
   try {
     const gross = await f.run(50n); assert(gross.deferredSubmission); assert(!gross.terminalForQuoteSet);
-    assert.deepEqual(f.sent, []);
+    assert.equal(f.sent.length, 0);
     const ev = await f.run(1000n); assert(ev.submitted); assert.equal(ev.profitMode, "positive-ev");
     const outcomes: string[] = [];
     await f.preference.flush((_e, r) => outcomes.push(r.decision));
@@ -71,7 +71,7 @@ test("production atomic path sends later positive EV and discards an earlier gro
 test("gross mode alone defers then sends the original 99%-gross bid without re-simulation", async () => {
   const f = fixture();
   try {
-    assert((await f.run(50n)).deferredSubmission); assert.deepEqual(f.sent, []);
+    assert((await f.run(50n)).deferredSubmission); assert.equal(f.sent.length, 0);
     await f.preference.flush(() => {});
     assert.equal(f.sent.length, 1); assert.equal(f.sent[0]!.profitMode, "positive-gross-profit");
     assert.equal(f.sent[0]!.bribeWei, 49n); assert.equal(f.simulations(), 1);
@@ -94,7 +94,7 @@ test("plain positive-EV mode rejects a loss and never defers a gross submission"
   try {
     const r = await f.run(50n); assert.equal(r.decision, "below_ev_gate");
     assert.equal(r.deferredSubmission, undefined); await f.preference.flush(() => {});
-    assert.deepEqual(f.sent, []);
+    assert.equal(f.sent.length, 0);
   } finally { f.close(); }
 });
 
@@ -110,7 +110,7 @@ for (const mutation of ["head", "abort", "revert"] as const) test(`deferred gros
     const decisions: string[] = [];
     const flush = f.preference.flush((_e, r) => decisions.push(r.decision));
     if (mutation === "abort") await assert.rejects(flush, /new head/); else await flush;
-    assert.deepEqual(f.sent, []); assert.equal(f.simulations(), 1);
+    assert.equal(f.sent.length, 0); assert.equal(f.simulations(), 1);
     assert.deepEqual(decisions, [mutation === "head" ? "blockscan_stale_state" : mutation === "revert" ? "sim_revert_seen_this_live" : "gross_profit_fallback_cancelled"]);
   } finally { f.close(); }
 });

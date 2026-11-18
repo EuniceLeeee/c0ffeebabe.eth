@@ -2,19 +2,30 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { buildFamilyRegressionPlan, sameRegressionInputs, summarizeFamilyRerun, classifyAcceptanceEvidence, type RegressionPlan } from "./family-json-regression.js";
 import sample from "./fixtures/protocol-json/cases/wsteth--wrap-original-input.json";
 import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-facts.js";
 import { registerAcceptanceSample } from "./protocol-json-sample-registration.js";
+import { assertSelectorFamilyModule } from "../venues/selector-family-module.js";
+import { normalizeSelectorFamilyDefinition, selectorFamilySemanticHash } from "../venues/selector-family-definition.js";
 
 // The normal shared suite also checks every installed JSON entry automatically.
 // This is explicitly definition-level evidence; historical facts use the batch entry.
 const installed = await buildFamilyRegressionPlan();
 for (const family of installed.families) test(`installed JSON definition: ${family.familyId}`, async () => {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
-  const { plugin } = await import(pathToFileURL(resolve(root, family.entry)).href);
+  const entry = await import(pathToFileURL(resolve(root, family.entry)).href);
+  assert.deepEqual(Object.keys(entry), ["selectorFamilyModule"], "installed entries expose only the v2 public contract");
+  assertSelectorFamilyModule(entry.selectorFamilyModule);
+  const { plugin, definition, semanticDefinitionHash } = entry.selectorFamilyModule;
+  const authored = JSON.parse(readFileSync(resolve(root, family.definition), "utf8"));
+  assert.equal(entry.selectorFamilyModule.contract, "selector-family/v2");
+  assert.deepEqual(definition, normalizeSelectorFamilyDefinition(authored));
+  assert.equal(semanticDefinitionHash, selectorFamilySemanticHash(authored));
   assert.equal(plugin.manifest.familyId, family.familyId);
   assert.equal(plugin.manifest.domain, family.domain);
+  assert.deepEqual([...plugin.manifest.supportedLineages].sort(), family.variants.map(variant => variant.lineageId).sort());
 });
 
 const plan: RegressionPlan = { format: "family-json-regression-plan-v1", testFingerprint: "test-a", sourceFingerprint: "source-a", families: [

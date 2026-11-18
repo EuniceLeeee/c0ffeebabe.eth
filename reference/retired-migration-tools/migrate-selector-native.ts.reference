@@ -1,0 +1,136 @@
+/** One-time source migration. This script reads retired inputs; neither
+ * production registration nor the native runtime imports those inputs. */
+import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync } from "node:fs";
+import { dirname, resolve, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
+import { reduceSelectorNativeProgram, pathOf } from "./selector-native-migration-prune.js";
+import { normalizeDeclarativeVariant, normalizeDeclarativeChecks } from "../listener/src/searcher/venues/declarative-variant.js";
+import { normalizeSelectorNativeExecutionDefinition, selectorNativeFamilyId, selectorNativeProgramKey } from "../listener/src/searcher/venues/selector-native-definition.js";
+type Data=Record<string,any>;
+const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
+const sourceArg=process.argv.indexOf("--source-root"),sourceRoot=sourceArg<0?root:resolve(process.argv[sourceArg+1]??"");
+const sourceVenues=resolve(sourceRoot,"listener/src/searcher/venues"),venues=resolve(root,"listener/src/searcher/venues");
+const read=(file:string):Data=>JSON.parse(readFileSync(file,"utf8"));
+const inlineModels=read(resolve(root,"scripts/selector-native-value-models.migration.json"));
+const digest=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex");
+const models=read(resolve(root,"scripts/selector-native-runtime-models.migration.json")) as any;
+const modelMap=new Map(models.map((m:any)=>[`${m.id}@${m.version}`,m]));
+const mathUses=new Map<string,Set<string>>(), migrations:any[]=[], pending:any[]=[];
+const pick=(v:Data,keys:string[])=>Object.fromEntries(keys.filter(k=>v[k]!==undefined).map(k=>[k,v[k]]));
+const nonempty=(v:any)=>v&&Object.keys(v).length>0;
+function transform(v:any,names:Map<string,string>):any {
+ if(typeof v==="string")return names.get(v)??(v==="$identity"?"$facts":v.startsWith("$identity.")?"$facts."+v.slice(10):v);
+ if(Array.isArray(v))return v.map(x=>transform(x,names));
+ return v&&typeof v==="object"?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,transform(x,names)])):v;
+}
+/** Keep only value definitions reachable from executable/binding data. */
+function prune(values:Data,uses:any):Data {
+ const result:Data={},seen=new Set<string>();
+ function keep(section:string,key?:string){
+  if(!values[section])return;
+  for(const k of key===undefined?Object.keys(values[section]):[key]){
+   const ref=section+"."+k;if(seen.has(ref)||!Object.hasOwn(values[section],k))continue;seen.add(ref);
+   (result[section]??={})[k]=values[section][k];visit(values[section][k]);
+  }
+ }
+ function visit(v:any):void {
+  if(typeof v==="string"){
+   const m=/^\$(abi|constants|expressions|programs|inputs)(?:\.([^.]+))?/.exec(v);if(m)keep(m[1]!,m[2]);
+  }else if(v&&typeof v==="object"){
+   if(["expression","program"].includes(v.op)&&typeof v.args?.[0]==="string")keep(v.op==="expression"?"expressions":"programs",v.args[0]);
+   if(["encode","decode","tryDecode","decodedResult","tryDecodedResult"].includes(v.op)&&typeof v.args?.[0]==="string")keep("abi",v.args[0]);
+   Object.values(v).forEach(visit);
+  }
+ }
+ visit(uses);return result;
+}
+function referencedMath(v:any,found=new Set<string>()):Set<string>{
+ if(v&&typeof v==="object"){if(v.op==="model"&&typeof v.args?.[0]==="string")found.add(v.args[0]);Object.values(v).forEach(x=>referencedMath(x,found));}return found;
+}
+for(const dir of readdirSync(resolve(sourceVenues,"execution-shapes")).sort()){
+ const file=resolve(sourceVenues,"execution-shapes",dir,dir.replace(/-family$/,"")+".json");if(!existsSync(file))continue;
+ const declaration=read(file),id=selectorNativeFamilyId(declaration as any);
+ const output:Data={format:"selector-native-execution/v1",selector:declaration.selector,signature:declaration.signature,domain:declaration.domain??"protocol",
+  activation:{enabled:true,envKey:`SEARCHER_FAMILY_SELECTOR_${declaration.selector.slice(2).toUpperCase()}_ENABLED`},programs:[]};
+ if(!declaration.programs?.length)output.unsupportedReason=declaration.unsupportedReason??"Observed ABI is not an independently executable entry";
+ const unique=new Map<string,Data>();
+ for(const reference of declaration.programs??[]){
+  const source=resolve(dirname(file),reference.source),original=read(source);
+  if(original.version!==2){
+   const supplied=process.env.SELECTOR_NATIVE_AMMALGAM_PROGRAM??resolve(root,"scripts/ammalgam-native-program.migration.json");
+   if(!supplied){pending.push({selector:declaration.selector,source:reference.source,variant:reference.variant});continue;}
+   const program=read(resolve(supplied));const key=selectorNativeProgramKey(program);unique.set(key,program);
+   migrations.push({selector:declaration.selector,source:relative(sourceRoot,source),variant:reference.variant,programKey:key,sourceSha256:digest(original),kind:"typed-to-data"});continue;
+  }
+  const primary=normalizeDeclarativeVariant(original.standard) as Data;
+  const variants=[primary,...original.variantFiles.map((name:string)=>normalizeDeclarativeVariant(read(resolve(dirname(source),name))))] as Data[];
+  const variant=variants.find(v=>v.id===reference.variant)??(reference.variant==="standard"?primary:undefined);if(!variant)throw new Error("missing variant "+reference.variant);
+  const module=(name:string)=>Object.hasOwn(variant.modules??{},name)?variant.modules[name]:original.modules?.[name];
+  const names=new Map<string,string>([[original.manifest.familyId,id],...original.manifest.supportedLineages.map((name:string)=>[name,"$programLineage"] as [string,string])]);
+  const binding=reference.binding;if(!binding?.facts)throw new Error("missing current binding "+reference.source);
+  const values=transform(Object.fromEntries(["abi","constants","expressions","programs"].map(k=>[k,{...(variant[k]??{}),...(binding.values?.[k]??{})}])),names);
+  const inputNames=[...new Set([...(variant.inputs??[]),...(binding.values?.inputs??[])])];if(inputNames.length)values.inputs=inputNames;
+  const resources=transform(pick(primary,["abi","constants","expressions","programs","inputs"]),names);
+  const program:Data={label:`${original.scope.family}/${reference.variant}`,
+   binding:{...transform(pick(binding,["nomination","candidate","subject","flow","facts"]),names),descriptor:transform(original.instance.draft,names),match:transform(variant.match,names)},
+   routes:{target:transform(original.routes.target,names),directions:transform(original.routes.directions,names),
+    ...(reference.directions?{allowedDirections:reference.directions}:{}),...(original.routes.graphVenue?{venue:transform(original.routes.graphVenue,names)}:{}),
+    ...(original.routes.descriptorChecks?{checks:transform(normalizeDeclarativeChecks(original.routes.descriptorChecks),names)}:{}),
+    ...(original.routes.assertions?{assertions:transform(normalizeDeclarativeChecks(original.routes.assertions),names)}:{})},
+   context:transform(variant.context,names),state:transform(variant.boundState,names),execution:transform(variant.execution,names),
+   ...(variant.assertions?.length?{checks:transform(variant.assertions,names)}:{}),
+   ...(original.production.domain==="swap"?{observations:transform(original.swap,names)}:{}),
+   dependencies:transform(variant.pricing.mutationAddresses,names),refreshPolicy:variant.pricing.refreshPolicy};
+  if(nonempty(module("instanceEvidence")))program.binding.descriptorReads=transform(module("instanceEvidence"),names);
+  if(nonempty(module("quoteOutput")))program.quoteOutput=transform(module("quoteOutput"),names);
+  if(nonempty(module("signedBlockEvidence")))program.runtimeEvidence=transform(module("signedBlockEvidence"),names);
+  if(nonempty(module("executionProjection")))program.runtimeProjection=transform(module("executionProjection").result,names);
+  const venue=program.routes.venue??{};
+  const physicalTarget=venue.pool??venue.manager??venue.vault??venue.target??program.routes.target;
+  program.routes.resource={target:physicalTarget,...(venue.poolId===undefined?{}:{poolId:venue.poolId}),...(binding.nomination?.poolNamespace===undefined?{}:{poolNamespace:binding.nomination.poolNamespace})};
+  // Audited one-time migration of an atomic path: the entry router itself is
+  // not either balance-bearing resource. Production consumes only this data.
+  if(declaration.selector==='0xcb70e273')program.routes.resources=[{target:'$descriptor.curve'},{target:'$descriptor.vault'}];
+  function observedResource(v:any):any {const path=pathOf(v);if(path?.length===2&&path[0]==='edge'&&['target','poolId'].includes(path[1]!))return {op:'coalesce',args:[`$edge.${path[1]==='target'?'observationTarget':'observationPoolId'}`,v]};
+   return Array.isArray(v)?v.map(observedResource):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,observedResource(x)])):v;}
+  if(program.observations)program.observations=observedResource(program.observations);
+  const fee=program.binding.facts?.feeRule?.feeBps;
+  const feeAlternatives=fee?.op==='if'&&JSON.stringify(fee.args[0]).includes('factory')&&fee.args.slice(1).every((v:any)=>v?.op==='uint')?fee.args.slice(1):undefined;
+  if(feeAlternatives)program.binding.facts.feeRule.feeBps=feeAlternatives[0];
+  // Action ownership changes structurally; ordinary getter/flow names are not
+  // action ids and must never be globally string-replaced.
+  const actions=new Set(original.manifest.ownedActionAdapterIds);
+  function actionFields(v:any):any {
+   if(Array.isArray(v))return v.map(actionFields);
+   if(!v||typeof v!=="object")return v;
+   const out=Object.fromEntries(Object.entries(v).map(([k,x])=>[k,k==="adapterId"&&typeof x==="string"&&actions.has(x)?`${id}:call`:actionFields(x)]));
+   if(["eq","ne"].includes(out.op)&&JSON.stringify(out.args).includes("adapterId"))out.args=out.args.map((x:any)=>typeof x==="string"&&actions.has(x)?`${id}:call`:x);
+   return out;
+  }
+  Object.assign(program,actionFields(program));
+  reduceSelectorNativeProgram(program,values,resources);
+  program.values=prune(values,program);
+  program.resourceValues=prune(resources,{binding:program.binding,routes:program.routes});
+  if(!nonempty(program.values))delete program.values;if(!nonempty(program.resourceValues))delete program.resourceValues;
+  const math=module("math"),aliases=referencedMath(program);
+  if(aliases.size){if(!math?.entries)throw new Error("missing math bindings "+reference.source);const entries=Object.fromEntries([...aliases].map(alias=>{const m=math.entries[alias];if(!m)throw new Error("missing math alias "+alias);const uses=mathUses.get(m.model)??new Set<string>();uses.add(reference.source);mathUses.set(m.model,uses);return[alias,m];}));const all=Array.isArray(inlineModels)?inlineModels:inlineModels.models;const needed=[...new Set(Object.values(entries).map((e:any)=>e.model))].map(id=>all.find((m:any)=>m.id===id)??(()=>{throw new Error('missing inline scalar model '+id)})());program.math={version:1,entries,models:needed};}
+  const runtimeMath=module("executionMath");
+  if(nonempty(runtimeMath)){const selected=[...new Set(Object.values(runtimeMath.entries).map((entry:any)=>`${entry.model}@${entry.version}`))].map(key=>{const model=modelMap.get(key);if(!model)throw new Error("missing inline runtime model "+key);return model;});program.runtimeMath={...runtimeMath,models:selected};}
+  const key=selectorNativeProgramKey(program);unique.set(key,program);
+  const alternativeProgramKeys:string[]=[];
+  for(const alternative of feeAlternatives?.slice(1)??[]){
+   const copy=JSON.parse(JSON.stringify(program));copy.label=`${program.label}:fee-${alternative.args[0]}`;
+   function replace(v:any):void {if(!v||typeof v!=='object')return;if(v.feeRule?.feeBps)v.feeRule.feeBps=alternative;Object.values(v).forEach(replace);}
+   replace(copy.binding.descriptor);const alternativeKey=selectorNativeProgramKey(copy);unique.set(alternativeKey,copy);alternativeProgramKeys.push(alternativeKey);
+  }
+  migrations.push({selector:declaration.selector,source:relative(sourceRoot,source),variant:reference.variant,directions:reference.directions??null,programKey:key,...(alternativeProgramKeys.length?{alternativeProgramKeys}:{}),sourceSha256:digest(original),executionSha256:digest(variant.execution),kind:"execution-and-parameter-data"});
+ }
+ output.programs=[...unique.values()];
+ if(declaration.programs?.length&&!output.programs.length)continue;
+ const native=normalizeSelectorNativeExecutionDefinition(output),dest=resolve(venues,"selector-native",dir,dir.replace(/-family$/,"")+".json");mkdirSync(dirname(dest),{recursive:true});writeFileSync(dest,JSON.stringify(native,null,2)+"\n");
+}
+const report={format:"selector-native-migration/v1",executableReferences:migrations.length,pending,ordinaryMathModels:[...mathUses].map(([id,uses])=>({id,sources:[...uses]})),migrations};
+const reportPath=resolve(root,"listener/src/searcher/generated/selector-native-migration.generated.json");writeFileSync(reportPath,JSON.stringify(report,null,2)+"\n");
+console.log(JSON.stringify({executableReferences:migrations.length,pending,ordinaryMathModels:report.ordinaryMathModels}));
+if(pending.length)process.exitCode=2;

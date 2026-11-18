@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xaa9d21cb",
+  "signature": "function quoteExactInputSingle(((address, address, uint24, int24, address), bool, uint128, bytes))",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_AA9D21CB_ENABLED"
+  },
+  "unsupportedReason": "Quote/read helper retained by its complete source program; ABI membership does not define a standalone execution route."
+}

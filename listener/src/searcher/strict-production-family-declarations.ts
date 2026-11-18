@@ -87,12 +87,12 @@ type RoutePluginProjection = {
   };
   readonly discovery?: DiscoverySemantics<FamilyCandidate>;
   readonly swap?: {
-    readonly landedEvents: {
+    readonly landedEvents?: {
       classify(input: {
         readonly observation: UnifiedObservation;
       }): "swap" | "mutation" | null;
     };
-    readonly receiptObservation: SwapObservationCapability;
+    readonly receiptObservation?: SwapObservationCapability;
   };
   readonly protocol?: {
     readonly oracleVictim?: OracleVictimSpec;
@@ -191,7 +191,7 @@ export class StrictProductionFamilyDeclarations {
             `strict declarations: ${manifest.familyId} lacks swap semantics`,
           );
         }
-        swapObservationGroups.push(Object.freeze({
+        if (plugin.swap.receiptObservation !== undefined) swapObservationGroups.push(Object.freeze({
           observation: plugin.swap.receiptObservation,
           familyIds: Object.freeze([manifest.familyId]),
           edgeAdapterIds: new Set(manifest.edgeAdapterIds ?? []),
@@ -344,7 +344,7 @@ export class StrictProductionFamilyDeclarations {
       if (plugin.manifest.domain !== "swap" || plugin.swap === undefined) {
         continue;
       }
-      if (plugin.swap.landedEvents.classify({ observation }) === "swap") {
+      if (plugin.swap.landedEvents?.classify({ observation }) === "swap") {
         return true;
       }
     }
@@ -367,7 +367,7 @@ export class StrictProductionFamilyDeclarations {
         plugin.manifest.domain !== "swap" ||
         plugin.swap === undefined ||
         plugin.discovery === undefined ||
-        plugin.swap.landedEvents.classify({ observation }) !== "swap"
+        plugin.swap.landedEvents?.classify({ observation }) !== "swap"
       ) {
         continue;
       }

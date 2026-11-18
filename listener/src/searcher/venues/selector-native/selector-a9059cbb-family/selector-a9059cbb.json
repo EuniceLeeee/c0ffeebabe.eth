@@ -1,0 +1,134 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xa9059cbb",
+  "signature": "function transfer(address, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_A9059CBB_ENABLED"
+  },
+  "binding": {
+    "descriptor": {
+      "token": {
+        "op": "address",
+        "args": [
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$target"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "nativeAnchor": {
+        "op": "address",
+        "args": [
+          "$constants.nativeAnchor"
+        ]
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.token",
+    "directions": [
+      {
+        "id": "self-burn-to-native",
+        "enabled": true,
+        "tokenIn": "$descriptor.token",
+        "tokenOut": "$descriptor.nativeAnchor",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        },
+        "executionAssets": {
+          "input": "erc20",
+          "output": "native"
+        }
+      }
+    ]
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": [
+      "$descriptor.token"
+    ],
+    "steps": [
+      {
+        "id": "redeem",
+        "call": {
+          "target": "$descriptor.token",
+          "signature": "function transfer(address,uint256) returns (bool)",
+          "args": [
+            "$descriptor.token",
+            {
+              "runtime": "amountIn"
+            }
+          ]
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "asset": "native",
+        "account": "$executor",
+        "minimum": "$minAmountOut"
+      },
+      {
+        "kind": "supply",
+        "token": "$descriptor.token",
+        "direction": "decrease",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      }
+    ]
+  },
+  "checks": [
+    {
+      "assert": {
+        "op": "not",
+        "args": [
+          {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.token",
+              "$descriptor.nativeAnchor"
+            ]
+          }
+        ]
+      },
+      "error": "self-burn-native cannot claim canonical WETH execution"
+    }
+  ],
+  "refreshPolicy": "on-touch",
+  "values": {
+    "constants": {
+      "nativeAnchor": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+    }
+  },
+  "resourceValues": {
+    "constants": {
+      "nativeAnchor": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+    }
+  },
+  "meta": {
+    "label": "protocol:self-burn-native/active-self-burn-effect-proof"
+  }
+}

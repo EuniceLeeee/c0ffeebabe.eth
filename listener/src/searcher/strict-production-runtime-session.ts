@@ -6,6 +6,7 @@ import type {
   AdapterWorkControl,
   CentralAdapterRuntime,
 } from "./adapter-work-intent.js";
+import { normalizeStateResourceKeys } from "./venues/route-state-resources.js";
 import {
   buildFamilyRouteGraphView,
 } from "./adapter-family-graph-runtime.js";
@@ -57,7 +58,7 @@ import {
   type PreparedFamilyInstance,
   type SealedFamilyExactQuoteHandle,
 } from "./venues/adapter-family-runtime.js";
-import type { CanonicalValue } from "./venues/canonical-value.js";
+import { hashCanonical, type CanonicalValue } from "./venues/canonical-value.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 import type { RouteVenueMid } from "./venues/mid-readers.js";
@@ -184,6 +185,7 @@ export interface StrictFundingRuntimeProjection {
 export interface StrictReadyFundingAsset {
   readonly familyId: FamilyId;
   readonly asset: string;
+  readonly binding?: import("./venues/adapter-family-plugin.js").FundingExecutionBinding;
 }
 
 /** Compact, non-authoritative timing/counts exposed for live diagnosis. */
@@ -253,7 +255,7 @@ export class StrictProductionRuntimeRoot {
   readonly #passiveStateKeysByDependency: ReadonlyMap<string, ReadonlySet<string>>;
   readonly #readyFundingAssetsByFamily: ReadonlyMap<
     FamilyId,
-    readonly string[]
+    readonly StrictReadyFundingAsset[]
   >;
 
   constructor(input: {
@@ -376,7 +378,7 @@ export class StrictProductionRuntimeRoot {
       instanceIndexesByStateKey,
       perBlockRefreshStateKeys: Object.freeze([...perBlockRefreshStateKeys]),
     });
-    const fundingAssetsByFamily = new Map<FamilyId, Set<string>>();
+    const fundingAssetsByFamily = new Map<FamilyId, Map<string, StrictReadyFundingAsset>>();
     for (const entry of input.readyFundingAssets) {
       const family = input.catalog.forStrictFamily(entry.familyId);
       if (family.plugin.manifest.domain !== "funding") {
@@ -385,8 +387,11 @@ export class StrictProductionRuntimeRoot {
         );
       }
       const asset = ethers.getAddress(entry.asset).toLowerCase();
-      const assets = fundingAssetsByFamily.get(entry.familyId) ?? new Set();
-      assets.add(asset);
+      const assets = fundingAssetsByFamily.get(entry.familyId) ?? new Map<string, StrictReadyFundingAsset>();
+      if (entry.binding && entry.binding.asset.toLowerCase() !== asset) throw new Error("Ready Funding asset/binding differs");
+      // A selector may have many providers and pool scopes. Never collapse them by asset/address.
+      const key = entry.binding ? hashCanonical(entry.binding as unknown as CanonicalValue) : asset;
+      assets.set(key, Object.freeze({ ...entry, asset }));
       fundingAssetsByFamily.set(entry.familyId, assets);
     }
     this.#catalog = input.catalog;
@@ -403,7 +408,7 @@ export class StrictProductionRuntimeRoot {
     this.#readyFundingAssetsByFamily = new Map(
       [...fundingAssetsByFamily.entries()].map(([id, assets]) => [
         id,
-        Object.freeze([...assets].sort()),
+        Object.freeze([...assets.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, entry]) => entry)),
       ]),
     );
     Object.freeze(this);
@@ -525,17 +530,20 @@ export class StrictProductionRuntimeRoot {
       ));
       const work = this.#catalog.listAll().flatMap((family) => {
         if (family.plugin.manifest.domain !== "funding") return [];
-        const assets = (this.#readyFundingAssetsByFamily.get(
+        const entries = (this.#readyFundingAssetsByFamily.get(
           family.plugin.manifest.familyId,
-        ) ?? []).filter((asset) => requestedAssets.has(asset));
-        return assets.length === 0 ? [] : [{ family, assets }];
+        ) ?? []).filter((entry) => requestedAssets.has(entry.asset));
+        const assets = [...new Set(entries.map(entry => entry.asset))];
+        const resourceBindings = entries.flatMap(entry => entry.binding ? [entry.binding] : []);
+        return assets.length === 0 ? [] : [{ family, assets, resourceBindings }];
       });
       // Independent source-pinned reads; settlement and publication retain
       // catalog order, including the first rejected Family.
-      const settled = await Promise.allSettled(work.map(async ({ family, assets }) => {
+      const settled = await Promise.allSettled(work.map(async ({ family, assets, resourceBindings }) => {
         const result = await executeFundingFamilyLiquidity({
           family,
           assets,
+          bindings: resourceBindings,
           source: input.source,
           generation: input.source.generation,
           runtime: input.runtime,
@@ -1205,34 +1213,37 @@ export class StrictProductionRuntimeSession {
     });
   }
 
-  fundingActionIds(asset: string, amount?: bigint): readonly string[] {
+  fundingChoices(asset: string, amount?: bigint): readonly { readonly actionAdapterId: string; readonly fundingId: string; readonly liquidityResourceKey?: string }[] {
     const normalizedAsset = asset.toLowerCase();
     return Object.freeze(this.#fundingBindings
-      .filter(({ offer }) =>
-        offer.asset.toLowerCase() === normalizedAsset &&
-        (amount === undefined || offer.maxBorrow >= amount)
-      )
-      .sort((left, right) =>
-        left.offer.planningPriority - right.offer.planningPriority ||
+      .filter(({ offer }) => offer.asset.toLowerCase() === normalizedAsset && offer.maxBorrow > 0n && (amount === undefined || offer.maxBorrow >= amount))
+      .sort((left, right) => left.offer.planningPriority - right.offer.planningPriority ||
         left.offer.liquidityPriority - right.offer.liquidityPriority ||
-        left.offer.actionAdapterId.localeCompare(right.offer.actionAdapterId)
-      )
-      .map(({ offer }) => offer.actionAdapterId));
+        left.offer.actionAdapterId.localeCompare(right.offer.actionAdapterId) || left.offer.fundingId.localeCompare(right.offer.fundingId))
+      .map(({ offer }) => Object.freeze({ actionAdapterId: offer.actionAdapterId, fundingId: offer.fundingId,
+        ...(offer.liquidityResourceKey === undefined ? {} : { liquidityResourceKey: offer.liquidityResourceKey }) })));
+  }
+
+  fundingActionIds(asset: string, amount?: bigint): readonly string[] {
+    return Object.freeze([...new Set(this.fundingChoices(asset, amount).map(choice => choice.actionAdapterId))]);
   }
 
   buildFundingRoot(input: {
     readonly actionAdapterId: string;
+    readonly fundingId?: string;
     readonly asset: string;
     readonly amount: bigint;
     readonly minProfit: bigint;
     readonly children: readonly ResolvedPlanNode[];
   }): ResolvedPlanNode {
     const normalizedAsset = input.asset.toLowerCase();
-    const binding = this.#fundingBindings.find(({ offer }) =>
+    const matches = this.#fundingBindings.filter(({ offer }) =>
       offer.actionAdapterId === input.actionAdapterId &&
-      offer.asset.toLowerCase() === normalizedAsset &&
-      offer.maxBorrow >= input.amount
+      (input.fundingId === undefined || offer.fundingId === input.fundingId) &&
+      offer.asset.toLowerCase() === normalizedAsset && offer.maxBorrow >= input.amount
     );
+    if (matches.length > 1) throw new Error("strict Funding selection is ambiguous; fundingId is required");
+    const binding = matches[0];
     if (binding === undefined) {
       throw new Error(
         `strict session has no Funding offer ${input.actionAdapterId} ` +
@@ -1585,6 +1596,12 @@ function currentPricingForRoute(
   }
   const mid = owners[0]!.mids.get(routeKey);
   const reason = owners[0]!.unavailable.get(routeKey);
+  if (owners[0]!.executionVerification === "startup-simulation") {
+    if (mid !== undefined || reason !== undefined) {
+      throw new Error(`strict current route ${routeKey} carries premature execution pricing`);
+    }
+    return Object.freeze({ status: "unresolved" as const, reason: "awaiting-startup-simulation" });
+  }
   if ((mid === undefined) === (reason === undefined)) {
     throw new Error(
       `strict current route ${routeKey} lacks one exact pricing classification`,
@@ -1921,6 +1938,11 @@ function edgeBindingFingerprint(edge: TokenEdge): string {
     edge.leavesStandingPosition ? "standing" : "flat",
     edge.instanceKey ?? "",
     edge.executionVariantKey ?? "",
+    ...(edge.observationTarget === undefined ? [] : [JSON.stringify(["observationTarget", edge.observationTarget.toLowerCase()])]),
+    ...(edge.observationPoolId === undefined ? [] : [JSON.stringify(["observationPoolId", edge.observationPoolId])]),
+    ...(edge.stateResourceKey === undefined ? [] : [JSON.stringify(["stateResourceKey", edge.stateResourceKey])]),
+    ...(edge.stateResourceKeys === undefined ? [] : [JSON.stringify(["stateResourceKeys", normalizeStateResourceKeys(edge.stateResourceKeys)])]),
+    ...(edge.executionVerification === undefined ? [] : [JSON.stringify(["executionVerification", edge.executionVerification])]),
   ].join("\u001f");
 }
 

@@ -529,7 +529,7 @@ export class AnvilSolver implements Solver {
     }
     // Keep enough to cover every bps (fluid) or finalSimTopN amounts (non-fluid).
     ranked.splice(Math.max(finalSimTopN, bestPerBps.size));
-    const fundingActions = strictSession.fundingActionIds(flashToken);
+    const fundingActions = strictSession.fundingChoices(flashToken);
     if (fundingActions.length === 0) {
       throw new Error(`no strict Funding offer for ${flashToken}`);
     }
@@ -561,7 +561,7 @@ export class AnvilSolver implements Solver {
       // rechecks the current generation before consuming each handle.
       const { amounts, rawOutputs, exactHandles } = cand.propagated;
 
-      const adapters = strictSession.fundingActionIds(
+      const adapters = strictSession.fundingChoices(
         flashToken,
         cand.flashAmount,
       );
@@ -570,7 +570,7 @@ export class AnvilSolver implements Solver {
           `no strict Funding offer for ${flashToken} amount=${cand.flashAmount}`;
         continue;
       }
-      for (const flashAdapterId of adapters) {
+      for (const { actionAdapterId: flashAdapterId, fundingId } of adapters) {
         if (pastDeadline()) {
           lastFailure = `deadline ${deadlineMs}ms reached before sim`;
           break;
@@ -597,6 +597,7 @@ export class AnvilSolver implements Solver {
               strictSession,
               exactHandles,
               quoteToleranceRawUnits ?? 0n,
+              fundingId,
             ),
           );
         } catch (err) {

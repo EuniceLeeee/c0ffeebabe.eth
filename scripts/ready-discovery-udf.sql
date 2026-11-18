@@ -9,10 +9,18 @@ AS r'''return DiscoveryKernel.compactTransactionJson(tx);''';
 WITH discovered AS (
   SELECT tx_hash AS source_tx_hash, block_hash AS source_hash,
     discovery_records(TO_JSON_STRING(STRUCT(
-    tx_hash, block_number, block_hash, transaction_index,
-    receipt_status, trace_rows_present, traces, logs
+    tx_hash, block_number, block_hash,
+    SAFE_CAST(JSON_VALUE(TO_JSON_STRING(source_tx), '$.transaction_index') AS INT64) AS transaction_index,
+    receipt_status,
+    JSON_VALUE(TO_JSON_STRING(source_tx), '$.from_address') AS from_address,
+    JSON_VALUE(TO_JSON_STRING(source_tx), '$.to_address') AS to_address,
+    JSON_VALUE(TO_JSON_STRING(source_tx), '$.input') AS input,
+    JSON_VALUE(TO_JSON_STRING(source_tx), '$.value') AS value,
+    SAFE_CAST(JSON_VALUE(TO_JSON_STRING(source_tx), '$.trace_rows_present') AS BOOL) AS trace_rows_present,
+    PARSE_JSON(JSON_QUERY(TO_JSON_STRING(source_tx), '$.traces')) AS traces,
+    logs
   ))) AS discovery_result
-  FROM `__SOURCE_TABLE__`
+  FROM `__SOURCE_TABLE__` AS source_tx
 ), records AS (
   SELECT
     JSON_VALUE(record, '$.kind') AS kind,
@@ -30,7 +38,7 @@ WITH discovered AS (
 ), ranked_witnesses AS (
   SELECT *, TO_JSON_STRING(STRUCT(
     kind, family, instance_key AS key, source_block AS block, tx_hash AS tx,
-    source_tx_hash AS sourceTx, source_hash AS sourceHash, PARSE_JSON(snapshot) AS snapshot
+    source_tx_hash AS sourceTx, source_hash AS sourceHash, fingerprint, PARSE_JSON(snapshot) AS snapshot
   )) AS body
   FROM records
 ), best_witnesses AS (
@@ -45,7 +53,15 @@ WITH discovered AS (
   FROM best_witnesses
   WHERE kind = 'opaque'
 ), compact_witnesses AS (
+  -- Census is a transaction ledger, not a best Family nomination. Preserve
+  -- every supplied row so conflicting duplicate sources cannot be hidden.
+  SELECT body FROM ranked_witnesses WHERE kind = 'selector-census'
+  UNION ALL
   SELECT body FROM best_witnesses WHERE kind = 'candidate'
+  UNION ALL
+  -- Direction/resource observations are independent of Ready admission.
+  -- Incomplete/unknown calls carry a source-call key and remain visible.
+  SELECT body FROM best_witnesses WHERE kind = 'selector-edge'
   UNION ALL
   SELECT TO_JSON_STRING(STRUCT(
     'opaque-group' AS kind, physical_key AS key,

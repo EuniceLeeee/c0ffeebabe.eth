@@ -12,10 +12,12 @@ import {
 } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { createHash } from "node:crypto";
 import { familyId, type FamilyId } from "./venues/adapter-family-identifiers.js";
 import {
   generateAbsentCapabilityIdentity,
   generateCapabilityClosure,
+  generateCapabilityClosures,
   generateRuntimeSourceClosure,
 } from "./venues/capability-content-hash.js";
 import {
@@ -111,18 +113,8 @@ export async function buildFamilyCapabilityShadowArtifact(
   const exact: CapabilityExactShadowRecord[] = [];
   const legacy: LegacyWholeFamilyShadowObservation[] = [];
   const issues: FamilyCapabilityShadowBuildIssue[] = [];
-  const activeActionSources = deriveActiveActionSources(context);
-  let registryLegacyRoots: readonly LegacyRoot[] = [];
-
   const registry = context.program.getSourceFile(productionRegistryFile);
-  if (registry !== undefined) {
-    registryLegacyRoots = legacyRegistryRoots(
-      context,
-      registry,
-      activeActionSources,
-      issues,
-    );
-  } else if (options.productionRegistryFile !== undefined) {
+  if (registry === undefined && options.productionRegistryFile !== undefined) {
     issues.push(issue(
       repoRelative(rootDirectory, productionRegistryFile),
       "invalid_production_entry",
@@ -141,61 +133,25 @@ export async function buildFamilyCapabilityShadowArtifact(
       ));
       continue;
     }
-    const legacyDeclaration = findVariable(source, "productionFamilyModule");
-    const strictDeclaration = findVariable(source, "plugin");
-    if ((legacyDeclaration === null) === (strictDeclaration === null)) {
+    const nativeDeclaration = findVariable(source, "selectorFamilyModule");
+    if (nativeDeclaration === null || findVariable(source, "productionFamilyModule") !== null ||
+        findVariable(source, "plugin") !== null || !declarativeEntries.has(resolve(entryFile))) {
       issues.push(issue(
         sourceLabel,
         "invalid_production_entry",
-        "entry must export exactly one of productionFamilyModule or plugin",
+        "entry must export only a v2 selectorFamilyModule generated from its registered JSON",
       ));
-      continue;
-    }
-    if (legacyDeclaration !== null) {
-      const root = legacyProductionModuleRoot(
-        context,
-        source,
-        legacyDeclaration,
-        issues,
-      );
-      if (root !== null) {
-        await appendLegacyObservation({
-          context,
-          root,
-          provenanceCommit,
-          legacy,
-          issues,
-        });
-      }
       continue;
     }
     const records = await strictProductionRecords({
       context,
       source,
-      declaration: strictDeclaration!,
+      declaration: nativeDeclaration,
       jsonEntry: declarativeEntries.get(resolve(entryFile)),
       provenanceCommit,
       issues,
     });
     exact.push(...records);
-  }
-
-  // A strict direct-root production entry supersedes its legacy registry
-  // shadow. During migration the registry may still carry the old Adapter
-  // Family, but generated capability identity is owned by the terminal entry
-  // set and must never contain mixed precision for the same Family.
-  const exactFamilyIds = new Set(
-    exact.map((record) => record.identity.familyId),
-  );
-  for (const root of registryLegacyRoots) {
-    if (exactFamilyIds.has(root.familyId)) continue;
-    await appendLegacyObservation({
-      context,
-      root,
-      provenanceCommit,
-      legacy,
-      issues,
-    });
   }
 
   return createFamilyCapabilityShadowArtifact({ exact, legacy, issues });
@@ -324,6 +280,9 @@ async function strictProductionRecords(input: {
     return [];
   }
   const call = unwrapExpression(initializer) as ts.CallExpression;
+  if (input.jsonEntry) {
+    return declarativeProtocolRecords(input, call);
+  }
   if (
     !ts.isIdentifier(call.expression) ||
     STRICT_DOMAIN_CONSTRUCTORS[call.expression.text] === undefined ||
@@ -335,9 +294,6 @@ async function strictProductionRecords(input: {
       "strict plugin cannot be preassembled or use an unknown constructor",
     ));
     return [];
-  }
-  if (input.jsonEntry && input.jsonEntry.format !== "bindings-v1") {
-    return declarativeProtocolRecords(input, call);
   }
   const definition = unwrapObjectLiteral(call.arguments[0]);
   if (definition === null) {
@@ -430,13 +386,7 @@ async function strictProductionRecords(input: {
     ));
     return [];
   }
-  if (input.jsonEntry && (resolvedFamilyId !== input.jsonEntry.familyId ||
-      domain !== input.jsonEntry.domain || readExportedStringProperty(input.context, manifestRoot, "domain") !== domain)) {
-    input.issues.push(issue(sourceLabel, "invalid_production_entry", "JSON Family/domain disagrees with its semantic manifest"));
-    return [];
-  }
-  const declarativeDependencies = input.jsonEntry ? [input.jsonEntry.definitionFile,
-    resolve(input.context.rootDirectory, "src/searcher/build-declarative-production.ts")] : [];
+  const declarativeDependencies: string[] = [];
   const strictFamilyId = familyId(resolvedFamilyId);
   const actionsExpression = unwrapExpression(properties.get("actionAdapters")!);
   if (!ts.isArrayLiteralExpression(actionsExpression)) {
@@ -576,7 +526,7 @@ async function strictProductionRecords(input: {
   return Object.freeze(records);
 }
 
-/** A v2 entry is an exact, generated call into one shared compiler. Its
+/** A native entry is an exact, generated call into one shared compiler. Its
  * semantics are the compiler closure plus all statically validated JSON
  * inputs, so every present capability conservatively owns that same closure.
  * This branch is never selected merely because a nearby JSON file exists. */
@@ -589,27 +539,29 @@ async function declarativeProtocolRecords(input: {
   readonly issues: FamilyCapabilityShadowBuildIssue[];
 }, call: ts.CallExpression): Promise<readonly CapabilityExactShadowRecord[]> {
   const entry = input.jsonEntry!;
-  const suffix = entry.domain === "swap" ? "Swap" : entry.domain === "credit" ? "Credit" : "Protocol";
-  const constructor = `define${suffix}Family`, compiler = `compileDeclarative${suffix}`;
   const sourceLabel = repoRelative(input.context.rootDirectory, input.source.fileName);
   const fail = (message: string): readonly CapabilityExactShadowRecord[] => {
     input.issues.push(issue(sourceLabel, "invalid_production_entry", message));
     return [];
   };
-  if (input.source.text !== entry.source || !["protocol", "swap", "credit"].includes(entry.domain) ||
-      !ts.isIdentifier(call.expression) || call.expression.text !== constructor)
-    return fail("declarative production source/domain differs from its validated generated entry");
-  const compiled = unwrapExpression(call.arguments[0]);
-  if (!ts.isCallExpression(compiled) || !ts.isIdentifier(compiled.expression) ||
-      compiled.expression.text !== compiler || compiled.arguments.length !== 2)
-    return fail("declarative protocol must call the shared compiler with its static JSON inputs");
-  const compilerRoot = directImportRoot(input.context, input.source, compiled.expression);
-  const constructorRoot = directImportRoot(input.context, input.source, call.expression);
-  if (compilerRoot?.exportName !== compiler || compilerRoot.sourceFile !==
-      resolve(input.context.rootDirectory, `src/searcher/venues/declarative-${entry.domain}.ts`) ||
-      constructorRoot?.exportName !== constructor || constructorRoot.sourceFile !==
-      resolve(input.context.rootDirectory, "src/searcher/venues/adapter-family-plugin.ts"))
-    return fail("declarative compiler or strict constructor is not a resolvable framework export");
+  if (input.source.text !== entry.source || !["protocol", "swap", "funding", "credit"].includes(entry.domain) ||
+      !ts.isIdentifier(call.expression) || call.expression.text !== "defineSelectorFamilyModule" ||
+      call.arguments.length !== 1 || (call.typeArguments?.length ?? 0) !== 0)
+    return fail("selector-native production source/domain differs from its validated entry");
+  const definition = unwrapExpression(call.arguments[0]);
+  if (!ts.isIdentifier(definition))
+    return fail("selector-native production requires one self-contained JSON definition");
+  const compilerRoot = directImportRoot(input.context, input.source, call.expression);
+  const definitionImport = input.source.statements.find((statement): statement is ts.ImportDeclaration =>
+    ts.isImportDeclaration(statement) && !statement.importClause?.isTypeOnly &&
+    statement.importClause?.name?.text === definition.text && ts.isStringLiteral(statement.moduleSpecifier));
+  const definitionSource = definitionImport && ts.isStringLiteral(definitionImport.moduleSpecifier)
+    ? ts.resolveModuleName(definitionImport.moduleSpecifier.text, input.source.fileName,
+      input.context.compilerOptions, ts.sys).resolvedModule?.resolvedFileName : undefined;
+  if (compilerRoot?.exportName !== "defineSelectorFamilyModule" || compilerRoot.sourceFile !==
+      resolve(input.context.rootDirectory, "src/searcher/venues/selector-family-module.ts") ||
+      definitionSource === undefined || resolve(definitionSource) !== entry.definitionFile)
+    return fail("selector-family/v2 module must bind its registered JSON and the framework module factory");
   // The validated emitted entry owns runtime wiring. Generator/type-emitter
   // implementation changes alone cannot invalidate a Family proof.
   const dependencies = [...new Set([...entry.dependencyFiles, input.source.fileName])]
@@ -620,14 +572,18 @@ async function declarativeProtocolRecords(input: {
   const present = new Set<string>(capabilities);
   const records: CapabilityExactShadowRecord[] = [];
   try {
-    for (const capability of capabilities) {
-      const generated = await generateCapabilityClosure({
-        familyId: strictFamilyId, capability, rootDirectory: input.context.rootDirectory,
-        entryFile: compilerRoot.sourceFile, additionalEntryFiles: dependencies,
-        inactiveRuntimeModules: entry.inactiveRuntimeModules,
-        provenanceCommit: input.provenanceCommit,
-      });
-      records.push(exactRecord(generated.identity, capability, compilerRoot, dependencies, input.context.rootDirectory));
+    const authoringIntegrity = Object.freeze([Object.freeze({
+      sourceFile: repoRelative(input.context.rootDirectory, entry.definitionFile),
+      sha256: createHash("sha256").update(await readFile(entry.definitionFile)).digest("hex"),
+    })]);
+    const generated = await generateCapabilityClosures({
+      familyId: strictFamilyId, capabilities, rootDirectory: input.context.rootDirectory,
+      entryFile: compilerRoot.sourceFile, additionalEntryFiles: dependencies,
+      inactiveRuntimeModules: entry.inactiveRuntimeModules,
+      provenanceCommit: input.provenanceCommit,
+    });
+    for (const closure of generated) {
+      records.push(exactRecord(closure.identity, closure.identity.capability, compilerRoot, dependencies, input.context.rootDirectory, authoringIntegrity));
     }
     for (const capability of FAMILY_CAPABILITY_NAMES) {
       if (!present.has(capability)) records.push(absentRecord(strictFamilyId, capability, input.provenanceCommit));
@@ -645,6 +601,7 @@ function exactRecord(
   root: DirectImportRoot,
   additional: readonly string[],
   rootDirectory: string,
+  authoringIntegrity?: CapabilityEntryRootReceipt["authoringIntegrity"],
 ): CapabilityExactShadowRecord {
   const rootReceipt: CapabilityEntryRootReceipt = Object.freeze({
     capability,
@@ -656,6 +613,7 @@ function exactRecord(
         .sort(),
     ),
     absence: null,
+    ...(authoringIntegrity === undefined ? {} : { authoringIntegrity }),
   });
   return Object.freeze({
     precision: "capability-exact" as const,

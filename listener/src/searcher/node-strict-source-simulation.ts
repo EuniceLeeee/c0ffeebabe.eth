@@ -12,10 +12,11 @@ export function createNodeStrictSourceSimulation(input:
     timeoutMs: number; scheduler?: Pick<RethTransportScheduler, "run">;
     allowExecutorCodeOverride?: boolean; lane?: "exact" | "discovery"; executor?: string; fundingCache?: NodeFundingCache;
     simulationMethod?: "debug_traceCall" | "eth_simulateV1";
+    tracePolicy?: "allow" | "forbid";
   }) {
   return createRevmStrictSourceSimulation({ ...input, preserveExecutorCode: !input.allowExecutorCodeOverride,
     ...(input.allowExecutorCodeOverride && input.executor ? { provisionedExecutor: input.executor } : {}),
     createClient: () => new NodeStrictClient({ timeoutMs: input.timeoutMs, scheduler: input.scheduler,
       executor: input.executor, executorRuntimeCode: input.executorRuntimeCode, allowExecutorCodeOverride: input.allowExecutorCodeOverride,
-      simulationMethod: input.simulationMethod, lane: input.lane, fundingCache: input.fundingCache }) });
+      simulationMethod: input.simulationMethod, tracePolicy: input.tracePolicy, lane: input.lane, fundingCache: input.fundingCache }) });
 }

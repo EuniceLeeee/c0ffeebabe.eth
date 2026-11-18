@@ -9,17 +9,21 @@ import type { ReadyFamilyPartition, ReadyUniverseGeneration } from "./universe-r
 import { rebuildUniverse } from "./universe-rebuild-runner.js";
 import { createRebuildWiring, familyDefinitionHash, readyRuleCompatibilityFor } from "./universe-rebuild-production.js";
 import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
+import { normalizeReadySelectorCensus, readySelectorCensusFingerprint } from "./ready-selector-coverage.js";
 
 /** One authoritative checkpoint and one complete-input review path.
  * Configuration/credentials use the normal process environment; no signing.
- * build: --checkpoint PATH --archive DIR --from-block N --to-block N [--families FILE] [--candidates FILE]
- * update: --checkpoint PATH --archive DIR [--families FILE] [--candidates FILE]
+ * build: --checkpoint PATH --selector-input FILE --from-block N --to-block N
+ *        [--families FILE] [--candidates FILE] [--trace-policy forbid|allow]
+ * update: --checkpoint PATH [--selector-input FILE] [--families FILE] [--candidates FILE]
  *         [--force-update | --force-retryable | --revalidate-proofs HASH]
  *         [--previous-candidates FILE] (shrink a paused explicit candidate selection)
  *         [--test-executor-runtime HASH] (explicit historical test context)
  * Families is the complete desired array of installed Family IDs; omission uses
- * the currently enabled catalog. Candidates is the complete desired array of
- * durable snapshots. Without it, retain the previous pool plus current discovery.
+ * the enabled selector declarations and funding families when census is supplied. Selector input is
+ * the complete raw census; updates inherit it and renominate through current JSON.
+ * Candidates is an optional complete desired array of durable snapshots. Legacy
+ * mode without census requires --archive and retains its previous candidate pool.
  * Force flags select work inside that same review; they never create a second
  * checkpoint or supplemental-Family execution path.
  */
@@ -35,7 +39,7 @@ export async function runReadyFamilyMaintenance(argv: readonly string[]): Promis
       continue;
     }
     const value = argv[++i];
-    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--families", "--candidates", "--previous-candidates", "--expect-update", "--revalidate-proofs", "--test-executor-runtime"].includes(key) ||
+    if (!["--checkpoint", "--archive", "--from-block", "--to-block", "--concurrency", "--families", "--candidates", "--previous-candidates", "--selector-input", "--simulation-method", "--trace-policy", "--expect-update", "--revalidate-proofs", "--test-executor-runtime"].includes(key) ||
       value === undefined || value.startsWith("--") || options.has(key)) throw new Error("invalid Ready maintenance option");
     options.set(key, value);
   }
@@ -60,9 +64,11 @@ export async function runReadyFamilyMaintenance(argv: readonly string[]): Promis
       options.has("--expect-update") || proofRuntimeHash !== undefined)) {
     throw new Error("--force-retryable requires update mode and cannot be combined with --force-update, --expect-update or --revalidate-proofs");
   }
-  if (!options.has("--checkpoint") || !options.has("--archive")) throw new Error("checkpoint and archive paths required");
+  if (!options.has("--checkpoint")) throw new Error("checkpoint path required");
+  if (options.has("--simulation-method") && !["debug_traceCall", "eth_simulateV1"].includes(options.get("--simulation-method")!)) throw new Error("invalid simulation method");
+  if (options.has("--trace-policy") && !["allow", "forbid"].includes(options.get("--trace-policy")!)) throw new Error("invalid trace policy");
   const checkpointPath = resolve(options.get("--checkpoint")!);
-  const archiveDirectory = resolve(options.get("--archive")!);
+  const archiveDirectory = resolve(options.get("--archive") ?? checkpointPath + ".archive");
   await withReadyMaintenanceLease(checkpointPath, () => runMaintenance(mode, options, checkpointPath, archiveDirectory));
 }
 
@@ -108,14 +114,23 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     throw new Error("--previous-candidates requires a paused Ready review");
   }
   const ruleCompatibility = await readyRuleCompatibilityFor(incumbent?.readyGeneration?.ruleBindings);
+  const selectorFile = options.get("--selector-input");
+  const inheritedCensus = incumbent?.inProgressRun?.selectorCensus ?? incumbent?.readyGeneration?.selectorCoverage?.transactions;
+  const selectorCensus = selectorFile === undefined ? inheritedCensus : normalizeReadySelectorCensus(JSON.parse(await readFile(resolve(selectorFile), "utf8")));
+  if (selectorCensus === undefined && !options.has("--archive")) throw new Error("legacy historical Ready requires --archive; selector Ready uses --selector-input");
+  const simulationMethod = options.get("--simulation-method") as "debug_traceCall" | "eth_simulateV1" | undefined;
+  const tracePolicy = (options.get("--trace-policy") ?? (selectorCensus === undefined ? "allow" : "forbid")) as "allow" | "forbid";
   const common = { rpcUrl, ruleCompatibility, executionIdentity: { executor, transactionOrigin },
+    ...(selectorCensus === undefined ? {} : { selectorCensus }), simulationMethod, tracePolicy,
     ...(testExecutorProvisioning && { testExecutorProvisioning }),
     ...(familyIds === undefined ? {} : { familyIds }) };
   const discovery = createRebuildWiring(common);
   const enabledIds = familyIds ?? [...new Set(discovery.requiredSourceCoverageKeys().map(key => key.slice(0, key.indexOf("|"))))].sort();
   const selectedFile = options.get("--candidates");
   const candidateFile = selectedFile === undefined ? null : await readFile(resolve(selectedFile));
-  const candidateFileFingerprint = candidateFile === null ? undefined : createHash("sha256").update(candidateFile).digest("hex");
+  const rawCandidateFileFingerprint = candidateFile === null ? undefined : createHash("sha256").update(candidateFile).digest("hex");
+  const candidateFileFingerprint = selectorCensus === undefined ? rawCandidateFileFingerprint : canonicalJsonFingerprint({
+    candidates: rawCandidateFileFingerprint ?? null, selectorCensus: readySelectorCensusFingerprint(selectorCensus), simulationMethod: simulationMethod ?? null, tracePolicy });
   const explicit: unknown = candidateFile ? JSON.parse(candidateFile.toString("utf8")) : null;
   if (candidateFile && !Array.isArray(explicit)) throw new Error("expected an array of durable Family candidate snapshots");
   const snapshots = Array.isArray(explicit) ? explicit : [];
@@ -137,7 +152,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   if (mode === "build") {
     const fromBlock = Number(options.get("--from-block")), toBlock = Number(options.get("--to-block"));
     if (!Number.isSafeInteger(fromBlock) || !Number.isSafeInteger(toBlock) || fromBlock < 0 ||
-      toBlock < fromBlock || toBlock - fromBlock >= 14_400) throw new Error("explicit bounded baseline range required");
+      toBlock < fromBlock || (selectorCensus === undefined && toBlock - fromBlock >= 14_400)) throw new Error("explicit bounded baseline range required");
     if (incumbent?.readyGeneration && incumbent.inProgressRun === null) throw new Error("baseline already complete; use update");
     range = { fromBlock, toBlock };
     source = await discovery.freezeCanonicalHead(toBlock);
@@ -155,18 +170,23 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     range = incumbent.readyGeneration!.universeRange;
     source = incumbent.readyGeneration!.cutoff;
   }
-  const archive = new ReadyActivityArchive({ directory: archiveDirectory, chainId: 1,
-    ...range, cutoffHash: source.hash });
+  const archive = selectorCensus === undefined ? new ReadyActivityArchive({ directory: archiveDirectory, chainId: 1,
+    ...range, cutoffHash: source.hash }) : undefined;
   const verifyArchivedInputs = async () => {
     const pending = incumbent?.inProgressRun;
+    if (selectorCensus !== undefined) {
+      if (pending?.selectorCensus && readySelectorCensusFingerprint(pending.selectorCensus) !== readySelectorCensusFingerprint(selectorCensus))
+        throw new Error("Ready selector input changed during resume");
+      return;
+    }
     // An explicitly empty sealed scope has no raw inputs to archive. The
     // runner still checks its complete input, source and resume bindings.
     if (discovery.requiredSourceCoverageKeys().length === 0 && pending?.candidateCount === 0 &&
         pending.sourceReceipts.length === 0) return;
-    const method = await archive.readTrace({ blockNumber: source.number, method: "trace_block" }) !== null
+    const method = await archive!.readTrace({ blockNumber: source.number, method: "trace_block" }) !== null
       ? "trace_block" : "debug_traceBlockByNumber";
     log("verifying complete compressed inputs before resuming admission");
-    return archive.assertComplete({ method });
+    return archive!.assertComplete({ method });
   };
   const wiring = createRebuildWiring({ ...common, activityArchive: archive, readyThrottle: discovery.readyThrottle,
     ...(candidateFile === null ? {} : { startupCandidates }) });
@@ -181,7 +201,8 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
       observationRange: range, attestationConcurrency: concurrency, log });
     resolveStrictReadyRuntime(ready);
     log(JSON.stringify({ status: "baseline-ready", generation: ready.generation, range,
-      activeInstances: ready.activeInstanceKeys.length, archiveComplete: true, broadcast: false }));
+      activeInstances: ready.activeInstanceKeys.length,
+      ...(ready.selectorCoverage ? { selectorCoverage: ready.selectorCoverage.counts, observationScope: ready.selectorCoverage.scope } : { archiveComplete: true }), broadcast: false }));
     return;
   }
   const base = incumbent!;
@@ -200,7 +221,7 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
   }
   const reviewedWiring = createRebuildWiring({ ...common, activityArchive: archive,
     readyThrottle: wiring.readyThrottle, startupCandidates: candidateFile ? startupCandidates :
-      enabledIds.flatMap(id => Object.values(partitions[id]?.candidatesByKey ?? {}).map(decode)) });
+      selectorCensus !== undefined ? [] : enabledIds.flatMap(id => Object.values(partitions[id]?.candidatesByKey ?? {}).map(decode)) });
   const reviewInput: Parameters<typeof readyMaintenanceReviewFingerprint>[0] = {
     parent: base.readyGeneration!, range, source,
     definitions: enabledIds.map(id => [id, familyDefinitionHash(id)] as const),
@@ -251,7 +272,8 @@ async function runMaintenance(mode: "build" | "update", options: Map<string, str
     observationRange: range, attestationConcurrency: concurrency, log });
   resolveStrictReadyRuntime(ready);
   log(JSON.stringify({ status: "reviewed-ready", generation: ready.generation,
-    accounting: ready.candidateAccounting, activeInstances: ready.activeInstanceKeys.length, broadcast: false }));
+    accounting: ready.candidateAccounting, activeInstances: ready.activeInstanceKeys.length,
+    ...(ready.selectorCoverage ? { selectorCoverage: ready.selectorCoverage.counts } : {}), broadcast: false }));
 }
 
 /** Resume can remove sealed candidates, but changing retained inputs requires

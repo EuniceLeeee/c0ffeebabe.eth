@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x8e65b383",
+  "signature": "function migrateAllBIT()",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_8E65B383_ENABLED"
+  },
+  "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

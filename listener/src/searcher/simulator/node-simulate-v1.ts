@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { hexlify, randomBytes } from "ethers";
 import { RevmFatalError, RevmStrictError } from "../revm-sim-client.js";
-import type { PinnedNodeRpc } from "./node-input-funding.js";
+import type { NodeTracePolicy, PinnedNodeRpc } from "./node-input-funding.js";
 import { buildNodeProgramQuote, isCanonicalNodeRuntimeCall, type NodeObservation } from "./node-program-quote.js";
 import { assertCallTrace, nodeNestedHalt, successfulTraceLogs, traceNodeTopLevel } from "./node-trace-simulation.js";
 import { checkedEthSimulateV1Block, checkedEthSimulateV1Call } from "./eth-simulate-v1.js";
@@ -65,6 +65,7 @@ async function callsAt(rpc: PinnedNodeRpc, env: NodeSimulateV1Environment,
     // portable to providers that reject EIP-1898 objects; fences above/below
     // and the returned parentHash independently bind its canonical identity.
     hex(env.base.number)]);
+    try {
     const block = checkedEthSimulateV1Block(result, env.base.hash, env.blockOverrides, calls.length);
     const raw = result[0];
     for (const [key, expected] of [["miner", ZERO], ["feeRecipient", ZERO], ["mixHash", ZERO_HASH], ["prevRandao", ZERO_HASH]] as const)
@@ -81,13 +82,25 @@ async function callsAt(rpc: PinnedNodeRpc, env: NodeSimulateV1Environment,
         throw new Error("conflicting simulateV1 revert data");
       return { ...call, returnData: error.data };
     });
+    } catch (error) {
+      // A received but invalid execution observation is not a transport gap.
+      // In particular a wrong virtual parent cannot unlock price fallback.
+      if (error instanceof RevmStrictError || error instanceof RevmFatalError) throw error;
+      throw new RevmStrictError("observation", `simulateV1 response validation failed: ${error instanceof Error ? error.message : "invalid response"}`);
+    }
   });
 }
 /** Wrap only execution RPCs. Canonical code/storage reads retain state N.
  * The caller retains scheduling, deadlines, cancellation and JSON-RPC parsing. */
-export function createNodeSimulateV1Rpc(rpc: PinnedNodeRpc, header: NodeSimulateV1Header): PinnedNodeRpc {
+export function createNodeSimulateV1Rpc(rpc: PinnedNodeRpc, header: NodeSimulateV1Header,
+  tracePolicy: NodeTracePolicy = "allow"): PinnedNodeRpc {
+  if (tracePolicy !== "allow" && tracePolicy !== "forbid") throw new Error("invalid simulateV1 trace policy");
   const env = nodeSimulateV1Environment(header);
   return async (method, params) => {
+    if (tracePolicy === "forbid" && (method.startsWith("debug_") || method.startsWith("trace_")))
+      throw new RevmStrictError("observation", "simulateV1 trace policy forbids " + method);
+    if (method === "eth_createAccessList") throw new RevmStrictError("observation",
+      "createAccessList cannot attest simulateV1 virtual environment");
     if (method === "eth_call") {
       if (params.length < 2 || params.length > 3) throw new Error("simulateV1 eth_call arity");
       pinned(params[1], env);
@@ -113,9 +126,10 @@ export function createNodeSimulateV1Rpc(rpc: PinnedNodeRpc, header: NodeSimulate
   };
 }
 function logs(value: unknown): { address: string; topics: string[]; data: string }[] {
-  if (!Array.isArray(value)) throw new Error("simulateV1 logs missing");
+  if (!Array.isArray(value)) throw new RevmStrictError("observation", "simulateV1 logs missing");
   return value.map(l => {
-    if (!address(l?.address) || !Array.isArray(l.topics) || !l.topics.every(hash) || !bytes(l.data)) throw new Error("invalid simulateV1 log");
+    if (!address(l?.address) || !Array.isArray(l.topics) || !l.topics.every(hash) || !bytes(l.data))
+      throw new RevmStrictError("observation", "invalid simulateV1 log");
     return { address: l.address.toLowerCase(), topics: l.topics.map((x: string) => x.toLowerCase()), data: l.data.toLowerCase() };
   });
 }
@@ -125,6 +139,7 @@ type Input = {
   rpc: PinnedNodeRpc; header: NodeSimulateV1Header; from: string; origin: string;
   calls: readonly { to: string; data: string }[]; observations: readonly NodeObservation[];
   overrides: Record<string, any>; gas: number; baselineAfterPrefix?: boolean;
+  tracePolicy?: NodeTracePolicy;
   codeAt: (address: string, reuse?: boolean) => Promise<string>;
 };
 /** Execute the existing BotVM observation program, then read its isolated
@@ -132,13 +147,16 @@ type Input = {
 export async function simulateNodeProgramV1(input: Input): Promise<Receipt> {
   const { rpc, from, origin, calls, observations } = input;
   const env = nodeSimulateV1Environment(input.header), block = { blockHash: env.base.hash, requireCanonical: true };
-  const traceRpc = createNodeSimulateV1Rpc(rpc, input.header);
+  const traceRpc = createNodeSimulateV1Rpc(rpc, input.header, input.tracePolicy);
   const canonicalReturn = calls.at(-1)?.to.toLowerCase() === from && isCanonicalNodeRuntimeCall(calls.at(-1)!.data);
+  if (input.tracePolicy === "forbid" && !canonicalReturn)
+    throw new RevmStrictError("observation", "trace-free simulateV1 requires canonical return");
   const used = new Set([from, origin, ...Object.keys(input.overrides).map(x => x.toLowerCase()), ...calls.map(c => c.to.toLowerCase()),
     ...observations.flatMap(o => o.kind === "supply" ? [o.token] : o.kind === "native" ? [o.account] : [o.token, o.account])]);
   const make = async (words: number) => {
     const quote = buildNodeProgramQuote({ executor: from, calls, observations,
-      baselineAfterPrefix: input.baselineAfterPrefix, terminalRevert: false, persistent: true, outputWords: words });
+      baselineAfterPrefix: input.baselineAfterPrefix, terminalRevert: false, persistent: true, outputWords: words,
+      prefixLogBoundary: input.tracePolicy === "forbid" && input.baselineAfterPrefix });
     if (used.has(quote.recorder) || await input.codeAt(quote.recorder, false) !== "0x") throw new Error("simulateV1 recorder occupied");
     const overrides = { ...input.overrides, [quote.recorder]: { code: quote.code, state: {} },
       [from]: { ...input.overrides[from], stateDiff: { ...input.overrides[from]?.stateDiff, [quote.diagnosticSlot]: quote.key } } };
@@ -182,6 +200,8 @@ export async function simulateNodeProgramV1(input: Input): Promise<Receipt> {
   const main = result[0]!;
   if (main.status === "0x0") {
     if ((main.error as { code?: number }).code !== 3) throw new Error("simulateV1 execution did not complete");
+    if (input.tracePolicy === "forbid") throw new RevmStrictError("observation",
+      "trace-free simulateV1 completed main revert and nested halt are unproven");
     const witness = await trace(program);
     if (witness.failed < 0 || (witness.result.output ?? "0x").toLowerCase() !== (main.returnData as string).toLowerCase())
       throw new Error("simulateV1 revert trace mismatch");
@@ -189,10 +209,19 @@ export async function simulateNodeProgramV1(input: Input): Promise<Receipt> {
     return { before: [], after: [], output: failed.output ?? "0x", gasUsed: quantity(main.gasUsed), logs: [],
       failure: { index: witness.failed, nestedHalt: nodeNestedHalt(failed) } };
   }
-  if (result[1]!.status !== "0x1") throw new Error("simulateV1 recorder read reverted");
-  const measured = program.quote.read(result[1]!.returnData as string);
+  if (result[1]!.status !== "0x1") throw new RevmStrictError("observation", "simulateV1 recorder read reverted");
+  let measured: ReturnType<typeof program.quote.read>;
+  try { measured = program.quote.read(result[1]!.returnData as string); }
+  catch { throw new RevmStrictError("observation", "simulateV1 recorder receipt is incomplete"); }
   let observedLogs = logs(main.logs);
-  if (!canonicalReturn || input.baselineAfterPrefix) {
+  if (program.quote.prefixLogBoundaryTopic) {
+    const boundaries = observedLogs.map((log, index) => ({ log, index }))
+      .filter(({ log }) => log.address === program.quote.recorder);
+    if (boundaries.length !== 1 || boundaries[0]!.log.topics.length !== 1 ||
+        boundaries[0]!.log.topics[0] !== program.quote.prefixLogBoundaryTopic || boundaries[0]!.log.data !== "0x")
+      throw new RevmStrictError("observation", "simulateV1 prefix log boundary is not authenticated");
+    observedLogs = observedLogs.slice(boundaries[0]!.index + 1);
+  } else if (!canonicalReturn || input.baselineAfterPrefix) {
     const witness = await trace(program);
     if (witness.failed >= 0 || !isDeepStrictEqual(measured, witness.receipt) ||
         (witness.main.at(-1)?.output ?? "0x").toLowerCase() !== measured.output?.toLowerCase() ||
@@ -207,6 +236,8 @@ export async function simulateNodeProgramV1(input: Input): Promise<Receipt> {
 /** Genuine top-level calls retain their caller and independent transaction
  * boundaries. A read-only probe measures state before/after the full sequence. */
 export async function simulateNodeTopLevelV1(input: Input): Promise<Receipt> {
+  if (input.tracePolicy !== undefined && input.tracePolicy !== "allow" && input.tracePolicy !== "forbid")
+    throw new Error("invalid simulateV1 trace policy");
   const env = nodeSimulateV1Environment(input.header), block = { blockHash: env.base.hash, requireCanonical: true };
   const observer = hexlify(randomBytes(20)), sender = hexlify(randomBytes(20));
   const used = new Set([input.from, ...Object.keys(input.overrides), ...input.calls.map(c => c.to),
@@ -238,7 +269,9 @@ export async function simulateNodeTopLevelV1(input: Input): Promise<Receipt> {
   };
   const before = read(result[0]!), mains = result.slice(1, -1), failed = mains.findIndex(c => c.status === "0x0");
   if (failed >= 0) {
-    const witness = await traceNodeTopLevel({ ...input, rpc: createNodeSimulateV1Rpc(input.rpc, input.header), block });
+    if (input.tracePolicy === "forbid") throw new RevmStrictError("observation",
+      "trace-free simulateV1 top-level revert and nested halt are unproven");
+    const witness = await traceNodeTopLevel({ ...input, rpc: createNodeSimulateV1Rpc(input.rpc, input.header, input.tracePolicy), block });
     if ((mains[failed]!.error as { code?: number }).code !== 3 || witness.failure?.index !== failed ||
         witness.output.toLowerCase() !== (mains[failed]!.returnData as string).toLowerCase()) throw new Error("simulateV1 top-level revert mismatch");
     return { ...witness, gasUsed: mains.slice(0, failed + 1).reduce((n, c) => n + quantity(c.gasUsed), 0n) };

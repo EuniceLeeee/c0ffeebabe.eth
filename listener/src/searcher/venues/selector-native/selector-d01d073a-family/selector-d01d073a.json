@@ -1,0 +1,101 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xd01d073a",
+  "signature": "function syncDeposit(uint256, address, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_D01D073A_ENABLED"
+  },
+  "binding": {
+    "descriptor": {
+      "asset": {
+        "op": "address",
+        "args": [
+          "$constants.reth"
+        ]
+      },
+      "receipt": {
+        "op": "address",
+        "args": [
+          "$target"
+        ]
+      }
+    }
+  },
+  "routes": {
+    "directions": [
+      {
+        "id": "sync-deposit",
+        "enabled": true,
+        "tokenIn": "$descriptor.asset",
+        "tokenOut": "$descriptor.receipt",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "wrap"
+        }
+      }
+    ]
+  },
+  "execution": {
+    "version": 1,
+    "settlement": {
+      "directOutput": false
+    },
+    "protectedAddresses": [
+      "$descriptor.target"
+    ],
+    "approval": {
+      "token": "$route.tokenIn",
+      "spender": "$descriptor.target",
+      "mode": "ensure"
+    },
+    "call": {
+      "target": "$descriptor.target",
+      "signature": "function syncDeposit(uint256 assets,address receiver,address referral) returns (uint256 shares)",
+      "args": [
+        {
+          "runtime": "amountIn"
+        },
+        "$executor",
+        {
+          "op": "address",
+          "args": [
+            "$constants.referral"
+          ]
+        }
+      ]
+    },
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "minimum": "$minAmountOut"
+      }
+    ]
+  },
+  "refreshPolicy": "on-touch",
+  "values": {
+    "constants": {
+      "reth": "0xae78736Cd615f374D3085123A210448E74Fc6393",
+      "referral": "0x0000000000000000000000000000000000000000"
+    }
+  },
+  "resourceValues": {
+    "constants": {
+      "reth": "0xae78736Cd615f374D3085123A210448E74Fc6393"
+    }
+  },
+  "meta": {
+    "label": "protocol:rocksolid/active-sync-deposit"
+  }
+}

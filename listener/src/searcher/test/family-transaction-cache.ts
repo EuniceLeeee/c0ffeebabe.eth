@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
+import { sha256EvidenceFile } from "./family-evidence-hash.js";
 import { copyFile, link, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -86,10 +87,10 @@ export async function cachedFamilyReady(input: {
     const reused = seal !== null;
     if (!seal) {
       await input.build(path);
-      await writeFamilyFactCache(`${path}.complete.json`, input.binding, { sha256: sha(await readFile(path)) });
+      await writeFamilyFactCache(`${path}.complete.json`, input.binding, { sha256: sha256EvidenceFile(path) });
       seal = await readFamilyFactCache(`${path}.complete.json`, input.binding);
     }
-    assert.equal(sha(await readFile(path)), seal!.value.sha256, "cached Ready changed after publication");
+    assert.equal(sha256EvidenceFile(path), seal!.value.sha256, "cached Ready changed after publication");
     // Each report owns a snapshot; subsequent tests cannot rewrite its evidence.
     await copyFile(path, input.out);
     return { status: reused ? "reused" : "built", key, recordedAt: seal!.recordedAt };

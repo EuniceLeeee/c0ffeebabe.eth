@@ -10,6 +10,8 @@ import { executeFundingFamilyLiquidity, buildFundingBorrowFragment, buildFunding
 import { planFragmentNodes } from "../solver/plan-fragment-requirements.js";
 import { createBoundedRequestExecutor, physicalAdapterRequestFingerprint, type AdapterRequest, type AdapterRequestResult, type CanonicalSource } from "../venues/adapter-request-program.js";
 import { hashCanonical } from "../venues/canonical-value.js";
+import { selectorFundingFee } from "../venues/selector-native-funding.js";
+import { collectRequestProgramResults } from "../venues/adapter-family-plugin.js";
 import type { FundingOfferDescriptor } from "../venues/adapter-family-plugin.js";
 import type { LoadedFamilyBox } from "../venues/family-capability-catalog.js";
 import type { PlanFragment } from "../venues/route-leg-adapter.js";
@@ -19,7 +21,7 @@ import { assertFundingReadyPublication, assertFundingRuntimeReady } from "./fami
 
 export interface FundingAcceptanceCase {
   readonly version: 1; readonly domain: "funding"; readonly id: string;
-  readonly familyId: string; readonly instanceKey: string; readonly lineageId: string;
+  readonly familyId: string; readonly instanceKey: string; readonly fundingId: string; readonly lineageId: string;
   readonly source: { readonly number: number; readonly hash: string };
   readonly executor: string; readonly owner: string; readonly transactionHash?: string;
   readonly token: string; readonly amountIn: string;
@@ -38,10 +40,10 @@ const uint = (value: unknown): bigint => {
 
 export function parseFundingAcceptanceCase(raw: unknown): FundingAcceptanceCase {
   assert(raw && typeof raw === "object" && !Array.isArray(raw));
-  const row = raw as Record<string, any>, keys = ["version", "domain", "id", "familyId", "instanceKey", "lineageId", "source", "executor", "owner", "token", "amountIn"];
+  const row = raw as Record<string, any>, keys = ["version", "domain", "id", "familyId", "instanceKey", "fundingId", "lineageId", "source", "executor", "owner", "token", "amountIn"];
   assert(keys.every(key => Object.hasOwn(row, key)) && Object.keys(row).every(key => keys.includes(key) || key === "transactionHash"), "invalid Funding case fields");
   assert.equal(row.version, 1); assert.equal(row.domain, "funding");
-  for (const key of ["id", "familyId", "instanceKey", "lineageId"]) assert(typeof row[key] === "string" && row[key].length > 0 && row[key].trim() === row[key]);
+  for (const key of ["id", "familyId", "instanceKey", "fundingId", "lineageId"]) assert(typeof row[key] === "string" && row[key].length > 0 && row[key].trim() === row[key]);
   assert(row.source && Object.keys(row.source).sort().join(",") === "hash,number" && Number.isSafeInteger(row.source.number) && row.source.number >= 0 && isHexString(row.source.hash, 32));
   assert(typeof row.amountIn === "string" && /^[1-9][0-9]*$/.test(row.amountIn) && BigInt(row.amountIn) <= MaxUint256);
   const [executor, owner, token] = [row.executor, row.owner, row.token].map(value => getAddress(value));
@@ -77,7 +79,9 @@ function descriptor(offer: FundingOfferDescriptor): FundingOfferDescriptor {
   for (const value of [offer.maxBorrow, offer.fee]) uint(value);
   assert(typeof offer.fundingId === "string" && offer.fundingId.length > 0);
   getAddress(offer.asset);
+  assert(offer.binding && offer.liquidityHolder && offer.liquidityResourceKey, "native Funding offer lacks resource binding");
   return { fundingId: offer.fundingId, asset: offer.asset, maxBorrow: offer.maxBorrow, fee: offer.fee,
+    binding:offer.binding,liquidityHolder:offer.liquidityHolder,liquidityResourceKey:offer.liquidityResourceKey,feeRate:offer.feeRate,feeScale:offer.feeScale,
     actionAdapterId: offer.actionAdapterId, planningPriority: offer.planningPriority, liquidityPriority: offer.liquidityPriority };
 }
 
@@ -180,20 +184,20 @@ export async function runFamilyFundingAcceptance(raw: FundingAcceptanceCase, con
   assert.equal(sample.familyId, family.plugin.manifest.familyId); assert.equal(source.number, sample.source.number);
   assert(same(source.hash, sample.source.hash) && same(executor, sample.executor) && same(owner, sample.owner), "Funding case source/actors mismatch");
   const discovery = assertFundingRuntimeReady(context, sample), plugin = fundingPlugin(family);
-  const lender = getAddress(plugin.funding.repayment.liquidityHolder); assert(!same(executor, lender), "borrower and lender must differ");
   Object.assign(report, { format: "family-funding-acceptance-v1", sample, source, evidence: context.evidence,
     discovery, result: "failed", executions: [], liquidityEvidence: [] }); checkpoint();
   let stage = "exact";
   try {
   const runtime = recordingRuntime(context.runtime, report.liquidityEvidence);
-  const liquidity = await executeFundingFamilyLiquidity({ family, assets: [sample.token], source,
+  const liquidity = await executeFundingFamilyLiquidity({ family, assets: [sample.token], bindings:discovery.bindings, source,
     generation: source.generation, runtime, control, publisher: { publish() {} } });
   report.liquidity = liquidity;
-  const offers = liquidity.offers.filter(offer => offer.fundingId === sample.instanceKey && same(offer.asset, sample.token));
+  const offers = liquidity.offers.filter(offer => offer.fundingId === sample.fundingId && same(offer.asset, sample.token));
   assert.equal(offers.length, 1, "Funding case requires one issued current offer");
-  const offer = offers[0]!, amount = BigInt(sample.amountIn);
+  const offer = offers[0]!, amount = BigInt(sample.amountIn), fee = selectorFundingFee(offer, amount), lender = getAddress(offer.liquidityHolder!);
+  assert(!same(executor, lender), "borrower and lender must differ");
   assert(amount <= offer.maxBorrow && offer.maxBorrow > 0n, "Funding capacity does not cover input");
-  report.offer = descriptor(offer); report.quote = { amountIn: amount, amountOut: amount, fee: offer.fee };
+  report.offer = descriptor(offer); report.quote = { amountIn: amount, amountOut: amount, fee };
   stage = "quotedExecution"; checkpoint();
   const dispatch = async (request: AdapterRequest, simulated: boolean) => {
     const result = await executeAdapterWork({ runtime: context.runtime, control, intent: {
@@ -212,7 +216,7 @@ export async function runFamilyFundingAcceptance(raw: FundingAcceptanceCase, con
   const balanceResult = await dispatch(balanceRequest, false); report.baseline = { request: balanceRequest, result: balanceResult };
   assert(balanceResult.ok && balanceResult.completion === "returned");
   const baseline = uint(BigInt(erc20.decodeFunctionResult("balanceOf", balanceResult.data)[0]));
-  assert(baseline >= offer.fee, "executor does not own the required fee balance");
+  assert(baseline >= fee, "executor does not own the required fee balance");
   const args = { family, offer, source, generation: source.generation, amount };
   const borrow = buildFundingBorrowFragment({ ...args, minProfit: 0n, children: [] });
   const repayment = buildFundingRepaymentFragment(args);
@@ -223,7 +227,7 @@ export async function runFamilyFundingAcceptance(raw: FundingAcceptanceCase, con
     report.executions.push(row); checkpoint();
     try {
       row.resultEvidence = await dispatch(request, true);
-      row.facts = probe === "positive" ? checkFundingPositiveFacts({ sample, source, lender, fee: offer.fee,
+      row.facts = probe === "positive" ? checkFundingPositiveFacts({ sample, source, lender, fee,
         requestId: request.id, result: row.resultEvidence }) : checkFundingRevertFacts({ sample, source, requestId: request.id, result: row.resultEvidence });
       assert(row.facts.passed, JSON.stringify(row.facts)); row.result = "pass";
     } catch (error) { row.error = safeError(error); }
@@ -245,31 +249,39 @@ export function verifyFundingAcceptanceReport(raw: FundingAcceptanceCase, report
   assert(isHexString(report.evidence.executorCodeHash, 32), "Funding executor code binding is missing");
   const discovery = assertFundingReadyPublication(family, report.discovery.memo, source, sample);
   for (const [key, value] of Object.entries(discovery)) assert.deepEqual(report.discovery[key], value, "Funding discovery projection changed");
-  const sources = plugin.funding.liquidity.sources([sample.token]).filter(row => row.fundingId === sample.instanceKey);
+  const sources = plugin.funding.liquidity.sources([sample.token], discovery.bindings).filter(row => row.fundingId === sample.fundingId);
   assert.equal(sources.length, 1);
-  const programInput = { assets: [sample.token], sources, source };
-  const expectedRequests = plugin.funding.liquidity.program.buildRequests(programInput);
-  assert.equal(report.liquidityEvidence.length, 1, "Funding quote must retain its actual read round");
-  const round = report.liquidityEvidence[0]; assert.deepEqual(round.source, source); assert.deepEqual(round.requests, expectedRequests);
-  assert.equal(round.results.length, expectedRequests.length);
-  for (let i = 0; i < round.results.length; i++) {
-    const row = round.results[i]; assert.equal(row.id, expectedRequests[i]!.id); assert.deepEqual(row.source, source);
-    assert(row.ok && row.completion === "returned" && row.provenance?.fingerprint, "Funding quote lacks completed source-bound reads");
+  const programInput = { assets: [sample.token], sources, source }, program = plugin.funding.liquidity.program;
+  const checkRound = (index:number, expectedRequests:readonly AdapterRequest[]) => {
+    const round=report.liquidityEvidence[index];assert(round,"missing source-pinned Funding read round");
+    assert.deepEqual(round.source, source); assert.deepEqual(round.requests, expectedRequests);
+    assert.equal(round.results.length, expectedRequests.length);
+    for (let i=0;i<round.results.length;i++){const row=round.results[i];assert.equal(row.id,expectedRequests[i]!.id);assert.deepEqual(row.source,source);
+      assert(row.ok && row.completion === "returned" && row.provenance?.fingerprint,"Funding quote lacks completed source-bound reads");}
+    return round.results as readonly AdapterRequestResult[];
+  };
+  const initialResults=checkRound(0,program.buildRequests(programInput)),priorEvidence:unknown[]=[];
+  let rounds=1;
+  for(let completedRound=0;;completedRound++){
+    const bound=program.buildDependentProgram?.({programInput,completedRound,initialResults,priorEvidence})??null;if(bound===null)break;
+    assert(completedRound<4,"Funding read round budget exceeded");const results=checkRound(rounds++,bound.requests);priorEvidence.push(bound.decode(results));
   }
+  assert.equal(report.liquidityEvidence.length,rounds,"Funding report has unowned read rounds");
+  const results=collectRequestProgramResults(initialResults,priorEvidence);
   const derived = plugin.funding.liquidity.deriveOffers({ sources,
-    evidence: plugin.funding.liquidity.program.decode({ programInput, results: round.results }) }).filter(offer => offer.fundingId === sample.instanceKey && same(offer.asset, sample.token));
+    evidence: plugin.funding.liquidity.program.decode({ programInput, results }) }).filter(offer => offer.fundingId === sample.fundingId && same(offer.asset, sample.token));
   assert.equal(derived.length, 1); const offer = descriptor(derived[0]!); assert.deepEqual(report.offer, offer);
-  const amount = BigInt(sample.amountIn); assert(amount <= offer.maxBorrow && amount > 0n);
-  assert.deepEqual(report.quote, { amountIn: amount, amountOut: amount, fee: offer.fee });
+  const amount = BigInt(sample.amountIn), fee = selectorFundingFee(offer, amount); assert(amount <= offer.maxBorrow && amount > 0n);
+  assert.deepEqual(report.quote, { amountIn: amount, amountOut: amount, fee });
   const baseline = report.baseline;
   assert.deepEqual(baseline.request, { id: `${sample.id}-baseline`, kind: "eth-call", to: sample.token,
     data: erc20.encodeFunctionData("balanceOf", [sample.executor]), completion: "return-data" });
   assert.equal(baseline.result.id, baseline.request.id); assert.deepEqual(baseline.result.source, source);
   assert(baseline.result.ok && baseline.result.completion === "returned" && baseline.result.provenance?.fingerprint);
-  const initial = uint(BigInt(erc20.decodeFunctionResult("balanceOf", baseline.result.data)[0])); assert(initial >= offer.fee);
+  const initial = uint(BigInt(erc20.decodeFunctionResult("balanceOf", baseline.result.data)[0])); assert(initial >= fee);
   const borrow = plugin.funding.repayment.buildBorrowFragment({ offer, amount, minProfit: 0n, children: [] });
   const repayment = plugin.funding.repayment.buildRepaymentFragment({ offer, amount });
-  const programs = compileFundingPrograms(family, sample, initial, borrow, repayment), lender = getAddress(plugin.funding.repayment.liquidityHolder);
+  const programs = compileFundingPrograms(family, sample, initial, borrow, repayment), lender = getAddress(offer.liquidityHolder!);
   assert(!same(lender, sample.executor)); assert.equal(report.executions.length, probes.length);
   for (const probe of probes) {
     const rows = report.executions.filter((row: any) => row.probe === probe); assert.equal(rows.length, 1);
@@ -286,7 +298,7 @@ export function verifyFundingAcceptanceReport(raw: FundingAcceptanceCase, report
       completion: row.resultEvidence.completion,
       source: { number: source.number, hash: source.hash.toLowerCase(), generation: source.generation },
     }) }, "Funding result provenance is not bound to its program/source/actors");
-    const facts = probe === "positive" ? checkFundingPositiveFacts({ sample, source, result: row.resultEvidence, requestId: row.request.id, lender, fee: offer.fee })
+    const facts = probe === "positive" ? checkFundingPositiveFacts({ sample, source, result: row.resultEvidence, requestId: row.request.id, lender, fee })
       : checkFundingRevertFacts({ sample, source, result: row.resultEvidence, requestId: row.request.id });
     assert(facts.passed, JSON.stringify(facts)); assert.equal(row.result, "pass"); assert.deepEqual(row.facts, facts);
   }

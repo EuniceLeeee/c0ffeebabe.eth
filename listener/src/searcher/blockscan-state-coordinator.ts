@@ -1,3 +1,4 @@
+import { edgeObservationTarget, edgeObservationPoolId } from "./venues/route-observation-identity.js";
 import {
   blockScanEdgeKey,
   blockScanEdgeMetadataFingerprint,
@@ -984,15 +985,16 @@ export class BlockScanStateCoordinator {
         // Activity identity: poolId for v4-style families, the pool/contract
         // address otherwise. edge.target is the shared manager/router for
         // v4-style families and must not be used as the primary identity.
-        const identity = edge.poolId !== undefined
-          ? `pool-id:${edge.poolId.toLowerCase()}`
-          : `address:${edge.target.toLowerCase()}`;
+        const poolId = edgeObservationPoolId(edge);
+        const identity = poolId !== undefined
+          ? `pool-id:${poolId}`
+          : `address:${edgeObservationTarget(edge)}`;
         const stateKeys = stateKeysByActivityIdentity.get(identity) ??
           new Set<string>();
         stateKeys.add(group.stateKey);
         stateKeysByActivityIdentity.set(identity, stateKeys);
-        if (edge.poolId !== undefined) {
-          const emitter = edge.target.toLowerCase();
+        if (poolId !== undefined) {
+          const emitter = edgeObservationTarget(edge);
           const fallback = singletonStateKeysByEmitter.get(emitter) ??
             new Set<string>();
           fallback.add(group.stateKey);

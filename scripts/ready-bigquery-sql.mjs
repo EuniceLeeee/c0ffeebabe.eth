@@ -3,7 +3,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { decodeRow, digest } from './bigquery-table.mjs';
+import { decodeRow, digest, selectorCensusFingerprint, assertReadySelectorEdgeObservation,
+  readySelectorEdgeKey, readySelectorEdgeFingerprint } from './bigquery-table.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -126,6 +127,31 @@ export function decodeSqlDiscoveryRow(fields, row, wiring, instanceKey, collectO
     return { coverage: { rows, minBlock, maxBlock: firstHead.number, maxHash: firstHead.blockHash } };
   }
   assert.equal(value.row_kind, 'witness');
+  if (record.kind === 'selector-edge') {
+    const edge = checkedWitness(record, record.snapshot);
+    assertReadySelectorEdgeObservation(edge);
+    assert.equal(edge.scope.chainId, 1, 'SQL selector edge chain differs');
+    assert.equal(record.family, edge.familyId, 'SQL selector edge family differs');
+    assert.equal(record.key, readySelectorEdgeKey(edge), 'SQL selector edge key differs');
+    assert.equal(record.fingerprint, readySelectorEdgeFingerprint(edge), 'SQL selector edge fingerprint differs');
+    return { selectorEdge: edge };
+  }
+  if (record.kind === 'selector-census') {
+    const census = checkedWitness(record, record.snapshot);
+    assert.equal(census.format, 'ready-selector-census/v1', 'Unknown SQL selector census format');
+    assert.equal(census.chainId, 1, 'SQL selector census chain differs');
+    assert.equal(record.key, '1|' + census.transactionHash, 'SQL selector census key differs');
+    assert.equal(census.status, 'unverified', 'SQL selector census cannot grant execution authority');
+    assert(Array.isArray(census.calls) && Array.isArray(census.logs) && Array.isArray(census.tokenFlows) &&
+      Array.isArray(census.resources) && Array.isArray(census.coverage?.issues), 'Malformed SQL selector census');
+    assert.equal(census.coverage.allInternalCallsEnumerated, false, 'SQL selector census cannot claim complete internal calls');
+    assert(census.calls.every(call => call.status === 'unverified' && ['raw-call', 'flow-correlated'].includes(call.classification)),
+      'SQL selector census call cannot grant execution authority');
+    assert(census.resources.every(resource => resource.status === 'unverified' && resource.selector === null),
+      'SQL event resource cannot invent an internal selector');
+    assert.equal(record.fingerprint, selectorCensusFingerprint(census), 'SQL selector census fingerprint differs');
+    return { selectorCensus: census };
+  }
   if (record.kind === 'opaque-group') {
     assert(Array.isArray(record.witnesses) && record.witnesses.length > 0, 'Empty SQL opaque group');
     const logs = record.witnesses.map(item => {
@@ -147,6 +173,8 @@ function checkedWitness(record, witness) {
   assert(Number.isSafeInteger(record.block) && record.block > 0 &&
     /^0x[0-9a-f]{64}$/i.test(record.sourceHash) && /^0x[0-9a-f]{64}$/i.test(record.sourceTx), 'Invalid SQL discovery source');
   assert.equal(record.tx, record.sourceTx.toLowerCase(), 'SQL discovery transaction differs');
+  assert(witness && typeof witness === 'object' && /^0x[0-9a-f]{64}$/i.test(witness.transactionHash) &&
+    /^0x[0-9a-f]{64}$/i.test(witness.blockHash), 'Invalid SQL discovery witness source');
   assert.equal(witness.transactionHash.toLowerCase(), record.tx, 'SQL discovery witness transaction differs');
   assert.equal(witness.blockNumber, record.block, 'SQL discovery witness block differs');
   assert.equal(witness.blockHash.toLowerCase(), record.sourceHash.toLowerCase(), 'SQL discovery witness block hash differs');

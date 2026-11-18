@@ -1,0 +1,64 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xe0232b42",
+  "signature": "function flashLoan(address token,uint256 assets,bytes data)",
+  "domain": "funding",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED"
+  },
+  "meta": {
+    "label": "Morpho compatible flashLoan"
+  },
+  "parameters": [
+    {
+      "path": [
+        0
+      ],
+      "role": "tokenIn"
+    },
+    {
+      "path": [
+        1
+      ],
+      "role": "amountIn"
+    },
+    {
+      "path": [
+        2
+      ],
+      "role": "children"
+    }
+  ],
+  "execution": {
+    "callback": {
+      "signature": "function onMorphoFlashLoan(uint256 assets,bytes data)",
+      "dataArgument": 1,
+      "args": [
+        "$amountIn",
+        "$children"
+      ]
+    },
+    "repayment": {
+      "mode": "approve-pull"
+    }
+  },
+  "funding": {
+    "liquidity": {
+      "target": "$tokenIn",
+      "signature": "function balanceOf(address) view returns(uint256)",
+      "args": [
+        "$provider"
+      ],
+      "result": 0
+    },
+    "fee": {
+      "kind": "constant",
+      "amount": "0"
+    },
+    "priority": {
+      "planning": 0,
+      "liquidity": 1
+    }
+  }
+}

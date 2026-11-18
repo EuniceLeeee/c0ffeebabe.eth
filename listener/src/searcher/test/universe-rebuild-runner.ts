@@ -104,7 +104,7 @@ async function startupReadyFromMain(
     ts.isFunctionDeclaration(node) && node.name?.text === "readyStartupReviewPlan");
   assert(plan, "the production source-binding planner exists");
   const body = ts.transpileModule(plan.getText(parsed).replace(/^export /, "") +
-    `\nreturn (async () => { let rebuildEnvelope = await rebuildStore.load(); const preparedReady = undefined; ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
+    `\nreturn (async () => { let rebuildEnvelope = await rebuildStore.load(); const preparedReady = undefined, selectorCensus = rebuildEnvelope?.inProgressRun?.selectorCensus ?? rebuildEnvelope?.readyGeneration?.selectorCoverage?.transactions; ${source.slice(start, end)}\nreturn { readyUniverse, rebuildEnvelope }; })();`,
     { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
   const run = new Function(
     "rebuildStore", "rebuildWiring", "rebuildUniverse", "canonicalJson",
@@ -1666,7 +1666,7 @@ async function main(): Promise<void> {
         const scoped = (ids: string[], families: string[]) => {
           const f = make(path, ids, () => families);
           return { ...f, input: { ...f.input,
-            dedupeFamilyCandidates: (items, selected) => f.input.dedupeFamilyCandidates(items, selected).map(raw => {
+            dedupeFamilyCandidates: (...args: Parameters<typeof f.input.dedupeFamilyCandidates>) => f.input.dedupeFamilyCandidates(...args).map(raw => {
               const candidate = raw as { id: string };
               return { ...candidate, familyId: owner(candidate.id) };
             }),

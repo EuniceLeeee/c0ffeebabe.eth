@@ -1,0 +1,1254 @@
+[
+  {
+    "id": "univ2:received-balance-delta",
+    "version": 1,
+    "inputs": [
+      "before",
+      "after"
+    ],
+    "outputs": [
+      "delta"
+    ],
+    "operations": [
+      {
+        "name": "delta",
+        "op": "sub",
+        "left": {
+          "input": "after"
+        },
+        "right": {
+          "input": "before"
+        }
+      }
+    ]
+  },
+  {
+    "id": "balancer-v2-swap-amount-guard",
+    "version": 1,
+    "inputs": [
+      "amount"
+    ],
+    "outputs": [
+      "high"
+    ],
+    "operations": [
+      {
+        "name": "high",
+        "op": "shr",
+        "left": {
+          "input": "amount"
+        },
+        "right": {
+          "constant": "255"
+        }
+      }
+    ]
+  },
+  {
+    "id": "univ4:negate",
+    "version": 1,
+    "inputs": [
+      "amount"
+    ],
+    "outputs": [
+      "negative",
+      "high"
+    ],
+    "operations": [
+      {
+        "name": "high",
+        "op": "shr",
+        "left": {
+          "input": "amount"
+        },
+        "right": {
+          "constant": "127"
+        }
+      },
+      {
+        "name": "negative",
+        "op": "neg",
+        "left": {
+          "input": "amount"
+        },
+        "right": {
+          "constant": "0"
+        }
+      }
+    ]
+  },
+  {
+    "id": "univ4:delta-zero-for-one",
+    "version": 1,
+    "inputs": [
+      "delta"
+    ],
+    "outputs": [
+      "output",
+      "debt",
+      "outputHigh"
+    ],
+    "operations": [
+      {
+        "name": "high",
+        "op": "shr",
+        "left": {
+          "input": "delta"
+        },
+        "right": {
+          "constant": "128"
+        }
+      },
+      {
+        "name": "output",
+        "op": "and",
+        "left": {
+          "input": "delta"
+        },
+        "right": {
+          "constant": "340282366920938463463374607431768211455"
+        }
+      },
+      {
+        "name": "debtRaw",
+        "op": "and",
+        "left": {
+          "local": "high"
+        },
+        "right": {
+          "constant": "340282366920938463463374607431768211455"
+        }
+      },
+      {
+        "name": "debtBase",
+        "op": "sub",
+        "left": {
+          "constant": "340282366920938463463374607431768211456"
+        },
+        "right": {
+          "local": "debtRaw"
+        }
+      },
+      {
+        "name": "debt",
+        "op": "and",
+        "left": {
+          "local": "debtBase"
+        },
+        "right": {
+          "constant": "340282366920938463463374607431768211455"
+        }
+      },
+      {
+        "name": "outputHigh",
+        "op": "shr",
+        "left": {
+          "local": "output"
+        },
+        "right": {
+          "constant": "127"
+        }
+      }
+    ]
+  },
+  {
+    "id": "univ4:delta-one-for-zero",
+    "version": 1,
+    "inputs": [
+      "delta"
+    ],
+    "outputs": [
+      "output",
+      "debt",
+      "outputHigh"
+    ],
+    "operations": [
+      {
+        "name": "high",
+        "op": "shr",
+        "left": {
+          "input": "delta"
+        },
+        "right": {
+          "constant": "128"
+        }
+      },
+      {
+        "name": "low",
+        "op": "and",
+        "left": {
+          "input": "delta"
+        },
+        "right": {
+          "constant": "340282366920938463463374607431768211455"
+        }
+      },
+      {
+        "name": "output",
+        "op": "and",
+        "left": {
+          "local": "high"
+        },
+        "right": {
+          "constant": "340282366920938463463374607431768211455"
+        }
+      },
+      {
+        "name": "debtBase",
+        "op": "sub",
+        "left": {
+          "constant": "340282366920938463463374607431768211456"
+        },
+        "right": {
+          "local": "low"
+        }
+      },
+      {
+        "name": "debt",
+        "op": "and",
+        "left": {
+          "local": "debtBase"
+        },
+        "right": {
+          "constant": "340282366920938463463374607431768211455"
+        }
+      },
+      {
+        "name": "outputHigh",
+        "op": "shr",
+        "left": {
+          "local": "output"
+        },
+        "right": {
+          "constant": "127"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ekubo:swap-return",
+    "version": 1,
+    "inputs": [
+      "word",
+      "flag"
+    ],
+    "outputs": [
+      "specified",
+      "magnitude",
+      "calculatedHigh"
+    ],
+    "operations": [
+      {
+        "name": "high",
+        "op": "shr",
+        "left": {
+          "input": "word"
+        },
+        "right": {
+          "constant": "128"
+        }
+      },
+      {
+        "name": "low",
+        "op": "and",
+        "left": {
+          "input": "word"
+        },
+        "right": {
+          "constant": "340282366920938463463374607431768211455"
+        }
+      },
+      {
+        "name": "inverse",
+        "op": "sub",
+        "left": {
+          "constant": "1"
+        },
+        "right": {
+          "input": "flag"
+        }
+      },
+      {
+        "name": "lowSelected",
+        "op": "mul",
+        "left": {
+          "local": "low"
+        },
+        "right": {
+          "input": "flag"
+        }
+      },
+      {
+        "name": "highSelected",
+        "op": "mul",
+        "left": {
+          "local": "high"
+        },
+        "right": {
+          "local": "inverse"
+        }
+      },
+      {
+        "name": "specified",
+        "op": "add",
+        "left": {
+          "local": "lowSelected"
+        },
+        "right": {
+          "local": "highSelected"
+        }
+      },
+      {
+        "name": "highSelectedCalc",
+        "op": "mul",
+        "left": {
+          "local": "high"
+        },
+        "right": {
+          "input": "flag"
+        }
+      },
+      {
+        "name": "lowSelectedCalc",
+        "op": "mul",
+        "left": {
+          "local": "low"
+        },
+        "right": {
+          "local": "inverse"
+        }
+      },
+      {
+        "name": "calculated",
+        "op": "add",
+        "left": {
+          "local": "highSelectedCalc"
+        },
+        "right": {
+          "local": "lowSelectedCalc"
+        }
+      },
+      {
+        "name": "magnitude",
+        "op": "sub",
+        "left": {
+          "constant": "340282366920938463463374607431768211456"
+        },
+        "right": {
+          "local": "calculated"
+        }
+      },
+      {
+        "name": "calculatedHigh",
+        "op": "shr",
+        "left": {
+          "local": "magnitude"
+        },
+        "right": {
+          "constant": "127"
+        }
+      }
+    ]
+  },
+  {
+    "id": "badger-sett-withdraw:runtime-terms",
+    "version": 1,
+    "inputs": [
+      "amountIn",
+      "backing",
+      "supply",
+      "vaultIdle",
+      "strategyIdle",
+      "feeBps"
+    ],
+    "outputs": [
+      "net"
+    ],
+    "operations": [
+      {
+        "name": "grossProduct",
+        "op": "mul",
+        "left": {
+          "input": "amountIn"
+        },
+        "right": {
+          "input": "backing"
+        }
+      },
+      {
+        "name": "gross",
+        "op": "div",
+        "left": {
+          "local": "grossProduct"
+        },
+        "right": {
+          "input": "supply"
+        }
+      },
+      {
+        "name": "liquid",
+        "op": "add",
+        "left": {
+          "input": "vaultIdle"
+        },
+        "right": {
+          "input": "strategyIdle"
+        }
+      },
+      {
+        "name": "margin",
+        "op": "sub",
+        "left": {
+          "local": "liquid"
+        },
+        "right": {
+          "local": "gross"
+        }
+      },
+      {
+        "name": "feeComplement",
+        "op": "sub",
+        "left": {
+          "constant": "200"
+        },
+        "right": {
+          "input": "feeBps"
+        }
+      },
+      {
+        "name": "feeNumerator",
+        "op": "mul",
+        "left": {
+          "local": "gross"
+        },
+        "right": {
+          "local": "feeComplement"
+        }
+      },
+      {
+        "name": "fee",
+        "op": "div",
+        "left": {
+          "local": "feeNumerator"
+        },
+        "right": {
+          "constant": "10000"
+        }
+      },
+      {
+        "name": "net",
+        "op": "sub",
+        "left": {
+          "local": "gross"
+        },
+        "right": {
+          "local": "fee"
+        }
+      }
+    ]
+  },
+  {
+    "id": "psm:runtime-terms",
+    "version": 1,
+    "inputs": [
+      "amountIn",
+      "fee",
+      "scale",
+      "isBuy"
+    ],
+    "outputs": [
+      "callAmount",
+      "expectedOut",
+      "expectedSpend",
+      "expectedReturn"
+    ],
+    "operations": [
+      {
+        "name": "isSell",
+        "op": "sub",
+        "left": {
+          "constant": "1"
+        },
+        "right": {
+          "input": "isBuy"
+        }
+      },
+      {
+        "name": "sellAmount",
+        "op": "mul",
+        "left": {
+          "input": "amountIn"
+        },
+        "right": {
+          "local": "isSell"
+        }
+      },
+      {
+        "name": "sellScaled",
+        "op": "mul",
+        "left": {
+          "local": "sellAmount"
+        },
+        "right": {
+          "input": "scale"
+        }
+      },
+      {
+        "name": "sellFeeScaled",
+        "op": "mul",
+        "left": {
+          "local": "sellScaled"
+        },
+        "right": {
+          "input": "fee"
+        }
+      },
+      {
+        "name": "sellFee",
+        "op": "div",
+        "left": {
+          "local": "sellFeeScaled"
+        },
+        "right": {
+          "constant": "1000000000000000000"
+        }
+      },
+      {
+        "name": "sellOut",
+        "op": "sub",
+        "left": {
+          "local": "sellScaled"
+        },
+        "right": {
+          "local": "sellFee"
+        }
+      },
+      {
+        "name": "buyBudget",
+        "op": "mul",
+        "left": {
+          "input": "amountIn"
+        },
+        "right": {
+          "input": "isBuy"
+        }
+      },
+      {
+        "name": "buyNext",
+        "op": "add",
+        "left": {
+          "local": "buyBudget"
+        },
+        "right": {
+          "constant": "1"
+        }
+      },
+      {
+        "name": "buyWide",
+        "op": "mul",
+        "left": {
+          "local": "buyNext"
+        },
+        "right": {
+          "constant": "1000000000000000000"
+        }
+      },
+      {
+        "name": "buyNumerator",
+        "op": "sub",
+        "left": {
+          "local": "buyWide"
+        },
+        "right": {
+          "constant": "1"
+        }
+      },
+      {
+        "name": "buyDenominator",
+        "op": "add",
+        "left": {
+          "constant": "1000000000000000000"
+        },
+        "right": {
+          "input": "fee"
+        }
+      },
+      {
+        "name": "buyGemWide",
+        "op": "div",
+        "left": {
+          "local": "buyNumerator"
+        },
+        "right": {
+          "local": "buyDenominator"
+        }
+      },
+      {
+        "name": "buyGem",
+        "op": "div",
+        "left": {
+          "local": "buyGemWide"
+        },
+        "right": {
+          "input": "scale"
+        }
+      },
+      {
+        "name": "buyScaled",
+        "op": "mul",
+        "left": {
+          "local": "buyGem"
+        },
+        "right": {
+          "input": "scale"
+        }
+      },
+      {
+        "name": "buyFeeScaled",
+        "op": "mul",
+        "left": {
+          "local": "buyScaled"
+        },
+        "right": {
+          "input": "fee"
+        }
+      },
+      {
+        "name": "buyFee",
+        "op": "div",
+        "left": {
+          "local": "buyFeeScaled"
+        },
+        "right": {
+          "constant": "1000000000000000000"
+        }
+      },
+      {
+        "name": "buyCost",
+        "op": "add",
+        "left": {
+          "local": "buyScaled"
+        },
+        "right": {
+          "local": "buyFee"
+        }
+      },
+      {
+        "name": "callAmount",
+        "op": "add",
+        "left": {
+          "local": "sellAmount"
+        },
+        "right": {
+          "local": "buyGem"
+        }
+      },
+      {
+        "name": "expectedOut",
+        "op": "add",
+        "left": {
+          "local": "sellOut"
+        },
+        "right": {
+          "local": "buyGem"
+        }
+      },
+      {
+        "name": "expectedSpend",
+        "op": "add",
+        "left": {
+          "local": "sellAmount"
+        },
+        "right": {
+          "local": "buyCost"
+        }
+      },
+      {
+        "name": "expectedReturn",
+        "op": "add",
+        "left": {
+          "local": "sellOut"
+        },
+        "right": {
+          "local": "buyCost"
+        }
+      }
+    ]
+  },
+  {
+    "id": "reserve-reference:net-balance",
+    "version": 1,
+    "inputs": [
+      "balance",
+      "borrow",
+      "deposit",
+      "reserve"
+    ],
+    "outputs": [
+      "net",
+      "reserveScaled",
+      "missingScaled"
+    ],
+    "operations": [
+      {
+        "name": "balanceBorrow",
+        "op": "add",
+        "left": {
+          "input": "balance"
+        },
+        "right": {
+          "input": "borrow"
+        }
+      },
+      {
+        "name": "net",
+        "op": "sub",
+        "left": {
+          "local": "balanceBorrow"
+        },
+        "right": {
+          "input": "deposit"
+        }
+      },
+      {
+        "name": "minBorrowDeposit",
+        "op": "min",
+        "left": {
+          "input": "borrow"
+        },
+        "right": {
+          "input": "deposit"
+        }
+      },
+      {
+        "name": "missing",
+        "op": "sub",
+        "left": {
+          "input": "borrow"
+        },
+        "right": {
+          "local": "minBorrowDeposit"
+        }
+      },
+      {
+        "name": "reserveScaled",
+        "op": "mul",
+        "left": {
+          "input": "reserve"
+        },
+        "right": {
+          "constant": "19"
+        }
+      },
+      {
+        "name": "missingScaled",
+        "op": "mul",
+        "left": {
+          "local": "missing"
+        },
+        "right": {
+          "constant": "20"
+        }
+      }
+    ]
+  },
+  {
+    "id": "reserve-reference:quadratic-output",
+    "version": 1,
+    "inputs": [
+      "reserveIn",
+      "reserveOut",
+      "referenceIn",
+      "amount"
+    ],
+    "outputs": [
+      "amountOut"
+    ],
+    "operations": [
+      {
+        "name": "minReserveRef",
+        "op": "min",
+        "left": {
+          "input": "reserveIn"
+        },
+        "right": {
+          "input": "referenceIn"
+        }
+      },
+      {
+        "name": "delta",
+        "op": "sub",
+        "left": {
+          "input": "reserveIn"
+        },
+        "right": {
+          "local": "minReserveRef"
+        }
+      },
+      {
+        "name": "sign",
+        "op": "eq",
+        "left": {
+          "local": "delta"
+        },
+        "right": {
+          "constant": "0"
+        }
+      },
+      {
+        "name": "doubleDelta",
+        "op": "add",
+        "left": {
+          "local": "delta"
+        },
+        "right": {
+          "local": "delta"
+        }
+      },
+      {
+        "name": "feeAmount",
+        "op": "add",
+        "left": {
+          "local": "doubleDelta"
+        },
+        "right": {
+          "input": "amount"
+        }
+      },
+      {
+        "name": "scaledFeeAmount",
+        "op": "mul",
+        "left": {
+          "local": "feeAmount"
+        },
+        "right": {
+          "constant": "36893488147419103232000"
+        }
+      },
+      {
+        "name": "feeA",
+        "op": "div",
+        "left": {
+          "local": "scaledFeeAmount"
+        },
+        "right": {
+          "input": "referenceIn"
+        }
+      },
+      {
+        "name": "newBalance",
+        "op": "add",
+        "left": {
+          "input": "amount"
+        },
+        "right": {
+          "input": "reserveIn"
+        }
+      },
+      {
+        "name": "minNewRef",
+        "op": "min",
+        "left": {
+          "local": "newBalance"
+        },
+        "right": {
+          "input": "referenceIn"
+        }
+      },
+      {
+        "name": "pastBy",
+        "op": "sub",
+        "left": {
+          "local": "newBalance"
+        },
+        "right": {
+          "local": "minNewRef"
+        }
+      },
+      {
+        "name": "scaledPast",
+        "op": "mul",
+        "left": {
+          "local": "pastBy"
+        },
+        "right": {
+          "constant": "36893488147419103232000"
+        }
+      },
+      {
+        "name": "relativePast",
+        "op": "div",
+        "left": {
+          "local": "scaledPast"
+        },
+        "right": {
+          "input": "referenceIn"
+        }
+      },
+      {
+        "name": "quadraticPast",
+        "op": "mul",
+        "left": {
+          "local": "relativePast"
+        },
+        "right": {
+          "local": "pastBy"
+        }
+      },
+      {
+        "name": "feeB",
+        "op": "div",
+        "left": {
+          "local": "quadraticPast"
+        },
+        "right": {
+          "input": "amount"
+        }
+      },
+      {
+        "name": "inverseSign",
+        "op": "sub",
+        "left": {
+          "constant": "1"
+        },
+        "right": {
+          "local": "sign"
+        }
+      },
+      {
+        "name": "selectedB",
+        "op": "mul",
+        "left": {
+          "local": "feeB"
+        },
+        "right": {
+          "local": "sign"
+        }
+      },
+      {
+        "name": "selectedA",
+        "op": "mul",
+        "left": {
+          "local": "feeA"
+        },
+        "right": {
+          "local": "inverseSign"
+        }
+      },
+      {
+        "name": "selectedFee",
+        "op": "add",
+        "left": {
+          "local": "selectedA"
+        },
+        "right": {
+          "local": "selectedB"
+        }
+      },
+      {
+        "name": "minFee",
+        "op": "min",
+        "left": {
+          "local": "selectedFee"
+        },
+        "right": {
+          "constant": "1844674407370955161"
+        }
+      },
+      {
+        "name": "feeSum",
+        "op": "add",
+        "left": {
+          "local": "selectedFee"
+        },
+        "right": {
+          "constant": "1844674407370955161"
+        }
+      },
+      {
+        "name": "fee",
+        "op": "sub",
+        "left": {
+          "local": "feeSum"
+        },
+        "right": {
+          "local": "minFee"
+        }
+      },
+      {
+        "name": "newBalanceScaled",
+        "op": "mul",
+        "left": {
+          "local": "newBalance"
+        },
+        "right": {
+          "constant": "184467440737095516160000"
+        }
+      },
+      {
+        "name": "amountFee",
+        "op": "mul",
+        "left": {
+          "input": "amount"
+        },
+        "right": {
+          "local": "fee"
+        }
+      },
+      {
+        "name": "afterFeeScaled",
+        "op": "sub",
+        "left": {
+          "local": "newBalanceScaled"
+        },
+        "right": {
+          "local": "amountFee"
+        }
+      },
+      {
+        "name": "afterFee",
+        "op": "div",
+        "left": {
+          "local": "afterFeeScaled"
+        },
+        "right": {
+          "constant": "184467440737095516160000"
+        }
+      },
+      {
+        "name": "invariant",
+        "op": "mul",
+        "left": {
+          "input": "reserveIn"
+        },
+        "right": {
+          "input": "reserveOut"
+        }
+      },
+      {
+        "name": "ceilNumeratorPlusOne",
+        "op": "add",
+        "left": {
+          "local": "invariant"
+        },
+        "right": {
+          "local": "afterFee"
+        }
+      },
+      {
+        "name": "ceilNumerator",
+        "op": "sub",
+        "left": {
+          "local": "ceilNumeratorPlusOne"
+        },
+        "right": {
+          "constant": "1"
+        }
+      },
+      {
+        "name": "requiredOutBalance",
+        "op": "div",
+        "left": {
+          "local": "ceilNumerator"
+        },
+        "right": {
+          "local": "afterFee"
+        }
+      },
+      {
+        "name": "amountOut",
+        "op": "sub",
+        "left": {
+          "input": "reserveOut"
+        },
+        "right": {
+          "local": "requiredOutBalance"
+        }
+      }
+    ]
+  },
+  {
+    "id": "univ2:runtime-quote",
+    "version": 1,
+    "inputs": [
+      "reserveIn",
+      "reserveOut",
+      "amountIn",
+      "feeBps",
+      "taxInNumerator",
+      "taxInDenominator",
+      "taxOutNumerator",
+      "taxOutDenominator"
+    ],
+    "outputs": [
+      "poolAmountOut",
+      "amountOut"
+    ],
+    "operations": [
+      {
+        "name": "feeComplement",
+        "op": "sub",
+        "left": {
+          "constant": "10000"
+        },
+        "right": {
+          "input": "feeBps"
+        }
+      },
+      {
+        "name": "inputTaxMul",
+        "op": "mul",
+        "left": {
+          "input": "amountIn"
+        },
+        "right": {
+          "input": "taxInNumerator"
+        }
+      },
+      {
+        "name": "inputTax",
+        "op": "div",
+        "left": {
+          "local": "inputTaxMul"
+        },
+        "right": {
+          "input": "taxInDenominator"
+        }
+      },
+      {
+        "name": "receivedIn",
+        "op": "sub",
+        "left": {
+          "input": "amountIn"
+        },
+        "right": {
+          "local": "inputTax"
+        }
+      },
+      {
+        "name": "inWithFee",
+        "op": "mul",
+        "left": {
+          "local": "receivedIn"
+        },
+        "right": {
+          "local": "feeComplement"
+        }
+      },
+      {
+        "name": "numerator",
+        "op": "mul",
+        "left": {
+          "local": "inWithFee"
+        },
+        "right": {
+          "input": "reserveOut"
+        }
+      },
+      {
+        "name": "denominatorBase",
+        "op": "mul",
+        "left": {
+          "input": "reserveIn"
+        },
+        "right": {
+          "constant": "10000"
+        }
+      },
+      {
+        "name": "denominator",
+        "op": "add",
+        "left": {
+          "local": "denominatorBase"
+        },
+        "right": {
+          "local": "inWithFee"
+        }
+      },
+      {
+        "name": "poolAmountOut",
+        "op": "div",
+        "left": {
+          "local": "numerator"
+        },
+        "right": {
+          "local": "denominator"
+        }
+      },
+      {
+        "name": "outputTaxMul",
+        "op": "mul",
+        "left": {
+          "local": "poolAmountOut"
+        },
+        "right": {
+          "input": "taxOutNumerator"
+        }
+      },
+      {
+        "name": "outputTax",
+        "op": "div",
+        "left": {
+          "local": "outputTaxMul"
+        },
+        "right": {
+          "input": "taxOutDenominator"
+        }
+      },
+      {
+        "name": "amountOut",
+        "op": "sub",
+        "left": {
+          "local": "poolAmountOut"
+        },
+        "right": {
+          "local": "outputTax"
+        }
+      }
+    ]
+  },
+  {
+    "id": "univ2:net-token-transfer",
+    "version": 1,
+    "inputs": [
+      "amount",
+      "numerator",
+      "denominator"
+    ],
+    "outputs": [
+      "net"
+    ],
+    "operations": [
+      {
+        "name": "scaled",
+        "op": "mul",
+        "left": {
+          "input": "amount"
+        },
+        "right": {
+          "input": "numerator"
+        }
+      },
+      {
+        "name": "tax",
+        "op": "div",
+        "left": {
+          "local": "scaled"
+        },
+        "right": {
+          "input": "denominator"
+        }
+      },
+      {
+        "name": "net",
+        "op": "sub",
+        "left": {
+          "input": "amount"
+        },
+        "right": {
+          "local": "tax"
+        }
+      }
+    ]
+  }
+]

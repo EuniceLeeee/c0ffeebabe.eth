@@ -6,8 +6,10 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 import { build } from '../listener/node_modules/esbuild/lib/main.js';
 import ts from '../listener/node_modules/typescript/lib/typescript.js';
+import { generatedCapabilityManifestFromShadowArtifact } from '../listener/src/searcher/venues/family-capability-shadow.ts';
 
 const sha = value => createHash('sha256').update(value).digest('hex');
 const json = path => JSON.parse(readFileSync(path, 'utf8'));
@@ -41,6 +43,7 @@ export function scanDiscoveryPackages(inputPath, sourceRoot) {
     const declaredFamilies=new Set(artifact.exact.map(item=>item.identity?.familyId));
     const discoveryFamilies=new Set(artifact.exact.filter(item=>item.identity?.capability==='discovery').map(item=>item.identity.familyId));
     assert.deepEqual([...declaredFamilies].sort(),[...discoveryFamilies].sort(),'Package Family is missing a discovery capability root');
+    generatedCapabilityManifestFromShadowArtifact({ artifact, strictFamilyIds: [...declaredFamilies] });
     packages.push({path,sha256:sha(readFileSync(path))});
     for (const item of artifact.exact.filter(item=>item.identity?.capability === 'discovery')) {
       assert.equal(item.precision,'capability-exact','Discovery root must be capability-exact');
@@ -51,8 +54,20 @@ export function scanDiscoveryPackages(inputPath, sourceRoot) {
       assert.equal(item.root?.absence,null,'Discovery root absent: '+familyId);
       assert.match(item.root.entryExport,/^[A-Za-z_$][\w$]*$/,'Invalid root export');
       assert(Array.isArray(item.root.additionalSourceFiles) && item.root.additionalSourceFiles.length,'Missing manifest sources: '+familyId);
-      roots.push({familyId,entrySourceFile:source(item.root.entrySourceFile),entryExport:item.root.entryExport,
-        additionalSourceFiles:item.root.additionalSourceFiles.map(source),contentHash:item.identity.contentHash,
+      const entrySourceFile=source(item.root.entrySourceFile),additionalSourceFiles=item.root.additionalSourceFiles.map(source);
+      assert.equal(item.root.entryExport, 'defineSelectorFamilyModule', 'Retired production module cannot enter the v2 discovery catalog');
+      assert.equal(entrySourceFile, join(root, 'src/searcher/venues/selector-family-module.ts'),
+        'Discovery v2 module must use the framework-owned factory');
+      assert(Array.isArray(item.root.authoringIntegrity) && item.root.authoringIntegrity.length === 1,
+        'Missing selector-family/v2 authoring byte integrity');
+      for (const integrity of item.root.authoringIntegrity) {
+        const authored = source(integrity.sourceFile);
+        assert(additionalSourceFiles.includes(authored), 'Authoring integrity is outside capability roots');
+        assert.equal(sha(readFileSync(authored)), integrity.sha256, 'Stale authored JSON byte integrity; regenerate the capability artifact');
+      }
+      roots.push({familyId,entrySourceFile,entryExport:item.root.entryExport,
+        additionalSourceFiles,sourceProvenance:[...new Set([entrySourceFile,...additionalSourceFiles])]
+          .map(path=>({path,sha256:sha(readFileSync(path))})),contentHash:item.identity.contentHash,
         semanticDependencies:item.identity.semanticDependencies,packagePath:path});
     }
   }
@@ -61,74 +76,57 @@ export function scanDiscoveryPackages(inputPath, sourceRoot) {
   return {sourceRoot:root,packages,roots};
 }
 
-// Capability roots name code, not necessarily an instantiated capability.
-// JSON roots bind the same compiler and ordered children as their production entry.
+// The production catalog admits only independent selector declarations. Query-side
+// discovery binds the same JSON but loads the pure metadata factory, never VM code.
 export function declarativeBinding(root, sourceRoot) {
+  assert.equal(root.entryExport, 'defineSelectorFamilyModule', 'Retired discovery root: migrate to selector-family/v2 JSON');
+  const expected = join(sourceRoot, 'src/searcher/venues/selector-family-module.ts');
+  assert.equal(root.entrySourceFile, expected, 'Unsupported selector-native compiler root');
   const definitions = root.additionalSourceFiles.filter(file => file.endsWith('.json'))
-    .filter(file => json(file).manifest?.familyId === root.familyId);
-  if (!definitions.length) return null;
-  assert.equal(definitions.length, 1, 'Ambiguous JSON Family definition');
+    .filter(file => { const format = json(file).format; return format === undefined || format === 'selector-family/v2'; });
+  assert.equal(definitions.length, 1, 'Missing/ambiguous selector-native definition');
   const definition = definitions[0], document = json(definition);
-  assert.equal(document.scope?.family, root.familyId, 'JSON Family scope mismatch');
-  assert(Array.isArray(document.variantFiles), 'Missing variant bindings');
-  const children = document.variantFiles.map(name => {
-    assert(typeof name === 'string' && /^\.\/[a-z0-9][a-z0-9-]*\.json$/.test(name), 'Invalid variant path');
-    const file = realpathSync(resolve(dirname(definition), name));
-    assert(root.additionalSourceFiles.includes(file), 'Variant absent from capability closure');
-    return file;
-  });
-  assert(new Set([definition,...children]).size === children.length + 1, 'Duplicate JSON binding');
-  const dir = join(sourceRoot, 'src/searcher/venues/production-families');
-  const matches = [];
-  for (const file of readdirSync(dir).filter(file => file.endsWith('.production.ts'))) {
-    const path = join(dir,file), content = readFileSync(path,'utf8');
+  const funding = document.domain === 'funding', credit = document.domain === 'credit';
+  assert.match(document.selector, /^0x[0-9a-fA-F]{8}$/, 'Invalid selector-native interface');
+  assert(typeof document.signature === 'string', 'Missing selector-native ABI');
+  assert(new RegExp('^execution:' + document.selector.toLowerCase() + ':abi-[0-9a-f]{64}$').test(root.familyId),
+    'Selector-native ABI family key mismatch');
+  const directory = join(sourceRoot, 'src/searcher/venues/production-families'), matches = [];
+  for (const file of readdirSync(directory).filter(file => file.endsWith('.production.ts'))) {
+    const path = join(directory,file), content = readFileSync(path,'utf8');
     const ast = ts.createSourceFile(path,content,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS), imports = new Map();
-    for (const node of ast.statements) if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
-      const imported = resolve(dir,node.moduleSpecifier.text.replace(/\.js$/,'.ts'));
+    for (const node of ast.statements) if (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly && ts.isStringLiteral(node.moduleSpecifier)) {
+      const imported = resolve(directory,node.moduleSpecifier.text.replace(/\.js$/,'.ts'));
       if (node.importClause?.name) imports.set(node.importClause.name.text,{path:imported,export:'default'});
       const bindings = node.importClause?.namedBindings;
-      if (bindings && ts.isNamedImports(bindings)) for (const b of bindings.elements)
+      if (bindings && ts.isNamedImports(bindings)) for (const b of bindings.elements) if (!b.isTypeOnly)
         imports.set(b.name.text,{path:imported,export:b.propertyName?.text ?? b.name.text});
     }
+    let count = 0;
     function visit(node) {
       if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-        const binding = imports.get(node.expression.text), args = node.arguments;
-        if (binding?.path === root.entrySourceFile && binding.export === root.entryExport &&
+        const compiler = imports.get(node.expression.text), args = node.arguments;
+        if (compiler?.path === expected && compiler.export === root.entryExport &&
             args[0] && ts.isIdentifier(args[0]) && imports.get(args[0].text)?.path === definition) {
-          assert(args.length === 2 && ts.isArrayLiteralExpression(args[1]), 'Invalid production child bindings');
-          const files = args[1].elements.map(arg => ts.isIdentifier(arg) ? imports.get(arg.text)?.path : undefined);
-          assert.deepEqual(files, children, 'Production child bindings disagree with JSON');
-          matches.push({path,sha256:sha(content)});
+          assert(args.length === 1, 'v2 module accepts one independent JSON');
+          const types = node.typeArguments ?? [];
+          assert.equal(types.length, 0, 'v2 module cannot override the JSON domain');
+          const declaration=node.parent;
+          assert(ts.isVariableDeclaration(declaration) &&
+            ts.isIdentifier(declaration.name) && declaration.name.text === 'selectorFamilyModule' && ts.isVariableDeclarationList(declaration.parent) &&
+            ts.isVariableStatement(declaration.parent.parent) && declaration.parent.parent.parent === ast &&
+            declaration.parent.parent.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword),
+            'Native discovery must bind the exported v2 selectorFamilyModule');
+          count++;
         }
       }
       ts.forEachChild(node,visit);
     }
     visit(ast);
+    if (count) { assert.equal(count,1,'Ambiguous native compiler invocation'); matches.push({path,sha256:sha(content)}); }
   }
-  assert.equal(matches.length,1,'Missing/ambiguous JSON production compiler binding');
-  return {definition,children,production:matches[0]};
-}
-
-// Version-1 JSON binds handwritten capability exports. Its closure also records
-// generator provenance, which is not a runtime manifest and must not enter SQL.
-export function boundManifestSource(root) {
-  const definitions = root.additionalSourceFiles.filter(file => file.endsWith('.json'))
-    .map(file => ({file, document: json(file)}))
-    .filter(({document}) => document.version === 1 && document.scope?.family === root.familyId);
-  if (!definitions.length) return null;
-  assert.equal(definitions.length, 1, 'Ambiguous bound Family definition');
-  const {file, document} = definitions[0];
-  const resolveBinding = binding => {
-    assert(binding && typeof binding.module === 'string' && binding.module.startsWith('./') &&
-      /^[A-Za-z_$][\w$]*$/.test(binding.export), 'Invalid bound capability');
-    return {path: realpathSync(resolve(dirname(file), binding.module.replace(/\.js$/, '.ts'))), export: binding.export};
-  };
-  const discovery = resolveBinding(document.discovery?.binding);
-  assert.equal(discovery.path, root.entrySourceFile, 'Bound discovery source differs');
-  assert.equal(discovery.export, root.entryExport, 'Bound discovery export differs');
-  const manifest = resolveBinding(document.manifest?.binding);
-  assert(root.additionalSourceFiles.includes(manifest.path), 'Bound manifest absent from capability closure');
-  return manifest;
+  assert.equal(matches.length,1,'Missing/ambiguous native production binding');
+  return {definition,children:[],production:matches[0],selectorNative:true,funding,credit};
 }
 
 function sourceExtractor(path, extracts) {
@@ -172,7 +170,7 @@ export async function buildDiscoveryUdf(options) {
   const inventory=scanDiscoveryPackages(options.catalog,options.sourceRoot), extracts=[];
   if (options.familyIds !== undefined) {
     const selected = new Set(options.familyIds);
-    assert(selected.size && selected.size === options.familyIds.length, 'Invalid discovery Family scope');
+    assert(selected.size === options.familyIds.length, 'Invalid discovery Family scope');
     inventory.roots = inventory.roots.filter(root => selected.has(root.familyId));
     assert.equal(inventory.roots.length, selected.size, 'Enabled Family is missing from the discovery package');
   }
@@ -184,33 +182,20 @@ export async function buildDiscoveryUdf(options) {
   const imports=[], tuples=[];
   for(const [i,root] of inventory.roots.entries()) {
     const binding = declarativeBinding(root, inventory.sourceRoot);
-    if (binding) {
-      root.declarative = binding;
-      const domain = json(binding.definition).production.domain;
-      const suffix = {protocol:'Protocol',swap:'Swap',credit:'Credit'}[domain];
-      assert(suffix && root.entryExport === 'compileDeclarative'+suffix &&
-        root.entrySourceFile === join(src,'venues/declarative-'+domain+'.ts'), 'Unsupported declarative compiler root');
-      imports.push(`import {compileDeclarativeFamilyDiscovery as compile${i}} from ${JSON.stringify(join(src,'venues/declarative-family-discovery.ts'))};`);
-      imports.push(`import definition${i} from ${JSON.stringify(binding.definition)};`);
-      binding.children.forEach((file,j)=>imports.push(`import child${i}_${j} from ${JSON.stringify(file)};`));
-      tuples.push(`{plugin:compile${i}(definition${i},[${binding.children.map((_,j)=>`child${i}_${j}`).join(',')}])}`);
-    } else {
-      imports.push(`import {${root.entryExport} as discovery${i}} from ${JSON.stringify(root.entrySourceFile)};`);
-      const bound = boundManifestSource(root);
-      if (bound) {
-        imports.push(`import {${bound.export} as manifest${i}} from ${JSON.stringify(bound.path)};`);
-        tuples.push(`{plugin:{discovery:discovery${i},manifest:findManifest(${JSON.stringify(root.familyId)},[{manifest:manifest${i}}])}}`);
-      } else {
-        const namespaces=root.additionalSourceFiles.map((file,j)=>{const name='manifestSource'+i+'_'+j;imports.push(`import * as ${name} from ${JSON.stringify(file)};`);return name;});
-        tuples.push(`{plugin:{discovery:discovery${i},manifest:findManifest(${JSON.stringify(root.familyId)},[${namespaces.join(',')}])}}`);
-      }
-    }
+    root.declarative = binding;
+    const factory = binding.funding ? 'compileSelectorNativeFundingDiscovery' : binding.credit ? 'compileSelectorNativeCreditDiscovery' : 'compileSelectorNativeDiscovery';
+    const file = binding.funding ? 'selector-native-funding-definition.ts' : binding.credit ? 'selector-native-credit-definition.ts' : 'selector-native-discovery.ts';
+    imports.push(`import {${factory} as compile${i}} from ${JSON.stringify(join(src,'venues',file))};`);
+    imports.push(`import definition${i} from ${JSON.stringify(binding.definition)};`);
+    tuples.push(`{plugin:compile${i}(definition${i})}`);
   }
   const methods=['digest','candidateForFamilyObservation','candidateForFamilyCallObservation','adapterLabelForFamily',
     'rebuildFamilyInstanceDedupeKey','candidateInstanceIdentity','hashFamilyCandidateKey','familyIdForCandidate',
     'candidateFingerprint','encodeDurableValue','isSealedReadonlyMap'];
   const helpers=['appendPattern','freezePatternIndex','comparePatternMatch','appendUniqueMatches','addressSurfaceKey','isNonZeroWord','normalizeHex','nonempty'];
   const generated=[...imports,
+    `import {readySelectorCensusFromTransaction} from ${JSON.stringify(join(src,'ready-selector-census.ts'))};`,
+    `import {readySelectorEdgesFromCensus,readySelectorEdgeKey,readySelectorEdgeFingerprint} from ${JSON.stringify(join(src,'ready-selector-edges.ts'))};`,
     `import {createOpaqueNominationCollector} from ${JSON.stringify(join(dirname(options.reader),'ready-opaque-nominations.mjs'))};`,
     `import {createHash} from '@portable-crypto';`,
     `function assert(value,message){if(!value)throw Error(message);}`,
@@ -236,14 +221,20 @@ const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>families,m
     reader.fn('observationsFromTx'),reader.fn('emptyCounts'),
     `export function rules(){return families.map(({plugin:{manifest,discovery}})=>({familyId:manifest.familyId,callPatterns:discovery.callPatterns??[],logPatterns:discovery.logPatterns??[]}));}`,
     `const collectOpaque=createOpaqueNominationCollector(PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG);
-export function compactTransaction(tx){const counts=emptyCounts(),observations=observationsFromTx(tx,counts),out=[];
+export function compactTransaction(tx){const census=readySelectorCensusFromTransaction(tx,{chainId:1});
+const censusFingerprint=digest('ready-selector-census/v1:'+canonicalJson(census));
+const out=[{kind:'selector-census',key:'1|'+(census.transactionHash??('unresolved:'+censusFingerprint)),block:census.blockNumber,
+score:0,fingerprint:censusFingerprint,snapshot:census,tx:census.transactionHash}];
+const counts=emptyCounts(),observations=observationsFromTx(tx,counts,census),edgeNominations=[];
 for(const raw of observations){const isCall=raw.kind==='call';const observation=isCall?{...raw,source:{number:raw.blockNumber,hash:raw.blockHash,generation:raw.blockNumber}}:{...raw,kind:'log',source:{number:raw.blockNumber,hash:raw.blockHash,generation:raw.blockNumber}};
 for(const match of index.matches(observation)){const {familyId,patternId}=match;const discovery=familyMap.get(familyId).plugin.discovery;
 const candidate=isCall?candidateForFamilyCallObservation(raw,familyId,patternId):candidateForFamilyObservation(raw,familyId,patternId);
 const signature=isCall?raw.data.slice(0,10).toLowerCase():raw.topics[0].toLowerCase();
-if(candidate!==null)out.push({kind:'candidate',family:familyId,key:rebuildFamilyInstanceDedupeKey(candidate),block:raw.blockNumber,score:candidateEvidenceScore(candidate),fingerprint:candidateFingerprint(candidate),snapshot:encodeDurableValue(candidate),tx:raw.transactionHash.toLowerCase(),logIndex:raw.logIndex??null,signature});
+if(candidate!==null){out.push({kind:'candidate',family:familyId,key:rebuildFamilyInstanceDedupeKey(candidate),block:raw.blockNumber,score:candidateEvidenceScore(candidate),fingerprint:candidateFingerprint(candidate),snapshot:encodeDurableValue(candidate),tx:raw.transactionHash.toLowerCase(),logIndex:raw.logIndex??null,signature});
+if(isCall){const abi=discovery.callPatterns?.find(pattern=>pattern.id===patternId)?.signature;if(abi)edgeNominations.push({familyId,signature:abi,candidate});}}
 }
 for(const retained of collectOpaque(raw)){out.push({kind:'opaque',family:retained.family,key:retained.key,block:raw.blockNumber,score:0,fingerprint:'',snapshot:raw,tx:raw.transactionHash.toLowerCase(),logIndex:raw.logIndex??null,signature:raw.topics[0].toLowerCase()});}}
+for(const edge of readySelectorEdgesFromCensus(census,edgeNominations))out.push({kind:'selector-edge',family:edge.familyId,key:readySelectorEdgeKey(edge),block:edge.blockNumber,score:edge.completeness==='complete'?1:0,fingerprint:readySelectorEdgeFingerprint(edge),snapshot:edge,tx:edge.transactionHash,signature:edge.selector});
 return out;}
 export function compactTransactionJson(input){return JSON.stringify(compactTransaction(JSON.parse(input)));}
 export function transactionJson(input){const tx=JSON.parse(input),counts=emptyCounts();const observations=observationsFromTx(tx,counts);return JSON.stringify({counts,observations,records:compactTransaction(tx)});}`,
@@ -262,17 +253,7 @@ export function transactionJson(input){const tx=JSON.parse(input),counts=emptyCo
       jsonResources.set(hash,value);
       return {loader:'js',contents:`const value=globalThis.__MEV_DISCOVERY_JSON__[${JSON.stringify(hash)}]; if(!value)throw Error('Missing pinned discovery JSON'); export default value;`};
     });
-    // Retained TS discovery may wrap a declarative runtime. Project that shared
-    // dependency too; never load identity/execution merely to obtain discovery.
-    build.onLoad({filter:/[\/]declarative-(protocol|swap|credit)\.ts$/}, args => {
-      const domain = args.path.match(/declarative-(protocol|swap|credit)\.ts$/)[1];
-      assert.equal(args.path,join(src,'venues/declarative-'+domain+'.ts'),'Unexpected compiler module');
-      const suffix={protocol:'Protocol',swap:'Swap',credit:'Credit'}[domain];
-      return {loader:'ts',resolveDir:dirname(args.path),contents:
-        `import {compileDeclarativeFamilyDiscovery} from './declarative-family-discovery.js';
-export function createDeclarative${suffix}Runtime(raw,children=[]){if(raw.production.domain!==${JSON.stringify(domain)})throw Error('Wrong discovery domain');return {definition:compileDeclarativeFamilyDiscovery(raw,children)};}
-export function compileDeclarative${suffix}(raw,children=[]){return createDeclarative${suffix}Runtime(raw,children).definition;}`};
-    });
+
   }};
   const result=await build({entryPoints:[join(options.out,'entry.generated.ts')],outfile:join(options.out,'kernel.js'),bundle:true,
     format:'iife',globalName:'DiscoveryKernel',platform:'browser',target:'es2020',minify:true,metafile:true,logLevel:'silent',
@@ -290,11 +271,22 @@ export function compileDeclarative${suffix}(raw,children=[]){return createDeclar
   if(jsonResources.size)flush();
   const kernel=readFileSync(join(options.out,'kernel.js'));
   assert(kernel.length<=1048576,'Discovery code exceeds BigQuery library limit');
+  // The selector model has no protocol manifest/identity block to validate at
+  // build time. Execute its shared pure data validator in the same empty realm
+  // used by SQL before publishing a build receipt. No VM or runtime compiler is
+  // loaded, and malformed data cannot become a nominally successful artifact.
+  if(inventory.roots.some(root=>root.declarative?.selectorNative)){
+    const context=vm.createContext({});
+    for(const resource of resourceFiles)vm.runInContext(readFileSync(join(options.out,resource.file),'utf8'),context,{timeout:30000});
+    vm.runInContext(kernel.toString('utf8'),context,{timeout:30000});
+    assert.deepEqual(Array.from(context.DiscoveryKernel.rules(),row=>row.familyId).sort(),inventory.roots.map(root=>root.familyId).sort(),
+      'Compiled discovery Family keys disagree with capability roots');
+  }
   const inputs=Object.keys(result.metafile.inputs).map(path=>({path,sha256:sha(readFileSync(path))}));
   const report={version:1,builderSha256:sha(readFileSync(new URL(import.meta.url))),...inventory,readerPath:options.reader,readerSha256:sha(readFileSync(options.reader)),
     familyCount:inventory.roots.length,familyIds:inventory.roots.map(root=>root.familyId),scope:options.familyIds ? 'active production discovery roots' : 'all discovered package roots; no production activation changed',
     kernelBytes:kernel.length,kernelSha256:sha(kernel),resources:[...resourceFiles,{file:"kernel.js",sha256:sha(kernel),bytes:kernel.length}],extracts,inputs,
-    interfaces:{compactTransactionJson:'JSON tx -> JSON array of decorated candidate/opaque records',transactionJson:'JSON tx -> JSON {counts, observations, records}'},
+    interfaces:{compactTransactionJson:'JSON tx -> JSON array containing unconditional selector-census, pre-admission selector-edge observations and candidate/opaque records',transactionJson:'JSON tx -> JSON {counts, observations, records}'},
     safety:{strictStarted:false,liveStarted:false,productionFilterEnabled:false}};
   writeFileSync(join(options.out,'build-provenance.json'),JSON.stringify(report,null,2),{flag:'wx',mode:0o600});
   writeFileSync(join(options.out,'metafile.json'),JSON.stringify(result.metafile,null,2),{flag:'wx',mode:0o600});

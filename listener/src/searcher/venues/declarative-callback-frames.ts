@@ -3,6 +3,7 @@ import { runtimeProgramScript, type RuntimeAmountProgram, type RuntimeSettlement
 import { concatBytes, encodeReturn } from "../../encoder.js";
 import { assertPublicRuntimeCaptureName, encodeDeclarativeCall } from "./declarative-call-codec.js";
 import type { BoundRuntimeMath, ExpandedRuntimeMathOperation } from "./declarative-runtime-math.js";
+import { encodeCallbackPayload, validateCallbackPayloadLayout, type CallbackPayloadLayout } from "./declarative-byte-layout.js";
 
 export type FrameValue = bigint | number | string | boolean | { readonly runtime: string };
 export interface FrameCheck { readonly left: FrameValue; readonly operator: "eq" | "gte"; readonly right: FrameValue }
@@ -17,9 +18,10 @@ export interface FrameArgument {
   readonly equals?: FrameValue; readonly minimum?: FrameValue; readonly maximum?: FrameValue;
 }
 export interface DeclarativeCallbackFrame {
-  readonly call: FrameCall & { readonly dataArgument: number };
+  readonly call: FrameCall & { readonly dataArgument: number; readonly dataLayout?: CallbackPayloadLayout };
   readonly callback: {
     readonly signature: string; readonly dataArgument: number;
+    readonly dataLayout?: CallbackPayloadLayout;
     readonly alternativeSignatures?: readonly string[];
     readonly arguments: readonly FrameArgument[];
     /** Explicit parent captures: no ambient access to an enclosing register. */
@@ -137,7 +139,7 @@ function check(raw: unknown, names: ReadonlySet<string>): void {
   refs([raw.left, raw.right], names);
 }
 function call(raw: unknown, names: Set<string>, staticCall: boolean, frameCall = false): void {
-  record(raw, ["target", "signature", "args", ...(frameCall ? ["dataArgument"] : [])], ["value", "save", "checks"], "call");
+  record(raw, ["target", "signature", "args", ...(frameCall ? ["dataArgument"] : [])], ["value", "save", "checks", ...(frameCall ? ["dataLayout"] : [])], "call");
   if (typeof raw.target !== "string" || typeof raw.signature !== "string" || !Array.isArray(raw.args) || staticCall && raw.value !== undefined)
     throw new Error("invalid callback call declaration");
   refs([raw.args, raw.value], names);
@@ -179,11 +181,13 @@ function callbackSelectors(callback: DeclarativeCallbackFrame["callback"]): bigi
 export function validateDeclarativeCallbackFrame(raw: unknown, depth = 0): asserts raw is DeclarativeCallbackFrame {
   if (depth > 4) throw new Error("callback frame nesting budget");
   record(raw, ["call", "callback"], [], "definition");
-  record(raw.call, ["target", "signature", "args", "dataArgument"], ["value", "save", "checks"], "outer call");
+  record(raw.call, ["target", "signature", "args", "dataArgument"], ["value", "save", "checks", "dataLayout"], "outer call");
+  validateCallbackPayloadLayout(raw.call.dataLayout);
   for (const capture of Object.keys(raw.call.save ?? {})) name(capture);
   const outer = bytesArgument(raw.call.signature, raw.call.dataArgument);
   if (!Array.isArray(raw.call.args) || raw.call.args.length !== outer.fn.inputs.length - 1) throw new Error("callback call args must omit payload");
-  record(raw.callback, ["signature", "dataArgument", "arguments", "captures", "steps"], ["returns", "alternativeSignatures"], "body");
+  record(raw.callback, ["signature", "dataArgument", "arguments", "captures", "steps"], ["returns", "alternativeSignatures", "dataLayout"], "body");
+  validateCallbackPayloadLayout(raw.callback.dataLayout);
   const cb = raw.callback, incoming = bytesArgument(cb.signature, cb.dataArgument);
   callbackSelectors(cb as unknown as DeclarativeCallbackFrame["callback"]);
   if (incoming.fn.inputs.some((type, index) => index !== cb.dataArgument && !scalar(type))) throw new Error("callback parameters require static scalar fields");
@@ -378,12 +382,13 @@ export function emitDeclarativeCallbackFrame(spec: DeclarativeCallbackFrame, emi
   const body = emit.compile(ops, seeds);
   const script = runtimeProgramScript(body.bytes());
   const payload = cb.returns ? concatBytes(script, encodeReturn(getBytes(AbiCoder.defaultAbiCoder().encode(cb.returns.types, cb.returns.values)))) : script;
-  const { dataArgument: _, ...outerCall } = spec.call;
-  const args = [...spec.call.args]; args.splice(spec.call.dataArgument, 0, hexlify(payload));
+  const { dataArgument: _, dataLayout: _layout, ...outerCall } = spec.call;
+  const outgoingPayload = encodeCallbackPayload(spec.call.dataLayout, payload), incomingPayload = encodeCallbackPayload(cb.dataLayout, payload);
+  const args = [...spec.call.args]; args.splice(spec.call.dataArgument, 0, outgoingPayload.data);
   const encoded = encodeDeclarativeCall(spec.call.signature, args);
-  const outgoingOffset = payloadOffset(spec.call.signature, spec.call.dataArgument, encoded.data);
-  const callbackArgs = incoming.fn.inputs.map((type, index) => index === cb.dataArgument ? hexlify(payload) : dummy(type));
-  const incomingOffset = payloadOffset(cb.signature, cb.dataArgument, incoming.abi.encodeFunctionData(incoming.fn, callbackArgs));
+  const outgoingOffset = payloadOffset(spec.call.signature, spec.call.dataArgument, encoded.data) + outgoingPayload.payloadOffset;
+  const callbackArgs = incoming.fn.inputs.map((type, index) => index === cb.dataArgument ? incomingPayload.data : dummy(type));
+  const incomingOffset = payloadOffset(cb.signature, cb.dataArgument, incoming.abi.encodeFunctionData(incoming.fn, callbackArgs)) + incomingPayload.payloadOffset;
   const held = [emit.word(ref("amountIn")), ...seeds.map(seed => emit.word(seed.value))];
   emit.call({ ...outerCall, args }, { callback: { incomingOffset, outgoingOffset }, patches: [
     { offset: outgoingOffset + 1, reg: held[0]!.reg },

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { cleanupHistoricalResources } from "./historical-resource-cleanup.js";
+export { cleanupHistoricalResources } from "./historical-resource-cleanup.js";
 import { blockScanRouteId, blockScanRouteLocator } from "./blockscan-route-identity.js";
 import { initEvents, makeBlockScanOpportunityId } from "./events.js";
 import { initBlockScanEnumerationSolverTelemetry } from "./blockscan-enumeration-solver-telemetry.js";
@@ -19,25 +21,28 @@ import { assertFamilyActivationEnvironment } from "./venues/production-families/
 import { StrictReadyGraphViewCoordinator } from "./strict-ready-graph-view.js";
 import { StrictProductionRuntimeRoot, type StrictReadyFundingAsset } from "./strict-production-runtime-session.js";
 import { assertIssuedPreparedFamilyInstance, type PreparedFamilyInstance } from "./venues/adapter-family-runtime.js";
+import type { FundingExecutionBinding } from "./venues/adapter-family-plugin.js";
 import { familyId } from "./venues/adapter-family-identifiers.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog,
   PRODUCTION_FAMILY_ACTIVATIONS } from "./venues/production-family-composition.js";
 import { PRODUCTION_STRICT_FAMILY_DECLARATIONS as declarations } from "./strict-production-family-declarations.js";
-import { BlockScanRuntimeLoop } from "./blockscan-runtime-loop.js";
+import { BlockScanRuntimeLoop, type BlockScanRuntimeLoopDependencies } from "./blockscan-runtime-loop.js";
 import { createBlockScanPriceRuntime, createLiveSourceSimulationFactory, createBlockScanLiveAmountSelectorFactory, logBlockScanAmountEvent, maybeSubmitBlockScanAtomic,
   resolveBlockScanCoreConfig, resolveBlockScanRefineCandidates, resolveBlockScanAtomicPolicy, resolveBlockScanLiveStageSettings } from "./main.js";
-import { readBlockTouchedStateKeys } from "./blockscan-touched-state.js";
+import { readBlockTouchedStateKeys, type BlockTouchedCanonicalAnchor } from "./blockscan-touched-state.js";
 import { BlockScanActivityPrefetch } from "./blockscan-activity-prefetch.js";
+import { resolveBlockScanActivitySettings } from "./blockscan-activity-mode.js";
 import { createBlockScanActivityTransport } from "./blockscan-activity-transport.js";
 import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationIdentity } from "./blockscan-live-continuation.js";
 import { ADDR } from "../shared/constants/addresses.js";
 import { RethTransportScheduler, type RethTransportLane, type RethTransportLease } from "./reth-transport-scheduler.js";
-import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
+import { parseBlockScanObservedHeader, readBlockScanObservedHeader, type BlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { TemplatePlanner } from "./planner/planner.js";
 import { AnvilSolver } from "./solver/solver.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
 import { EthSimulateV1Simulator, buildEthSimulateV1ExecutionInput } from "./simulator/eth-simulate-v1.js";
 import { SourceBlockSimulator } from "./simulator/source-block.js";
+import { strictFundingExecutionResource } from "./strict-execution-projection.js";
 import { resolveBlockScanSolverSearchConfig } from "./blockscan-solver-search-config.js";
 import { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import { createBlockScanStartupExecutionPreflight } from "./blockscan-startup-execution-preflight.js";
@@ -273,6 +278,41 @@ export function historicalFundingStarts(
   return result;
 }
 
+/** Preserve every resource of a rehydrated native Funding memo. Current-source
+ * offer issuance still validates each binding through the owning compiler. */
+export function historicalReadyFundingAssets(
+  memo: { readonly familyId: string; readonly instanceKey: string }, value: unknown,
+): readonly StrictReadyFundingAsset[] {
+  assert(value && typeof value === "object" && "domain" in value && value.domain === "funding" &&
+    "familyId" in value && value.familyId === memo.familyId && "instanceKey" in value && value.instanceKey === memo.instanceKey,
+  "historical Funding memo identity differs from rehydrated binding");
+  assert("bindings" in value && Array.isArray(value.bindings) && value.bindings.length > 0,
+    "historical Funding memo requires native selector/provider bindings");
+  return Object.freeze(value.bindings.map((binding: FundingExecutionBinding) => {
+    assert(binding && typeof binding === "object" && typeof binding.asset === "string" && ethers.isAddress(binding.asset) &&
+      typeof binding.provider === "string" && ethers.isAddress(binding.provider), "historical Funding binding has invalid asset/provider");
+    return Object.freeze({ familyId: familyId(memo.familyId), asset: binding.asset, binding });
+  }));
+}
+
+/** A WS-shaped hint has no transaction coverage. Read the actual full header
+ * before using a missing list, and reject a replacement branch. */
+export async function historicalTouchedAnchor(
+  header: Parameters<BlockScanRuntimeLoopDependencies["readBlockSwapTouched"]>[1],
+  readHeader: () => Promise<BlockScanObservedHeader>,
+): Promise<BlockTouchedCanonicalAnchor> {
+  const full = header?.transactionHashes === undefined ? await readHeader() : header;
+  if (header) {
+    assert.equal(full.number, header.number, "historical activity header number changed");
+    assert.equal(full.hash.toLowerCase(), header.hash.toLowerCase(), "historical activity header hash changed");
+    assert.equal(full.parentHash.toLowerCase(), header.parentHash.toLowerCase(), "historical activity header parent changed");
+  }
+  assert(Array.isArray(full.transactionHashes), "historical activity lacks full header transaction hashes");
+  return Object.freeze({ hash: full.hash, parentHash: full.parentHash,
+    transactionHashes: Object.freeze([...full.transactionHashes]),
+    ...(full.passiveTouchedAddresses === undefined ? {} : { passiveTouchedAddresses: Object.freeze([...full.passiveTouchedAddresses]) }) });
+}
+
 // Lossless data serialization only. Authority-bearing sessions are always reissued,
 // never revived from disk. Supports the existing historical snapshot encoding.
 export const atBlockJson = (value: unknown): string => JSON.stringify(value, (_key, v) => {
@@ -377,7 +417,12 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     implementationSha256: startupTableImplementation(),
   } : undefined;
   const startupExpected = benchmark ? new Map([...benchmark.baseline.pricing.pricing.effectiveMids!.rows]
-    .filter(([, row]) => row.status === "quoted" && (row.amountOut ?? 0n) > 0n)) : undefined;
+    .filter(([, row]) => row.status === "quoted" && (row.amountOut ?? 0n) > 0n)
+    .map(([id, row]) => {
+      assert(typeof row.amountIn === "bigint" && row.amountIn > 0n && typeof row.amountOut === "bigint" && row.amountOut > 0n,
+        "quoted historical startup row lacks positive input/output evidence");
+      return [id, { instanceKey: row.instanceKey, amountIn: row.amountIn, amountOut: row.amountOut }] as const;
+    })) : undefined;
   if (args["import-startup-results"]) {
     const resultPath = resolve(args["import-startup-results"], "summary.json");
     const bytes = readFileSync(resultPath), prior = JSON.parse(bytes.toString("utf8"));
@@ -515,6 +560,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
   const identity = { executor: executor.toLowerCase(), transactionOrigin: owner.toLowerCase() };
   const wiring = createRebuildWiring({ rpcUrl, executionIdentity: identity });
   const instances: PreparedFamilyInstance[] = [], funding: StrictReadyFundingAsset[] = [];
+  let fundingInstanceCount = 0;
   const readyMemos = activeReadyMemos(envelope);
   assertReadyFamilyActivation(readyMemos, wiring.isFamilyEnabled);
   for (const memo of readyMemos) {
@@ -523,15 +569,15 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     const family = catalog.forStrictFamily(familyId(memo.familyId));
     const value = wiring.rehydrateVerifiedInstance({ memo, cutoff: ready.cutoff });
     if (family.plugin.manifest.domain === "funding") {
-      assert(value && typeof value === "object" && "asset" in value && typeof value.asset === "string" && ethers.isAddress(value.asset));
-      funding.push({ familyId: familyId(memo.familyId), asset: value.asset });
+      funding.push(...historicalReadyFundingAssets(memo, value));
+      fundingInstanceCount++;
     } else {
       const instance = value as PreparedFamilyInstance;
       assertIssuedPreparedFamilyInstance({ family, instance, source: ready.cutoff, generation: ready.cutoff.generation });
       instances.push(instance);
     }
   }
-  assert.equal(instances.length + funding.length, ready.activeInstanceKeys.length);
+  assert.equal(instances.length + fundingInstanceCount, ready.activeInstanceKeys.length);
   for (const token of args.fundingTokens) assert(funding.some(f => f.asset.toLowerCase() === token),
     `--funding-token ${token} is absent from Ready funding; CLI does not discover or inject assets`);
   const root = new StrictProductionRuntimeRoot({ catalog, readySource: ready.cutoff, readyGraph: graph,
@@ -544,11 +590,12 @@ export async function runAtBlock(argv: string[]): Promise<void> {
   const fetch = new ethers.FetchRequest(rpcUrl); fetch.timeout = 30_000;
   const provider = new ethers.JsonRpcProvider(fetch);
   const liveSettings = resolveBlockScanLiveStageSettings(configEnv, cfg.maxCandidates);
+  const activitySettings = resolveBlockScanActivitySettings(configEnv);
   const priceWindow = benchmark !== undefined;
   const scheduler = new HistoricalPricingBatchScheduler(priceWindow ? liveSettings.transport
     : { capacity: 2, producerReserved: 1, transportTimeoutMs: 30_000 }, args.pricingBatchSize);
   const activityTransport = createBlockScanActivityTransport(rpcUrl);
-  const activity = new BlockScanActivityPrefetch(activityTransport, abort.signal);
+  const activity = new BlockScanActivityPrefetch(activityTransport, abort.signal, activitySettings.mode);
   // Quote-only Solver and direct final sim do not start or fork this legacy resource.
   const state = new AnvilStateBackend(rpcUrl, "http://127.0.0.1:1", 1);
   const executionStates = [state, ...Array.from({ length: benchmark ? liveSettings.solveConcurrency - 1 : 0 },
@@ -738,16 +785,11 @@ export async function runAtBlock(argv: string[]): Promise<void> {
       rpcUrl, executor, owner, chainId: Number(chainId), stateRoot: String(rawAnchor!.stateRoot), executablePath: executablePath!,
       ...(executorRuntimeCode ? { executorRuntimeCode } : {}),
       fundingForPlan: plan => {
-        const matches = catalog.listAll().filter(f => f.plugin.manifest.domain === "funding" &&
-          f.plugin.manifest.ownedActionAdapterIds.includes(plan.root.adapterId));
-        assert.equal(matches.length, 1, "source-block requires one registered Funding root");
-        const plugin = matches[0]!.plugin;
-        assert(plugin.manifest.domain === "funding" && "funding" in plugin);
-        const repayment = plugin.funding.repayment;
-        assert.equal(plan.root.target.toLowerCase(), repayment.target.toLowerCase());
+        const resource = strictFundingExecutionResource({ catalog, node: plan.root, executor });
         assert.equal(plan.root.amount, plan.flashAmount);
-        return { asset: plan.profitToken, amount: plan.flashAmount.toString(), target: repayment.target,
-          liquidityHolder: repayment.liquidityHolder };
+        assert.equal(resource.asset, plan.profitToken.toLowerCase());
+        return { asset: resource.asset, amount: resource.amount.toString(), target: resource.target,
+          liquidityHolder: resource.liquidityHolder };
       },
       onResult: (executionInput, result) => save(`simulation-${++simulationSequence}.json`, { implementation, executionInput, result }),
     }) : undefined;
@@ -768,7 +810,8 @@ export async function runAtBlock(argv: string[]): Promise<void> {
     // Observe the production simulator; do not add a candidate/trial scheduler.
     const simulate = directSimulator.simulate.bind(directSimulator);
     let trialSequence = 0;
-    directSimulator.simulate = async (plan, context) => {
+    directSimulator.simulate = async (plan: Parameters<EthSimulateV1Simulator["simulate"]>[0],
+      context: Parameters<EthSimulateV1Simulator["simulate"]>[1]) => {
       const trialId = ++trialSequence;
       save(`trial-${trialId}-input.json`, { source: context.source, header: context.header, plan });
       try {
@@ -792,6 +835,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
       finalSimulationExecutorCode: finalSimulationExecutorRuntimeCode?.keccak256 ?? "chain",
       startupExecutorCode: startupIdentity?.executorCode ?? "chain",
       startupRevertFilterEnabled: startupFilterEnabled,
+      activityMode: activitySettings.mode, activityShadowDiagnostics: false,
       ...(implementation ? { implementation } : {}),
       topologyContainsFutureDiscovery: ready.cutoff.number > args.block, historicalNaturalDiscoveryProven: false,
       ...(restored ? { historicalEffective: restored.provenance, atomicRuntimeRestored: false,
@@ -843,6 +887,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
       exactRefineHardBudgetMs: Number(configEnv.SEARCHER_BLOCKSCAN_EXACT_REFINE_HARD_BUDGET_MS ?? "4000"),
       largeGraphEdgeThreshold: 25_000, largeGraphPassBudgetMs: args.budgetMs, passBudgetMs: args.budgetMs,
       startupWarmEnabled: false,
+      startupWarmBudgetMs: liveSettings.startupWarmBudgetMs,
       hotPricingFamilyBudgetMs: args.budgetMs,
       refineCandidates: coarseCfg.maxCandidates, solveReserveMs: 2500,
       solverGridHalfWidth: search.gridHalfWidth, solverAmountGrid: search.amountGrid, solverGssMaxTries: search.gssMaxTries,
@@ -858,17 +903,22 @@ export async function runAtBlock(argv: string[]): Promise<void> {
         exactConcurrency: liveSettings.exactConcurrency, exactProbeTimeoutMs: liveSettings.exactProbeTimeoutMs,
         exactRpcBatchSize: liveSettings.exactRpcBatchSize, exactRpcBatchConcurrency: liveSettings.exactRpcBatchConcurrency,
       } : {}),
-      readBlockSwapTouched: priceWindow ? (number, header, range) => activity.withBlockActivity(header?.hash,
-        () => readBlockTouchedStateKeys(activity, number, ADDR.UNISWAP_V4_POOL_MANAGER, header,
-          range === undefined ? undefined : { ...range, readHeader: number => observeHeader(number,
-            { signal: range.signal, deadlineAtMs: range.deadlineAtMs }) }, root.resolveBlockTouchedStateKeys), range)
-        : async () => new Set(graph.map(edge => (edge.poolId ?? edge.target).toLowerCase())),
+      readBlockSwapTouched: priceWindow ? async (number, header, range) => {
+        const canonical = await historicalTouchedAnchor(header, () => observeHeader(number, range));
+        return activity.withBlockActivity(canonical.hash,
+          () => readBlockTouchedStateKeys(activity, number, ADDR.UNISWAP_V4_POOL_MANAGER, canonical,
+            range === undefined ? undefined : { ...range, readHeader: number => observeHeader(number,
+              { signal: range.signal, deadlineAtMs: range.deadlineAtMs }) }, root.resolveBlockTouchedStateKeys,
+            { mode: activitySettings.mode }), range);
+      }
+        : async () => new Set(root.pricingIndex().instanceIndexesByStateKey.keys()),
       currentHeadEvidenceFamilyForEdge: id => declarations.currentHeadEvidenceFamilyForEdge(id),
       currentHeadEvidenceScopeKeyForEdge: edge => declarations.currentHeadEvidenceScopeKeyForEdge(edge),
       currentHeadEvidenceScopeKeys: evidence => declarations.currentHeadEvidenceScopeKeys(evidence),
       isCurrentHeadEvidenceFamily: id => declarations.isCurrentHeadEvidenceFamily(id),
       isShuttingDown: () => abort.signal.aborted, blockScanGraph: () => graph, blockScanPlanner: () => planner,
-      currentRuntimeCoordinator: () => prices.currentRuntimeCoordinator, flashTokens: () => funding.map(f => f.asset),
+      currentRuntimeCoordinator: () => prices.currentRuntimeCoordinator,
+      flashTokens: () => [...new Set(funding.map(f => f.asset.toLowerCase()))].sort(),
       buildGraphView: input => views.build(input), readBlockHash: async (_provider, number) => (await observeHeader(number)).hash,
       formatRouteKey: opportunity => blockScanRouteId(opportunity.seedEdges),
       formatRing: opportunity => opportunity.seedEdges.map(e => e.tokenIn).join(" → "),
@@ -1031,19 +1081,6 @@ export function historicalContinuationIdentity(baseline: string,
   policy: { readonly spreadBps: number; readonly fixedWethInput: bigint | null; readonly cascade: boolean }): string {
   return liveContinuationIdentity({ scope: "historical-journal", baseline,
     pricingPolicy: { ...policy, fixedWethInput: policy.fixedWethInput?.toString() ?? null } });
-}
-
-export async function cleanupHistoricalResources(actions: readonly (() => unknown | Promise<unknown>)[], runFailed: boolean): Promise<void> {
-  // A run deadline may already have fired. An unresolved Promise and the
-  // production worker's unref'ed timers do not keep a CLI process alive.
-  const keepAlive = setInterval(() => {}, 60_000);
-  const errors: unknown[] = [];
-  try {
-    for (const action of actions) { try { await action(); } catch (error) { errors.push(error); } }
-  } finally { clearInterval(keepAlive); }
-  // Preserve the original pass failure, but a failed evidence drain must never
-  // turn an otherwise successful run into a successful receipt.
-  if (errors.length && !runFailed) throw errors[0];
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

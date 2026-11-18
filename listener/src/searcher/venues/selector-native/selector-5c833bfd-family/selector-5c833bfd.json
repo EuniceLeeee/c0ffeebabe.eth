@@ -1,0 +1,848 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x5c833bfd",
+  "signature": "function redeem(address, uint256, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": false,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_5C833BFD_ENABLED"
+  },
+  "programs": [
+    {
+      "parameters": [
+        {
+          "path": [
+            0
+          ],
+          "role": "tokenIn"
+        },
+        {
+          "path": [
+            1
+          ],
+          "role": "amountIn"
+        },
+        {
+          "path": [
+            2
+          ],
+          "role": "recipient"
+        }
+      ],
+      "values": {
+        "abi": {
+          "basket": [
+            "function getComponents() view returns(address[])",
+            "function getUnits() view returns(uint256[])",
+            "function naturalUnit() view returns(uint256)"
+          ],
+          "core": [
+            "function transferProxy() view returns(address)",
+            "function vault() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "nomination": {
+          "poolIdPath": [
+            0
+          ],
+          "poolNamespace": "component-basket",
+          "parameterPaths": [
+            [
+              0
+            ]
+          ]
+        },
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "basket",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "components",
+                  "kind": "eth-call",
+                  "to": "$args.0",
+                  "completion": "return-data",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "basket",
+                      "getComponents",
+                      []
+                    ]
+                  }
+                }
+              ],
+              "result": {
+                "components": {
+                  "op": "map",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "basket",
+                        "getComponents",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "components"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "token",
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$token"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "result": "$steps.basket"
+        },
+        "descriptor": {
+          "set": "$args.0",
+          "components": "$binding.components",
+          "componentRows": {
+            "op": "map",
+            "args": [
+              "$binding.components",
+              "token",
+              {
+                "token": "$token",
+                "index": "$index"
+              }
+            ]
+          },
+          "tokenIn": "$args.0"
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$binding.components"
+                  ]
+                },
+                0
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    {
+                      "op": "unique",
+                      "args": [
+                        "$binding.components"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$binding.components"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "every",
+              "args": [
+                "$binding.components",
+                "token",
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$token",
+                            "$args.0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$token",
+                            "$target"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "routes": {
+        "resource": {
+          "target": "$descriptor.set"
+        },
+        "directions": {
+          "op": "map",
+          "args": [
+            "$descriptor.componentRows",
+            "component",
+            {
+              "id": {
+                "op": "join",
+                "args": [
+                  [
+                    "redeem",
+                    {
+                      "op": "string",
+                      "args": [
+                        "$component.index"
+                      ]
+                    }
+                  ],
+                  ":"
+                ]
+              },
+              "tokenIn": "$descriptor.set",
+              "tokenOut": "$component.token",
+              "taxonomy": {
+                "slotKind": "protocol",
+                "protocolAction": "redeem"
+              },
+              "fields": {
+                "componentIndex": "$component.index"
+              }
+            }
+          ]
+        }
+      },
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": {
+          "op": "concat",
+          "args": [
+            [
+              "$target",
+              "$route.tokenIn",
+              "$route.tokenOut"
+            ],
+            "$descriptor.components"
+          ]
+        },
+        "steps": [
+          {
+            "id": "opening",
+            "static": true,
+            "call": {
+              "target": "$route.tokenOut",
+              "signature": "function balanceOf(address) view returns(uint256)",
+              "args": [
+                "$executor"
+              ],
+              "save": {
+                "opening": 0
+              }
+            },
+            "when": "$externalRecipient"
+          },
+          {
+            "id": "redeem",
+            "call": {
+              "target": "$target",
+              "signature": "function redeem(address,uint256,address)",
+              "args": [
+                "$descriptor.set",
+                {
+                  "runtime": "amountIn"
+                },
+                "$executor"
+              ]
+            }
+          },
+          {
+            "id": "closing",
+            "static": true,
+            "call": {
+              "target": "$route.tokenOut",
+              "signature": "function balanceOf(address) view returns(uint256)",
+              "args": [
+                "$executor"
+              ],
+              "save": {
+                "closing": 0
+              }
+            },
+            "when": "$externalRecipient"
+          },
+          {
+            "id": "receipt",
+            "math": {
+              "model": "freshreceipt",
+              "inputs": {
+                "after": {
+                  "runtime": "closing"
+                },
+                "before": {
+                  "runtime": "opening"
+                }
+              },
+              "outputs": {
+                "receipt": "receipt"
+              }
+            },
+            "when": "$externalRecipient"
+          },
+          {
+            "id": "handoff",
+            "when": "$externalRecipient",
+            "input": {
+              "runtime": "receipt"
+            },
+            "envelopes": {
+              "op": "map",
+              "args": [
+                {
+                  "op": "chunks",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        "$descriptor.components",
+                        "token",
+                        {
+                          "op": "not",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$token",
+                                "$route.tokenOut"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    8
+                  ]
+                },
+                "group",
+                {
+                  "effects": {
+                    "op": "map",
+                    "args": [
+                      "$group",
+                      "token",
+                      {
+                        "kind": "unchanged-token",
+                        "token": "$token",
+                        "account": "$executor"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "call": {
+              "target": "$route.tokenOut",
+              "signature": "function transfer(address,uint256)",
+              "args": [
+                "$recipient",
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          },
+          {
+            "kind": "supply",
+            "token": "$route.tokenIn",
+            "direction": "decrease",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          }
+        ],
+        "envelopes": {
+          "op": "map",
+          "args": [
+            {
+              "op": "chunks",
+              "args": [
+                "$descriptor.componentRows",
+                2
+              ]
+            },
+            "group",
+            {
+              "steps": {
+                "op": "concat",
+                "args": [
+                  [],
+                  {
+                    "op": "flatMap",
+                    "args": [
+                      "$group",
+                      "item",
+                      [
+                        {
+                          "id": {
+                            "op": "join",
+                            "args": [
+                              [
+                                "member",
+                                {
+                                  "op": "string",
+                                  "args": [
+                                    "$index"
+                                  ]
+                                }
+                              ],
+                              ""
+                            ]
+                          },
+                          "static": true,
+                          "call": {
+                            "target": "$descriptor.set",
+                            "signature": "function getComponents() view returns(address[])",
+                            "args": [],
+                            "save": {
+                              "op": "objectFromEntries",
+                              "args": [
+                                [
+                                  [
+                                    {
+                                      "op": "join",
+                                      "args": [
+                                        [
+                                          "member",
+                                          {
+                                            "op": "string",
+                                            "args": [
+                                              "$index"
+                                            ]
+                                          }
+                                        ],
+                                        ""
+                                      ]
+                                    },
+                                    {
+                                      "arrayIndex": "$item.index",
+                                      "length": {
+                                        "op": "length",
+                                        "args": [
+                                          "$descriptor.components"
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                ]
+                              ]
+                            },
+                            "checks": [
+                              {
+                                "left": {
+                                  "runtime": {
+                                    "op": "join",
+                                    "args": [
+                                      [
+                                        "member",
+                                        {
+                                          "op": "string",
+                                          "args": [
+                                            "$index"
+                                          ]
+                                        }
+                                      ],
+                                      ""
+                                    ]
+                                  }
+                                },
+                                "operator": "eq",
+                                "right": {
+                                  "op": "uint",
+                                  "args": [
+                                    "$item.token"
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "id": {
+                            "op": "join",
+                            "args": [
+                              [
+                                "unit",
+                                {
+                                  "op": "string",
+                                  "args": [
+                                    "$index"
+                                  ]
+                                }
+                              ],
+                              ""
+                            ]
+                          },
+                          "static": true,
+                          "call": {
+                            "target": "$descriptor.set",
+                            "signature": "function getDefaultPositionRealUnit(address) view returns(int256)",
+                            "args": [
+                              "$item.token"
+                            ],
+                            "save": {
+                              "op": "objectFromEntries",
+                              "args": [
+                                [
+                                  [
+                                    {
+                                      "op": "join",
+                                      "args": [
+                                        [
+                                          "unit",
+                                          {
+                                            "op": "string",
+                                            "args": [
+                                              "$index"
+                                            ]
+                                          }
+                                        ],
+                                        ""
+                                      ]
+                                    },
+                                    0
+                                  ]
+                                ]
+                              ]
+                            },
+                            "checks": [
+                              {
+                                "left": "57896044618658097711785492504343953926634992332820282019728792003956564819967",
+                                "operator": "gte",
+                                "right": {
+                                  "runtime": {
+                                    "op": "join",
+                                    "args": [
+                                      [
+                                        "unit",
+                                        {
+                                          "op": "string",
+                                          "args": [
+                                            "$index"
+                                          ]
+                                        }
+                                      ],
+                                      ""
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "id": {
+                            "op": "join",
+                            "args": [
+                              [
+                                "units",
+                                {
+                                  "op": "string",
+                                  "args": [
+                                    "$index"
+                                  ]
+                                }
+                              ],
+                              ""
+                            ]
+                          },
+                          "math": {
+                            "model": "basketfloorunits",
+                            "inputs": {
+                              "input": {
+                                "runtime": "amountIn"
+                              },
+                              "unit": {
+                                "runtime": {
+                                  "op": "join",
+                                  "args": [
+                                    [
+                                      "unit",
+                                      {
+                                        "op": "string",
+                                        "args": [
+                                          "$index"
+                                        ]
+                                      }
+                                    ],
+                                    ""
+                                  ]
+                                }
+                              }
+                            },
+                            "outputs": {
+                              "op": "merge",
+                              "args": [
+                                {
+                                  "op": "objectFromEntries",
+                                  "args": [
+                                    [
+                                      [
+                                        "minimum",
+                                        {
+                                          "op": "join",
+                                          "args": [
+                                            [
+                                              "minimum",
+                                              {
+                                                "op": "string",
+                                                "args": [
+                                                  "$index"
+                                                ]
+                                              }
+                                            ],
+                                            ""
+                                          ]
+                                        }
+                                      ]
+                                    ]
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    ]
+                  }
+                ]
+              },
+              "effects": {
+                "op": "flatMap",
+                "args": [
+                  "$group",
+                  "item",
+                  [
+                    {
+                      "kind": "credit",
+                      "token": "$item.token",
+                      "account": {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$item.token",
+                              "$route.tokenOut"
+                            ]
+                          },
+                          "$recipient",
+                          "$executor"
+                        ]
+                      },
+                      "minimum": {
+                        "runtime": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "minimum",
+                              {
+                                "op": "string",
+                                "args": [
+                                  "$index"
+                                ]
+                              }
+                            ],
+                            ""
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "kind": "unchanged-token",
+                      "token": "$item.token",
+                      "account": {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$item.token",
+                              "$route.tokenOut"
+                            ]
+                          },
+                          "$executor",
+                          "$recipient"
+                        ]
+                      },
+                      "when": "$externalRecipient"
+                    }
+                  ]
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "runtimeMath": {
+        "version": 1,
+        "entries": {
+          "basketfloorunits": {
+            "model": "basket-floor-units",
+            "version": 1
+          },
+          "freshreceipt": {
+            "model": "fresh-receipt",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "basket-floor-units",
+            "version": 1,
+            "inputs": [
+              "input",
+              "unit"
+            ],
+            "outputs": [
+              "minimum"
+            ],
+            "operations": [
+              {
+                "name": "numerator",
+                "op": "mul",
+                "left": {
+                  "input": "input"
+                },
+                "right": {
+                  "input": "unit"
+                }
+              },
+              {
+                "name": "minimum",
+                "op": "div",
+                "left": {
+                  "local": "numerator"
+                },
+                "right": {
+                  "constant": "1000000000000000000"
+                }
+              }
+            ]
+          },
+          {
+            "id": "fresh-receipt",
+            "version": 1,
+            "inputs": [
+              "after",
+              "before"
+            ],
+            "outputs": [
+              "receipt"
+            ],
+            "operations": [
+              {
+                "name": "receipt",
+                "op": "sub",
+                "left": {
+                  "input": "after"
+                },
+                "right": {
+                  "input": "before"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dependencies": {
+        "op": "concat",
+        "args": [
+          "$descriptor.components",
+          [
+            "$target",
+            "$descriptor.set"
+          ]
+        ]
+      },
+      "meta": {
+        "sourceFamily": "set-redemption",
+        "migrationKey": "typed:set:basic-basket",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    }
+  ]
+}

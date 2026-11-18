@@ -15,26 +15,18 @@ import {
 import {
   GENERATED_PRODUCTION_FAMILY_ENTRIES,
 } from "../../generated/production-family-entries.generated.js";
-import { AdapterFamilyRegistry } from "../adapter-family-registry.js";
 import {
-  assertDefinedFamilyPlugin,
   definedFamilyPluginContractSummary,
   type AnyDefinedStrictFamilyPlugin,
   type FamilyOwnedActionAdapter as StrictFamilyOwnedActionAdapter,
 } from "../adapter-family-plugin.js";
 import type { FamilyId } from "../adapter-family-identifiers.js";
-import type { AdapterFamily } from "../route-leg-adapter.js";
-import type {
-  ProductionFamilyActivation,
-} from "./contract.js";
-import {
-  assertLegacyProductionFamilyModule,
-} from "./contract.js";
 import {
   PRODUCTION_ENTRY_PATTERN,
   productionFamilySourceDirectory,
 } from "./tracked-sources.js";
-import { assertDefinedFamilyActivation, DEFAULT_FAMILY_ACTIVATION, type FamilyActivation } from "./activation.js";
+import type { FamilyActivation } from "./activation.js";
+import { assertSelectorFamilyModule } from "../selector-family-module.js";
 
 export type ProductionFamilyLoadIssueCode =
   | "source_scan_failed"
@@ -49,14 +41,11 @@ export interface ProductionFamilyLoadIssue {
   readonly message: string;
 }
 
-export interface LoadedProductionFamilyModule extends ProductionFamilyActivation {
-  readonly sourceFile: string;
-}
-
 export interface LoadedDefinedFamilyPluginModule {
   readonly contractKind: "defined-family-plugin";
   readonly familyId: FamilyId;
   readonly definitionBoundaryHash: string;
+  readonly semanticDefinitionHash: string;
   readonly plugin: AnyDefinedStrictFamilyPlugin;
   readonly actionAdapters: readonly StrictFamilyOwnedActionAdapter[];
   readonly sourceFile: string;
@@ -64,8 +53,9 @@ export interface LoadedDefinedFamilyPluginModule {
 }
 
 export interface ProductionFamilyLoadResult {
-  readonly modules: readonly LoadedProductionFamilyModule[];
-  /** Terminal plugins are scanned and validated but not silently legacy-adapted. */
+  /** Empty sentinel retained for result consumers; no module loading contract exists. */
+  readonly modules: readonly never[];
+  /** Strict constructor plugins are scanned and fully validated. */
   readonly plugins: readonly LoadedDefinedFamilyPluginModule[];
   /** Fully validated definitions omitted only from runtime activation. */
   readonly disabledPlugins: readonly LoadedDefinedFamilyPluginModule[];
@@ -87,7 +77,6 @@ export interface ProductionFamilyLoaderOptions {
   readonly sourceDirectory?: string;
   readonly importTimeoutMs?: number;
   readonly sharedInfraActionAdapterIds?: readonly string[];
-  readonly contractMode?: "mixed-migration" | "strict-only";
   readonly importEntry?: (
     sourceFile: string,
     runtimeUrl: URL,
@@ -99,15 +88,13 @@ export interface ProductionFamilyLoaderOptions {
  * import list. Development fixtures may still supply a source directory, but
  * production runtime never discovers authority from a checkout or `.git`.
  */
-export async function loadProductionFamilyModules(
-  baseFamilies: readonly AdapterFamily[],
+export async function loadStrictProductionFamilyPlugins(
   options: ProductionFamilyLoaderOptions = {},
 ): Promise<ProductionFamilyLoadResult> {
   const rootDirectory = listenerRoot();
   const sourceDirectory = options.sourceDirectory ??
     productionFamilySourceDirectory(rootDirectory);
   const importTimeoutMs = options.importTimeoutMs ?? 10_000;
-  const contractMode = options.contractMode ?? "mixed-migration";
   if (!Number.isInteger(importTimeoutMs) || importTimeoutMs <= 0) {
     throw new Error("production family importTimeoutMs must be a positive integer");
   }
@@ -135,32 +122,15 @@ export async function loadProductionFamilyModules(
       "source_scan_failed",
       errorMessage(error),
     );
-    return freezeResult([], [], [issue]);
+    return freezeResult([], [issue]);
   }
 
-  const accepted: LoadedProductionFamilyModule[] = [];
   const acceptedPlugins: LoadedDefinedFamilyPluginModule[] = [];
   const disabledPlugins: LoadedDefinedFamilyPluginModule[] = [];
   const issues: ProductionFamilyLoadIssue[] = [];
   const acceptedActionIds = new Set<string>();
-  const reservedBaseActionIds = new Set(
-    [
-      ...baseFamilies.flatMap((family) => [
-      ...family.ownedActionAdapterIds,
-      ...family.requiredInfraActionAdapterIds,
-      ]),
-      ...(options.sharedInfraActionAdapterIds ?? []),
-    ],
-  );
-  const sharedInfraIds = new Set(
-    [
-      ...baseFamilies.flatMap((family) => family.requiredInfraActionAdapterIds),
-      ...(options.sharedInfraActionAdapterIds ?? []),
-    ],
-  );
-  const activeFamilyIds = new Set<string>(
-    baseFamilies.map((family) => family.id),
-  );
+  const sharedInfraIds = new Set(options.sharedInfraActionAdapterIds ?? []);
+  const activeFamilyIds = new Set<string>();
 
   for (const sourceFile of sourceFiles) {
     const sourcePath = resolve(sourceDirectory, sourceFile);
@@ -193,7 +163,6 @@ export async function loadProductionFamilyModules(
       candidate = validateModuleContract(
         imported,
         sharedInfraIds,
-        contractMode,
       );
     } catch (error) {
       issues.push(freezeIssue(
@@ -205,7 +174,7 @@ export async function loadProductionFamilyModules(
     }
 
     const duplicateAction = candidate.actionAdapters.find((adapter) =>
-      reservedBaseActionIds.has(adapter.id) ||
+      sharedInfraIds.has(adapter.id) ||
       acceptedActionIds.has(adapter.id)
     );
     if (duplicateAction) {
@@ -226,67 +195,24 @@ export async function loadProductionFamilyModules(
       continue;
     }
 
-    if (candidate.contractKind === "legacy-production-module") {
-      try {
-        // Constructing the full prefix checks family id, action ownership,
-        // pool/edge claims, identity declarations and every typed capability.
-        new AdapterFamilyRegistry([
-          ...baseFamilies,
-          ...accepted.map((module) => module.family),
-          candidate.activation.family,
-        ]);
-      } catch (error) {
-        issues.push(freezeIssue(
-          sourceFile,
-          "family_registration_conflict",
-          errorMessage(error),
-        ));
-        continue;
-      }
-    }
-
     for (const adapter of candidate.actionAdapters) {
       acceptedActionIds.add(adapter.id);
     }
     activeFamilyIds.add(candidate.familyId);
-    if (candidate.contractKind === "legacy-production-module") {
-      accepted.push(Object.freeze({
-        ...candidate.activation,
-        sourceFile,
-      }));
-    } else {
-      const target = candidate.runtimeActivation.enabled ? acceptedPlugins : disabledPlugins;
-      target.push(Object.freeze({
-        contractKind: candidate.contractKind,
-        familyId: candidate.familyId,
-        definitionBoundaryHash: candidate.definitionBoundaryHash,
-        plugin: candidate.plugin,
-        actionAdapters: candidate.actionAdapters,
-        sourceFile,
-        activation: candidate.runtimeActivation,
-      }));
-    }
+    const target = candidate.runtimeActivation.enabled ? acceptedPlugins : disabledPlugins;
+    target.push(Object.freeze({
+      contractKind: candidate.contractKind,
+      familyId: candidate.familyId,
+      definitionBoundaryHash: candidate.definitionBoundaryHash,
+      semanticDefinitionHash: candidate.semanticDefinitionHash,
+      plugin: candidate.plugin,
+      actionAdapters: candidate.actionAdapters,
+      sourceFile,
+      activation: candidate.runtimeActivation,
+    }));
   }
 
-  return freezeResult(accepted, acceptedPlugins, issues, disabledPlugins);
-}
-
-/**
- * Terminal loader entry: strict constructor modules only, with no legacy base
- * Family input. The mixed loader remains solely for migration fixtures until
- * the §18.3 cleanup slice deletes it.
- */
-export async function loadStrictProductionFamilyPlugins(
-  options: Omit<ProductionFamilyLoaderOptions, "contractMode">,
-): Promise<ProductionFamilyLoadResult> {
-  const result = await loadProductionFamilyModules([], {
-    ...options,
-    contractMode: "strict-only",
-  });
-  if (result.modules.length !== 0) {
-    throw new Error("strict production loader admitted a legacy module");
-  }
-  return result;
+  return freezeResult(acceptedPlugins, issues, disabledPlugins);
 }
 
 class ProductionFamilyImportTimeoutError extends Error {}
@@ -316,7 +242,6 @@ async function withTimeout<T>(
 function validateModuleContract(
   imported: unknown,
   sharedInfraIds: ReadonlySet<string>,
-  contractMode: "mixed-migration" | "strict-only",
 ): ValidatedProductionContract {
   if (
     imported === null ||
@@ -328,80 +253,45 @@ function validateModuleContract(
     readonly productionFamilyModule?: unknown;
     readonly plugin?: unknown;
     readonly activation?: unknown;
+    readonly selectorFamilyModule?: unknown;
   };
-  const hasLegacy = "productionFamilyModule" in namespace;
-  const hasPlugin = "plugin" in namespace;
-  if (hasLegacy === hasPlugin) {
+  if ("productionFamilyModule" in namespace || "plugin" in namespace || "activation" in namespace) {
     throw new Error(
-      "module must export exactly one of productionFamilyModule or plugin",
+      "legacy productionFamilyModule/plugin exports are no longer supported; export a v2 selectorFamilyModule",
     );
   }
-
-  if (hasPlugin) {
-    const plugin = namespace.plugin;
-    assertDefinedFamilyPlugin(plugin);
-    const summary = definedFamilyPluginContractSummary(plugin);
-    assertKnownSharedInfra(
-      summary.familyId,
-      summary.requiredInfraActionAdapterIds,
-      sharedInfraIds,
-    );
-    const runtimeActivation = "activation" in namespace ? namespace.activation : DEFAULT_FAMILY_ACTIVATION;
-    if ("activation" in namespace) assertDefinedFamilyActivation(runtimeActivation);
-    return Object.freeze({
-      contractKind: "defined-family-plugin" as const,
-      familyId: summary.familyId,
-      definitionBoundaryHash: summary.definitionBoundaryHash,
-      plugin,
-      runtimeActivation: runtimeActivation as FamilyActivation,
-      actionAdapters: Object.freeze([...plugin.actionAdapters]),
-    });
+  if (!("selectorFamilyModule" in namespace)) {
+    throw new Error("module must export a v2 selectorFamilyModule");
   }
-
-  const module = namespace.productionFamilyModule;
-  if ("activation" in namespace) {
-    throw new Error("entry activation requires a strict plugin, not a legacy migration module");
-  }
-  if (contractMode === "strict-only") {
-    throw new Error(
-      "productionFamilyModule is a migration-only contract; export a strict plugin",
-    );
-  }
-  assertLegacyProductionFamilyModule(module);
+  const module = namespace.selectorFamilyModule;
+  assertSelectorFamilyModule(module);
+  const plugin = module.plugin;
+  const summary = definedFamilyPluginContractSummary(plugin);
   assertKnownSharedInfra(
-    module.family.id,
-    module.family.requiredInfraActionAdapterIds,
+    summary.familyId,
+    summary.requiredInfraActionAdapterIds,
     sharedInfraIds,
   );
-  const activation = Object.freeze({
-    contractKind: module.contractKind,
-    activationContractHash: module.activationContractHash,
-    family: module.family,
-    actionAdapters: Object.freeze([...module.actionAdapters]),
-  });
   return Object.freeze({
-    contractKind: "legacy-production-module" as const,
-    familyId: module.family.id,
-    activation,
-    actionAdapters: activation.actionAdapters,
+    contractKind: "defined-family-plugin" as const,
+    familyId: summary.familyId,
+    definitionBoundaryHash: summary.definitionBoundaryHash,
+    semanticDefinitionHash: module.semanticDefinitionHash,
+    plugin,
+    runtimeActivation: module.activation,
+    actionAdapters: Object.freeze([...plugin.actionAdapters]),
   });
 }
 
-type ValidatedProductionContract =
-  | {
-      readonly contractKind: "legacy-production-module";
-      readonly familyId: string;
-      readonly activation: ProductionFamilyActivation;
-      readonly actionAdapters: ProductionFamilyActivation["actionAdapters"];
-    }
-  | {
-      readonly contractKind: "defined-family-plugin";
-      readonly familyId: FamilyId;
-      readonly definitionBoundaryHash: string;
-      readonly plugin: AnyDefinedStrictFamilyPlugin;
-      readonly runtimeActivation: FamilyActivation;
-      readonly actionAdapters: readonly StrictFamilyOwnedActionAdapter[];
-    };
+interface ValidatedProductionContract {
+  readonly contractKind: "defined-family-plugin";
+  readonly familyId: FamilyId;
+  readonly definitionBoundaryHash: string;
+  readonly semanticDefinitionHash: string;
+  readonly plugin: AnyDefinedStrictFamilyPlugin;
+  readonly runtimeActivation: FamilyActivation;
+  readonly actionAdapters: readonly StrictFamilyOwnedActionAdapter[];
+}
 
 function assertKnownSharedInfra(
   familyId: string,
@@ -440,35 +330,30 @@ function freezeIssue(
 }
 
 function freezeResult(
-  modules: readonly LoadedProductionFamilyModule[],
   plugins: readonly LoadedDefinedFamilyPluginModule[],
   issues: readonly ProductionFamilyLoadIssue[],
   disabledPlugins: readonly LoadedDefinedFamilyPluginModule[] = [],
 ): ProductionFamilyLoadResult {
-  const frozenModules = Object.freeze([...modules]);
+  const frozenModules: readonly never[] = Object.freeze([]);
   const frozenPlugins = Object.freeze([...plugins]);
   const frozenDisabledPlugins = Object.freeze([...disabledPlugins]);
   const frozenIssues = Object.freeze([...issues]);
   const scanSha256 = createHash("sha256")
     .update(JSON.stringify({
-      modules: frozenModules.map((module) => ({
-        sourceFile: module.sourceFile,
-        familyId: module.family.id,
-        contractKind: module.contractKind,
-        activationContractHash: module.activationContractHash,
-        actionAdapterIds: module.actionAdapters.map((adapter) => adapter.id),
-      })),
+      modules: frozenModules,
       plugins: frozenPlugins.map((module) => ({
         sourceFile: module.sourceFile,
         familyId: module.familyId,
         contractKind: module.contractKind,
         definitionBoundaryHash: module.definitionBoundaryHash,
+        semanticDefinitionHash: module.semanticDefinitionHash,
         actionAdapterIds: module.actionAdapters.map((adapter) => adapter.id),
       })),
       disabledPlugins: frozenDisabledPlugins.map((module) => ({
         sourceFile: module.sourceFile,
         familyId: module.familyId,
         definitionBoundaryHash: module.definitionBoundaryHash,
+        semanticDefinitionHash: module.semanticDefinitionHash,
         activation: module.activation,
         actionAdapterIds: module.actionAdapters.map((adapter) => adapter.id),
       })),

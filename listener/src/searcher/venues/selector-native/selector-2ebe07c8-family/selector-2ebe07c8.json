@@ -1,0 +1,148 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x2ebe07c8",
+  "signature": "function depositAsset(address, uint256, uint256, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_2EBE07C8_ENABLED"
+  },
+  "binding": {
+    "nomination": {
+      "parameterPaths": [
+        [
+          0
+        ]
+      ]
+    },
+    "descriptor": {
+      "asset": {
+        "op": "address",
+        "args": [
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$args",
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "receipt": {
+        "op": "address",
+        "args": [
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$tokenOut"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "routes": {
+    "directions": [
+      {
+        "id": "deposit-asset",
+        "enabled": true,
+        "tokenIn": "$descriptor.asset",
+        "tokenOut": "$descriptor.receipt",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "wrap"
+        }
+      }
+    ]
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": false
+    },
+    "protectedAddresses": [
+      "$descriptor.target",
+      "$descriptor.asset",
+      "$descriptor.receipt"
+    ],
+    "contextChecks": [
+      {
+        "condition": {
+          "op": "not",
+          "args": [
+            "$externalRecipient"
+          ]
+        },
+        "error": "eigenpie deposit mints to the executor; an external recipient is unsupported"
+      }
+    ],
+    "steps": [
+      {
+        "id": "deposit",
+        "approval": {
+          "token": "$route.tokenIn",
+          "spender": "$descriptor.target",
+          "mode": "exact-clear"
+        },
+        "call": {
+          "target": "$descriptor.target",
+          "signature": "function depositAsset(address asset,uint256 depositAmount,uint256 minRec,address referral)",
+          "args": [
+            "$route.tokenIn",
+            {
+              "runtime": "amountIn"
+            },
+            "$minAmountOut",
+            "$constants.referral"
+          ]
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient",
+        "minimum": "$minAmountOut"
+      },
+      {
+        "kind": "supply",
+        "token": "$route.tokenOut",
+        "direction": "increase",
+        "minimum": 1
+      }
+    ]
+  },
+  "refreshPolicy": "on-touch",
+  "values": {
+    "constants": {
+      "referral": "0x0000000000000000000000000000000000000000"
+    }
+  },
+  "meta": {
+    "label": "protocol:eigenpie/observed-active-pair"
+  }
+}

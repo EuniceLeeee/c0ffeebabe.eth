@@ -98,7 +98,8 @@ export function createStartupNodeSimulation(input: {
       if (observed.hash.toLowerCase() !== source.hash.toLowerCase()) throw new Error("startup node source header mismatch");
       const result = await dispatch(signal, "simulate", async () => {
         const dispatched = performance.now();
-        try { return await simulator.simulateStartupPrefix({ source, header: observed, amount: invocation.amount, legs: invocation.legs },
+        try { return await simulator.simulateStartupPrefix({ source, header: observed, amount: invocation.amount,
+          legs: invocation.legs, maxInputPathHops: invocation.maxInputPathHops },
           { signal, deadlineAtMs: control.deadlineAtMs! }); }
         finally { simulationMs += performance.now() - dispatched; }
       });

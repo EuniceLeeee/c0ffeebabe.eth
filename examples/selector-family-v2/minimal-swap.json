@@ -1,0 +1,14 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xa467cf54",
+  "signature": "function swap(bytes32 poolId,address tokenIn,address tokenOut,uint256 amountIn,uint256 minimumOut,address recipient) returns(uint256)",
+  "parameters": [
+    { "path": [0], "role": "poolId" },
+    { "path": [1], "role": "tokenIn" },
+    { "path": [2], "role": "tokenOut" },
+    { "path": [3], "role": "amountIn" },
+    { "path": [4], "role": "minimumOut" },
+    { "path": [5], "role": "recipient" }
+  ],
+  "payment": { "kind": "approval" }
+}

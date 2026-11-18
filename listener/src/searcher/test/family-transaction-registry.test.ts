@@ -4,6 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync, readFileSyn
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { assertSelectorFamilyModule } from "../venues/selector-family-module.js";
 import { familyTransactionDirectory, familyTransactionRoot, familyTransactionInputFingerprint, familyTransactionLegMissing,
   getInstalledTransactionFamilies, loadFamilyTransactionRegistry, parseFamilyTransaction, readFamilyTransaction } from "./family-transaction-registry.js";
 
@@ -63,7 +65,8 @@ test("installed coverage comes from the complete production catalog including di
   const rows = await getInstalledTransactionFamilies();
   const { PRODUCTION_STRICT_SHADOW_FAMILY_LOAD: load } = await import("../venues/production-family-composition.js");
   assert.deepEqual(rows.map(row => row.familyId).sort(), [...load.plugins, ...load.disabledPlugins].map(row => String(row.familyId)).sort());
-  assert(rows.some(row => !row.enabled));
+  assert.equal(rows.filter(row => !row.enabled).length, load.disabledPlugins.length);
+  assert(rows.every(row => row.selectorExecution));
   for (const row of rows) assert(row.lineages.length > 0);
 });
 test("central TX registry preserves every existing priced trial with its own identity and raw input", () => {
@@ -156,10 +159,27 @@ test("primary source snapshots retain matching transaction pins and distinguish 
       assert.deepEqual((row.leg as any)[key], observed[key]);
   }
 });
-test("legacy installed scope enumerates the same production catalog and directs non-JSON families to the main facts", async () => {
+test("installed scope contains standalone v2 execution, credit and funding declarations", async () => {
   const { buildFamilyRegressionPlan } = await import("./family-json-regression.js");
+  const { normalizeSelectorFamilyDefinition, selectorFamilySemanticHash } = await import("../venues/selector-family-definition.js");
   const plan = await buildFamilyRegressionPlan(familyTransactionRoot, "installed"), installed = await getInstalledTransactionFamilies();
   assert.deepEqual(plan.families.map(row => row.familyId).sort(), installed.map(row => row.familyId).sort());
-  assert(plan.families.some(row => row.domain === "credit"));
-  assert(plan.families.some(row => row.domain === "funding"));
+  assert(plan.families.every(row => ["protocol", "swap", "credit", "funding"].includes(row.domain)));
+  assert(plan.families.every(row => row.definition.includes("/selector-native/")));
+  assert(plan.families.some(row => row.domain === "funding"));assert(plan.families.some(row => row.domain === "credit"));
+  assert(installed.every(row => row.selectorExecution), "every installed entry belongs to the selector catalog");
+  for (const family of installed) {
+    const entry = plan.families.find(row => row.familyId === family.familyId);
+    assert(entry);
+    assert.deepEqual(entry.variants.map(variant => variant.lineageId), family.lineages,
+      "selector inventory derives lineages from its installed manifest, without a legacy standard variant");
+    const exported = await import(pathToFileURL(resolve(familyTransactionRoot, entry.entry)).href);
+    assert.deepEqual(Object.keys(exported), ["selectorFamilyModule"]);
+    assertSelectorFamilyModule(exported.selectorFamilyModule);
+    const module = exported.selectorFamilyModule, raw = JSON.parse(readFileSync(resolve(familyTransactionRoot, entry.definition), "utf8"));
+    assert.equal(module.contract, "selector-family/v2");
+    assert.deepEqual(module.definition, normalizeSelectorFamilyDefinition(raw));
+    assert.equal(module.semanticDefinitionHash, selectorFamilySemanticHash(raw));
+    assert.equal(module.plugin.manifest.familyId, family.familyId);assert.equal(module.plugin.manifest.domain, family.domain);
+  }
 });

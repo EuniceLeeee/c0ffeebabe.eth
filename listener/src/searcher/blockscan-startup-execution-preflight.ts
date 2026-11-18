@@ -1,8 +1,9 @@
 import { keccak256, toUtf8Bytes } from "ethers";
 import assert from "node:assert/strict";
 import { ADDR } from "../shared/constants/addresses.js";
-import { effectiveEnumerationMids, effectiveRowAmountReference, MAX_EFFECTIVE_INPUT_PATH_HOPS,
-  type EffectiveMidSnapshot, type EffectiveMidRow } from "./blockscan-effective-mid.js";
+import { effectiveEnumerationMids, effectiveRowAmountReference, effectiveInputPathHops,
+  effectiveExecutionReceiptHash, type EffectiveExecutionVerification,
+  type EffectiveMidSnapshot, type EffectiveMidRow, type EffectiveAmountReference } from "./blockscan-effective-mid.js";
 import type { BlockScanSimRejectCache } from "./blockscan-sim-reject-cache.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import type { StartupNodeSimulation } from "./blockscan-startup-node-simulation.js";
@@ -12,15 +13,34 @@ import { blockScanEdgeKey } from "./venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import { StateCallAbortedError } from "../shared/state/state-backend.js";
 import { applyStartupTargetFilters } from "./blockscan-startup-filter.js";
+import type { CanonicalSource } from "./venues/adapter-request-program.js";
+import { RevmStrictError } from "./revm-sim-client.js";
+import type { StartupPrefixReceipt } from "./simulator/startup-prefix-program.js";
 
 export type StartupExecutionPreflight = ReturnType<typeof createBlockScanStartupExecutionPreflight>;
 export type StartupPrefixObservation = Readonly<Record<string, unknown>>;
+export interface StartupEffectiveQuote {
+  readonly source: CanonicalSource;
+  readonly amountIn: bigint;
+  readonly amountOut: bigint;
+  readonly amountSpent: bigint;
+  readonly inputReference: EffectiveAmountReference;
+  readonly pricingMethod: "startup-simulation";
+  readonly executionVerification: EffectiveExecutionVerification;
+}
 export interface StartupContinuationState {
   readonly version: 1;
   readonly rows: readonly (readonly [string, { readonly key: string; readonly observation: StartupPrefixObservation }])[];
 }
 const digest = (value: unknown) => keccak256(toUtf8Bytes(JSON.stringify(value,
   (_, v) => typeof v === "bigint" ? v.toString() : v)));
+const sourcePolicyKey = (source: CanonicalSource, maxInputPathHops: number) =>
+  `${source.number}:${source.hash.toLowerCase()}:${source.generation}:${maxInputPathHops}`;
+const rowFields = (row: EffectiveMidRow | undefined) => row && [row.edgeId, row.instanceKey,
+  row.tokenIn, row.tokenOut, row.amountIn, row.amountOut, row.amountSpent, row.pricingMethod,
+  row.executionVerification, row.status, row.quotedAt];
+const issuedKey = (source: CanonicalSource, maxInputPathHops: number, rows: readonly EffectiveMidRow[]) =>
+  digest({ source, maxInputPathHops, rows: rows.map(rowFields) });
 
 /** Observations stay immutable. Optional target-revert policy writes to live's
  * existing rejection cache, never another filter or price warmup. */
@@ -33,19 +53,30 @@ export function createBlockScanStartupExecutionPreflight(input: {
 }) {
   if (!Number.isSafeInteger(input.concurrency) || input.concurrency < 1) throw new Error("invalid startup simulation concurrency");
   let complete = false, checkedSource = "";
+  let activePolicy: number | undefined;
   let deferred = false;
   let continuationRestored = false;
   const reusable = new Map<string, { readonly key: string; readonly observation: StartupPrefixObservation }>();
   let changes = new Map<string, StartupContinuationState["rows"][number][1]>(), resetPending = false;
   const successful = new Set<string>();
+  const issued = new Map<string, { sourceKey: string; requestKey: string; key?: string;
+    observation: StartupPrefixObservation; result?: StartupEffectiveQuote }>();
+  const usePolicy = (maxInputPathHops: number) => {
+    if (activePolicy !== undefined && activePolicy !== maxInputPathHops) {
+      complete = false; successful.clear(); reusable.clear(); issued.clear(); changes.clear(); resetPending = true;
+    }
+    activePolicy = maxInputPathHops;
+  };
   return {
     reset() { complete = false; checkedSource = ""; successful.clear(); reusable.clear(); deferred = false; continuationRestored = false;
-      changes.clear(); resetPending = true; },
+      issued.clear(); activePolicy = undefined; changes.clear(); resetPending = true; },
     takeContinuationDelta() {
       const delta = { reset: resetPending, rows: [...changes] };
       changes = new Map(); resetPending = false;
       return delta;
     },
+    // Catch-up may postpone one-time filtering, never the execution that owns
+    // a refreshed price. Otherwise resume would quote first and simulate again.
     defer(value: boolean) { deferred = value; },
     exportContinuation(): StartupContinuationState { return { version: 1, rows: [...reusable] }; },
     restoreContinuation(state: StartupContinuationState) {
@@ -59,20 +90,141 @@ export function createBlockScanStartupExecutionPreflight(input: {
       }
       continuationRestored = true;
     },
+    /** The existing startup transaction supplies both the price and execution
+     * observation. The later preflight consumes this receipt, never resimulates
+     * a successful price with the same source, input path and target. */
+    async quoteEffective(work: {
+      edge: TokenEdge; amountIn: bigint; source: CanonicalSource; reference: EffectiveAmountReference;
+      maxInputPathHops: number; edges: readonly TokenEdge[]; control: AdapterWorkControl;
+      prepareQuote(ids: ReadonlySet<string>): Promise<void>;
+      sessionFor(edge: TokenEdge): StrictProductionRuntimeSession;
+    }): Promise<StartupEffectiveQuote | undefined> {
+      const maxInputPathHops = effectiveInputPathHops(work.maxInputPathHops);
+      usePolicy(maxInputPathHops);
+      // Completion and deferral govern the screening pass below. A new source
+      // still prefers its funded execution receipt over a separate Exact call.
+      const { source, edge, reference } = work;
+      const open = () => {
+        work.control.signal?.throwIfAborted();
+        if (Date.now() >= (work.control.deadlineAtMs ?? Infinity))
+          throw new StateCallAbortedError("startup execution price deadline", "deadline");
+      };
+      open();
+      const graph = new Map(work.edges.map(value => [blockScanEdgeKey(value), value]));
+      const edgeId = blockScanEdgeKey(edge), instanceKey = edgeInstanceKey(edge);
+      assert(graph.size === work.edges.length && graph.get(edgeId) === edge &&
+        work.amountIn > 0n && reference.amountIn === work.amountIn && reference.path.length <= maxInputPathHops,
+      "invalid startup execution price input");
+      let token = ADDR.WETH.toLowerCase(), output: bigint | undefined;
+      const visited = new Set([token]);
+      for (const step of reference.path) {
+        const bound = graph.get(step.edgeId);
+        assert(bound && !bound.leavesStandingPosition && step.instanceKey === edgeInstanceKey(bound) &&
+          step.status === "quoted" && step.tokenIn.toLowerCase() === token &&
+          step.tokenIn.toLowerCase() === bound.tokenIn.toLowerCase() && step.tokenOut.toLowerCase() === bound.tokenOut.toLowerCase() &&
+          typeof step.amountIn === "bigint" && step.amountIn > 0n && typeof step.amountOut === "bigint" && step.amountOut > 0n &&
+          (output === undefined || step.amountIn === output) && step.quotedAt && step.quotedAt.number <= source.number &&
+          step.quotedAt.generation <= source.generation &&
+          (step.quotedAt.number !== source.number || step.quotedAt.hash.toLowerCase() === source.hash.toLowerCase()) &&
+          !visited.has(step.tokenOut.toLowerCase()), "invalid startup execution price lineage");
+        token = step.tokenOut.toLowerCase(); visited.add(token); output = step.amountOut;
+      }
+      assert(token === edge.tokenIn.toLowerCase() && (output === undefined || output === work.amountIn),
+        "startup execution price target does not follow lineage");
+      const requestKey = digest({ source, maxInputPathHops, edgeId, instanceKey, amountIn: work.amountIn,
+        reference: reference.path.map(rowFields) });
+      const prior = issued.get(edgeId);
+      if (prior?.requestKey === requestKey) {
+        if (prior.result) return prior.result;
+        throw Object.assign(new RevmStrictError("observation", "startup execution price reverted"), { code: "STARTUP_EXECUTION_REVERT" });
+      }
+      const selected = [...reference.path.map(row => graph.get(row.edgeId)!), edge];
+      await work.prepareQuote(new Set(selected.map(blockScanEdgeKey)));
+      open();
+      const legs = selected.map(value => {
+        const leg = work.sessionFor(value).buildRuntimeAmountLeg({ edge: value, executor: input.executor, runtimeEvidence: [] });
+        return leg && { tokenIn: value.tokenIn, tokenOut: value.tokenOut, program: leg.program };
+      });
+      if (legs.some(leg => !leg)) return undefined;
+      const rootAmount = reference.path[0]?.amountIn ?? work.amountIn;
+      const invocation = { source, maxInputPathHops, control: work.control,
+        callerAuthority: { executor: input.executor, transactionOrigin: input.transactionOrigin },
+        amount: rootAmount, legs: legs.map(leg => leg!) };
+      const result = await input.simulateStandalone(invocation);
+      open();
+      assert(result.targetBlock === source.number + 1, "startup execution price virtual source mismatch");
+      const targetIndex = selected.length - 1;
+      const stage = result.kind === "success" ? "none" : result.failure === undefined ? "unattributed"
+        : result.failure.hop < 0 ? "funding" : result.failure.hop === targetIndex ? "target" : "prefix";
+      let priced: StartupEffectiveQuote | undefined, rows: readonly EffectiveMidRow[] | undefined;
+      if (result.kind === "success") {
+        assert(result.receipts.length === selected.length + 1 && result.receipts[0]!.hop === -1 &&
+          result.receipts[0]!.amountIn === rootAmount && result.receipts[0]!.amountOut === rootAmount &&
+          result.receipts[0]!.amountSpent === rootAmount, "startup execution price funding receipt mismatch");
+        const quotedAt = Object.freeze({ ...source });
+        const simulatedRows: EffectiveMidRow[] = [];
+        for (const [index, value] of selected.entries()) {
+          const receipt: StartupPrefixReceipt = result.receipts[index + 1]!;
+          assert(receipt.hop === index && receipt.amountIn === result.receipts[index]!.amountOut &&
+            receipt.amountIn > 0n && receipt.amountOut > 0n && receipt.amountSpent >= 0n && receipt.amountSpent <= receipt.amountIn,
+          "startup execution price receipt continuity mismatch");
+          const row: EffectiveMidRow = { edgeId: blockScanEdgeKey(value), instanceKey: edgeInstanceKey(value),
+            tokenIn: value.tokenIn.toLowerCase(), tokenOut: value.tokenOut.toLowerCase(),
+            amountIn: receipt.amountIn, amountOut: receipt.amountOut, amountSpent: receipt.amountSpent,
+            effectiveMid: Number(receipt.amountOut) / Number(receipt.amountIn), status: "quoted" as const, quotedAt,
+            pricingMethod: "startup-simulation" as const };
+          const executionVerification = Object.freeze({ kind: "startup-simulation" as const,
+            targetBlock: result.targetBlock, scriptHash: result.scriptHash,
+            receiptHash: effectiveExecutionReceiptHash(row,
+              { amountIn: receipt.amountIn, path: simulatedRows }, maxInputPathHops, result.targetBlock, result.scriptHash) });
+          simulatedRows.push(Object.freeze({ ...row, executionVerification }));
+        }
+        rows = Object.freeze(simulatedRows);
+        const target = result.receipts.at(-1)!;
+        priced = Object.freeze({ source: quotedAt, amountIn: target.amountIn, amountOut: target.amountOut,
+          amountSpent: target.amountSpent, pricingMethod: "startup-simulation" as const,
+          executionVerification: rows.at(-1)!.executionVerification!,
+          inputReference: Object.freeze({ amountIn: target.amountIn, path: Object.freeze(rows.slice(0, -1)) }) });
+      }
+      const observation = Object.freeze({ sourceBlock: source.number, sourceBlockHash: source.hash,
+        generation: source.generation, edgeId, instanceKey, mode: "observe-only", filterApplied: false,
+        pricingMethod: "startup-simulation", expectedAmountIn: String(work.amountIn), expectedAmountOut: null,
+        status: result.kind, failureStage: stage, failedHop: result.failure?.hop ?? null,
+        failedEdgeId: result.failure && result.failure.hop >= 0 ? blockScanEdgeKey(selected[result.failure.hop]!) : null,
+        targetAttempted: result.kind === "success" || stage === "target" ? true : stage === "unattributed" ? null : false,
+        prefixEdges: reference.path.map(step => step.edgeId), prefixCanAffectTargetState: reference.path.length > 0,
+        targetInstanceInPrefix: reference.path.some(step => step.instanceKey === instanceKey), independentPriceEquivalent: false,
+        rootAmount: String(rootAmount), actualAmountIn: priced ? String(priced.amountIn) : null,
+        actualAmountOut: priced ? String(priced.amountOut) : null, actualAmountSpent: priced ? String(priced.amountSpent) : null,
+        amountEvidence: priced ? "same-transaction" : "unavailable", amountMatches: priced ? priced.amountIn === work.amountIn : null,
+        targetBlock: result.targetBlock, scriptHash: result.scriptHash, gasUsed: String(result.gasUsed),
+        simulationMs: result.simulationMs, nodeQueueMs: result.nodeQueueMs,
+        revertReasonHash: result.failure ? keccak256(result.failure.reason) : null,
+        revertDataHash: result.kind === "revert" ? keccak256(result.returnData) : null });
+      issued.set(edgeId, { requestKey, sourceKey: sourcePolicyKey(source, maxInputPathHops),
+        key: rows && issuedKey(source, maxInputPathHops, rows), observation, result: priced });
+      console.log(`[searcher/startup-prefix-observation] ${JSON.stringify(observation)}`);
+      input.onObservation?.(observation);
+      if (!priced) throw Object.assign(new RevmStrictError("observation", "startup execution price reverted"), { code: "STARTUP_EXECUTION_REVERT" });
+      return priced;
+    },
     async run(work: {
       effective: EffectiveMidSnapshot; edges: readonly TokenEdge[]; control: AdapterWorkControl;
       prepareQuote(ids: ReadonlySet<string>): Promise<void>;
       sessionFor(edge: TokenEdge): StrictProductionRuntimeSession;
     }): Promise<boolean> {
+      const maxInputPathHops = effectiveInputPathHops(work.effective.maxInputPathHops);
+      usePolicy(maxInputPathHops);
       if (deferred || complete || !work.effective.complete) return false;
       const { source } = work.effective;
-      const sourceKey = `${source.number}:${source.hash.toLowerCase()}:${source.generation}`;
+      const sourceKey = sourcePolicyKey(source, maxInputPathHops);
       if (sourceKey !== checkedSource) { checkedSource = sourceKey; successful.clear(); }
       const graph = new Map(work.edges.map(edge => [blockScanEdgeKey(edge), edge]));
       const priced = effectiveEnumerationMids({ sourceBlock: source.number, sourceBlockHash: source.hash,
         generation: source.generation, graph: { edges: work.edges }, effectiveMids: work.effective });
       const pending = [...priced.keys()].map(id => work.effective.rows.get(id)!);
-      const verifiedThisRun: StartupPrefixObservation[] = [];
+      const verifiedThisRun: StartupPrefixObservation[] = [...issued.values()]
+        .filter(value => value.sourceKey === sourceKey && !value.result).map(value => value.observation);
       const started = Date.now();
       const counts = { eligibleDirections: pending.length, checked: 0, succeeded: 0, reverted: 0,
         prefixReverted: 0, targetReverted: 0, fundingReverted: 0, unattributedReverted: 0,
@@ -94,7 +246,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
         const progress = Object.freeze({ sourceBlock: source.number, sourceBlockHash: source.hash,
           generation: source.generation, mode: "observe-only", executionBackend: "eth_simulateV1",
           targetRevertFilterEnabled: Number(input.filterTargetReverts === true),
-          inputFundingMode: "native-prefix", phase, ...counts,
+          inputFundingMode: "native-prefix", maxInputPathHops, phase, ...counts,
           pending: pending.length - counts.checked - counts.reusedSuccessful - counts.reusedReverted - counts.skippedFiltered -
             counts.skippedFilteredPrefix - counts.unsupported - counts.unavailable,
           elapsedMs: Date.now() - started });
@@ -107,7 +259,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
       };
       const lineage = (row: EffectiveMidRow): readonly EffectiveMidRow[] | undefined => {
         const reference = effectiveRowAmountReference(row);
-        if (!reference || reference.amountIn !== row.amountIn || reference.path.length > MAX_EFFECTIVE_INPUT_PATH_HOPS) return;
+        if (!reference || reference.amountIn !== row.amountIn || reference.path.length > maxInputPathHops) return;
         const rows = [...reference.path, row];
         let token = ADDR.WETH.toLowerCase();
         for (const [i, step] of rows.entries()) {
@@ -128,11 +280,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
       // every dependency. With amount cascading off, the old lineage alone
       // would miss a touched prefix whose current price has changed.
       const continuationKey = (rows: readonly EffectiveMidRow[]) => {
-        const fields = (row: EffectiveMidRow | undefined) => row && [
-          row.edgeId, row.instanceKey, row.tokenIn, row.tokenOut,
-          row.amountIn, row.amountOut, row.status, row.quotedAt,
-        ];
-        return digest(rows.map(row => [fields(row), fields(work.effective.rows.get(row.edgeId))]));
+        return digest({ maxInputPathHops, rows: rows.map(row => [rowFields(row), rowFields(work.effective.rows.get(row.edgeId))]) });
       };
       const programs = new Map<string, string | null>();
       const diagnosticCache = new Map<string, ReturnType<StartupNodeSimulation>>();
@@ -148,6 +296,17 @@ export function createBlockScanStartupExecutionPreflight(input: {
             if (!rows) { counts.unavailable++; record(row, { status: "unverified", reason: "recorded-lineage-unavailable" }); continue; }
             if (rows.slice(0, -1).some(step => input.simRejects.hasPool(graph.get(step.edgeId)!))) {
               counts.skippedFilteredPrefix++; record(row, { status: "prefix-filtered-by-existing-live-sim" }); continue;
+            }
+            const shared = issued.get(row.edgeId);
+            if (shared?.result && shared.sourceKey === sourceKey && shared.key === issuedKey(source, maxInputPathHops, rows)) {
+              counts.reusedSuccessful++;
+              const observation = Object.freeze({ ...shared.observation, reused: true,
+                reusePolicy: "same-startup-simulation-price" });
+              reusable.set(row.edgeId, Object.freeze({ key: continuationKey(rows), observation }));
+              changes.set(row.edgeId, reusable.get(row.edgeId)!);
+              verifiedThisRun.push(observation);
+              input.onObservation?.(observation);
+              continue;
             }
             const cached = reusable.get(row.edgeId);
             if (continuationRestored && cached?.key === continuationKey(rows)) {
@@ -193,7 +352,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
                 if (legs.some(leg => leg.program === null)) {
                   counts.unsupported++; record(row, { status: "unsupported", reason: "production-runtime-leg-unavailable" }); continue;
                 }
-                const invocation = { source, control: work.control,
+                const invocation = { source, control: work.control, maxInputPathHops,
                   callerAuthority: { executor: input.executor, transactionOrigin: input.transactionOrigin },
                   amount: rows[0]!.amountIn!, legs: legs.map(leg => ({ ...leg, program: leg.program! })) };
                 const checkKey = digest({ source, amount: invocation.amount, legs: invocation.legs, expectedAmount: row.amountIn });
@@ -246,6 +405,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
                   rootAmount: String(invocation.amount), actualAmountIn: actualIn === undefined ? null : String(actualIn),
                   amountEvidence, amountMatches: actualIn === undefined ? null : actualIn === row.amountIn,
                   actualAmountOut: result.kind === "success" ? String(result.receipts.at(-1)!.amountOut) : null,
+                  actualAmountSpent: result.kind === "success" ? String(result.receipts.at(-1)!.amountSpent) : null,
                   targetBlock: result.targetBlock, scriptHash: result.scriptHash, gasUsed: String(result.gasUsed),
                   simulationMs: result.simulationMs, nodeQueueMs: result.nodeQueueMs,
                   revertReasonHash: result.failure ? keccak256(result.failure.reason) : null,

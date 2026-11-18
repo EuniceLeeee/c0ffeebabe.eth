@@ -27,9 +27,10 @@
           "jsonPointer": "/families/2/samples/1"
         },
         {
-          "file": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
-          "sha256": "b5df6ef6d860120d4b9cbf66eef347792358c70af996f0dbdad24f74d80b43e4",
-          "jsonPointer": ""
+          "file": "listener/src/searcher/test/fixtures/family-source-snapshots/ee5e16352d1e4d9267e1c1cf6cb22153c57e827c8b46d2b13d57eab982da56ea.txt",
+          "sha256": "ee5e16352d1e4d9267e1c1cf6cb22153c57e827c8b46d2b13d57eab982da56ea",
+          "jsonPointer": "",
+          "originalFile": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json"
         }
       ],
       "referenceMissing": [

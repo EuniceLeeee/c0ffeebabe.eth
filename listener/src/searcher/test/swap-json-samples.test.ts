@@ -39,7 +39,37 @@ test("Swap scope cannot silently include a disabled family or alter the frozen e
   changed(index => { index.scopeReference.enabledFamilies[0].flag = index.scopeReference.enabledFamilies[1].flag; }, /duplicate/);
   changed(index => { index.scopeReference.configSha256 = "unknown"; }, /scope pins/);
   changed(index => { index.domain = "protocol"; }, /domain mismatch/);
-  changed(index => { index.families[0].familyId = "protocol:unrelated"; }, /domain/);
+  changed(index => { index.families[0].familyId = "protocol:unrelated"; }, /case\/library Family reference mismatch/);
+});
+
+test("opaque selector Family references retain explicit case/library domain validation", () => {
+  const root = mkdtempSync(join(tmpdir(), "swap-selector-samples-"));
+  try {
+    cpSync(dirname(swapJsonSamplesPath), root, { recursive: true });
+    const path = join(root, "index.json"), index = JSON.parse(readFileSync(path, "utf8"));
+    const family = index.families.find((item: any) => item.completeCases > 0);
+    const referenceFamilyId = family.familyId, familyId = "execution:0x128acb08:abi-fixture";
+    family.familyId = familyId;
+    index.scopeReference.familyIds = index.scopeReference.familyIds.map((id: string) => id === referenceFamilyId ? familyId : id);
+    const enabled = index.scopeReference.enabledFamilies.find((item: any) => item.familyId === referenceFamilyId);
+    enabled.familyId = familyId; enabled.flag = "SEARCHER_FAMILY_SELECTOR_128ACB08_ENABLED";
+    const file = join(root, complete(index).casePath), data = JSON.parse(readFileSync(file, "utf8"));
+    data.familyId = familyId;
+    writeFileSync(path, JSON.stringify(index)); writeFileSync(file, JSON.stringify(data));
+    const result = loadSwapJsonSamples(path);
+    assert.equal(result.cases[0]!.familyId, familyId);
+    assert.equal(result.cases[0]!.data.domain, "swap");
+    assert.equal(result.execution, "not-run", "reference validation grants no selector execution admission");
+    for (const domain of ["protocol", "credit", undefined]) {
+      const wrongDomain = { ...data, domain, ...(domain === "credit" ? {
+        trials: data.trials.map((trial: any) => ({ ...trial, credit: { debtBps: 10000 } })),
+      } : {}) };
+      const contents = JSON.stringify(wrongDomain);
+      assert.doesNotThrow(() => parseProtocolJsonAcceptanceCase(JSON.parse(contents)), "negative must reach the library-domain check");
+      writeFileSync(file, contents);
+      assert.throws(() => loadSwapJsonSamples(path), /case\/library domain mismatch/);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 test("Swap samples cannot forge a pass, borrow old output, or replace route-key provenance", () => {

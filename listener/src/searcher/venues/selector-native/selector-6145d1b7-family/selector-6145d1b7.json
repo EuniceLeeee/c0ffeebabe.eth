@@ -1,0 +1,474 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x6145d1b7",
+  "signature": "function withdraw(uint256, uint32)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_6145D1B7_ENABLED"
+  },
+  "binding": {
+    "flow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "converter",
+          "requirements": {
+            "transports": [
+              "eth-call",
+              "get-storage"
+            ]
+          },
+          "requests": [
+            {
+              "id": "selectorBinding:converter:asset",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingconverterasset",
+                  "baseToken()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:converter:proxyAdmin",
+              "kind": "get-storage",
+              "address": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "slot": "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
+            }
+          ],
+          "result": {
+            "asset": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingconverterasset",
+                        "baseToken()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:converter:asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "proxyAdmin": {
+              "op": "addressWord",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "selectorBinding:converter:proxyAdmin"
+                      ]
+                    },
+                    "data"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "converter": {
+          "asset": "$steps.converter.asset",
+          "proxyAdmin": "$steps.converter.proxyAdmin"
+        }
+      }
+    },
+    "descriptor": {
+      "op": "merge",
+      "args": [
+        {
+          "target": {
+            "op": "address",
+            "args": [
+              "$target"
+            ]
+          },
+          "asset": {
+            "op": "address",
+            "args": [
+              "$binding.converter.asset"
+            ]
+          },
+          "variant": "xwin-allocations-v1"
+        },
+        {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "xwin-allocations-v1",
+                "btb-bear-v1"
+              ]
+            },
+            {},
+            {
+              "proxyAdmin": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$binding.converter.proxyAdmin"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "routes": {
+    "directions": [
+      {
+        "id": "redeem",
+        "enabled": true,
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$descriptor.target"
+          ]
+        },
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$descriptor.asset"
+          ]
+        },
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.target",
+            "$descriptor.target"
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "or",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "mint"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "redeem"
+              ]
+            }
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.taxonomy.slotKind",
+            "protocol"
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.taxonomy.protocolAction",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "mint"
+                  ]
+                },
+                "wrap",
+                "redeem"
+              ]
+            }
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "mint"
+                  ]
+                },
+                "$descriptor.asset",
+                "$descriptor.target"
+              ]
+            }
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "mint"
+                  ]
+                },
+                "$descriptor.target",
+                "$descriptor.asset"
+              ]
+            }
+          ]
+        },
+        "error": "conversion route binding mismatch"
+      }
+    ]
+  },
+  "execution": {
+    "version": 1,
+    "settlement": {
+      "directOutput": false
+    },
+    "protectedAddresses": [
+      {
+        "op": "address",
+        "args": [
+          "$descriptor.target"
+        ]
+      },
+      {
+        "op": "address",
+        "args": [
+          "$descriptor.asset"
+        ]
+      },
+      {
+        "op": "address",
+        "args": [
+          "$descriptor.proxyAdmin"
+        ]
+      }
+    ],
+    "contextChecks": [
+      {
+        "condition": {
+          "op": "defined",
+          "args": [
+            "$transactionOrigin"
+          ]
+        },
+        "error": "xWin runtime requires transaction origin"
+      },
+      {
+        "condition": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$transactionOrigin",
+                "$constants.zeroAddress"
+              ]
+            }
+          ]
+        },
+        "error": "xWin runtime requires transaction origin"
+      }
+    ],
+    "approval": {
+      "token": {
+        "op": "address",
+        "args": [
+          "$route.tokenIn"
+        ]
+      },
+      "spender": {
+        "op": "address",
+        "args": [
+          "$descriptor.target"
+        ]
+      },
+      "mode": "exact-clear",
+      "when": {
+        "op": "eq",
+        "args": [
+          "$direction",
+          "mint"
+        ]
+      }
+    },
+    "call": {
+      "target": {
+        "op": "address",
+        "args": [
+          "$descriptor.target"
+        ]
+      },
+      "signature": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              "$direction",
+              "mint"
+            ]
+          },
+          "function deposit(uint256,uint32) returns(uint256)",
+          "function withdraw(uint256,uint32) returns(uint256)"
+        ]
+      },
+      "args": [
+        {
+          "runtime": "amountIn"
+        },
+        0
+      ]
+    },
+    "effects": [
+      {
+        "kind": "debit",
+        "token": {
+          "op": "address",
+          "args": [
+            "$route.tokenIn"
+          ]
+        },
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": {
+          "op": "address",
+          "args": [
+            "$route.tokenOut"
+          ]
+        },
+        "account": "$recipient"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "assert": {
+        "op": "eq",
+        "args": [
+          "$descriptor.variant",
+          "xwin-allocations-v1"
+        ]
+      },
+      "error": "conversion variant mismatch"
+    },
+    {
+      "assert": {
+        "op": "not",
+        "args": [
+          {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.target",
+              "$descriptor.asset"
+            ]
+          }
+        ]
+      },
+      "error": "conversion token aliasing"
+    }
+  ],
+  "refreshPolicy": "each-block",
+  "values": {
+    "abi": {
+      "bindingconverterasset": [
+        "function baseToken() view returns(address)"
+      ]
+    },
+    "constants": {
+      "zeroAddress": "0x0000000000000000000000000000000000000000"
+    }
+  },
+  "meta": {
+    "label": "protocol:token-conversion/xwin-allocations-v1"
+  }
+}

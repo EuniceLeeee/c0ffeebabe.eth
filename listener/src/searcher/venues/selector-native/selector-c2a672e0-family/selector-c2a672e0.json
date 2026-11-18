@@ -1,0 +1,963 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xc2a672e0",
+  "signature": "function unstake(address, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_C2A672E0_ENABLED"
+  },
+  "binding": {
+    "flow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "gateway",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "selectorBinding:gateway:vault",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindinggatewayvault",
+                  "getAddress(string)",
+                  [
+                    "stakedToken"
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "result": {
+            "vault": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindinggatewayvault",
+                        "getAddress(string)",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:gateway:vault"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "vault",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "selectorBinding:vault:asset",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$steps.gateway.vault"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingvaultasset",
+                  "asset()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:vault:core",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$steps.gateway.vault"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingvaultcore",
+                  "core()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:vault:yieldSharing",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$steps.gateway.vault"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingvaultyieldSharing",
+                  "yieldSharing()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "result": {
+            "asset": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingvaultasset",
+                        "asset()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:vault:asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "core": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingvaultcore",
+                        "core()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:vault:core"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "yieldSharing": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingvaultyieldSharing",
+                        "yieldSharing()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:vault:yieldSharing"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "gateway": {
+          "vault": "$steps.gateway.vault"
+        },
+        "vault": {
+          "asset": "$steps.vault.asset",
+          "core": "$steps.vault.core",
+          "yieldSharing": "$steps.vault.yieldSharing"
+        }
+      }
+    },
+    "descriptor": {
+      "vault": {
+        "op": "address",
+        "args": [
+          "$binding.gateway.vault"
+        ]
+      },
+      "asset": {
+        "op": "address",
+        "args": [
+          "$binding.vault.asset"
+        ]
+      },
+      "share": {
+        "op": "address",
+        "args": [
+          {
+            "op": "coalesce",
+            "args": [
+              "$missing",
+              "$binding.gateway.vault"
+            ]
+          }
+        ]
+      },
+      "custodian": "$missing",
+      "infinifi": {
+        "vault": "$binding.gateway.vault",
+        "asset": "$binding.vault.asset",
+        "gateway": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$target"
+              ]
+            }
+          ]
+        },
+        "core": "$binding.vault.core",
+        "yieldSharing": "$binding.vault.yieldSharing"
+      },
+      "verifiedDirections": {
+        "op": "if",
+        "args": [
+          {
+            "op": "defined",
+            "args": [
+              "$missing"
+            ]
+          },
+          {
+            "op": "merge",
+            "args": [
+              {
+                "redeem": true
+              }
+            ]
+          },
+          {
+            "redeem": true
+          }
+        ]
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.vault",
+    "directions": [
+      {
+        "id": "redeem",
+        "enabled": "$descriptor.verifiedDirections.redeem",
+        "tokenIn": "$descriptor.share",
+        "tokenOut": "$descriptor.asset",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      }
+    ]
+  },
+  "state": {
+    "vault": "$descriptor.infinifi.vault",
+    "asset": "$descriptor.infinifi.asset",
+    "gateway": "$descriptor.infinifi.gateway",
+    "yieldSharing": "$descriptor.infinifi.yieldSharing",
+    "core": "$descriptor.infinifi.core"
+  },
+  "execution": {
+    "version": 1,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": [
+      "$binding.vault",
+      "$binding.asset",
+      "$binding.gateway",
+      "$binding.yieldSharing",
+      "$binding.core"
+    ],
+    "preflight": [
+      {
+        "target": "$binding.gateway",
+        "signature": "function getAddress(string) view returns(address)",
+        "args": [
+          "stakedToken"
+        ],
+        "save": {
+          "bindingValue": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "bindingValue"
+            },
+            "operator": "eq",
+            "right": "$binding.vault"
+          }
+        ]
+      },
+      {
+        "target": "$binding.gateway",
+        "signature": "function getAddress(string) view returns(address)",
+        "args": [
+          "receiptToken"
+        ],
+        "save": {
+          "bindingValue": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "bindingValue"
+            },
+            "operator": "eq",
+            "right": "$binding.asset"
+          }
+        ]
+      },
+      {
+        "target": "$binding.gateway",
+        "signature": "function getAddress(string) view returns(address)",
+        "args": [
+          "yieldSharing"
+        ],
+        "save": {
+          "bindingValue": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "bindingValue"
+            },
+            "operator": "eq",
+            "right": "$binding.yieldSharing"
+          }
+        ]
+      },
+      {
+        "target": "$binding.vault",
+        "signature": "function asset() view returns(address)",
+        "args": [],
+        "save": {
+          "bindingValue": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "bindingValue"
+            },
+            "operator": "eq",
+            "right": "$binding.asset"
+          }
+        ]
+      },
+      {
+        "target": "$binding.vault",
+        "signature": "function yieldSharing() view returns(address)",
+        "args": [],
+        "save": {
+          "bindingValue": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "bindingValue"
+            },
+            "operator": "eq",
+            "right": "$binding.yieldSharing"
+          }
+        ]
+      },
+      {
+        "target": "$binding.gateway",
+        "signature": "function core() view returns(address)",
+        "args": [],
+        "save": {
+          "bindingValue": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "bindingValue"
+            },
+            "operator": "eq",
+            "right": "$binding.core"
+          }
+        ]
+      },
+      {
+        "target": "$binding.vault",
+        "signature": "function core() view returns(address)",
+        "args": [],
+        "save": {
+          "bindingValue": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "bindingValue"
+            },
+            "operator": "eq",
+            "right": "$binding.core"
+          }
+        ]
+      },
+      {
+        "target": "$binding.yieldSharing",
+        "signature": "function core() view returns(address)",
+        "args": [],
+        "save": {
+          "bindingValue": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "bindingValue"
+            },
+            "operator": "eq",
+            "right": "$binding.core"
+          }
+        ]
+      },
+      {
+        "target": "$binding.core",
+        "signature": "function hasRole(bytes32,address) view returns(bool)",
+        "args": [
+          "$constants.role",
+          "$binding.gateway"
+        ],
+        "save": {
+          "bindingValue": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "bindingValue"
+            },
+            "operator": "eq",
+            "right": true
+          }
+        ]
+      }
+    ],
+    "approval": {
+      "token": "$route.tokenIn",
+      "spender": "$binding.gateway",
+      "mode": "exact-clear",
+      "requireBool": true,
+      "verifyAllowance": true
+    },
+    "call": {
+      "target": "$binding.gateway",
+      "signature": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              "$direction",
+              "deposit"
+            ]
+          },
+          "function stake(address,uint256) returns(uint256)",
+          "function unstake(address,uint256) returns(uint256)"
+        ]
+      },
+      "args": [
+        "$recipient",
+        {
+          "runtime": "amountIn"
+        }
+      ],
+      "save": {
+        "output": 0
+      },
+      "checks": [
+        {
+          "left": {
+            "runtime": "output"
+          },
+          "operator": "gte",
+          "right": 1
+        }
+      ]
+    },
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient",
+        "equals": {
+          "runtime": "output"
+        },
+        "minimum": "$minAmountOut"
+      },
+      {
+        "kind": "supply",
+        "token": "$binding.vault",
+        "direction": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$direction",
+                "deposit"
+              ]
+            },
+            "increase",
+            "decrease"
+          ]
+        },
+        "equals": {
+          "op": "if",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$direction",
+                "deposit"
+              ]
+            },
+            {
+              "runtime": "output"
+            },
+            {
+              "runtime": "amountIn"
+            }
+          ]
+        }
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenIn",
+        "account": "$recipient",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-native",
+        "when": "$directSettlement"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenIn",
+        "account": "$binding.gateway"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenOut",
+        "account": "$binding.gateway"
+      }
+    ],
+    "requireCanonicalSource": true,
+    "rejectRuntimeEvidence": true,
+    "contextChecks": [
+      {
+        "error": "conversion direction unsupported",
+        "condition": {
+          "op": "or",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$direction",
+                "deposit"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$direction",
+                "redeem"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "error": "InfiniFi runtime bindings",
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.vault",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.asset",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.gateway",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.yieldSharing",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.core",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.vault",
+                    "$binding.asset"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.vault",
+                    "$binding.gateway"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.vault",
+                    "$binding.yieldSharing"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.vault",
+                    "$binding.core"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.asset",
+                    "$binding.gateway"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.asset",
+                    "$binding.yieldSharing"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.asset",
+                    "$binding.core"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.gateway",
+                    "$binding.yieldSharing"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.gateway",
+                    "$binding.core"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$binding.yieldSharing",
+                    "$binding.core"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$binding.gateway",
+                "$constants.gateway"
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "checks": [
+    {
+      "assert": {
+        "op": "and",
+        "args": [
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "defined",
+                "args": [
+                  "$descriptor.custodian"
+                ]
+              }
+            ]
+          },
+          {
+            "op": "sameAddress",
+            "args": [
+              "$binding.gateway",
+              "0x3f04b65ddbd87f9ce0a2e7eb24d80e7fb87625b5"
+            ]
+          },
+          {
+            "op": "sameAddress",
+            "args": [
+              "$binding.vault",
+              "$descriptor.vault"
+            ]
+          },
+          {
+            "op": "sameAddress",
+            "args": [
+              "$binding.vault",
+              "$descriptor.share"
+            ]
+          },
+          {
+            "op": "sameAddress",
+            "args": [
+              "$binding.asset",
+              "$descriptor.asset"
+            ]
+          },
+          {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$binding.vault",
+                  "$binding.asset"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "error": "InfiniFi route binding mismatch"
+    }
+  ],
+  "refreshPolicy": "each-block",
+  "values": {
+    "abi": {
+      "bindinggatewayvault": [
+        "function getAddress(string) view returns(address)"
+      ],
+      "bindingvaultasset": [
+        "function asset() view returns(address)"
+      ],
+      "bindingvaultcore": [
+        "function core() view returns(address)"
+      ],
+      "bindingvaultyieldSharing": [
+        "function yieldSharing() view returns(address)"
+      ]
+    },
+    "constants": {
+      "role": "0x276ea66e969b021a947c47a128f4d53c55387336443ef7a5391a75f0d2e48d25",
+      "gateway": "0x3f04b65ddbd87f9ce0a2e7eb24d80e7fb87625b5"
+    }
+  },
+  "meta": {
+    "label": "protocol:erc4626/infinifi-gateway-staking"
+  }
+}

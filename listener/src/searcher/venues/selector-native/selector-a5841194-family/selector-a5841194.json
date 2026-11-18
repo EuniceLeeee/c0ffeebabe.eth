@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xa5841194",
+  "signature": "function sync(address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_A5841194_ENABLED"
+  },
+  "unsupportedReason": "Nested step of a retained complete execution program; it is not an independent route entry."
+}

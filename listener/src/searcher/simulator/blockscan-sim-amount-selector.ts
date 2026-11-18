@@ -27,6 +27,7 @@ export function createBlockScanSimAmountSelector(input: {
   runtimeAmounts?: boolean;
   /** Source-pinned per-token maximum-borrow entry selected once by the caller. */
   fundingActionId?: string;
+  fundingId?: string;
   /** Paired execution benchmark control, not an independent search policy. */
   callbackSettlement?: boolean;
 }) {
@@ -89,22 +90,24 @@ export function createBlockScanSimAmountSelector(input: {
             onExactCall: () => { if (opts.timing) opts.timing.hopExactCalls++; },
           });
           if (opts.timing) opts.timing.quoteMs += performance.now() - quoteStart;
-          const actions = input.fundingActionId === undefined
-            ? session.fundingActionIds(plan.opportunity.flashToken, amount)
-            : [input.fundingActionId];
+          const actions = session.fundingChoices(plan.opportunity.flashToken, amount).filter(choice =>
+            (input.fundingActionId === undefined || choice.actionAdapterId === input.fundingActionId) &&
+            (input.fundingId === undefined || choice.fundingId === input.fundingId));
+          if (input.fundingActionId !== undefined && input.fundingId === undefined && actions.length > 1)
+            throw new Error("sim amount selector fixed funding action requires a provider fundingId");
           if (!actions.length) throw new Error("sim amount selector missing verified funding action");
           let best: AmountSimulation<ResolvedPlan> = { success: false, reason: "no positive executable funding action" };
           for (const action of [...(settlement ? [null] : []), ...actions]) {
             control.signal.throwIfAborted();
             const buildStart = performance.now();
-            const root = action === null ? settlement! : runtimeLegs ? session.buildFundingRoot({ actionAdapterId: action,
+            const root = action === null ? settlement! : runtimeLegs ? session.buildFundingRoot({ actionAdapterId: action.actionAdapterId, fundingId: action.fundingId,
               asset: plan.opportunity.flashToken, amount, minProfit: plan.opportunity.targetNetProfit ?? 1n,
               children: [{ adapterId: "runtime-amount-flow", target: input.executor,
                 tokenIn: plan.opportunity.flashToken, tokenOut: plan.opportunity.flashToken, amount,
                 params: { legs: prepared.legsJson, quoteToleranceRawUnits: tolerance, minimumReturn: amount + (plan.opportunity.targetNetProfit ?? 1n) }, children: [] }],
             }) : await buildResolvedPlanFromPath(plan.tokenPath, plan.opportunity.flashToken, amount,
               propagated!.amounts, input.executor, controlledState, plan.opportunity.targetNetProfit ?? 1n,
-              action, propagated!.rawOutputs, session, propagated!.exactHandles, tolerance);
+              action.actionAdapterId, propagated!.rawOutputs, session, propagated!.exactHandles, tolerance, action.fundingId);
             if (opts.timing) opts.timing.planBuildMs += performance.now() - buildStart;
             const candidate: ResolvedPlan = { root, flashAmount: amount, profitToken: plan.opportunity.profitToken,
               netProfit: 0n, templateName: plan.templateName };
@@ -116,7 +119,7 @@ export function createBlockScanSimAmountSelector(input: {
             finally { if (opts.timing) opts.timing.simMs += performance.now() - simStart; }
             control.signal.throwIfAborted();
             input.record?.({ type: "sim_amount_execution", mode: runtimeLegs ? "runtime-actual" : "quoted",
-              ...identity, fundingActionId: action, settlementMode: action === null ? "deferred-input" : "funded",
+              ...identity, fundingActionId: action?.actionAdapterId ?? null, fundingId: action?.fundingId ?? null, settlementMode: action === null ? "deferred-input" : "funded",
               amount: amount.toString(), success: sim.success, gasUsed: sim.gasUsed.toString(),
               grossProfit: sim.grossProfit.toString(), netProfit: sim.netProfit.toString(),
               failureKind: sim.failure?.kind ?? null, failureCode: sim.failure?.code ?? null });

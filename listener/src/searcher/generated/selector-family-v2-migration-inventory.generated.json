@@ -1,0 +1,3848 @@
+{
+  "format": "selector-family-v2-complete-migration/v1",
+  "baseCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "counts": {
+    "baseFamilies": 52,
+    "coveredBaseFamilies": 52,
+    "selectorFamilies": 128,
+    "ordinaryExecutableFamilies": 89,
+    "ordinaryPrograms": 180,
+    "automaticParameterPrograms": 10,
+    "creditFamilies": 1,
+    "fundingFamilies": 2,
+    "observationOnlyFamilies": 36,
+    "enabledSelectorFamilies": 95
+  },
+  "boundary": {
+    "sourceFamilyCoverage": "Every installed fdb859a Family, including disabled typed entries, maps to a standalone v2 execution declaration.",
+    "observationOnly": "Historical observation/callback/internal selectors without an implemented standalone entry remain visible; they are not claimed executable.",
+    "acceptance": "Coverage is an inventory assertion. Local EVM regressions and source-bound historical transaction acceptance are reported separately.",
+    "retiredRuntimeImports": 0
+  },
+  "families": [
+    {
+      "familyId": "aqua-swapvm",
+      "destinations": [
+        {
+          "selector": "0xf4d2d412",
+          "file": "listener/src/searcher/venues/selector-native/selector-f4d2d412-family/selector-f4d2d412.json",
+          "programKey": "parameters:a04f9f1042884783a9c96c1d966249f5a4788ddfe2444f9f6ccb9582dbd00784",
+          "origin": "scripts/selector-typed-aqua-migration.json"
+        }
+      ]
+    },
+    {
+      "familyId": "balancer-v1",
+      "destinations": [
+        {
+          "selector": "0x8201aa3f",
+          "file": "listener/src/searcher/venues/selector-native/selector-8201aa3f-family/selector-8201aa3f.json",
+          "programKey": "parameters:07e745087c43554e049330644789376a1e80053459f72b596349ee7be5fe3bfc",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x8201aa3f",
+          "file": "listener/src/searcher/venues/selector-native/selector-8201aa3f-family/selector-8201aa3f.json",
+          "programKey": "parameters:3bff69d6260438cdf214cbfbd5e662d3c7000039755de25dfecf4e24193b954d",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "balancer-v2",
+      "destinations": [
+        {
+          "selector": "0x52bbbe29",
+          "file": "listener/src/searcher/venues/selector-native/selector-52bbbe29-family/selector-52bbbe29.json",
+          "programKey": "parameters:41298814be1ec6bd0928108cbd7a0bc6ca7836b670dc43c3b4e57639ad45a346",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "balancer-v3",
+      "destinations": [
+        {
+          "selector": "0x750283bc",
+          "file": "listener/src/searcher/venues/selector-native/selector-750283bc-family/selector-750283bc.json",
+          "programKey": "parameters:05647d0d5694877540c8fbfce9ab5cc7fa639747c47af30d69d7e87bed5f5e22",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        }
+      ]
+    },
+    {
+      "familyId": "credit:fluid",
+      "destinations": [
+        {
+          "selector": "0x032d2276",
+          "file": "listener/src/searcher/venues/selector-native/selector-032d2276-family/selector-032d2276.json",
+          "programKey": "parameters:c1c07315c431b2d6fbb1f2bc5b5fac3638b851e1dfd4fbc03f7f11273d5086a9",
+          "origin": "selector-credit-v2-migration"
+        }
+      ]
+    },
+    {
+      "familyId": "curve-plain",
+      "destinations": [
+        {
+          "selector": "0x3df02124",
+          "file": "listener/src/searcher/venues/selector-native/selector-3df02124-family/selector-3df02124.json",
+          "programKey": "parameters:be4fbe1412a1928bae264d003d1118b9f0650469a29f4fbf165a576698c608d8",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x3df02124",
+          "file": "listener/src/searcher/venues/selector-native/selector-3df02124-family/selector-3df02124.json",
+          "programKey": "parameters:eeaa5dc4c79f293f7559a5de1d3d65b739c2131ae372ad204aeeb21411698eb2",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x5b41b908",
+          "file": "listener/src/searcher/venues/selector-native/selector-5b41b908-family/selector-5b41b908.json",
+          "programKey": "parameters:9dd59f13f7195f7129ed99482e5cf62e3d50278bc7bffdd02c8582bc6204b8d4",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x5b41b908",
+          "file": "listener/src/searcher/venues/selector-native/selector-5b41b908-family/selector-5b41b908.json",
+          "programKey": "parameters:dbc7e40f67a528e156a8d76347042d39d84559075314f7c9295de7f198bb63f7",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x767691e7",
+          "file": "listener/src/searcher/venues/selector-native/selector-767691e7-family/selector-767691e7.json",
+          "programKey": "parameters:bf0eb546a532835ea32984c7bb96c339de93570d0ad7b2b0bf5b2d883526cc9e",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x767691e7",
+          "file": "listener/src/searcher/venues/selector-native/selector-767691e7-family/selector-767691e7.json",
+          "programKey": "parameters:c3f4c6c71fb802f70b586e63936a2f038b56a907994509ccaa6f2884569964cf",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x7e3db030",
+          "file": "listener/src/searcher/venues/selector-native/selector-7e3db030-family/selector-7e3db030.json",
+          "programKey": "parameters:78ed4dc50c2fff3cbf4debc48340244b9b6c8712e23e608e0f06eb64c2f33b3a",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x7e3db030",
+          "file": "listener/src/searcher/venues/selector-native/selector-7e3db030-family/selector-7e3db030.json",
+          "programKey": "parameters:d9b6758c5a456bd355084e0a7475be630377b40c2ec3b05996ea65bee7c10c23",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xafb43012",
+          "file": "listener/src/searcher/venues/selector-native/selector-afb43012-family/selector-afb43012.json",
+          "programKey": "parameters:6b66cadb340b54d4cae019a168aa858fec8149e2ce1c16c206669e89d30cf38c",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xafb43012",
+          "file": "listener/src/searcher/venues/selector-native/selector-afb43012-family/selector-afb43012.json",
+          "programKey": "parameters:cfda5e374fd51c678d26d7a5ca81e02c1fd0c54c3d8e822dbdbd662ec35c0bcf",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "curve-plain-lp",
+      "destinations": [
+        {
+          "selector": "0x1a4d01d2",
+          "file": "listener/src/searcher/venues/selector-native/selector-1a4d01d2-family/selector-1a4d01d2.json",
+          "programKey": "parameters:ea85ac3875fcd81a1794522742482c04e72b0bf9fb543dea76b7430af2359bf5",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xb72df5de",
+          "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+          "programKey": "parameters:253ea12509a499ae0c8ff6e5b64af4bce8d1abc4fd4e01ce59a8e81d245508a9",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "curve-underlying",
+      "destinations": [
+        {
+          "selector": "0x44ee1986",
+          "file": "listener/src/searcher/venues/selector-native/selector-44ee1986-family/selector-44ee1986.json",
+          "programKey": "parameters:256b7b41b493a9f7a06ed790da31b9a8bcd961b5abe455ec12b9b38ec5cab609",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x44ee1986",
+          "file": "listener/src/searcher/venues/selector-native/selector-44ee1986-family/selector-44ee1986.json",
+          "programKey": "parameters:90242366e88a3b404bf24fd8beab1b968ec99a932fb9126941040e6baf1f0546",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x44ee1986",
+          "file": "listener/src/searcher/venues/selector-native/selector-44ee1986-family/selector-44ee1986.json",
+          "programKey": "parameters:ae6cb1c060f5b715ec724c3ab40b2c8fd5a6cd7cf556e2d58458c0943f50f043",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x44ee1986",
+          "file": "listener/src/searcher/venues/selector-native/selector-44ee1986-family/selector-44ee1986.json",
+          "programKey": "parameters:b5b3cbfc5420dec3e019e3476e3294186e512dfef1674ac6490e919ead2c4674",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x44ee1986",
+          "file": "listener/src/searcher/venues/selector-native/selector-44ee1986-family/selector-44ee1986.json",
+          "programKey": "parameters:f28b190f6c9a9efd53d20140740efc25e97f3d4eff8537a6b9687e618830b9b9",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x65b2489b",
+          "file": "listener/src/searcher/venues/selector-native/selector-65b2489b-family/selector-65b2489b.json",
+          "programKey": "parameters:616a9d112a0689ea0ff56b3f3f8780644777b602ef778fc328e9ecaf07e43b33",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x65b2489b",
+          "file": "listener/src/searcher/venues/selector-native/selector-65b2489b-family/selector-65b2489b.json",
+          "programKey": "parameters:710ecb242aa58e3ea34120d4c4c100ea1f8e63aafa351ba4b5b006dc5969c1fe",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x65b2489b",
+          "file": "listener/src/searcher/venues/selector-native/selector-65b2489b-family/selector-65b2489b.json",
+          "programKey": "parameters:a1be30dd3a0597bae121c670ef950db18ee18f44db191104394da9d0373bcedf",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x65b2489b",
+          "file": "listener/src/searcher/venues/selector-native/selector-65b2489b-family/selector-65b2489b.json",
+          "programKey": "parameters:a27049d23823c8203686a729e9a22898634878f77d0794ff7ccf9836c2403792",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x65b2489b",
+          "file": "listener/src/searcher/venues/selector-native/selector-65b2489b-family/selector-65b2489b.json",
+          "programKey": "parameters:fa180c54903ab9c673d5456b48a90a87a59a259208ef1c592ceb182837bb8c45",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xa6417ed6",
+          "file": "listener/src/searcher/venues/selector-native/selector-a6417ed6-family/selector-a6417ed6.json",
+          "programKey": "parameters:66899f17da9d36a1f302c61feb0df10c7eddd87cbaaafa3cda6bf171b8628041",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xa6417ed6",
+          "file": "listener/src/searcher/venues/selector-native/selector-a6417ed6-family/selector-a6417ed6.json",
+          "programKey": "parameters:71e5f1f7903cb7ffe0910a3c32241805f83c2d68d064943e6686257727ecbae6",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xa6417ed6",
+          "file": "listener/src/searcher/venues/selector-native/selector-a6417ed6-family/selector-a6417ed6.json",
+          "programKey": "parameters:89e24c13002fce9f179de77200aacfd922e14190dad24a3b828d447971ae6fa5",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xa6417ed6",
+          "file": "listener/src/searcher/venues/selector-native/selector-a6417ed6-family/selector-a6417ed6.json",
+          "programKey": "parameters:9ee6932226aed582b25f6e807c964547fc7db8cfede026275d65a70f144a7655",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xa6417ed6",
+          "file": "listener/src/searcher/venues/selector-native/selector-a6417ed6-family/selector-a6417ed6.json",
+          "programKey": "parameters:c5a356fa321f5f0e98e81b1bfd7436ef1d887bed1e056ffa9b3ed2c05e9b56e3",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xe2ad025a",
+          "file": "listener/src/searcher/venues/selector-native/selector-e2ad025a-family/selector-e2ad025a.json",
+          "programKey": "parameters:71f4480792b37cf7fc5bdd130f40b879ac6080301252df906308912868d429b9",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xe2ad025a",
+          "file": "listener/src/searcher/venues/selector-native/selector-e2ad025a-family/selector-e2ad025a.json",
+          "programKey": "parameters:72c2e2b76aed1dff3a90f9785455a86f1672276cd65fbddb1d7a49c21df8f47e",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xe2ad025a",
+          "file": "listener/src/searcher/venues/selector-native/selector-e2ad025a-family/selector-e2ad025a.json",
+          "programKey": "parameters:7f4d31850d802d603a505284f9c2af408797428fabc40417cdf818e27a79802d",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xe2ad025a",
+          "file": "listener/src/searcher/venues/selector-native/selector-e2ad025a-family/selector-e2ad025a.json",
+          "programKey": "parameters:b337b05654be6cb5c2d4860190e69ba2ae67371b9cf1b04923b64e6c0aff5609",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xe2ad025a",
+          "file": "listener/src/searcher/venues/selector-native/selector-e2ad025a-family/selector-e2ad025a.json",
+          "programKey": "parameters:e5256d6c62ed9ee17303b8d5a99b9ef3169e3900466e43395dcb09a0455bf870",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:ammalgam",
+      "destinations": [
+        {
+          "selector": "0x022c0d9f",
+          "file": "listener/src/searcher/venues/selector-native/selector-022c0d9f-family/selector-022c0d9f.json",
+          "programKey": "parameters:2dab1f524c1c78d50044b3e7eff6b2ea51cceca1ad795425dd73aec56f9125fe",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:angstrom-v4",
+      "destinations": [
+        {
+          "selector": "0xa88f90c1",
+          "file": "listener/src/searcher/venues/selector-native/selector-a88f90c1-family/selector-a88f90c1.json",
+          "programKey": "parameters:91966cf38b0502ad762844c1a106a9c6d941e78c3bab6d44ca364619306ecf1a",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:dodo-v2",
+      "destinations": [
+        {
+          "selector": "0xbd6015b4",
+          "file": "listener/src/searcher/venues/selector-native/selector-bd6015b4-family/selector-bd6015b4.json",
+          "programKey": "parameters:18c55ec937ea423f52ae7e357c14d73c0cec1502da34f78925e4919eb1565949",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xdd93f59a",
+          "file": "listener/src/searcher/venues/selector-native/selector-dd93f59a-family/selector-dd93f59a.json",
+          "programKey": "parameters:32fe881070f32f54f487d7b7704671e903925f976291efd6d701ad38321cab98",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:ekubo-router-v1",
+      "destinations": [
+        {
+          "selector": "0xf196187f",
+          "file": "listener/src/searcher/venues/selector-native/selector-f196187f-family/selector-f196187f.json",
+          "programKey": "parameters:fe38bc8a7bbd37e91556203edfbb715973c68d834c497d72670b46d34827eedd",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:oneswap",
+      "destinations": [
+        {
+          "selector": "0xa6e81533",
+          "file": "listener/src/searcher/venues/selector-native/selector-a6e81533-family/selector-a6e81533.json",
+          "programKey": "parameters:7f99bfc9ef53a94c1d812f513c851d0b7a62d93cbd82022b326389a7077c89bd",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:precision-pool",
+      "destinations": [
+        {
+          "selector": "0xa6220b66",
+          "file": "listener/src/searcher/venues/selector-native/selector-a6220b66-family/selector-a6220b66.json",
+          "programKey": "parameters:9bc552004f0f7af149e35b6ed3ce0947b9505f17f8dbc7007a5e129c0673dbdd",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:uniswap-v1",
+      "destinations": [
+        {
+          "selector": "0x95e3c50b",
+          "file": "listener/src/searcher/venues/selector-native/selector-95e3c50b-family/selector-95e3c50b.json",
+          "programKey": "parameters:f08218b2c74dcf57555bdd809c48b3f68d37ac94189a5ac157dc7844b52ed536",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xad65d76d",
+          "file": "listener/src/searcher/venues/selector-native/selector-ad65d76d-family/selector-ad65d76d.json",
+          "programKey": "parameters:f08218b2c74dcf57555bdd809c48b3f68d37ac94189a5ac157dc7844b52ed536",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xf39b5b9b",
+          "file": "listener/src/searcher/venues/selector-native/selector-f39b5b9b-family/selector-f39b5b9b.json",
+          "programKey": "parameters:f08218b2c74dcf57555bdd809c48b3f68d37ac94189a5ac157dc7844b52ed536",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "custom-swap:zero1-curve",
+      "destinations": [
+        {
+          "selector": "0x59a87bc1",
+          "file": "listener/src/searcher/venues/selector-native/selector-59a87bc1-family/selector-59a87bc1.json",
+          "programKey": "parameters:f4f9ed400df7ef94cdb3024ffd0d17a094d5bd91afadb256db4b5ed2f22acf40",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xd04c6983",
+          "file": "listener/src/searcher/venues/selector-native/selector-d04c6983-family/selector-d04c6983.json",
+          "programKey": "parameters:51850a6dbc3762daf4fc8d9ed47ec58d80d152acff28c5221b65965a6bf132c9",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "ella-exchange",
+      "destinations": [
+        {
+          "selector": "0x86b01724",
+          "file": "listener/src/searcher/venues/selector-native/selector-86b01724-family/selector-86b01724.json",
+          "programKey": "parameters:e82a3edd815dc93002b6fbe8dbfbc6b9e662ea98a558614ce301420f328edefe",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xd0137d8d",
+          "file": "listener/src/searcher/venues/selector-native/selector-d0137d8d-family/selector-d0137d8d.json",
+          "programKey": "parameters:86178dd2e8e9ab2887fd378e7c17111d8937500b97304a0994b8778872560957",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "flash-loan:balancer-v2",
+      "destinations": [
+        {
+          "selector": "0x5c38449e",
+          "file": "listener/src/searcher/venues/selector-native/selector-5c38449e-family/selector-5c38449e.json",
+          "origin": "selector-funding-template"
+        }
+      ]
+    },
+    {
+      "familyId": "flash-loan:morpho",
+      "destinations": [
+        {
+          "selector": "0xe0232b42",
+          "file": "listener/src/searcher/venues/selector-native/selector-e0232b42-family/selector-e0232b42.json",
+          "origin": "selector-funding-template"
+        }
+      ]
+    },
+    {
+      "familyId": "fluid-dex",
+      "destinations": [
+        {
+          "selector": "0x2668dfaa",
+          "file": "listener/src/searcher/venues/selector-native/selector-2668dfaa-family/selector-2668dfaa.json",
+          "programKey": "parameters:0483e65d66454626c590895e4d37db1cc2b43371bc571b61f2e18566dbd9a2de",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "kyberswap-elastic",
+      "destinations": [
+        {
+          "selector": "0x24b31a0c",
+          "file": "listener/src/searcher/venues/selector-native/selector-24b31a0c-family/selector-24b31a0c.json",
+          "programKey": "parameters:e48b6d66eb83c933d411c3b96a9f754620c4d424e64d454e11c50bab096ef0a1",
+          "origin": "scripts/selector-typed-c-migration.json"
+        }
+      ]
+    },
+    {
+      "familyId": "mooniswap",
+      "destinations": [
+        {
+          "selector": "0xe331d039",
+          "file": "listener/src/searcher/venues/selector-native/selector-e331d039-family/selector-e331d039.json",
+          "programKey": "parameters:5e121ba10e561ad85fdc411592a00753b010d99b2c0505e5264f471d9b19a6a6",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:astra-multitoken",
+      "destinations": [
+        {
+          "selector": "0x5e5144eb",
+          "file": "listener/src/searcher/venues/selector-native/selector-5e5144eb-family/selector-5e5144eb.json",
+          "programKey": "parameters:f5d6bedf78e34bbcd6ab33af7b0aa6a40932ed76c1b8827c5a62a0f9dbbc3d66",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:badger-sett-withdraw",
+      "destinations": [
+        {
+          "selector": "0x2e1a7d4d",
+          "file": "listener/src/searcher/venues/selector-native/selector-2e1a7d4d-family/selector-2e1a7d4d.json",
+          "programKey": "parameters:9e9920329c1157484c0a191e6e52891299224adfe20cf5837e7cc42c3b4b0819",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:compound-ctoken",
+      "destinations": [
+        {
+          "selector": "0xdb006a75",
+          "file": "listener/src/searcher/venues/selector-native/selector-db006a75-family/selector-db006a75.json",
+          "programKey": "parameters:076dfa460df4a5dd31d716159c7bd33b1a0df295f48f492443f04e0e1d067868",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:curve-lp",
+      "destinations": [
+        {
+          "selector": "0x029b2f34",
+          "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+          "programKey": "parameters:1cdda7661c1df77f213cacf471158523a7935abd0579809d1250c2e1e753ee16",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x029b2f34",
+          "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+          "programKey": "parameters:8069ed26225913bdc901bffe4ac1cb5d455334ed0297dc895538399a3e2607c7",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x029b2f34",
+          "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+          "programKey": "parameters:8d4ab2c299458e57d12c2b2ff6cbc8ee268447a39bcdcce959cef0153c5c401c",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x029b2f34",
+          "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+          "programKey": "parameters:9af1e753535c4904c55baa574e13df695094763e7d0f62e82fad15fbafd43a8a",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x029b2f34",
+          "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+          "programKey": "parameters:a9eda403b4acd7b6502d3d9fd479e629d002709a43aa7d9a977efa34ea15ef28",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x029b2f34",
+          "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+          "programKey": "parameters:aa8345ea521b38fd93d29ebab4122e1820f462f172a8a0aa1646b8daac5adc8e",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x029b2f34",
+          "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+          "programKey": "parameters:c04a95d4dd6dc9aa1727af044bb6cb59c7b8ab7938f27f8952dcc8632b9eaabd",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x029b2f34",
+          "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+          "programKey": "parameters:ec1fdfa3599f38dd951edab02c33cc6288713b1b26a505e5762a66f391c801ce",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x07329bcd",
+          "file": "listener/src/searcher/venues/selector-native/selector-07329bcd-family/selector-07329bcd.json",
+          "programKey": "parameters:64748e4e3ba2d33b81e0d0776220f5dc2eaa78b103db35cf46b54bc8fadee0af",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x07329bcd",
+          "file": "listener/src/searcher/venues/selector-native/selector-07329bcd-family/selector-07329bcd.json",
+          "programKey": "parameters:ba9c5be060bd6f61e2b78d4a2daf84e89f6ba836bad50ebba01b3831f50a34ff",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x081579a5",
+          "file": "listener/src/searcher/venues/selector-native/selector-081579a5-family/selector-081579a5.json",
+          "programKey": "parameters:2a65d2b824c743fc22f758e070b3620bc43db8a0e906c07dd99ce128bec224a1",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x081579a5",
+          "file": "listener/src/searcher/venues/selector-native/selector-081579a5-family/selector-081579a5.json",
+          "programKey": "parameters:628dd015e0db9d4ee035b8d547e7dc18c233ee3df135052473b26a0f10ea88ee",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0b4c7e4d",
+          "file": "listener/src/searcher/venues/selector-native/selector-0b4c7e4d-family/selector-0b4c7e4d.json",
+          "programKey": "parameters:6c18994e50b1029b3a05b9c55f4f132622ffb56f0009abfc821a7c1b8104735c",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0b4c7e4d",
+          "file": "listener/src/searcher/venues/selector-native/selector-0b4c7e4d-family/selector-0b4c7e4d.json",
+          "programKey": "parameters:7952c73d97da7195c8954787d9b68a50080432cde3b7b04789158d5fe957bed1",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0b4c7e4d",
+          "file": "listener/src/searcher/venues/selector-native/selector-0b4c7e4d-family/selector-0b4c7e4d.json",
+          "programKey": "parameters:dcea04857fad51622533b06058388866c893ceb3316de1ec0c09ed015eab3367",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0b4c7e4d",
+          "file": "listener/src/searcher/venues/selector-native/selector-0b4c7e4d-family/selector-0b4c7e4d.json",
+          "programKey": "parameters:ff711a258d45203744a47698ae91cd89eaa2e4746de8a652a2ca62430a0f711b",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0c3e4b54",
+          "file": "listener/src/searcher/venues/selector-native/selector-0c3e4b54-family/selector-0c3e4b54.json",
+          "programKey": "parameters:0fb1382f4e755eb3db170f1f44f632c735e0d90478e41608946b8c28a427eaf9",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0c3e4b54",
+          "file": "listener/src/searcher/venues/selector-native/selector-0c3e4b54-family/selector-0c3e4b54.json",
+          "programKey": "parameters:21c903294e943e0d5fea527743fd134e4563d690d57086218d15d4785495683b",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0c3e4b54",
+          "file": "listener/src/searcher/venues/selector-native/selector-0c3e4b54-family/selector-0c3e4b54.json",
+          "programKey": "parameters:301cdf4915fdba54a05a227c94ce56ca78c7a121e0d764373c7210ce9bffc036",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0c3e4b54",
+          "file": "listener/src/searcher/venues/selector-native/selector-0c3e4b54-family/selector-0c3e4b54.json",
+          "programKey": "parameters:97a9dca501197e2b8fdb630a41dc14bb59a67f2b75c75a0fadcf0c4b2811f3e9",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0e08bda6",
+          "file": "listener/src/searcher/venues/selector-native/selector-0e08bda6-family/selector-0e08bda6.json",
+          "programKey": "parameters:fa9f50fa94f891f8be76b892da4349438e44cac9b63d12236750c4c8bb0448c2",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0fbcee6e",
+          "file": "listener/src/searcher/venues/selector-native/selector-0fbcee6e-family/selector-0fbcee6e.json",
+          "programKey": "parameters:20c1a93778a18030c5903e8ad94f1ab04b01d9179b3f1119fba4e7893751143d",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0fbcee6e",
+          "file": "listener/src/searcher/venues/selector-native/selector-0fbcee6e-family/selector-0fbcee6e.json",
+          "programKey": "parameters:cfd4c27e2c0ab812db5dee00bff45e26f38236af483a948494a50204cc5967f8",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x1a4d01d2",
+          "file": "listener/src/searcher/venues/selector-native/selector-1a4d01d2-family/selector-1a4d01d2.json",
+          "programKey": "parameters:0eae0489f56357eb7ef765d34eae2183c1801528385898e13649b148fe8832b5",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x1a4d01d2",
+          "file": "listener/src/searcher/venues/selector-native/selector-1a4d01d2-family/selector-1a4d01d2.json",
+          "programKey": "parameters:24a4f52eaebe0de5852275fba5ccf6bb1cdd26f12bc023bff1a679d5c1afa8ab",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x1a4d01d2",
+          "file": "listener/src/searcher/venues/selector-native/selector-1a4d01d2-family/selector-1a4d01d2.json",
+          "programKey": "parameters:4fca8a21818df4c138a33907fcbd65cef6321d2fe0d4b0bf47117577f5857920",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x4515cef3",
+          "file": "listener/src/searcher/venues/selector-native/selector-4515cef3-family/selector-4515cef3.json",
+          "programKey": "parameters:140116d67ec640b2bedb3fb1673ffdcba86ba6e0c0bd4b1d4fd544af1bca7c3b",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x4515cef3",
+          "file": "listener/src/searcher/venues/selector-native/selector-4515cef3-family/selector-4515cef3.json",
+          "programKey": "parameters:90a2eb0b4303f6217839cc84dec4e083c0dfdeb542ffa76a8feaf904adf1309b",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x4515cef3",
+          "file": "listener/src/searcher/venues/selector-native/selector-4515cef3-family/selector-4515cef3.json",
+          "programKey": "parameters:d0bba2076dd6f78b676888ef74f5871a0ece7b91e6a99b02cb7dcaeb651d4ee1",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x5cecb5f7",
+          "file": "listener/src/searcher/venues/selector-native/selector-5cecb5f7-family/selector-5cecb5f7.json",
+          "programKey": "parameters:001c596222245e9e1a2b0198bac33853d17b0abc7864e87aa8556d143b8cfcf6",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x5cecb5f7",
+          "file": "listener/src/searcher/venues/selector-native/selector-5cecb5f7-family/selector-5cecb5f7.json",
+          "programKey": "parameters:33298627eca6efb983a7920e401015e1abb811d13f311b862ade56717587e343",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x5cecb5f7",
+          "file": "listener/src/searcher/venues/selector-native/selector-5cecb5f7-family/selector-5cecb5f7.json",
+          "programKey": "parameters:97cb8ff96ae57d5f37ab3b0a3c29765dedd1735224efc41eec6e62fa3f459bae",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x7328333b",
+          "file": "listener/src/searcher/venues/selector-native/selector-7328333b-family/selector-7328333b.json",
+          "programKey": "parameters:292877f0214d84db024a54acba967fead6014fa3b5b25cc998716074bb8ecb11",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x7328333b",
+          "file": "listener/src/searcher/venues/selector-native/selector-7328333b-family/selector-7328333b.json",
+          "programKey": "parameters:42e6aac062726a59be00bf6f544221be8c9ee1fdc71bd788d276feb01e507d68",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x75b96abc",
+          "file": "listener/src/searcher/venues/selector-native/selector-75b96abc-family/selector-75b96abc.json",
+          "programKey": "parameters:109a7c1d5302be98fd426cfde967e51bbe32e44d3e362113932d9d5df76ed411",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x75b96abc",
+          "file": "listener/src/searcher/venues/selector-native/selector-75b96abc-family/selector-75b96abc.json",
+          "programKey": "parameters:5249e66add431d104182d9c72c8156675c556b8893e93929b6aa6b920163fbd2",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x75b96abc",
+          "file": "listener/src/searcher/venues/selector-native/selector-75b96abc-family/selector-75b96abc.json",
+          "programKey": "parameters:598901135c59f5500c37dbb8ac2dad72d9bd569a4049df3cd8263a3d5cf94b8c",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x978d5f79",
+          "file": "listener/src/searcher/venues/selector-native/selector-978d5f79-family/selector-978d5f79.json",
+          "programKey": "parameters:2f71fb01ccc68bc7f802edb326cb7c78db9bab9a585ef984d523d3a877fca366",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x978d5f79",
+          "file": "listener/src/searcher/venues/selector-native/selector-978d5f79-family/selector-978d5f79.json",
+          "programKey": "parameters:3fb05e06994b22677f7348dbe3fff3df5e004ba67dae22d308ce3c10a0f864a9",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x978d5f79",
+          "file": "listener/src/searcher/venues/selector-native/selector-978d5f79-family/selector-978d5f79.json",
+          "programKey": "parameters:48ff7ab99234aa49a6bc3ee00b5e4e8e1352fdd210e63e3b55801fbc1ae4100b",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x978d5f79",
+          "file": "listener/src/searcher/venues/selector-native/selector-978d5f79-family/selector-978d5f79.json",
+          "programKey": "parameters:d62c0dab7c0be3a2d2aeeee9b9349ef11869176f5e93e2eb129730ffd2921317",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xa7256d09",
+          "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+          "programKey": "parameters:152e7c3cab37a3ec9c4f3fcdb0ccc4830f1223c3bd9227bc9937d7229ec562a2",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xa7256d09",
+          "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+          "programKey": "parameters:32db1093aec9979851d856b2127d7ecf24b23ea887d83fe24109795b579331bc",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xa7256d09",
+          "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+          "programKey": "parameters:4f52bf8d437f8c2adf60d32a2dc19615cec03f38fd31c5a61ce460583335a041",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xa7256d09",
+          "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+          "programKey": "parameters:708c39bf860adb77531bab46d682ff58b6205fa6df79da1289d8ee09bba7e176",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xa7256d09",
+          "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+          "programKey": "parameters:832c7ebb89858642eecee349652654b9559a519921476399aa6ac69e4c5298c3",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xa7256d09",
+          "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+          "programKey": "parameters:b1f139586d0b7e945ed9bfdf858bc20b2fec8d1233e81536f02e2e95e5f2155e",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xa7256d09",
+          "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+          "programKey": "parameters:cf06d650f98cb5c10cd65633490af41267189de3d8bfd60ee0de3bca7daf310c",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xa7256d09",
+          "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+          "programKey": "parameters:fcba91864ff2cf24eb9452b883a3de93a0036aac6aba0367f805022fbeb5c897",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xb72df5de",
+          "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+          "programKey": "parameters:469a0dcf107a625c7a8f3e62fb221389a3afe9bf424f889fa4cbfa394c22236c",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xb72df5de",
+          "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+          "programKey": "parameters:583c9f6439d43563fcdd9b63df136785256b34722078fbe5e4479741cfaf9a7d",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xb72df5de",
+          "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+          "programKey": "parameters:6eba2caab91460ab1a6b1f775fec9799e85649076de52ab73f369fefa11ccbf4",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xb72df5de",
+          "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+          "programKey": "parameters:7dbc7e5565bfcc2ea150f73cc9af3134ae5832e0f2e1d7b64c2d1f023cc3e2b0",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xb72df5de",
+          "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+          "programKey": "parameters:c15cd05d411350a377dacbee583901edc61f6b24f23d35baed20e8248471c5c3",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xb72df5de",
+          "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+          "programKey": "parameters:d31132f625ed4ce0c59317fa595cb868f83d17fb931be58cd79f4a0413a73e99",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xb72df5de",
+          "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+          "programKey": "parameters:e3b5575bf1865168896790a27472f8d0c570785d60c88ce8ad7a81a77819de1d",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xb72df5de",
+          "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+          "programKey": "parameters:f6823654bd8f17ba2593dd62b9c756f86abeb5188bbc36ae198de004760dd18b",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xcb495064",
+          "file": "listener/src/searcher/venues/selector-native/selector-cb495064-family/selector-cb495064.json",
+          "programKey": "parameters:0cd178213084fc141ba670437f65c8eed868d3adf155acbfb1641b2551a13e42",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xcb495064",
+          "file": "listener/src/searcher/venues/selector-native/selector-cb495064-family/selector-cb495064.json",
+          "programKey": "parameters:4ec217ff0bce328a3c930a305f2cf01bb2500c242ef6df6077d2f6910f0b476d",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xcb495064",
+          "file": "listener/src/searcher/venues/selector-native/selector-cb495064-family/selector-cb495064.json",
+          "programKey": "parameters:db41b616a7347f261dd25208d2c1cfa4d12a799a556272fd843aa3086a86051d",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xcb495064",
+          "file": "listener/src/searcher/venues/selector-native/selector-cb495064-family/selector-cb495064.json",
+          "programKey": "parameters:e5682d2fd0171906c38a82f9ce3c6bc4e3b258cf4cbd8266c0e2c6fa2590e107",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xf1dc3cc9",
+          "file": "listener/src/searcher/venues/selector-native/selector-f1dc3cc9-family/selector-f1dc3cc9.json",
+          "programKey": "parameters:6a9dad3f52370453fb65964f85b78f9b74bd58b201b20e857b6b9c198115f09c",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xf1dc3cc9",
+          "file": "listener/src/searcher/venues/selector-native/selector-f1dc3cc9-family/selector-f1dc3cc9.json",
+          "programKey": "parameters:b70c55e086023baf4dc3bc42c23b7b6d6ecb3c8d3db35c0402456996078de358",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:eigenpie",
+      "destinations": [
+        {
+          "selector": "0x2ebe07c8",
+          "file": "listener/src/searcher/venues/selector-native/selector-2ebe07c8-family/selector-2ebe07c8.json",
+          "programKey": "parameters:2d5469e8f8736126a850b7be3447108b4b83ed5aa224867f681784e92fa0973f",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:erc4626",
+      "destinations": [
+        {
+          "selector": "0x6e553f65",
+          "file": "listener/src/searcher/venues/selector-native/selector-6e553f65-family/selector-6e553f65.json",
+          "programKey": "parameters:0732d17f49beb81e2ab846f5d0ce33fe129dfbf1c9090c6da57a27f59b73c31a",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x6e553f65",
+          "file": "listener/src/searcher/venues/selector-native/selector-6e553f65-family/selector-6e553f65.json",
+          "programKey": "parameters:6bca85c6501a8904dc96d9fb54fc0e61b6bbc28cd910cc91c9f1742e24ae6129",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x6e553f65",
+          "file": "listener/src/searcher/venues/selector-native/selector-6e553f65-family/selector-6e553f65.json",
+          "programKey": "parameters:a13461b3d8d17e702390f852d6724005f2dbf23362aee81ed9d84b6fee9292d5",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x94bf804d",
+          "file": "listener/src/searcher/venues/selector-native/selector-94bf804d-family/selector-94bf804d.json",
+          "programKey": "parameters:af9716a627682e4ee7b0bee88afed1df8ab19ebeae0b25ec8833726922493f52",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xadc9772e",
+          "file": "listener/src/searcher/venues/selector-native/selector-adc9772e-family/selector-adc9772e.json",
+          "programKey": "parameters:1423f8a2b5cec88ff5d4c5278db0228fa5f7134976ff3ff659685833faeb1129",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xb460af94",
+          "file": "listener/src/searcher/venues/selector-native/selector-b460af94-family/selector-b460af94.json",
+          "programKey": "parameters:3eec3e29df38f8d066cae977069946d0b854bc5421992262aa854671a69d3a0a",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xba087652",
+          "file": "listener/src/searcher/venues/selector-native/selector-ba087652-family/selector-ba087652.json",
+          "programKey": "parameters:b10e1a6148dfcb05914c1c7a1bd08e2a28ac375cd85c576018b7896072dfd9c5",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xba087652",
+          "file": "listener/src/searcher/venues/selector-native/selector-ba087652-family/selector-ba087652.json",
+          "programKey": "parameters:c94459093122c6e3e0af966ca3beac9ef2542f76d06707c63f7a10c05f978fbe",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xba087652",
+          "file": "listener/src/searcher/venues/selector-native/selector-ba087652-family/selector-ba087652.json",
+          "programKey": "parameters:ecd22d00559890cd29f38998cddb3b7b37f3f2db7f62a950c456b0aa254006d7",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xc2a672e0",
+          "file": "listener/src/searcher/venues/selector-native/selector-c2a672e0-family/selector-c2a672e0.json",
+          "programKey": "parameters:5bdad024f0e5b1766ea9aca997f63185688d60234f194ae475cf5dc6ec2000af",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:erc4626-silo-redeem",
+      "destinations": [
+        {
+          "selector": "0xfea53be1",
+          "file": "listener/src/searcher/venues/selector-native/selector-fea53be1-family/selector-fea53be1.json",
+          "programKey": "parameters:3314185a8c69e4b241b3af3cbe0202905b9923c8d4ee9226b4d19d02df1c7aa6",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:ethertoken-native-redeem",
+      "destinations": [
+        {
+          "selector": "0x2e1a7d4d",
+          "file": "listener/src/searcher/venues/selector-native/selector-2e1a7d4d-family/selector-2e1a7d4d.json",
+          "programKey": "parameters:72fa3868281018004d30b35b8500732a330817cdd267dd4464868872a3cbf12c",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:few-wrapped",
+      "destinations": [
+        {
+          "selector": "0x26599850",
+          "file": "listener/src/searcher/venues/selector-native/selector-26599850-family/selector-26599850.json",
+          "programKey": "parameters:5aac7e3893916b7c8bc14e3d6d6cd670a87b6ef759678b371c4fd170bc8c915c",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x5dbd6059",
+          "file": "listener/src/searcher/venues/selector-native/selector-5dbd6059-family/selector-5dbd6059.json",
+          "programKey": "parameters:e5c123251cad5e33679e52dc8c4e62618ceedcbf616d61f54040643615909c1a",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xde0e9a3e",
+          "file": "listener/src/searcher/venues/selector-native/selector-de0e9a3e-family/selector-de0e9a3e.json",
+          "programKey": "parameters:ca89c61816df65b8f06bcc1bcefb40f73eb30e206ae74d66714799aa392afd5e",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xea598cb0",
+          "file": "listener/src/searcher/venues/selector-native/selector-ea598cb0-family/selector-ea598cb0.json",
+          "programKey": "parameters:eef2aa307ee46180697382a1a95f84dc1df19f685f1045e91e54e5acaeac29a1",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:goldx",
+      "destinations": [
+        {
+          "selector": "0x40c10f19",
+          "file": "listener/src/searcher/venues/selector-native/selector-40c10f19-family/selector-40c10f19.json",
+          "programKey": "parameters:75c60fb540306427425f9a274e84d2a7a26b554535c3b316f32507b25a4227b1",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:metronome-hgusdc",
+      "destinations": [
+        {
+          "selector": "0xcb70e273",
+          "file": "listener/src/searcher/venues/selector-native/selector-cb70e273-family/selector-cb70e273.json",
+          "programKey": "parameters:0775af849bfcb03f855289b543f0ff8040a42da2f6a78d258609b43d081dd3c2",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:metronome-synth",
+      "destinations": [
+        {
+          "selector": "0xdf791e50",
+          "file": "listener/src/searcher/venues/selector-native/selector-df791e50-family/selector-df791e50.json",
+          "programKey": "parameters:9be648a4130757e7d0160c51ffae935b1b4b634d8610f8282b7ba396d4b489b4",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:peapods-debond",
+      "destinations": [
+        {
+          "selector": "0xee9c79da",
+          "file": "listener/src/searcher/venues/selector-native/selector-ee9c79da-family/selector-ee9c79da.json",
+          "programKey": "parameters:b2ba672e07fea3dcbad9ac1cf3ed2cb4350a48da1d12840899d3183c72b0035f",
+          "origin": "listener/src/searcher/generated/selector-typed-root-migration.generated.json"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:psm",
+      "destinations": [
+        {
+          "selector": "0x8d7ef9bb",
+          "file": "listener/src/searcher/venues/selector-native/selector-8d7ef9bb-family/selector-8d7ef9bb.json",
+          "programKey": "parameters:937a660fb01a97bc50eedc31930b7e519fd7fe8a581303f80c7ce9a58dff81b6",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x95991276",
+          "file": "listener/src/searcher/venues/selector-native/selector-95991276-family/selector-95991276.json",
+          "programKey": "parameters:991eafebb19da060bd257ef3f0e5e3fabcfc99c5f66cdc805aa072776426deae",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:psv",
+      "destinations": [
+        {
+          "selector": "0x8d7ef9bb",
+          "file": "listener/src/searcher/venues/selector-native/selector-8d7ef9bb-family/selector-8d7ef9bb.json",
+          "programKey": "parameters:e48f97421c97592834140acfc6dc1961ae225eef5e52d60184d371dfc384bba6",
+          "origin": "listener/src/searcher/generated/selector-typed-root-migration.generated.json"
+        },
+        {
+          "selector": "0x95991276",
+          "file": "listener/src/searcher/venues/selector-native/selector-95991276-family/selector-95991276.json",
+          "programKey": "parameters:d9b75ea6f3b914eb64f9674412d15893267042b70b07cf27290c78a384b86ea9",
+          "origin": "listener/src/searcher/generated/selector-typed-root-migration.generated.json"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:rocksolid",
+      "destinations": [
+        {
+          "selector": "0xd01d073a",
+          "file": "listener/src/searcher/venues/selector-native/selector-d01d073a-family/selector-d01d073a.json",
+          "programKey": "parameters:ca94c100f98d723f3733b9dc50404e6d0567c4817c9a4d85c474f98750ec8ad6",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:self-burn-native",
+      "destinations": [
+        {
+          "selector": "0xa9059cbb",
+          "file": "listener/src/searcher/venues/selector-native/selector-a9059cbb-family/selector-a9059cbb.json",
+          "programKey": "parameters:ce90ac1187671ab106ef93fa4b0932f731ed9953b933e82ea74ae76a5e920f23",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:set-redemption",
+      "destinations": [
+        {
+          "selector": "0x1c2a0e40",
+          "file": "listener/src/searcher/venues/selector-native/selector-1c2a0e40-family/selector-1c2a0e40.json",
+          "programKey": "parameters:5694bbd1921d40b17d2a801ec481a21efe912b7b905319e79f07646eb25e4891",
+          "origin": "listener/src/searcher/generated/selector-typed-set-migration.generated.json"
+        },
+        {
+          "selector": "0x1c2a0e40",
+          "file": "listener/src/searcher/venues/selector-native/selector-1c2a0e40-family/selector-1c2a0e40.json",
+          "programKey": "parameters:8cff18d2b3480f5b00620d63982a7abcf33c26db6b70ee0d6c0dbec4fe41f4ab",
+          "origin": "listener/src/searcher/generated/selector-typed-set-migration.generated.json"
+        },
+        {
+          "selector": "0x5c833bfd",
+          "file": "listener/src/searcher/venues/selector-native/selector-5c833bfd-family/selector-5c833bfd.json",
+          "programKey": "parameters:72e66779ee93e2dafd80cc6ae44607bc704c038ce3e817f192f5be61c4db31f6",
+          "origin": "listener/src/searcher/generated/selector-typed-set-migration.generated.json"
+        },
+        {
+          "selector": "0x73088bf7",
+          "file": "listener/src/searcher/venues/selector-native/selector-73088bf7-family/selector-73088bf7.json",
+          "programKey": "parameters:02f483df403b0e77a3cdfaaa551b83aebbf415c1b4f80eab01581b7860674d33",
+          "origin": "listener/src/searcher/generated/selector-typed-set-migration.generated.json"
+        },
+        {
+          "selector": "0x73088bf7",
+          "file": "listener/src/searcher/venues/selector-native/selector-73088bf7-family/selector-73088bf7.json",
+          "programKey": "parameters:514b83c9bd86a0ee26eab2292d18239122084e8433434e99ee785669bcc1c516",
+          "origin": "listener/src/searcher/generated/selector-typed-set-migration.generated.json"
+        },
+        {
+          "selector": "0x867904b4",
+          "file": "listener/src/searcher/venues/selector-native/selector-867904b4-family/selector-867904b4.json",
+          "programKey": "parameters:07c136a6e94959d4d189be5cc0aef4b8175a3924acef5d28b075cc2a672ff878",
+          "origin": "listener/src/searcher/generated/selector-typed-set-migration.generated.json"
+        },
+        {
+          "selector": "0x867904b4",
+          "file": "listener/src/searcher/venues/selector-native/selector-867904b4-family/selector-867904b4.json",
+          "programKey": "parameters:cdc0c6ead559398eeb9f60306be13c01f20a1d2c410254363d6b207005e7f158",
+          "origin": "listener/src/searcher/generated/selector-typed-set-migration.generated.json"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:staked-usdat",
+      "destinations": [
+        {
+          "selector": "0x6e553f65",
+          "file": "listener/src/searcher/venues/selector-native/selector-6e553f65-family/selector-6e553f65.json",
+          "programKey": "parameters:8082346582adf5c0f1912397ef33cb6fc9cdae441ecb0b74ba002e34e6e10199",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:token-conversion",
+      "destinations": [
+        {
+          "selector": "0x2b2dfd2c",
+          "file": "listener/src/searcher/venues/selector-native/selector-2b2dfd2c-family/selector-2b2dfd2c.json",
+          "programKey": "parameters:1f7c18b457fbcd3b86c6ec1a56b5c6a0727348ac2e6a486532abdf3a8d326050",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x6145d1b7",
+          "file": "listener/src/searcher/venues/selector-native/selector-6145d1b7-family/selector-6145d1b7.json",
+          "programKey": "parameters:ad289c9c6029e70bcbd9784e412b1f7871b8f555a814b18eaa938ff96e73d1aa",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xa0712d68",
+          "file": "listener/src/searcher/venues/selector-native/selector-a0712d68-family/selector-a0712d68.json",
+          "programKey": "parameters:0719153f85f5818aebe6c859a79541d156eebe9e2039048382cf7b42b0e2fae3",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xdb006a75",
+          "file": "listener/src/searcher/venues/selector-native/selector-db006a75-family/selector-db006a75.json",
+          "programKey": "parameters:6aad477f61390c881024cecabdbb9b1807816c310297ebb532245ddc65983117",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:token-migration",
+      "destinations": [
+        {
+          "selector": "0xf5720c4a",
+          "file": "listener/src/searcher/venues/selector-native/selector-f5720c4a-family/selector-f5720c4a.json",
+          "programKey": "parameters:f2f286571e3e5f3cad719db223f1e29f0a94cef9d9616335731a4e38caee90a7",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:wsteth",
+      "destinations": [
+        {
+          "selector": "0xde0e9a3e",
+          "file": "listener/src/searcher/venues/selector-native/selector-de0e9a3e-family/selector-de0e9a3e.json",
+          "programKey": "parameters:c5141d48aa6054825b26274f05eb7cb7e954bcdaf263dee8880c2b3ab327ae68",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0xea598cb0",
+          "file": "listener/src/searcher/venues/selector-native/selector-ea598cb0-family/selector-ea598cb0.json",
+          "programKey": "parameters:9420dfcc263cf7fca72119deaf44c9ddd2c6163261d6f52335dea31f512e336b",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:yearn-auction",
+      "destinations": [
+        {
+          "selector": "0x4d44e663",
+          "file": "listener/src/searcher/venues/selector-native/selector-4d44e663-family/selector-4d44e663.json",
+          "programKey": "parameters:fa922feaf0460ac5e8067806fc34b2e6486702bf4fea333a57dd7028a2b44336",
+          "origin": "listener/src/searcher/generated/selector-typed-root-migration.generated.json"
+        },
+        {
+          "selector": "0x52180208",
+          "file": "listener/src/searcher/venues/selector-native/selector-52180208-family/selector-52180208.json",
+          "programKey": "parameters:721a13cfee0073c90e7b2628b215be698330555c8f103910b79dda0985c91279",
+          "origin": "listener/src/searcher/generated/selector-typed-root-migration.generated.json"
+        },
+        {
+          "selector": "0x66ae5880",
+          "file": "listener/src/searcher/venues/selector-native/selector-66ae5880-family/selector-66ae5880.json",
+          "programKey": "parameters:a33645f487c82588d947c65606af7f81d5aec6ca4a2e218e8c87613ce4b8c472",
+          "origin": "listener/src/searcher/generated/selector-typed-root-migration.generated.json"
+        },
+        {
+          "selector": "0x8033d687",
+          "file": "listener/src/searcher/venues/selector-native/selector-8033d687-family/selector-8033d687.json",
+          "programKey": "parameters:5e646651a4c6fbef36ce02f306eb8cd6c3d2c056152c8781b35652d3cde36e6c",
+          "origin": "listener/src/searcher/generated/selector-typed-root-migration.generated.json"
+        }
+      ]
+    },
+    {
+      "familyId": "protocol:yieldbasis-lt",
+      "destinations": [
+        {
+          "selector": "0x00aeef8a",
+          "file": "listener/src/searcher/venues/selector-native/selector-00aeef8a-family/selector-00aeef8a.json",
+          "programKey": "parameters:bf17313188b87be3cc66cf53d35cac1617ee474aa45c0ca6b1c9514424db80f3",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x0ad58d2f",
+          "file": "listener/src/searcher/venues/selector-native/selector-0ad58d2f-family/selector-0ad58d2f.json",
+          "programKey": "parameters:d2daaa8e42526cf9bf645693726a06d32592a469b9c2d8bad731e47a46a6955f",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0x441a3e70",
+          "file": "listener/src/searcher/venues/selector-native/selector-441a3e70-family/selector-441a3e70.json",
+          "programKey": "parameters:8cf3d470e2873cdc6ffa2585ea20bb29da37c698e4cf0d240ee0cc06b3d78ece",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        },
+        {
+          "selector": "0xfad3cc4b",
+          "file": "listener/src/searcher/venues/selector-native/selector-fad3cc4b-family/selector-fad3cc4b.json",
+          "programKey": "parameters:f953b8b863b8fa712affcf66dd7bc74c323a581caf1e735bc0cb2593e38ef6f5",
+          "origin": "listener/src/searcher/generated/selector-typed-a-migration.generated.json"
+        }
+      ]
+    },
+    {
+      "familyId": "swap:algebra-integral",
+      "destinations": [
+        {
+          "selector": "0x128acb08",
+          "file": "listener/src/searcher/venues/selector-native/selector-128acb08-family/selector-128acb08.json",
+          "programKey": "parameters:564551e96fbfb1c5a165a1a5510dcc1b99d6f7c8feb75e256ac1019fd75cba85",
+          "origin": "scripts/selector-typed-c-migration.json"
+        }
+      ]
+    },
+    {
+      "familyId": "univ2-standard",
+      "destinations": [
+        {
+          "selector": "0x022c0d9f",
+          "file": "listener/src/searcher/venues/selector-native/selector-022c0d9f-family/selector-022c0d9f.json",
+          "programKey": "parameters:0d6176b5d11a2aef02211a58bd644cbe92880d9618b21a4d9b2986576e8872cd",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x022c0d9f",
+          "file": "listener/src/searcher/venues/selector-native/selector-022c0d9f-family/selector-022c0d9f.json",
+          "programKey": "parameters:8b22403920f647e6ab7936532db6d23938aa7d331934373adb6aa744e5e03a66",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x022c0d9f",
+          "file": "listener/src/searcher/venues/selector-native/selector-022c0d9f-family/selector-022c0d9f.json",
+          "programKey": "parameters:f46ee4c72403e400bf9f7afe3cec1abef346256b78ebeac193038719c8cb4756",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "univ3-standard",
+      "destinations": [
+        {
+          "selector": "0x128acb08",
+          "file": "listener/src/searcher/venues/selector-native/selector-128acb08-family/selector-128acb08.json",
+          "programKey": "parameters:db29cfc904dece1d49ef440fbaf92b6963216236ab368d4f519bc3d5a0e98814",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "univ4",
+      "destinations": [
+        {
+          "selector": "0x48c89491",
+          "file": "listener/src/searcher/venues/selector-native/selector-48c89491-family/selector-48c89491.json",
+          "programKey": "parameters:e279a9bd0d6e5da8ecddba7aa6f75eebd4f3c48df2452bd69cf3f55ba6e77982",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "univ4-fee-hook",
+      "destinations": [
+        {
+          "selector": "0x48c89491",
+          "file": "listener/src/searcher/venues/selector-native/selector-48c89491-family/selector-48c89491.json",
+          "programKey": "parameters:0b368d9f5b0cba468fd8698f72cbcf57146869e6ef467a76ef057ba1e3176db8",
+          "origin": "declarative-base-execution"
+        },
+        {
+          "selector": "0x48c89491",
+          "file": "listener/src/searcher/venues/selector-native/selector-48c89491-family/selector-48c89491.json",
+          "programKey": "parameters:6da170ebcb90c79510edb8d64cf3eefb3a9d63532fd55bca75d08462d6772260",
+          "origin": "declarative-base-execution"
+        }
+      ]
+    },
+    {
+      "familyId": "vault-spot",
+      "destinations": [
+        {
+          "selector": "0x93316212",
+          "file": "listener/src/searcher/venues/selector-native/selector-93316212-family/selector-93316212.json",
+          "programKey": "parameters:1af7a11618317380fc97742bb37e56c444bb48f0e8c29facbd9969926d0b6707",
+          "origin": "listener/src/searcher/generated/selector-typed-root-migration.generated.json"
+        }
+      ]
+    }
+  ],
+  "declarations": [
+    {
+      "selector": "0x00aeef8a",
+      "familyId": "execution:0x00aeef8a:abi-19f9fabb765dc8f26d342b6694b4383a601149baa0ec46688bc796e1f4b4a692",
+      "signature": "function deposit(uint256, uint256, uint256) returns (uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-00aeef8a-family/selector-00aeef8a.json",
+      "sha256": "6cc62c41af9f3d071e57334735bb789928517eb8d8c8edd28c0be3387975bec7",
+      "semanticHash": "85fd39ea0acd39fbba66a0621cf23b2ebdbf00b384653a8da027da899a9f8183",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:bf17313188b87be3cc66cf53d35cac1617ee474aa45c0ca6b1c9514424db80f3",
+          "mode": "execution-extension",
+          "migrationKey": "yieldbasis-lt:deposit:executor"
+        }
+      ]
+    },
+    {
+      "selector": "0x013efd8b",
+      "familyId": "execution:0x013efd8b:abi-4ebd8ba4746b3ffb2633ceec01e9dd9c66078e9fe3e34a5b0de6133e4afda240",
+      "signature": "function tokenToEthSwapOutput(uint256, uint256, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-013efd8b-family/selector-013efd8b.json",
+      "sha256": "1f0fecc1fd805a659c487e8d888dc2addda386c0d2341d5b7378a209d9c95f15",
+      "semanticHash": "be833520d615665f9a6a1c96e49756d1cdb282bc6764332bca2f22333ef48d00",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x01ec954a",
+      "familyId": "execution:0x01ec954a:abi-13e55ee23897164c0f97c075b5d5f5597f5372bae8f56f3acfa949789449b796",
+      "signature": "function onSwap((uint8, address, address, uint256, bytes32, uint256, address, address, bytes), uint256[], uint256, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-01ec954a-family/selector-01ec954a.json",
+      "sha256": "9a6713ed075a5a776c2a36054adae1708b9699cad5b557ce4073f6a52de58ed7",
+      "semanticHash": "8cd7003a51919502dc3f431a83b181537dc5fbae3824af6828bd0c2b4b9b97a4",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x022c0d9f",
+      "familyId": "execution:0x022c0d9f:abi-84bd60829e63d1e7a3d9138778146957ca007ad5f0b73d9843af28c5f9f5b3c5",
+      "signature": "function swap(uint256, uint256, address, bytes)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-022c0d9f-family/selector-022c0d9f.json",
+      "sha256": "cab0c8d0b401c21f9a53af50ef7c59654be230f2dccda6b33f0f66f8aa0566cc",
+      "semanticHash": "6cd31c911d3bf9225b6c6e9d839196837278e3414af9af5e80388e88fd21ca6e",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:2dab1f524c1c78d50044b3e7eff6b2ea51cceca1ad795425dd73aec56f9125fe",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:f46ee4c72403e400bf9f7afe3cec1abef346256b78ebeac193038719c8cb4756",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:a553f7b58dcfadb4ef459e37931bbc5df50a49c116d45668728158c222482186",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:0d6176b5d11a2aef02211a58bd644cbe92880d9618b21a4d9b2986576e8872cd",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:8b22403920f647e6ab7936532db6d23938aa7d331934373adb6aa744e5e03a66",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x029b2f34",
+      "familyId": "execution:0x029b2f34:abi-3098a8ee986baf5ebe630638801ff6b5a9a356d5517fb97f973a11250ae2ceea",
+      "signature": "function add_liquidity(uint256[4], uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+      "sha256": "95e00abaef08c9d677234d8820a73320d9b1dba10a6c2417d9afbb738e8dde17",
+      "semanticHash": "2ca72ea7c3a8b1f315586ed5d07b122218eaf6137417b28cbb6d081571112935",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:9af1e753535c4904c55baa574e13df695094763e7d0f62e82fad15fbafd43a8a",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:none:mint:0"
+        },
+        {
+          "programKey": "parameters:8069ed26225913bdc901bffe4ac1cb5d455334ed0297dc895538399a3e2607c7",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:none:mint:1"
+        },
+        {
+          "programKey": "parameters:1cdda7661c1df77f213cacf471158523a7935abd0579809d1250c2e1e753ee16",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:none:mint:2"
+        },
+        {
+          "programKey": "parameters:aa8345ea521b38fd93d29ebab4122e1820f462f172a8a0aa1646b8daac5adc8e",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:none:mint:3"
+        },
+        {
+          "programKey": "parameters:a9eda403b4acd7b6502d3d9fd479e629d002709a43aa7d9a977efa34ea15ef28",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:zap:mint:0"
+        },
+        {
+          "programKey": "parameters:8d4ab2c299458e57d12c2b2ff6cbc8ee268447a39bcdcce959cef0153c5c401c",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:zap:mint:1"
+        },
+        {
+          "programKey": "parameters:ec1fdfa3599f38dd951edab02c33cc6288713b1b26a505e5762a66f391c801ce",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:zap:mint:2"
+        },
+        {
+          "programKey": "parameters:c04a95d4dd6dc9aa1727af044bb6cb59c7b8ab7938f27f8952dcc8632b9eaabd",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:zap:mint:3"
+        }
+      ]
+    },
+    {
+      "selector": "0x032d2276",
+      "familyId": "execution:0x032d2276:abi-762ed4db41e88fd2a0fa5e6085936dbf3e6cb1ebc9ab43283e65dd6fcd734d0d",
+      "signature": "function operate(uint256, int256, int256, address) payable returns (uint256, int256, int256)",
+      "domain": "credit",
+      "file": "listener/src/searcher/venues/selector-native/selector-032d2276-family/selector-032d2276.json",
+      "sha256": "d3f61dcb91b97a24e5350272d8194f470b0459a656954b3d73104cfa6bfd36ae",
+      "semanticHash": "91ba13bf8f630897ffc9573fd5ea4085dda5f07167eab388b6f992fd91b7d876",
+      "enabled": true,
+      "status": "credit-position-program",
+      "programs": [
+        {
+          "programKey": "parameters:c1c07315c431b2d6fbb1f2bc5b5fac3638b851e1dfd4fbc03f7f11273d5086a9",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x04e45aaf",
+      "familyId": "execution:0x04e45aaf:abi-f3cae9e87a71f09352c6331459aebe4575fd473acc6b82702d487689ffc9b209",
+      "signature": "function exactInputSingle((address, address, uint24, address, uint256, uint256, uint160))",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-04e45aaf-family/selector-04e45aaf.json",
+      "sha256": "020d12ef8f96b44c3195e63ec9c7414c291506ce034d6f38a9a091d2d353c0e8",
+      "semanticHash": "27793d1859f3b63651bf1ed19df0fa317c725c4f8f37a52fdfb74ca89bf4000e",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x07329bcd",
+      "familyId": "execution:0x07329bcd:abi-7b32c3f58bd71ccf70e651f519d410fb13569aed9b6cea34c734ad5dacd95cdb",
+      "signature": "function remove_liquidity_one_coin(uint256, uint256, uint256, bool, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-07329bcd-family/selector-07329bcd.json",
+      "sha256": "64685675b914bad493bdecc2e0cebbb214ba8650e53bb16e7e4abb524f4cda31",
+      "semanticHash": "0bd4851035c720cc89de2bb18494e8b9b1d7f8750edf97762d449f2844f6ff67",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:64748e4e3ba2d33b81e0d0776220f5dc2eaa78b103db35cf46b54bc8fadee0af",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:uint256:booleanReceiver:redeem"
+        },
+        {
+          "programKey": "parameters:ba9c5be060bd6f61e2b78d4a2daf84e89f6ba836bad50ebba01b3831f50a34ff",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fee-claim:booleanReceiver:redeem"
+        }
+      ]
+    },
+    {
+      "selector": "0x081579a5",
+      "familyId": "execution:0x081579a5:abi-87d829283d8a0ca522d7ba30d00e5420a6731e41526445a62695e700013c5c31",
+      "signature": "function remove_liquidity_one_coin(uint256, int128, uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-081579a5-family/selector-081579a5.json",
+      "sha256": "9275195f6f3908a4860ccfe49620a802290b4911ca0b4f25a96025bcfe822b84",
+      "semanticHash": "929d4c64b767d8fc5610ec8ab20eaa81302dc654862c054b3c92156cb2a38563",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:628dd015e0db9d4ee035b8d547e7dc18c233ee3df135052473b26a0f10ea88ee",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:int128:receiver:redeem"
+        },
+        {
+          "programKey": "parameters:2a65d2b824c743fc22f758e070b3620bc43db8a0e906c07dd99ce128bec224a1",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng:redeem"
+        }
+      ]
+    },
+    {
+      "selector": "0x0ad58d2f",
+      "familyId": "execution:0x0ad58d2f:abi-49cf25fcda915b68a20e1793f1d09f5d6f2764146805d12f550c29297e872db2",
+      "signature": "function withdraw(uint256, uint256, address) returns (uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-0ad58d2f-family/selector-0ad58d2f.json",
+      "sha256": "5b94c1a8723f09049af25f5fd55bf0e5358c2b5d321a5a0e26dd1538774edd4a",
+      "semanticHash": "5647393e906fbbacd79d0a0af34800edb177a1444c2270378a0aa22d1d364c2c",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:d2daaa8e42526cf9bf645693726a06d32592a469b9c2d8bad731e47a46a6955f",
+          "mode": "execution-extension",
+          "migrationKey": "yieldbasis-lt:withdraw:receiver"
+        }
+      ]
+    },
+    {
+      "selector": "0x0b0d9c09",
+      "familyId": "execution:0x0b0d9c09:abi-778dd97373a877b6d22184be178e89672fa358b5c6e4a0d80dc17f34f0d0c03e",
+      "signature": "function take(address, address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-0b0d9c09-family/selector-0b0d9c09.json",
+      "sha256": "f3af90e05eeb75468d1255f8a64c5a07f369e1f9055d36ddcfdba810ef253228",
+      "semanticHash": "dca0fe076fb87d938a04eba85dc614e8b0bbc5c909d542c4bada22fd20e54391",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Nested step of a retained complete execution program; it is not an independent route entry.",
+      "programs": []
+    },
+    {
+      "selector": "0x0b4c7e4d",
+      "familyId": "execution:0x0b4c7e4d:abi-f8cb7466491bced50e0fe362fc041f1f0edaccc202a973d64476820a7d95d58e",
+      "signature": "function add_liquidity(uint256[2], uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-0b4c7e4d-family/selector-0b4c7e4d.json",
+      "sha256": "7be3ae361886d7bbcc6ff9214a4eeeaac6022cc79d48bfec8c0dff121e7e583f",
+      "semanticHash": "8b65cc3b911f4d4df63ff12ad63ce441523ab15976650e70765e4badf933b4d8",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:dcea04857fad51622533b06058388866c893ceb3316de1ec0c09ed015eab3367",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed2:none:mint:0"
+        },
+        {
+          "programKey": "parameters:7952c73d97da7195c8954787d9b68a50080432cde3b7b04789158d5fe957bed1",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed2:none:mint:1"
+        },
+        {
+          "programKey": "parameters:ff711a258d45203744a47698ae91cd89eaa2e4746de8a652a2ca62430a0f711b",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:stable-base:mint:0"
+        },
+        {
+          "programKey": "parameters:6c18994e50b1029b3a05b9c55f4f132622ffb56f0009abfc821a7c1b8104735c",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:stable-base:mint:1"
+        }
+      ]
+    },
+    {
+      "selector": "0x0c3e4b54",
+      "familyId": "execution:0x0c3e4b54:abi-90faba00017d1d49051191350a98e41403e3d644ff269c269cd9b24af408237f",
+      "signature": "function add_liquidity(uint256[2], uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-0c3e4b54-family/selector-0c3e4b54.json",
+      "sha256": "f3bffcd8bc072fdd697895a2eda4035cb0d9b2dc26a4cbdc38414243b64f0e68",
+      "semanticHash": "09c875135da97547e3fdaad64f1c6ead269c298f88cda8eebb88e6e0034f8a55",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:301cdf4915fdba54a05a227c94ce56ca78c7a121e0d764373c7210ce9bffc036",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed2:receiver:mint:0"
+        },
+        {
+          "programKey": "parameters:0fb1382f4e755eb3db170f1f44f632c735e0d90478e41608946b8c28a427eaf9",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed2:receiver:mint:1"
+        },
+        {
+          "programKey": "parameters:21c903294e943e0d5fea527743fd134e4563d690d57086218d15d4785495683b",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-fixed2:mint:0"
+        },
+        {
+          "programKey": "parameters:97a9dca501197e2b8fdb630a41dc14bb59a67f2b75c75a0fadcf0c4b2811f3e9",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-fixed2:mint:1"
+        }
+      ]
+    },
+    {
+      "selector": "0x0e08bda6",
+      "familyId": "execution:0x0e08bda6:abi-077c0052d08d96f2e32b372362a46381e7c71f4951633ac702548577ab2fe322",
+      "signature": "function remove_liquidity_one_coin(uint256, int128, uint256, bool, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-0e08bda6-family/selector-0e08bda6.json",
+      "sha256": "c1585e2cdcff65f70c1cdfd7ceb511a0186b83edc64508a0f5c6fb91ee051f4a",
+      "semanticHash": "59b215f8eabcc2bf7940e18dd2c7abe61272839675b5b7dc4949d92a0e1506fa",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:fa9f50fa94f891f8be76b892da4349438e44cac9b63d12236750c4c8bb0448c2",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:int128:booleanReceiver:redeem"
+        }
+      ]
+    },
+    {
+      "selector": "0x0fbcee6e",
+      "familyId": "execution:0x0fbcee6e:abi-6a79e3917bc3ad20df1c6b5e9ec9864c942cdef2c17e28022ecbac0ba8d0fd20",
+      "signature": "function remove_liquidity_one_coin(uint256, uint256, uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-0fbcee6e-family/selector-0fbcee6e.json",
+      "sha256": "857942f4cb66d24a41304a04422aa9e4843b34d5715473eb3cde505ae9f1bfa5",
+      "semanticHash": "9eba808f4d9e49b44aafa14217a81a4a185af20757d0219b5ecd5c8cd964ab52",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:20c1a93778a18030c5903e8ad94f1ab04b01d9179b3f1119fba4e7893751143d",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:uint256:receiver:redeem"
+        },
+        {
+          "programKey": "parameters:cfd4c27e2c0ab812db5dee00bff45e26f38236af483a948494a50204cc5967f8",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fee-claim:receiver:redeem"
+        }
+      ]
+    },
+    {
+      "selector": "0x10d1e85c",
+      "familyId": "execution:0x10d1e85c:abi-cc1099ed09f93b9083a4f7c53c56bf108737653481ceea1af7d95808fbb91640",
+      "signature": "function uniswapV2Call(address, uint256, uint256, bytes)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-10d1e85c-family/selector-10d1e85c.json",
+      "sha256": "043fb4dcc3efd5d5b39fd09220871f316eccf20860cf2f11c88a052086fe1b99",
+      "semanticHash": "cf7c22154d27b8ddd8d2ab987bb2da979e77a57868eb19899704553712b8ac18",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Callback endpoint of a retained complete execution program; it is not an independent transaction entry.",
+      "programs": []
+    },
+    {
+      "selector": "0x11da60b4",
+      "familyId": "execution:0x11da60b4:abi-5db6579c24995248334bacc8ace314cbce4fb2bcbba10a543858627bee6d633b",
+      "signature": "function settle()",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-11da60b4-family/selector-11da60b4.json",
+      "sha256": "cd90092d575d4c7737186c76f5e4b9009c5f6e8b6edb0330ba4c27a14614575c",
+      "semanticHash": "725a26e645ffec5866419f0974ee968c4630f883166a1453d0810186703b52be",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Nested step of a retained complete execution program; it is not an independent route entry.",
+      "programs": []
+    },
+    {
+      "selector": "0x128acb08",
+      "familyId": "execution:0x128acb08:abi-5ff95628f8f0a21b9ccdd97d3d7508bdc6580a46170869072f5fe3ff385bf52a",
+      "signature": "function swap(address, bool, int256, uint160, bytes)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-128acb08-family/selector-128acb08.json",
+      "sha256": "cc9c4c7fb5a45424909f07b98c018db6984590b32e5edccc34fa4d627e6cccfe",
+      "semanticHash": "b1718b92fb430386391123c6927a1710361b43eecde9ee65c38b3da4f1128c8f",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:db29cfc904dece1d49ef440fbaf92b6963216236ab368d4f519bc3d5a0e98814",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:564551e96fbfb1c5a165a1a5510dcc1b99d6f7c8feb75e256ac1019fd75cba85",
+          "mode": "execution-extension",
+          "migrationKey": "typed-algebra-integral-exact-input"
+        }
+      ]
+    },
+    {
+      "selector": "0x158ef93e",
+      "familyId": "execution:0x158ef93e:abi-a93ed03839d90ddc5a1fc728780f8d03ca690a87636896137a177669ef51f620",
+      "signature": "function initialized()",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-158ef93e-family/selector-158ef93e.json",
+      "sha256": "8d79388c15b5dc8add613959401ed5f91ed2d5daf5587439f6fecf573d090075",
+      "semanticHash": "143665ec290814d180be8bc34fbb0c1172994fc8ff353d7b79b757c312a8381a",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x1a4d01d2",
+      "familyId": "execution:0x1a4d01d2:abi-3d0774d3c7a2df86603e30bdfee70d6b9fcf29cc407035ed8cd650d5cb2f2370",
+      "signature": "function remove_liquidity_one_coin(uint256, int128, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-1a4d01d2-family/selector-1a4d01d2.json",
+      "sha256": "efc16c879a90a4a57195c402ed18ca9c35eb49ac24b28b1c5a4e37eee56a3b1a",
+      "semanticHash": "444ed8aac043d0def962f6310c4f74bd1868f21f336e58fe2a4e7bddd4d92cbd",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:ea85ac3875fcd81a1794522742482c04e72b0bf9fb543dea76b7430af2359bf5",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:24a4f52eaebe0de5852275fba5ccf6bb1cdd26f12bc023bff1a679d5c1afa8ab",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:int128:none:redeem"
+        },
+        {
+          "programKey": "parameters:0eae0489f56357eb7ef765d34eae2183c1801528385898e13649b148fe8832b5",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:zap:redeem"
+        },
+        {
+          "programKey": "parameters:4fca8a21818df4c138a33907fcbd65cef6321d2fe0d4b0bf47117577f5857920",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:stable-base:redeem"
+        }
+      ]
+    },
+    {
+      "selector": "0x1c2a0e40",
+      "familyId": "execution:0x1c2a0e40:abi-e6818d0186faeafc44d2100fc93f6d9511841a6217d1082adb8ea0bedcfed452",
+      "signature": "function redeemAndWithdrawTo(address, address, uint256, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-1c2a0e40-family/selector-1c2a0e40.json",
+      "sha256": "c82eb58cc37a527fd7d01b4152b7245b8f080645e833ba3d0307452330babc9a",
+      "semanticHash": "046f06750f126fac35ccb6eef42d6444d76596bf352375b2a6ac413066e27c32",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:8cff18d2b3480f5b00620d63982a7abcf33c26db6b70ee0d6c0dbec4fe41f4ab",
+          "mode": "execution-extension",
+          "migrationKey": "typed:set:legacy-redemption:unary"
+        },
+        {
+          "programKey": "parameters:5694bbd1921d40b17d2a801ec481a21efe912b7b905319e79f07646eb25e4891",
+          "mode": "execution-extension",
+          "migrationKey": "typed:set:legacy-redemption:basket"
+        }
+      ]
+    },
+    {
+      "selector": "0x1d6e11f2",
+      "familyId": "execution:0x1d6e11f2:abi-b1afcc6f5b0c4c2ad9237d7d3c94ab17d8dcc8ec023579ef0d2e7c0a905b1da8",
+      "signature": "function distributeInterpolationRewards()",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-1d6e11f2-family/selector-1d6e11f2.json",
+      "sha256": "472e1e14c929b07ff0748ad8cb05ab0af47f27662044be83b454bc4e04a7834f",
+      "semanticHash": "6ea49f9683557d44c8a329aae07914e69774195411a9d962f4dd5b5335333b38",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x1d8a7962",
+      "familyId": "execution:0x1d8a7962:abi-57a1bb548a574061b37b28ffe573ffae09195985a1151470c2170c1520791f3e",
+      "signature": "function swap((address, address, bytes32), bool, int128, uint96, uint256, int256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-1d8a7962-family/selector-1d8a7962.json",
+      "sha256": "5cead0d48aa239e8d9f420738c3f53e5d1b73dc49de05336aa23d546ce46c719",
+      "semanticHash": "00613607b29c43255499337234ebcc91a431a235247e956b9a23f0dddd6ece12",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x1e1401f8",
+      "familyId": "execution:0x1e1401f8:abi-7b9dae26847effc923dbab59b8242fbbf6f9423e9bf3e1f7a24845641d442426",
+      "signature": "function getReturn(address, address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-1e1401f8-family/selector-1e1401f8.json",
+      "sha256": "e0b2a1051bab730453a56406bc8ced5acbab8fa579afa91ef20f0bdf342c44bb",
+      "semanticHash": "f312a8d63eb7e259f5bb02b33d20924faf5187291c26d33d3faf4fa9ace487ab",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Quote/read helper retained by its complete source program; ABI membership does not define a standalone execution route.",
+      "programs": []
+    },
+    {
+      "selector": "0x22109682",
+      "familyId": "execution:0x22109682:abi-c971ecb60635d2605fc6cee4355f5900b3db937f8a5c9f042b65cb829471e044",
+      "signature": "function nomiswapCall(address, uint256, uint256, bytes)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-22109682-family/selector-22109682.json",
+      "sha256": "b45b8b72f807cdc86af1b7e7e624bbbd0ce05453c956e011a221cb36c1b7015c",
+      "semanticHash": "7eb5038aaa86792470d643a18956ba9790ec92bd75e269182883bcddc7144b2a",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x24b31a0c",
+      "familyId": "execution:0x24b31a0c:abi-d32fc6c14bf138546d58c8fa99894783ab7e8b295317e92b424134e793104ee8",
+      "signature": "function swap(address recipient, int256 amountSpecified, bool zeroForOne, uint160 sqrtPriceLimitX96, bytes data) returns (int256 amount0, int256 amount1)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-24b31a0c-family/selector-24b31a0c.json",
+      "sha256": "b3d2801d4d79870e2efa0f2262d2363ed41a1fb65ea910ca5e281c7afc8a7c7d",
+      "semanticHash": "20befd5b33459e3b7acaa988aa81daa4754ff075464378a0c92c0023e921bd46",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:e48b6d66eb83c933d411c3b96a9f754620c4d424e64d454e11c50bab096ef0a1",
+          "mode": "execution-extension",
+          "migrationKey": "typed-kyberswap-elastic-exact-input"
+        }
+      ]
+    },
+    {
+      "selector": "0x26599850",
+      "familyId": "execution:0x26599850:abi-72d3f7d0b6ea611bc1ce5af3ba0b67851cc1c0a24f97a428e9e4b0269b3a32ef",
+      "signature": "function wrapTo(uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-26599850-family/selector-26599850.json",
+      "sha256": "8478afc763bb39f70a3ede1b02f08ec67812eb5dfd690480647e876ff84e25bf",
+      "semanticHash": "f9f233e0344a35bdabb912fb1a52986a3a36a97b93fe5318bb73aada06f703e7",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:5aac7e3893916b7c8bc14e3d6d6cd670a87b6ef759678b371c4fd170bc8c915c",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x2668dfaa",
+      "familyId": "execution:0x2668dfaa:abi-6900ee801b6b1df884343b7085ffcf6a5e0b0907f4791ff61aa2a293fdac1428",
+      "signature": "function swapIn(bool, uint256, uint256, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-2668dfaa-family/selector-2668dfaa.json",
+      "sha256": "42bc7169233316e5904dde5f8e51ef1e920b99942058d666227e45bee0440b1f",
+      "semanticHash": "20dcc5be24eeabb0e72fb74167537840d518e307357fdbb85d889a08de66b783",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:0483e65d66454626c590895e4d37db1cc2b43371bc571b61f2e18566dbd9a2de",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x2adcb0c6",
+      "familyId": "execution:0x2adcb0c6:abi-8086bacd39d184a00fb90a3a7ca45bf1f1cebc7fc940c332dcefecf14764bb7e",
+      "signature": "function quoteSwapOut(address, address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-2adcb0c6-family/selector-2adcb0c6.json",
+      "sha256": "443fafbf68895a47aba4aa2d9f417126d712f4a8fac17c49d08ac2d6845d7579",
+      "semanticHash": "c1a7552c36164689e7aaaf748a6ef69012190323212dd61a9466fe299ef4c1d1",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x2b2dfd2c",
+      "familyId": "execution:0x2b2dfd2c:abi-2c867028873f9d1bef6be22f7fcc4aec0fb182b078d0083760daac8aecae7c46",
+      "signature": "function deposit(uint256, uint32)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-2b2dfd2c-family/selector-2b2dfd2c.json",
+      "sha256": "373ac4818eb011d98cee96dd4c636063044a2ed107f7f20c5d4d89c91a1fb55f",
+      "semanticHash": "6ca811c34a79383f4236027c761ce5fc0e2f73063418557c4483a1483a96b7cb",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:1f7c18b457fbcd3b86c6ec1a56b5c6a0727348ac2e6a486532abdf3a8d326050",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x2bfb780c",
+      "familyId": "execution:0x2bfb780c:abi-565845504582e2f6b22263e3f31095b62e702b80c00bece778ff1585d2281649",
+      "signature": "function swap((uint8 kind, address pool, address tokenIn, address tokenOut, uint256 amountGivenRaw, uint256 limitRaw, bytes userData) params) returns (uint256 amountCalculatedRaw, uint256 amountInRaw, uint256 amountOutRaw)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-2bfb780c-family/selector-2bfb780c.json",
+      "sha256": "2dac163f1d27f17f7486612bc380e54835dbd49930d6681e2f586b7594589c9a",
+      "semanticHash": "4b777990f9e47712df0fab951dbe3a747b059a5056b7554d7243b7b2de940435",
+      "enabled": false,
+      "status": "observation-only",
+      "unsupportedReason": "Observed Vault interface requires its caller's unlock/settle/sendTo transaction context. The fdb Exact encoder executes swapSingleTokenExactIn; no independent Vault-swap execution proof is claimed.",
+      "programs": []
+    },
+    {
+      "selector": "0x2e1a7d4d",
+      "familyId": "execution:0x2e1a7d4d:abi-a6f96f6f84f7a946c83636ebe2c1509ae3e07ca91c1ad8e08657a04896a33169",
+      "signature": "function withdraw(uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-2e1a7d4d-family/selector-2e1a7d4d.json",
+      "sha256": "ba9b7cf00c3df9276213dcb33896906b15ebf45c70be03677f2a9c42fedba951",
+      "semanticHash": "d2096d8b0affe846ee8edc7142ef914c8e2a0d1166bd931ae960c8717d48d0b9",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:9e9920329c1157484c0a191e6e52891299224adfe20cf5837e7cc42c3b4b0819",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:72fa3868281018004d30b35b8500732a330817cdd267dd4464868872a3cbf12c",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x2ebe07c8",
+      "familyId": "execution:0x2ebe07c8:abi-bd2dcea656f01706e430aefaedcc7d185c20d22b9a85cf2fa6b9dbec75cd2524",
+      "signature": "function depositAsset(address, uint256, uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-2ebe07c8-family/selector-2ebe07c8.json",
+      "sha256": "86060397b61791037a4a92a336a126a95a881317f6fe59e77c13d8d993a968cd",
+      "semanticHash": "4d096c41d761ff1ef11b5ddebcfb38ed7724ae0b2b4552e9a51c5bd217e979f6",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:2d5469e8f8736126a850b7be3447108b4b83ed5aa224867f681784e92fa0973f",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x38ed1739",
+      "familyId": "execution:0x38ed1739:abi-5d40f888fd31492b72a940015f6184f9e35d385c6b1a13e01902218d1323f0be",
+      "signature": "function swapExactTokensForTokens(uint256, uint256, address[], address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-38ed1739-family/selector-38ed1739.json",
+      "sha256": "531b04d476c21837fc14d6276399753119a2cc8dcea7539a4e3152f1244133fe",
+      "semanticHash": "a80bdb80e7a0bd0062d5bfac7e5ece1e9d4097df22039299ee4292d182f5801e",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x3bc52842",
+      "familyId": "execution:0x3bc52842:abi-5eebf08d2822a45135415e50624758385f67d0a4ecf33b843a6d69ebde501501",
+      "signature": "function quote((address, address, bytes32), bool, int128, uint96, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-3bc52842-family/selector-3bc52842.json",
+      "sha256": "e5769012251005723f4605ca6c9ab4af20692f69de96be15d50a4f0c601a5799",
+      "semanticHash": "13a07ecdb17d75d3372057e25ccba07954fcc6b41668f9910237f9827565ab41",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Quote/read helper retained by its complete source program; ABI membership does not define a standalone execution route.",
+      "programs": []
+    },
+    {
+      "selector": "0x3df02124",
+      "familyId": "execution:0x3df02124:abi-ed6d023cb407bd748ce23c81071f95a7e783c0ebdacd1ef40cd312c61addcb34",
+      "signature": "function exchange(int128, int128, uint256, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-3df02124-family/selector-3df02124.json",
+      "sha256": "76901fc731b681ff71631dc149a0742186151f78b5a46ae71a4ebd7d33e5eb1d",
+      "semanticHash": "87dfc46b69aaeaaf7f9c824653778c3213c1cfa41b00785e27b7258eedf17ba6",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:be4fbe1412a1928bae264d003d1118b9f0650469a29f4fbf165a576698c608d8",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:eeaa5dc4c79f293f7559a5de1d3d65b739c2131ae372ad204aeeb21411698eb2",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x40c10f19",
+      "familyId": "execution:0x40c10f19:abi-e4482988ad46daef420df6bef657b787815cc894f66e9c9ad19be23df146d7a4",
+      "signature": "function mint(address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-40c10f19-family/selector-40c10f19.json",
+      "sha256": "831ea9245e56fdd91e5214b0e88e7944c980027c12841cf3805eaa659286c52a",
+      "semanticHash": "b8c835853488ae8c8d364f3b6c9b95fbd143b690af433683610ec0157753909c",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:75c60fb540306427425f9a274e84d2a7a26b554535c3b316f32507b25a4227b1",
+          "mode": "parameters-and-payment"
+        }
+      ]
+    },
+    {
+      "selector": "0x441a3e70",
+      "familyId": "execution:0x441a3e70:abi-d37b11ea673337dee66cde5d363f0708d54850e303b8f2277f3341daf7c1211e",
+      "signature": "function withdraw(uint256, uint256) returns (uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-441a3e70-family/selector-441a3e70.json",
+      "sha256": "e0eebb37dfc2d4b1502e1ac8d169748777644fc24f94e3df79e78b4e5d0a1a7b",
+      "semanticHash": "4ee5483db8998302f36730443c89a25a56c5b98fa4b057ef21c245ef6255dfde",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:8cf3d470e2873cdc6ffa2585ea20bb29da37c698e4cf0d240ee0cc06b3d78ece",
+          "mode": "execution-extension",
+          "migrationKey": "yieldbasis-lt:withdraw:executor"
+        }
+      ]
+    },
+    {
+      "selector": "0x44ee1986",
+      "familyId": "execution:0x44ee1986:abi-8af36b9394375ce24d40c882062682c5392835046056d5cc86f80808ed4e3438",
+      "signature": "function exchange_underlying(int128, int128, uint256, uint256, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-44ee1986-family/selector-44ee1986.json",
+      "sha256": "a68d7f7818daf985332903aa69b124e491bb04e1c7e5206cde54efce91c99c3e",
+      "semanticHash": "3f4d26b649c40e47a90e9a09fb976d7e22c5e09f5092c48408830dbc439ae135",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:f28b190f6c9a9efd53d20140740efc25e97f3d4eff8537a6b9687e618830b9b9",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:90242366e88a3b404bf24fd8beab1b968ec99a932fb9126941040e6baf1f0546",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:b5b3cbfc5420dec3e019e3476e3294186e512dfef1674ac6490e919ead2c4674",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:ae6cb1c060f5b715ec724c3ab40b2c8fd5a6cd7cf556e2d58458c0943f50f043",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:256b7b41b493a9f7a06ed790da31b9a8bcd961b5abe455ec12b9b38ec5cab609",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x4515cef3",
+      "familyId": "execution:0x4515cef3:abi-9b363e7cc4cca5edff5cdbbd3c57d7489e1daf3cd391eba308815bc32d4f629f",
+      "signature": "function add_liquidity(uint256[3], uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-4515cef3-family/selector-4515cef3.json",
+      "sha256": "260325c3beecb52127181183b44737bd1a4c75e25a7e1c352af9d296d47bf970",
+      "semanticHash": "de4d4353355a61eceaa831a44512434133237e2c964ed0a5f3f40c8a90ae05d1",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:d0bba2076dd6f78b676888ef74f5871a0ece7b91e6a99b02cb7dcaeb651d4ee1",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed3:none:mint:0"
+        },
+        {
+          "programKey": "parameters:90a2eb0b4303f6217839cc84dec4e083c0dfdeb542ffa76a8feaf904adf1309b",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed3:none:mint:1"
+        },
+        {
+          "programKey": "parameters:140116d67ec640b2bedb3fb1673ffdcba86ba6e0c0bd4b1d4fd544af1bca7c3b",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed3:none:mint:2"
+        }
+      ]
+    },
+    {
+      "selector": "0x48c89491",
+      "familyId": "execution:0x48c89491:abi-a5ecdbc19af23c4ab67b44364ae4e5e8bd08c077c58e19efa4ead63886b9eb4a",
+      "signature": "function unlock(bytes)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-48c89491-family/selector-48c89491.json",
+      "sha256": "7a0c072bf8e790fbfe00533400adeb24e01ba60a5a160b49cc0c4bed770125b4",
+      "semanticHash": "570ae0e164cd8b6f601589802374d5ab1aae1cd9e5c54fa95aa5653541c6802c",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:e279a9bd0d6e5da8ecddba7aa6f75eebd4f3c48df2452bd69cf3f55ba6e77982",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:0b368d9f5b0cba468fd8698f72cbcf57146869e6ef467a76ef057ba1e3176db8",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:6da170ebcb90c79510edb8d64cf3eefb3a9d63532fd55bca75d08462d6772260",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x4d44e663",
+      "familyId": "execution:0x4d44e663:abi-0253ac48e202118a14d003e4887c85c1a044c5fc6647117aff67c7b397a6b62a",
+      "signature": "function take(address) returns (uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-4d44e663-family/selector-4d44e663.json",
+      "sha256": "474916b54c6ec59db053b12e03f67a8cb75f809ac256cce210d8990b4fbb9b8e",
+      "semanticHash": "504dd235d2d2a679f9d31b9df755bccb5b311792adff3393ee0a1b1a4a476fc1",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:fa922feaf0460ac5e8067806fc34b2e6486702bf4fea333a57dd7028a2b44336",
+          "mode": "execution-extension",
+          "migrationKey": "typed:yearn-auction:take-1"
+        }
+      ]
+    },
+    {
+      "selector": "0x52180208",
+      "familyId": "execution:0x52180208:abi-162625289e1888ee43d447bd5994c29cc0519ddd6fd09897a3ab71c81decbbe9",
+      "signature": "function take(address, uint256) returns (uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-52180208-family/selector-52180208.json",
+      "sha256": "10dff84a499e3c6625208a44690560936e04c4ee37e5999d8e1a695529998329",
+      "semanticHash": "67c10529625a45b1b413bd3e72a136072fd2342aec94804c72ac8df67b41ac62",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:721a13cfee0073c90e7b2628b215be698330555c8f103910b79dda0985c91279",
+          "mode": "execution-extension",
+          "migrationKey": "typed:yearn-auction:take-2"
+        }
+      ]
+    },
+    {
+      "selector": "0x52bbbe29",
+      "familyId": "execution:0x52bbbe29:abi-453a754190e99de9310167c070727b55b9c1e0097dc4950358bd8e5f72f35d5f",
+      "signature": "function swap((bytes32, uint8, address, address, uint256, bytes), (address, bool, address, bool), uint256, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-52bbbe29-family/selector-52bbbe29.json",
+      "sha256": "ae17328df87ea585616a317d9ee6a61d0798b725135d6908c551fd004cf47e7d",
+      "semanticHash": "12ce6ea9e7befd324b21c754c7974f73fff9ab15834d676389a8e7ec65c12176",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:41298814be1ec6bd0928108cbd7a0bc6ca7836b670dc43c3b4e57639ad45a346",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x59a87bc1",
+      "familyId": "execution:0x59a87bc1:abi-23706a9118c72c28101edb5dbdccdd8d0bc83eeefeb88bbb31ae83a62e85eea9",
+      "signature": "function buy(uint256, uint256, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-59a87bc1-family/selector-59a87bc1.json",
+      "sha256": "795002b7e621ea42491173a90f54d373e8b93a022b2c87bba842ae28ae503da2",
+      "semanticHash": "f292a3db5181bc1b43ce7a8df43fec415bf9ac678739cc65f5a60b05e1966d20",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:f4f9ed400df7ef94cdb3024ffd0d17a094d5bd91afadb256db4b5ed2f22acf40",
+          "mode": "parameters-and-payment"
+        }
+      ]
+    },
+    {
+      "selector": "0x5b41b908",
+      "familyId": "execution:0x5b41b908:abi-61e271ac3ac83b777682c962903ae9eb97872929e4fbf9d4d6902ca0aa93b425",
+      "signature": "function exchange(uint256, uint256, uint256, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-5b41b908-family/selector-5b41b908.json",
+      "sha256": "446557fcb11c0d1855c1b68b012e913c3e75d3cd8441ad3813e543ffe3d046d7",
+      "semanticHash": "f7321e1b622370423bc442ad1408c319b8d7981605e5d3d6b6802043b6ec3408",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:9dd59f13f7195f7129ed99482e5cf62e3d50278bc7bffdd02c8582bc6204b8d4",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:dbc7e40f67a528e156a8d76347042d39d84559075314f7c9295de7f198bb63f7",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x5c38449e",
+      "familyId": "execution:0x5c38449e:abi-6488b714a3f260ba8e9cda70951b5ccfba7eef3b872865dc670d771862b0723c",
+      "signature": "function flashLoan(address recipient, address[] tokens, uint256[] amounts, bytes userData)",
+      "domain": "funding",
+      "file": "listener/src/searcher/venues/selector-native/selector-5c38449e-family/selector-5c38449e.json",
+      "sha256": "a51e4c32600414e11108e6908b762d77b255e2e15415fe3122208ed93c652465",
+      "semanticHash": "d107103a2ea8186996ef22f2ecfb9a9ec5131490d9efa11f244a786ceaf7c21f",
+      "enabled": true,
+      "status": "funding-template",
+      "programs": []
+    },
+    {
+      "selector": "0x5c833bfd",
+      "familyId": "execution:0x5c833bfd:abi-7972124af131efb0824e48830f55348cfb0dd7823555b7b37f44a7da96f9bc04",
+      "signature": "function redeem(address, uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-5c833bfd-family/selector-5c833bfd.json",
+      "sha256": "b916bbb533dfc9cc264bad8b86618629495af444e5b1bd089e43fafd7838383b",
+      "semanticHash": "d8544db8d8d9004c52dde9dcb053364dc21f401b1d8144517ea6a7f694b94516",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:72e66779ee93e2dafd80cc6ae44607bc704c038ce3e817f192f5be61c4db31f6",
+          "mode": "execution-extension",
+          "migrationKey": "typed:set:basic-basket"
+        }
+      ]
+    },
+    {
+      "selector": "0x5cecb5f7",
+      "familyId": "execution:0x5cecb5f7:abi-aea9f2dc77c35c824715cffadc64b4a2f425da3c6c785ee250a5d76ba1e7269b",
+      "signature": "function add_liquidity(uint256[3], uint256, bool, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-5cecb5f7-family/selector-5cecb5f7.json",
+      "sha256": "decdd55728acb742b74eaebb43a91535ceb31c1197081abe269d992369337e87",
+      "semanticHash": "22ffce86ddbd853b6960244fba161d41e38ae6d34fe63486f9acba4612c8adfe",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:97cb8ff96ae57d5f37ab3b0a3c29765dedd1735224efc41eec6e62fa3f459bae",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed3:booleanReceiver:mint:0"
+        },
+        {
+          "programKey": "parameters:001c596222245e9e1a2b0198bac33853d17b0abc7864e87aa8556d143b8cfcf6",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed3:booleanReceiver:mint:1"
+        },
+        {
+          "programKey": "parameters:33298627eca6efb983a7920e401015e1abb811d13f311b862ade56717587e343",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed3:booleanReceiver:mint:2"
+        }
+      ]
+    },
+    {
+      "selector": "0x5dbd6059",
+      "familyId": "execution:0x5dbd6059:abi-307a9c7d350c8b32c36768dda470f4b7e030540341d6baa0022719aa513e13f3",
+      "signature": "function unwrapTo(uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-5dbd6059-family/selector-5dbd6059.json",
+      "sha256": "5c6c53ae2c57c9c6af8a55dccd7eb44b5c1aba450a1cdcffe3fab271fad5d6fa",
+      "semanticHash": "af0d23d0099596d378c492092bbf8d0b50c33c75dd86a12d254a80a6789578f8",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:e5c123251cad5e33679e52dc8c4e62618ceedcbf616d61f54040643615909c1a",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x5e5144eb",
+      "familyId": "execution:0x5e5144eb:abi-518aff0189cdeace6d276aff0bd7e5713f8643214c687c2991605adcd70b0c4f",
+      "signature": "function change(address, address, uint256, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-5e5144eb-family/selector-5e5144eb.json",
+      "sha256": "47350712e934fd79a2d6b8255ec6816f9316bec0e7a50162747e6bbaca3a8883",
+      "semanticHash": "8ccf45a4a0b4a3afecb607d4ec7a4d3feebe8d1b7d98b6ff0a540668dd255b79",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:f5d6bedf78e34bbcd6ab33af7b0aa6a40932ed76c1b8827c5a62a0f9dbbc3d66",
+          "mode": "parameters-and-payment"
+        }
+      ]
+    },
+    {
+      "selector": "0x6145d1b7",
+      "familyId": "execution:0x6145d1b7:abi-9304691cad1cf88741aeb269456009de56a452ac98ad7869e13ad455182cc049",
+      "signature": "function withdraw(uint256, uint32)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-6145d1b7-family/selector-6145d1b7.json",
+      "sha256": "756c5154ba19a1c536ad48373b0da42eac9d5fd58b03e061648b7b8223a553d3",
+      "semanticHash": "3ad887a7bf24e46c92d2f8178bab7d72bdab04a6178a2202105c8c7f10125ee0",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:ad289c9c6029e70bcbd9784e412b1f7871b8f555a814b18eaa938ff96e73d1aa",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x65b2489b",
+      "familyId": "execution:0x65b2489b:abi-51fdbdb8ed2f924cc46af942ec30609fc4f4745476cc5af13eb1e4d45456f7f6",
+      "signature": "function exchange_underlying(uint256, uint256, uint256, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-65b2489b-family/selector-65b2489b.json",
+      "sha256": "0878012f8da8da6b38acc92b9d4346b08bfd28e471c3afad99a185f6f8c8f887",
+      "semanticHash": "e30e03f1543182f56baa31272c72efae8fda6c8c9e2faf0557beb2be8053ae78",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:616a9d112a0689ea0ff56b3f3f8780644777b602ef778fc328e9ecaf07e43b33",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:a1be30dd3a0597bae121c670ef950db18ee18f44db191104394da9d0373bcedf",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:fa180c54903ab9c673d5456b48a90a87a59a259208ef1c592ceb182837bb8c45",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:a27049d23823c8203686a729e9a22898634878f77d0794ff7ccf9836c2403792",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:710ecb242aa58e3ea34120d4c4c100ea1f8e63aafa351ba4b5b006dc5969c1fe",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x66ae5880",
+      "familyId": "execution:0x66ae5880:abi-7de067a488db9ef195fce96b74b7bf1611927bba5831e65f7a18888577353c8e",
+      "signature": "function take(address, uint256, address, bytes) returns (uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-66ae5880-family/selector-66ae5880.json",
+      "sha256": "33eac0fd4d3328eed8d383f81690e1d96c24fa28bbf4b230eb227287b21c8180",
+      "semanticHash": "cfe110465768c6afde40cdf04b9617b268991532561c24a442bae147ea40a33b",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:a33645f487c82588d947c65606af7f81d5aec6ca4a2e218e8c87613ce4b8c472",
+          "mode": "execution-extension",
+          "migrationKey": "typed:yearn-auction:take-4"
+        }
+      ]
+    },
+    {
+      "selector": "0x6b1d4db7",
+      "familyId": "execution:0x6b1d4db7:abi-5488afc5a81c734b3d93d2997a0326121ded95aa4175e72deab482174a2baacb",
+      "signature": "function ethToTokenSwapOutput(uint256, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-6b1d4db7-family/selector-6b1d4db7.json",
+      "sha256": "400f5705de175a52d45d23b1505bbba54eeab0fcbf2c17d8a544e3259f93868b",
+      "semanticHash": "ca6cd86c9a0092d3e4ccfb316571dae8b84956a14e64352b73069680203a38f3",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x6d0cb613",
+      "familyId": "execution:0x6d0cb613:abi-ccf07cbb8f729c922de84bd4bc255efcb611c9a6110ffe9499f53e381c4f5ba0",
+      "signature": "function multihopSwap((((address, address, bytes32), uint96, uint256)[], (address, int128)), int256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-6d0cb613-family/selector-6d0cb613.json",
+      "sha256": "91e02f8022d3eb75fafe74bde5fe5fea15ec4a90c52c17dcacfd6881d66532f0",
+      "semanticHash": "4b8cf75dabe44c238ec00834187ae7b69ac9b9a47213f0b6f457b316d989dfff",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x6e553f65",
+      "familyId": "execution:0x6e553f65:abi-3fd6e636c4740ced1ed01824a01dedf895e8d10d088d2d9a1bfc2d690b1381ee",
+      "signature": "function deposit(uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-6e553f65-family/selector-6e553f65.json",
+      "sha256": "439ccfcb92094da1777b29e261c32326f15a40d522e37a65cbcd75fac66bdc6b",
+      "semanticHash": "d83a4aa9a0eea8898b5fc4a17bde8ba97c875d472c4f8d67e3eefb91b319ac0f",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:0732d17f49beb81e2ab846f5d0ce33fe129dfbf1c9090c6da57a27f59b73c31a",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:a13461b3d8d17e702390f852d6724005f2dbf23362aee81ed9d84b6fee9292d5",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:6bca85c6501a8904dc96d9fb54fc0e61b6bbc28cd910cc91c9f1742e24ae6129",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:8082346582adf5c0f1912397ef33cb6fc9cdae441ecb0b74ba002e34e6e10199",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x7237e031",
+      "familyId": "execution:0x7237e031:abi-57c944118b277601e0205b8ba5078ddf3341f59c0177c359529bd008aa3708bf",
+      "signature": "function tokenToEthTransferInput(uint256, uint256, uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-7237e031-family/selector-7237e031.json",
+      "sha256": "5bf703de319d6e6a437016489fd049aabebab3695f228bd792f3d499a8f3835b",
+      "semanticHash": "46e5c93a77e2ca2d19b180bc0dc78fbaba1b81a24fcb91a8993ad4bbb2c9b87f",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x73088bf7",
+      "familyId": "execution:0x73088bf7:abi-3b752c232e5f560397c83e7a1969581267271f0d45d03705178cf8184c22645b",
+      "signature": "function issueTo(address, address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-73088bf7-family/selector-73088bf7.json",
+      "sha256": "e316e6dfd709a26a60643ed16453443abe8ebe916f4c4dd0f8b7a20118a40742",
+      "semanticHash": "95f5452a2d9fde00f2c79250e88f6f11d5fd46de9254a157b2b39ebb146d574d",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:514b83c9bd86a0ee26eab2292d18239122084e8433434e99ee785669bcc1c516",
+          "mode": "execution-extension",
+          "migrationKey": "typed:set:legacy-issue:to:plain"
+        },
+        {
+          "programKey": "parameters:02f483df403b0e77a3cdfaaa551b83aebbf415c1b4f80eab01581b7860674d33",
+          "mode": "execution-extension",
+          "migrationKey": "typed:set:legacy-issue:to:fee"
+        }
+      ]
+    },
+    {
+      "selector": "0x7328333b",
+      "familyId": "execution:0x7328333b:abi-765542eadaa4f84760189ff1f869034e7e1cec4b8766ca4250154999e5c9e8c2",
+      "signature": "function add_liquidity(uint256[2], uint256, bool, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-7328333b-family/selector-7328333b.json",
+      "sha256": "54145ec7243549b43576b8668c5bd83b824550d1ba085cf6abd261e089ce424a",
+      "semanticHash": "9c7f881f4a4fb19f333fa1123ad5aa1304e03b4cbddbea42cf6ac4f242ece5c0",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:42e6aac062726a59be00bf6f544221be8c9ee1fdc71bd788d276feb01e507d68",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed2:booleanReceiver:mint:0"
+        },
+        {
+          "programKey": "parameters:292877f0214d84db024a54acba967fead6014fa3b5b25cc998716074bb8ecb11",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed2:booleanReceiver:mint:1"
+        }
+      ]
+    },
+    {
+      "selector": "0x750283bc",
+      "familyId": "execution:0x750283bc:abi-f052c5726f8c7fa8a8b4fef70ef296b351ae6e3170525fafbf7ecdfc8b1f08e7",
+      "signature": "function swapSingleTokenExactIn(address pool, address tokenIn, address tokenOut, uint256 exactAmountIn, uint256 minAmountOut, uint256 deadline, bool wethIsEth, bytes userData) payable returns (uint256 amountOut)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-750283bc-family/selector-750283bc.json",
+      "sha256": "0a8964d0fca0e53a72162c90d2b52629e8e0e4d8cd974c9ec29305cef8a62062",
+      "semanticHash": "5643124a3bee03d6f5c4fd52bf7bf55b1873afa57ec041df9c2cffb9d862d7ab",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:05647d0d5694877540c8fbfce9ab5cc7fa639747c47af30d69d7e87bed5f5e22",
+          "mode": "execution-extension",
+          "migrationKey": "balancer-v3:router-exact-input"
+        }
+      ]
+    },
+    {
+      "selector": "0x75b96abc",
+      "familyId": "execution:0x75b96abc:abi-f0517c9873f197f17f574a448e22d5dc953bf0033b7886b3a84e1a378c3933b9",
+      "signature": "function add_liquidity(uint256[3], uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-75b96abc-family/selector-75b96abc.json",
+      "sha256": "44d3214ca697bbfc32a3af35666e8e4f2d391b2101b800a62414d2ba2f6eb1ab",
+      "semanticHash": "4d9a82683d76f67099d93dbdec394824975429e45f91bb1240710be4349c72f2",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:109a7c1d5302be98fd426cfde967e51bbe32e44d3e362113932d9d5df76ed411",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed3:receiver:mint:0"
+        },
+        {
+          "programKey": "parameters:5249e66add431d104182d9c72c8156675c556b8893e93929b6aa6b920163fbd2",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed3:receiver:mint:1"
+        },
+        {
+          "programKey": "parameters:598901135c59f5500c37dbb8ac2dad72d9bd569a4049df3cd8263a3d5cf94b8c",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed3:receiver:mint:2"
+        }
+      ]
+    },
+    {
+      "selector": "0x767691e7",
+      "familyId": "execution:0x767691e7:abi-4a7b7bbbb686451fb9e79ab20bd5e211322d3335d00e19a04ab2c1f2a2d1716b",
+      "signature": "function exchange_received(uint256, uint256, uint256, uint256, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-767691e7-family/selector-767691e7.json",
+      "sha256": "066580ddf4974e8092842c93384fe4987ed693f0cd8c1d9b439286cd3b3fb34d",
+      "semanticHash": "ae1ffbf813b9078058ac9830b31734f14da741a09e14535c2daeb95e5e8a65fc",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:bf0eb546a532835ea32984c7bb96c339de93570d0ad7b2b0bf5b2d883526cc9e",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:c3f4c6c71fb802f70b586e63936a2f038b56a907994509ccaa6f2884569964cf",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x7c5e9ea4",
+      "familyId": "execution:0x7c5e9ea4:abi-2feed28551e046fdce97e68558fa19fc3fa2826d8b2860563b605e4b09a5e223",
+      "signature": "function swapExactAmountOut(address, uint256, address, uint256, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-7c5e9ea4-family/selector-7c5e9ea4.json",
+      "sha256": "0c767f1811bed6d2477feb5637d141b58fc9581efd05fd023a5a214cff6816d5",
+      "semanticHash": "fa9fef68f7c11ba5b7a0127943db71eb5e512e65c33a94cd96f42bccba3ad817",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x7e3db030",
+      "familyId": "execution:0x7e3db030:abi-dc2de3deeea9c8414f6711f17a92935fe2e7e90b65f2bf18ecd2fa249b82c845",
+      "signature": "function exchange_received(int128, int128, uint256, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-7e3db030-family/selector-7e3db030.json",
+      "sha256": "a65de7c62d175b61beb8f0aa94943483d254f1ffd99bb5f8a5389b9f33a9bab7",
+      "semanticHash": "c74e13c57a5264e2847a11753303c72d5c2219e6c1de9ec921a33e8c4ae60e72",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:d9b6758c5a456bd355084e0a7475be630377b40c2ec3b05996ea65bee7c10c23",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:78ed4dc50c2fff3cbf4debc48340244b9b6c8712e23e608e0f06eb64c2f33b3a",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x8033d687",
+      "familyId": "execution:0x8033d687:abi-e7ce69bdb34dfa86273a96e80f538053b34519bc6ee9a76d8a85a2cb2dfd6fb7",
+      "signature": "function take(address, uint256, address) returns (uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-8033d687-family/selector-8033d687.json",
+      "sha256": "00a7d8c5335d03f64028c1ced5acd3bc6185dc313bdd69fbc7f402f0d5ac5d0c",
+      "semanticHash": "c4eb8381c3d6abdc6c9ca2c800175ff547cdff3d640871936438f93a74461b31",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:5e646651a4c6fbef36ce02f306eb8cd6c3d2c056152c8781b35652d3cde36e6c",
+          "mode": "execution-extension",
+          "migrationKey": "typed:yearn-auction:take-3"
+        }
+      ]
+    },
+    {
+      "selector": "0x8201aa3f",
+      "familyId": "execution:0x8201aa3f:abi-c1a49ed51e1b9db7fdee6d0e9f8c8e9e11a80f8d24c09921007dc9082dfcb8b6",
+      "signature": "function swapExactAmountIn(address, uint256, address, uint256, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-8201aa3f-family/selector-8201aa3f.json",
+      "sha256": "b076c5e0e67be3e74cbb2c3ffb9481809b6f0764ff7bfacaea52c15a569cbdeb",
+      "semanticHash": "871f432750eddaeae561db696332a4448b22e125ec6a6c7a56f7caeaca07ca52",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:3bff69d6260438cdf214cbfbd5e662d3c7000039755de25dfecf4e24193b954d",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:07e745087c43554e049330644789376a1e80053459f72b596349ee7be5fe3bfc",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x82ad56cb",
+      "familyId": "execution:0x82ad56cb:abi-5e17da39c1e19f5b092a01136899d0b125c23953c5cd80d160086f2c16292d62",
+      "signature": "function aggregate3((address, bool, bytes)[])",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-82ad56cb-family/selector-82ad56cb.json",
+      "sha256": "bf53097e86da029de29ee8a5bc9ab61a69bbe0c14c9a24fc149d96e00f638596",
+      "semanticHash": "8d41ce71d700917b56b444fda7968efc183d5fb87759dd412bbcf1fbeb058071",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x8433ea22",
+      "familyId": "execution:0x8433ea22:abi-de3b85d6841453315bba8f014242d03445e8e51391985b294f4ffe78e7dbc6d8",
+      "signature": "function liquidate(uint256, uint256, address, bool)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-8433ea22-family/selector-8433ea22.json",
+      "sha256": "ebb584eaa3ac88d444d57283d33e8d0dbdb322783dfa0cae304669b730110690",
+      "semanticHash": "f38b8682522ae4d5b595739a6eb399c08372f1bd03059cb92add3d2642b111a8",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x852a12e3",
+      "familyId": "execution:0x852a12e3:abi-275c1c40e7de81682afec478cb353a47cc466dc7495e3e6e880b69de4f560d61",
+      "signature": "function redeemUnderlying(uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-852a12e3-family/selector-852a12e3.json",
+      "sha256": "aa9439c23f19d322830ce00e2be11abb1a9743038de328208490c7243e95902a",
+      "semanticHash": "5e170587889f1176efe4082442d03804ea3d6764d9d666097c1b3df9893bfba3",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x867904b4",
+      "familyId": "execution:0x867904b4:abi-55ec25d419ae37de3e84dd36394dc867ddfcfa6cd3bb122b4074003de1a44715",
+      "signature": "function issue(address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-867904b4-family/selector-867904b4.json",
+      "sha256": "68f217b75bc3d621ccfbe3fb8df458feea039cb3d32655fc4a3727695e5d986a",
+      "semanticHash": "2352edc4acecf8edc163eea0bb927a0d843660ecdc737d18e707ba0d5b2cd748",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:07c136a6e94959d4d189be5cc0aef4b8175a3924acef5d28b075cc2a672ff878",
+          "mode": "execution-extension",
+          "migrationKey": "typed:set:legacy-issue:self:plain"
+        },
+        {
+          "programKey": "parameters:cdc0c6ead559398eeb9f60306be13c01f20a1d2c410254363d6b207005e7f158",
+          "mode": "execution-extension",
+          "migrationKey": "typed:set:legacy-issue:self:fee"
+        }
+      ]
+    },
+    {
+      "selector": "0x86b01724",
+      "familyId": "execution:0x86b01724:abi-d51466096f025afcb4a3c3690b5359fcab58e38393fa1462832912a48c523359",
+      "signature": "function swap1(uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-86b01724-family/selector-86b01724.json",
+      "sha256": "f9820094e589a0dc7adc0e2ac3d8dc2b19b1c29053659289991e87eb43e7ed00",
+      "semanticHash": "0e004ec6dec4f0b3beb2df3ae69d8228f38864f6960535cf4140a13d5a056515",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:e82a3edd815dc93002b6fbe8dbfbc6b9e662ea98a558614ce301420f328edefe",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x8d7ef9bb",
+      "familyId": "execution:0x8d7ef9bb:abi-710df79deb7367c8d28a5dd8fba6ac5f1d163328b8809bed906532b44ba48d56",
+      "signature": "function buyGem(address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-8d7ef9bb-family/selector-8d7ef9bb.json",
+      "sha256": "3273dc05f1adc5889e104c6a810ae392395d5c93f4bc4c6b66c1999fe45f6302",
+      "semanticHash": "30b744fcb80d04049d4667cc72814d2586bec06e2c8368d2fd72b612f83907ba",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:937a660fb01a97bc50eedc31930b7e519fd7fe8a581303f80c7ce9a58dff81b6",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:e48f97421c97592834140acfc6dc1961ae225eef5e52d60184d371dfc384bba6",
+          "mode": "execution-extension",
+          "migrationKey": "typed:psv:buyGem"
+        }
+      ]
+    },
+    {
+      "selector": "0x8e65b383",
+      "familyId": "execution:0x8e65b383:abi-6840d3125ae1929dea7babc8ea00de48d63738f23b60e6de31644649047c45f5",
+      "signature": "function migrateAllBIT()",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-8e65b383-family/selector-8e65b383.json",
+      "sha256": "a6f86244053ed1a27371106668db2a3e2a369635cea209f03a126248b2d10929",
+      "semanticHash": "e80bbda2db7f2e64a00c70ceae26443804875a65aa45c75db8103eee912efbf2",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0x91dd7346",
+      "familyId": "execution:0x91dd7346:abi-1ae935c0d584cdb42250b14ffc29906efc6668d247050e86fd0638a060a8c5f3",
+      "signature": "function unlockCallback(bytes)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-91dd7346-family/selector-91dd7346.json",
+      "sha256": "b036e15510618771fbefc8445f112484919bd422aefc852c2c3cd8a899673eea",
+      "semanticHash": "587988cc3da982466797431714fba28d421ab9563e0f622279e7f7d88f8c6108",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Callback endpoint of a retained complete execution program; it is not an independent transaction entry.",
+      "programs": []
+    },
+    {
+      "selector": "0x93316212",
+      "familyId": "execution:0x93316212:abi-df13f0a7d914df070b58a92e94cb52b5cf2f8335bc448ede50ee98f2625cee60",
+      "signature": "function swap(address, address, address) returns (uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-93316212-family/selector-93316212.json",
+      "sha256": "ef20295d35b3333609a42a8768045b6f2e2e563ad26317b57b3d37a7f8180043",
+      "semanticHash": "49153b1083ef4bf3a9f0fdba00db34e6bfdd9b7f106f0ef1e9b22c029ac5084a",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:1af7a11618317380fc97742bb37e56c444bb48f0e8c29facbd9969926d0b6707",
+          "mode": "execution-extension",
+          "migrationKey": "typed:vault-spot:pretransfer-accounted"
+        }
+      ]
+    },
+    {
+      "selector": "0x94bf804d",
+      "familyId": "execution:0x94bf804d:abi-57422b9ffe61e9ff9a5d91ba3c6b45e3c04576f872087083390e627fd59329c4",
+      "signature": "function mint(uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-94bf804d-family/selector-94bf804d.json",
+      "sha256": "4af94b5d70f6cfa52a7e6ac69142fe0fbf84ca965a377ad59e8beb830eda6e45",
+      "semanticHash": "56db179fac0ed5bb90921e0a66d1f80738d864fa79900a7eefb905b0a2cd91ec",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:af9716a627682e4ee7b0bee88afed1df8ab19ebeae0b25ec8833726922493f52",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x95991276",
+      "familyId": "execution:0x95991276:abi-2bb090d5eebf7bca7680cda0ed6086b6c1a07d8bc0a3dbbd9eb27a0c1dd008ff",
+      "signature": "function sellGem(address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-95991276-family/selector-95991276.json",
+      "sha256": "34f7f20a6e70652191156ef70f09b1b13c605870ffac67179b66f1d0765af18d",
+      "semanticHash": "207daf6d8ebdfe2d70b88b99bb57a00d546b0b394594c5d76ddce8a12c8522dd",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:991eafebb19da060bd257ef3f0e5e3fabcfc99c5f66cdc805aa072776426deae",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:d9b75ea6f3b914eb64f9674412d15893267042b70b07cf27290c78a384b86ea9",
+          "mode": "execution-extension",
+          "migrationKey": "typed:psv:sellGem"
+        }
+      ]
+    },
+    {
+      "selector": "0x95e3c50b",
+      "familyId": "execution:0x95e3c50b:abi-b7c63947497727f3ec46a59422a4c2b07b773f73b9dcd783e6c2bf6b25b1fd49",
+      "signature": "function tokenToEthSwapInput(uint256, uint256, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-95e3c50b-family/selector-95e3c50b.json",
+      "sha256": "4593f28e53cb1391159532db2a7a46985ba8c9af3b2760ebac53fa1333944f2d",
+      "semanticHash": "822ac6390d6e17de2a26994d59ac7b90c640e225823459ab6939d80890de1c36",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:f08218b2c74dcf57555bdd809c48b3f68d37ac94189a5ac157dc7844b52ed536",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0x978d5f79",
+      "familyId": "execution:0x978d5f79:abi-59f3f4780959c9009baedb70060c1d93957de0e8f9ba9cd54ce6bc91fd251588",
+      "signature": "function add_liquidity(uint256[4], uint256, bool, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-978d5f79-family/selector-978d5f79.json",
+      "sha256": "44f1d0f693406a7b7ff0e41e70e59e38174498b2f6dfbc7acab1b776541f5edb",
+      "semanticHash": "821e83c547c6836fc3cbb36da593d1213a227a6212c82c6890f81b8d167d4397",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:2f71fb01ccc68bc7f802edb326cb7c78db9bab9a585ef984d523d3a877fca366",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:booleanReceiver:mint:0"
+        },
+        {
+          "programKey": "parameters:3fb05e06994b22677f7348dbe3fff3df5e004ba67dae22d308ce3c10a0f864a9",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:booleanReceiver:mint:1"
+        },
+        {
+          "programKey": "parameters:d62c0dab7c0be3a2d2aeeee9b9349ef11869176f5e93e2eb129730ffd2921317",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:booleanReceiver:mint:2"
+        },
+        {
+          "programKey": "parameters:48ff7ab99234aa49a6bc3ee00b5e4e8e1352fdd210e63e3b55801fbc1ae4100b",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:booleanReceiver:mint:3"
+        }
+      ]
+    },
+    {
+      "selector": "0x9d2c110c",
+      "familyId": "execution:0x9d2c110c:abi-6da7349be36061aeaee7c5c3c8b8e36d30394743f39ef0cd741a27be63c44666",
+      "signature": "function onSwap((uint8, address, address, uint256, bytes32, uint256, address, address, bytes), uint256, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-9d2c110c-family/selector-9d2c110c.json",
+      "sha256": "189068bbafc630336b946ba9b85d1de9b6c3e3ec670b7acc674f0c4f5552841d",
+      "semanticHash": "f70ea20466511136d9f6359ce6461b37fce7426c0043f46a24029b49cb692de1",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0xa0712d68",
+      "familyId": "execution:0xa0712d68:abi-37594d034fb99eb24b563c41acc150397915f45433843dd0998df717b061c7b0",
+      "signature": "function mint(uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-a0712d68-family/selector-a0712d68.json",
+      "sha256": "5f0d4bfba665481ca343333aa6b309d334fffebd78ed3159e0760de005d89618",
+      "semanticHash": "41ca4979fd1c951628f517d16ecd05f1e70aa53145bac9cef85ad360c2051a4e",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:0719153f85f5818aebe6c859a79541d156eebe9e2039048382cf7b42b0e2fae3",
+          "mode": "parameters-and-payment"
+        }
+      ]
+    },
+    {
+      "selector": "0xa5841194",
+      "familyId": "execution:0xa5841194:abi-9103d5c901ed3ea3a858051baf28053fc1d05cf08bd2924d266ee76034c2770f",
+      "signature": "function sync(address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-a5841194-family/selector-a5841194.json",
+      "sha256": "31ef282da72b5438c8539b36d807693e651fd4d907761ed9349d96cb5cb8023a",
+      "semanticHash": "600b35872315caa85cf06afb17b37fa1c42b03bcd77afc6bf3fba7909b5b5a4d",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Nested step of a retained complete execution program; it is not an independent route entry.",
+      "programs": []
+    },
+    {
+      "selector": "0xa6220b66",
+      "familyId": "execution:0xa6220b66:abi-6d9b21b44b764ee1c438c22eb602cb59f33454d225926e43fb8e59b2e63a1227",
+      "signature": "function swapExactIn(address, uint256, uint256, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-a6220b66-family/selector-a6220b66.json",
+      "sha256": "7c30ec87806aac6a73c7f5c51c2ca1e3346260e9028135bf8c1f73e76677deab",
+      "semanticHash": "44d8b4ae832e73b07ddc5fcdea4974911d1ae8f758cf1a37145d4aa2b50f2814",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:9bc552004f0f7af149e35b6ed3ce0947b9505f17f8dbc7007a5e129c0673dbdd",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xa6417ed6",
+      "familyId": "execution:0xa6417ed6:abi-d0a153f93b8eef14666700c67260b749eacd6fdb8267875b0b24a3b10194d7e1",
+      "signature": "function exchange_underlying(int128, int128, uint256, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-a6417ed6-family/selector-a6417ed6.json",
+      "sha256": "660baf29b8b1fce4e892d5b82f68d3506735c36f993e9f2bb9fc950a2d6ddac2",
+      "semanticHash": "c46055490a830a481cd8afbbb7eecf6c04827a8673aabf48c6a69ad497ded752",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:71e5f1f7903cb7ffe0910a3c32241805f83c2d68d064943e6686257727ecbae6",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:66899f17da9d36a1f302c61feb0df10c7eddd87cbaaafa3cda6bf171b8628041",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:89e24c13002fce9f179de77200aacfd922e14190dad24a3b828d447971ae6fa5",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:9ee6932226aed582b25f6e807c964547fc7db8cfede026275d65a70f144a7655",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:c5a356fa321f5f0e98e81b1bfd7436ef1d887bed1e056ffa9b3ed2c05e9b56e3",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xa6e81533",
+      "familyId": "execution:0xa6e81533:abi-75c15f8578e3bb04d30736a359dae30c8bc8da8936fbb41c113f8733ca8419a4",
+      "signature": "function addMarketOrder(address, address, uint112)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-a6e81533-family/selector-a6e81533.json",
+      "sha256": "9156882bfaa0b6c0e26c7b4e7dc2a6dc9a544047d04dfc2f59326ce38d0a18c2",
+      "semanticHash": "fdd7762c00cb12c80302d3c176ccc6e9a28a408c27789a6434ba8b0dfc77280a",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:7f99bfc9ef53a94c1d812f513c851d0b7a62d93cbd82022b326389a7077c89bd",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xa7256d09",
+      "familyId": "execution:0xa7256d09:abi-9d173275456868f41644511ce7f403f24aa1b0821963b11ea425df87d419cc07",
+      "signature": "function add_liquidity(uint256[], uint256, address) returns (uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+      "sha256": "bab4151e809529ae1a60cdef4b50d5717d63a115b938909b3d9f486ac64a20be",
+      "semanticHash": "5b489bf25cb957c80fdabcce99c77ce7170eac4f2c228e18726aa28c144df0ab",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:cf06d650f98cb5c10cd65633490af41267189de3d8bfd60ee0de3bca7daf310c",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:receiver:mint:0"
+        },
+        {
+          "programKey": "parameters:152e7c3cab37a3ec9c4f3fcdb0ccc4830f1223c3bd9227bc9937d7229ec562a2",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:receiver:mint:1"
+        },
+        {
+          "programKey": "parameters:fcba91864ff2cf24eb9452b883a3de93a0036aac6aba0367f805022fbeb5c897",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:receiver:mint:2"
+        },
+        {
+          "programKey": "parameters:832c7ebb89858642eecee349652654b9559a519921476399aa6ac69e4c5298c3",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:receiver:mint:3"
+        },
+        {
+          "programKey": "parameters:b1f139586d0b7e945ed9bfdf858bc20b2fec8d1233e81536f02e2e95e5f2155e",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:receiver:mint:4"
+        },
+        {
+          "programKey": "parameters:4f52bf8d437f8c2adf60d32a2dc19615cec03f38fd31c5a61ce460583335a041",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:receiver:mint:5"
+        },
+        {
+          "programKey": "parameters:708c39bf860adb77531bab46d682ff58b6205fa6df79da1289d8ee09bba7e176",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:receiver:mint:6"
+        },
+        {
+          "programKey": "parameters:32db1093aec9979851d856b2127d7ecf24b23ea887d83fe24109795b579331bc",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:receiver:mint:7"
+        }
+      ]
+    },
+    {
+      "selector": "0xa88f90c1",
+      "familyId": "execution:0xa88f90c1:abi-a61d179b6ba841695786efd6c98f325306e56efb9c5ea7f1b2515cab55322ca2",
+      "signature": "function swap((address, address, uint24, int24, address), bool, uint128, uint128, (uint64, bytes)[], address, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-a88f90c1-family/selector-a88f90c1.json",
+      "sha256": "2cfd6c2a14945c9f1094f68e9117d5eec2bad065040b798afdcd402d71e96dad",
+      "semanticHash": "71bc075fb424a56123f2cf776212908a17156cfe9c37d18d76a78a391ed1f7a4",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:91966cf38b0502ad762844c1a106a9c6d941e78c3bab6d44ca364619306ecf1a",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xa9059cbb",
+      "familyId": "execution:0xa9059cbb:abi-29c2c06156bcbd1765337144fee052e980f016b3fbb20d9c83855a843efdea24",
+      "signature": "function transfer(address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-a9059cbb-family/selector-a9059cbb.json",
+      "sha256": "226c400104c7aed2f83242c0cc7c83eaae2adb7451ebcbbb2ce53140004e85b3",
+      "semanticHash": "fc1f03a2456d788b2f5bc06ccade860e9b9a14bc99b93a8979e07a82c019fdb4",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:ce90ac1187671ab106ef93fa4b0932f731ed9953b933e82ea74ae76a5e920f23",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xaa9d21cb",
+      "familyId": "execution:0xaa9d21cb:abi-13953001563def8151ddcdef10d4ca7ea6a41077c6d3aacef7a865e9d59dfe5e",
+      "signature": "function quoteExactInputSingle(((address, address, uint24, int24, address), bool, uint128, bytes))",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-aa9d21cb-family/selector-aa9d21cb.json",
+      "sha256": "d4a09c978fa330759c77a066f58e91b8fa88c07f90d9addb07a1502a5751095e",
+      "semanticHash": "4e6ffa637d91acf0e23b4910e13e893353164fe917c748bc336ccb34965a5c29",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Quote/read helper retained by its complete source program; ABI membership does not define a standalone execution route.",
+      "programs": []
+    },
+    {
+      "selector": "0xad65d76d",
+      "familyId": "execution:0xad65d76d:abi-3aa3fbb24cbea7a5e2d5fe362baa082f8beba0279fde744ab2afc3a92205ce43",
+      "signature": "function ethToTokenTransferInput(uint256, uint256, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-ad65d76d-family/selector-ad65d76d.json",
+      "sha256": "d645f74fb77e432ff8970843af6c957aeccf5dd8663507f0779fb3a60ab57bbc",
+      "semanticHash": "884b5d717fa1329d171134e8b94213f8f6e62540163ab55432be6adacb8f6d99",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:f08218b2c74dcf57555bdd809c48b3f68d37ac94189a5ac157dc7844b52ed536",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xadc9772e",
+      "familyId": "execution:0xadc9772e:abi-3f62de0cb775a7260d769c57448c2b34ab72bbb409121c3dc18e2719fd6ebd9a",
+      "signature": "function stake(address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-adc9772e-family/selector-adc9772e.json",
+      "sha256": "4f90795d611e9167f78b5b9daba6748856a0e7bedd76d65c3be28aa6a5c91a19",
+      "semanticHash": "568b8d74bad23599e8e3476bc78a958eba85db40b4ae55980fa226ddcd943cef",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:1423f8a2b5cec88ff5d4c5278db0228fa5f7134976ff3ff659685833faeb1129",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xafb43012",
+      "familyId": "execution:0xafb43012:abi-571c193eccfefde6c09f1ecad8a3e72d80f36c54116047e4abb0fef192dcf05f",
+      "signature": "function exchange_received(int128, int128, uint256, uint256, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-afb43012-family/selector-afb43012.json",
+      "sha256": "f9df4782448611911b08d9012d3513b2636de078418abe6d3890c40f93b54242",
+      "semanticHash": "967e60698ef3d65e63037ff1b9d351cf3b6150d00985e356f30418608a178c42",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:cfda5e374fd51c678d26d7a5ca81e02c1fd0c54c3d8e822dbdbd662ec35c0bcf",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:6b66cadb340b54d4cae019a168aa858fec8149e2ce1c16c206669e89d30cf38c",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xb460af94",
+      "familyId": "execution:0xb460af94:abi-56baccffca5cd5011f68fa54931a5c787b79c98895e542cb00570061ebd8fd5d",
+      "signature": "function withdraw(uint256, address, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-b460af94-family/selector-b460af94.json",
+      "sha256": "65ecc980e39c3a2b9c525cedfa5f975c258416151d38bdbb3f93af6d15877f47",
+      "semanticHash": "ba5c6aa359547ba6efd32b329764a666ba00d1411c3f048e8656b4834560babd",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:3eec3e29df38f8d066cae977069946d0b854bc5421992262aa854671a69d3a0a",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xb72df5de",
+      "familyId": "execution:0xb72df5de:abi-476bd4cc6ff7a70c44fd834e974c18135ca2cae17ed34529a2ed282ebc0b64bb",
+      "signature": "function add_liquidity(uint256[], uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+      "sha256": "bcb7a28758eb728f710d36f2d10df72f7001ee25abf522f7b1a1f4413ed81339",
+      "semanticHash": "b09e747c5ee136d31ca2c82e3af0943fa0e11cbe65d826ae599228fc1feb0d6e",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:253ea12509a499ae0c8ff6e5b64af4bce8d1abc4fd4e01ce59a8e81d245508a9",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:e3b5575bf1865168896790a27472f8d0c570785d60c88ce8ad7a81a77819de1d",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:executor:mint:0"
+        },
+        {
+          "programKey": "parameters:c15cd05d411350a377dacbee583901edc61f6b24f23d35baed20e8248471c5c3",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:executor:mint:1"
+        },
+        {
+          "programKey": "parameters:7dbc7e5565bfcc2ea150f73cc9af3134ae5832e0f2e1d7b64c2d1f023cc3e2b0",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:executor:mint:2"
+        },
+        {
+          "programKey": "parameters:6eba2caab91460ab1a6b1f775fec9799e85649076de52ab73f369fefa11ccbf4",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:executor:mint:3"
+        },
+        {
+          "programKey": "parameters:f6823654bd8f17ba2593dd62b9c756f86abeb5188bbc36ae198de004760dd18b",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:executor:mint:4"
+        },
+        {
+          "programKey": "parameters:469a0dcf107a625c7a8f3e62fb221389a3afe9bf424f889fa4cbfa394c22236c",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:executor:mint:5"
+        },
+        {
+          "programKey": "parameters:d31132f625ed4ce0c59317fa595cb868f83d17fb931be58cd79f4a0413a73e99",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:executor:mint:6"
+        },
+        {
+          "programKey": "parameters:583c9f6439d43563fcdd9b63df136785256b34722078fbe5e4479741cfaf9a7d",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:ng-dynamic:executor:mint:7"
+        }
+      ]
+    },
+    {
+      "selector": "0xba087652",
+      "familyId": "execution:0xba087652:abi-6225d388973c291bd342ac03367aa9c0b1c6e27293daeac2f043b5634b0cb236",
+      "signature": "function redeem(uint256, address, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-ba087652-family/selector-ba087652.json",
+      "sha256": "778c9812968b8560f29b8114fe30dc8cafbaf98da2dce8789bce879221a8ff4a",
+      "semanticHash": "00f9c5981b199091dbb8b345f72e70997cce027a15d9ec99f320033ff7053eb9",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:b10e1a6148dfcb05914c1c7a1bd08e2a28ac375cd85c576018b7896072dfd9c5",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:c94459093122c6e3e0af966ca3beac9ef2542f76d06707c63f7a10c05f978fbe",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:ecd22d00559890cd29f38998cddb3b7b37f3f2db7f62a950c456b0aa254006d7",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xbd6015b4",
+      "familyId": "execution:0xbd6015b4:abi-40dc02cc9929f03a644dda9f1245ae358a8a5e503902185a7dcd74c57433c821",
+      "signature": "function sellBase(address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-bd6015b4-family/selector-bd6015b4.json",
+      "sha256": "7fad78cf1aa41525e51eb29625b2b4f81386b7221a47e3fceaf7286770c628a4",
+      "semanticHash": "78cd1bdd92259f7dba02cdff6f9713889464300bbfec72a6817d9685723e50b8",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:18c55ec937ea423f52ae7e357c14d73c0cec1502da34f78925e4919eb1565949",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xbd6d894d",
+      "familyId": "execution:0xbd6d894d:abi-7539de136e692341dc4b095dc6e299bc980fea2000b5a35dc83f68cfbcf312ab",
+      "signature": "function exchangeRateCurrent()",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-bd6d894d-family/selector-bd6d894d.json",
+      "sha256": "5c4f2cdba8c286569d2d8e54d10aab3a836eb760a09aa6d79619428eb755128e",
+      "semanticHash": "4136faa36d59a5fb1e2b9718b1ab424feb5e0f60a14f3de9aae2976c2d223b28",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0xc2a672e0",
+      "familyId": "execution:0xc2a672e0:abi-78eecadb9d25ff22c6ecca3d4e7afddc4bf1097a8b19a488c1426f597188c3ab",
+      "signature": "function unstake(address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-c2a672e0-family/selector-c2a672e0.json",
+      "sha256": "cc314ecd35c23a80a8133f4ae8b5aa061f3d8bcd42650e83532eb2cd525310ae",
+      "semanticHash": "76e0f7fc790ffc1b42fcd4beb5e484118d0ecdc15342cc16a81ebdbccab4ccd2",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:5bdad024f0e5b1766ea9aca997f63185688d60234f194ae475cf5dc6ec2000af",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xc6a5026a",
+      "familyId": "execution:0xc6a5026a:abi-5f47ae94a358aa695ad827ace32470111782a1626cde0e73ae943b2270ec62fb",
+      "signature": "function quoteExactInputSingle((address, address, uint256, uint24, uint160))",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-c6a5026a-family/selector-c6a5026a.json",
+      "sha256": "318265cac5533fedb337b1d978732548edd5e9e35b9ce3509dbfcd99e168ceeb",
+      "semanticHash": "ceed0ea378e9b93965071cb90abc7bf8b45f35c9abea3585f591678e497d6f5d",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0xcb495064",
+      "familyId": "execution:0xcb495064:abi-80f248e974c51c2ee43849543b1b649369ab157b8cdfc73ad5b5b42024b1aa9d",
+      "signature": "function add_liquidity(uint256[4], uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-cb495064-family/selector-cb495064.json",
+      "sha256": "68ffad4156531915cea563a5d1c3ef4747676cb21a26f6cdcc3043505732e59e",
+      "semanticHash": "1e7df99e80a66fa3bb52a6df9a36c386458dfe3c9b42188ff52d9c3959a6d468",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:0cd178213084fc141ba670437f65c8eed868d3adf155acbfb1641b2551a13e42",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:receiver:mint:0"
+        },
+        {
+          "programKey": "parameters:4ec217ff0bce328a3c930a305f2cf01bb2500c242ef6df6077d2f6910f0b476d",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:receiver:mint:1"
+        },
+        {
+          "programKey": "parameters:e5682d2fd0171906c38a82f9ce3c6bc4e3b258cf4cbd8266c0e2c6fa2590e107",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:receiver:mint:2"
+        },
+        {
+          "programKey": "parameters:db41b616a7347f261dd25208d2c1cfa4d12a799a556272fd843aa3086a86051d",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fixed4:receiver:mint:3"
+        }
+      ]
+    },
+    {
+      "selector": "0xcb70e273",
+      "familyId": "execution:0xcb70e273:abi-b0af6034e7d9e3535396d8500d1423e302e3bf45ca5b23611453a72c71475fb5",
+      "signature": "function executePath(bytes, uint256[], address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-cb70e273-family/selector-cb70e273.json",
+      "sha256": "c44ac5d76d3279800c7241c6628d42fe3f81ff68861779adc723aa0fba258a14",
+      "semanticHash": "3816a512841d355daa1dae63ebcee62b6758b48d266c4bbcfcdddc14b8d75592",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:0775af849bfcb03f855289b543f0ff8040a42da2f6a78d258609b43d081dd3c2",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xce7d6503",
+      "familyId": "execution:0xce7d6503:abi-13af182e2c244838b73e4627560ed2b511eee21192fe40da4979062397c6496e",
+      "signature": "function exchange(uint256, uint256, uint256, uint256, bool, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-ce7d6503-family/selector-ce7d6503.json",
+      "sha256": "c41f0cb0942fc191e993d48aeba61a2ec78df7c376e51384b7bbaff358705d89",
+      "semanticHash": "260233816459a4963f46f49ed1e8031aa13ebf77acd6f23c0b357759fe30ced1",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0xd0137d8d",
+      "familyId": "execution:0xd0137d8d:abi-8903538f625de0f17fd17a13320d451061440e263856309f8d5167921a8b47d5",
+      "signature": "function swapBase1()",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-d0137d8d-family/selector-d0137d8d.json",
+      "sha256": "25fa416a404a7454f8447712d91a62599e4a1e653d8d26816eaa6cbe2895fa8d",
+      "semanticHash": "13ec4c164645bfb877684ad49c2258aa14932f6b704ca123e3643dca6baa6fa3",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:86178dd2e8e9ab2887fd378e7c17111d8937500b97304a0994b8778872560957",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xd01d073a",
+      "familyId": "execution:0xd01d073a:abi-cde221285698fc28588e3e065f1f0c30e6e874b9f50b81b94eaba43ad707d312",
+      "signature": "function syncDeposit(uint256, address, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-d01d073a-family/selector-d01d073a.json",
+      "sha256": "96412d690683e931a935c02ee944bb574b3a369189b1cf5b4608ab0ac52f5e83",
+      "semanticHash": "c816599d59a68941d0210c9a1fb089da36d49e9c70ddad53e06f07bda02837fa",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:ca94c100f98d723f3733b9dc50404e6d0567c4817c9a4d85c474f98750ec8ad6",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xd04c6983",
+      "familyId": "execution:0xd04c6983:abi-a9842527fb339bcb38bedbf60081304632b5d7909358489605c9330d2ceaaef6",
+      "signature": "function sell(uint256, uint256, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-d04c6983-family/selector-d04c6983.json",
+      "sha256": "9dd1fd656fb0c7a7443229f7a658ba24d97b001f6ce825cd39b6a9e5d84513cb",
+      "semanticHash": "de85aa3533619d758b31369fddf16c1b4b7a9796f302922f26bbf428a1d4a636",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:51850a6dbc3762daf4fc8d9ed47ec58d80d152acff28c5221b65965a6bf132c9",
+          "mode": "parameters-and-payment"
+        }
+      ]
+    },
+    {
+      "selector": "0xd0e30db0",
+      "familyId": "execution:0xd0e30db0:abi-5b1cb02972f399ff8720425fd4e17851ccc9c824de70518c2ba05ca7c7b065fd",
+      "signature": "function deposit()",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-d0e30db0-family/selector-d0e30db0.json",
+      "sha256": "6e3b58413bf86760189f50bfa964366e8f7f5ecac35909e715397d4eb004fc6b",
+      "semanticHash": "66aa4477c7d0487c3d45de5a9abb9c334a8b2ba050146152cae5091538d57f5d",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Nested step of a retained complete execution program; it is not an independent route entry.",
+      "programs": []
+    },
+    {
+      "selector": "0xd5bcb9b5",
+      "familyId": "execution:0xd5bcb9b5:abi-bb59a412572f7c65925f4b252b357d200c3ffafae6be30fde0649da502a30427",
+      "signature": "function swap(address, address, uint256, uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-d5bcb9b5-family/selector-d5bcb9b5.json",
+      "sha256": "7c0c108a2bc43c5854a0051b198c122e1cc811176dd4f1ca6e71989e4553e01c",
+      "semanticHash": "bd9410d518c31e0cb1f2513bf8340322fb9f10d5b78bc1f9d7eb037eb4be97f1",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0xdb006a75",
+      "familyId": "execution:0xdb006a75:abi-54ea9f2a3866004fb43ec423a7a7279aed3be3d8fdf061ec592cf58553b8e953",
+      "signature": "function redeem(uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-db006a75-family/selector-db006a75.json",
+      "sha256": "634f9d3be91f2bee639ca32e07866b054aa8ff5e80b1627f016f2186eb210448",
+      "semanticHash": "ed7313823e8bad6edf80343e7f5ebd975c1dc77187c5674113ebfebb12e0238f",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:076dfa460df4a5dd31d716159c7bd33b1a0df295f48f492443f04e0e1d067868",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:6aad477f61390c881024cecabdbb9b1807816c310297ebb532245ddc65983117",
+          "mode": "parameters-and-payment"
+        }
+      ]
+    },
+    {
+      "selector": "0xdd93f59a",
+      "familyId": "execution:0xdd93f59a:abi-2ad8659fdf3e74f33759fc05bf27829a820cc8292a050841969269ffb206c5a4",
+      "signature": "function sellQuote(address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-dd93f59a-family/selector-dd93f59a.json",
+      "sha256": "36db235f7f2e63c640e8eb13a337647d8935482810585ed1dc9976691721fddd",
+      "semanticHash": "c4a3bc5ca6722710a0cdaf0d86c47268ebaf89c5f6c4ca8d8585c3001a4aa8ad",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:32fe881070f32f54f487d7b7704671e903925f976291efd6d701ad38321cab98",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xddc1f59d",
+      "familyId": "execution:0xddc1f59d:abi-9149107dce20e9088e282391de103858feaad9457db283a72362d52ae84a2b7d",
+      "signature": "function exchange(int128, int128, uint256, uint256, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-ddc1f59d-family/selector-ddc1f59d.json",
+      "sha256": "306c4c24e722f84ad1ad6358a2071132cccc60697bcdb653ef330968453068db",
+      "semanticHash": "4e5b4c28b049f2682823f885dcced9fa6ee96caea43fa34bfb49be1a0ffd5ac7",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0xde0e9a3e",
+      "familyId": "execution:0xde0e9a3e:abi-7ba0397f9b615baf0ee9ab4ed65e8f982ecad74f81a150e9d02a0844794cd02c",
+      "signature": "function unwrap(uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-de0e9a3e-family/selector-de0e9a3e.json",
+      "sha256": "771d0934ce5c2dc0053f74a473e4716b6292c77d93f90ca4ba6ff0c6a4128f4f",
+      "semanticHash": "e5d161200367688b8818c074b872f369907163bf26ecb8f5859cd4b31d73ea75",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:ca89c61816df65b8f06bcc1bcefb40f73eb30e206ae74d66714799aa392afd5e",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:c5141d48aa6054825b26274f05eb7cb7e954bcdaf263dee8880c2b3ab327ae68",
+          "mode": "parameters-and-payment"
+        }
+      ]
+    },
+    {
+      "selector": "0xdf791e50",
+      "familyId": "execution:0xdf791e50:abi-ff37104d59d7dc17e56b54ec1b2d45d49c8ebdf763a98e079e0944de3b38aea8",
+      "signature": "function swap(address, address, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-df791e50-family/selector-df791e50.json",
+      "sha256": "5e25922d535801de40fb08de3c15dc8b220f73539d8f427905cc120134d43f5f",
+      "semanticHash": "3a668372c084c715b9017a2084e7df76348fcfe4e73711d7b3afb0810bc830b7",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:9be648a4130757e7d0160c51ffae935b1b4b634d8610f8282b7ba396d4b489b4",
+          "mode": "parameters-and-payment"
+        }
+      ]
+    },
+    {
+      "selector": "0xdfcd412e",
+      "familyId": "execution:0xdfcd412e:abi-b52bd7396e677c70010285aee8b2a683c1768af51ef96c09503d3edde20c2f71",
+      "signature": "function withdraw(address, uint256, address, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-dfcd412e-family/selector-dfcd412e.json",
+      "sha256": "2539d7d60b5f15fda234ed1d632078c53a1aea3d5a1750ba08dece0bbec8f0b0",
+      "semanticHash": "3b382a9f249a0fc26bc62d58214f9e39caa5fd443cdd89c715f7943a5305cc6c",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified.",
+      "programs": []
+    },
+    {
+      "selector": "0xe0232b42",
+      "familyId": "execution:0xe0232b42:abi-63b983bbdf20287268a7c62b4b9cb5ee476ada22bbb9c0155bf075b7cbd6b672",
+      "signature": "function flashLoan(address token, uint256 assets, bytes data)",
+      "domain": "funding",
+      "file": "listener/src/searcher/venues/selector-native/selector-e0232b42-family/selector-e0232b42.json",
+      "sha256": "71be26ea3e42cce4b8a4af80dd3d6ba7b852596b5854f21894665e7e524cda65",
+      "semanticHash": "6dbffab482aa9794d1d309c3b0e895e9b190bf7a5f670450f01347390c7e6a01",
+      "enabled": true,
+      "status": "funding-template",
+      "programs": []
+    },
+    {
+      "selector": "0xe2ad025a",
+      "familyId": "execution:0xe2ad025a:abi-d68e80f6402c90427bad6fccf9e48a7b606e8ecf1eda2803156b1f327ab3b2f9",
+      "signature": "function exchange_underlying(uint256, uint256, uint256, uint256, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-e2ad025a-family/selector-e2ad025a.json",
+      "sha256": "b59a481e97299b676d6589c87bb15140f3a220d776907b8e6b0343b3da563a43",
+      "semanticHash": "98f4511dcf8b4c00ef0ba9df103f354642a26838a9d285d2596edd0c92d45a70",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:71f4480792b37cf7fc5bdd130f40b879ac6080301252df906308912868d429b9",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:7f4d31850d802d603a505284f9c2af408797428fabc40417cdf818e27a79802d",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:b337b05654be6cb5c2d4860190e69ba2ae67371b9cf1b04923b64e6c0aff5609",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:72c2e2b76aed1dff3a90f9785455a86f1672276cd65fbddb1d7a49c21df8f47e",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:e5256d6c62ed9ee17303b8d5a99b9ef3169e3900466e43395dcb09a0455bf870",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xe331d039",
+      "familyId": "execution:0xe331d039:abi-228656e2de21278d5b3ea23ac92f5db24dbd5b5d05f084ed997bdd8096618d05",
+      "signature": "function swapFor(address, address, uint256, uint256, address, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-e331d039-family/selector-e331d039.json",
+      "sha256": "6ab26ac65e3d1e1863c8ed75ab6e51b3da8318e005a5e27ffce4da3160b0204e",
+      "semanticHash": "2e96b319ac25b92514c6d7314ddfd814959cac02373d0e416a53e40943cf2592",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:5e121ba10e561ad85fdc411592a00753b010d99b2c0505e5264f471d9b19a6a6",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xea598cb0",
+      "familyId": "execution:0xea598cb0:abi-df0c656d6ec7de16bb53398056481d18763146d232c7f2c233760eaa35e3e6c9",
+      "signature": "function wrap(uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-ea598cb0-family/selector-ea598cb0.json",
+      "sha256": "55ef311cacf7138460b2c358248276e25b272899a430b21a4f1149221ff9f78a",
+      "semanticHash": "062d446322165bb1d41da4149cf98eeb3c8d939154a5fbdffd5985c9f3860be9",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:eef2aa307ee46180697382a1a95f84dc1df19f685f1045e91e54e5acaeac29a1",
+          "mode": "execution-extension"
+        },
+        {
+          "programKey": "parameters:9420dfcc263cf7fca72119deaf44c9ddd2c6163261d6f52335dea31f512e336b",
+          "mode": "parameters-and-payment"
+        }
+      ]
+    },
+    {
+      "selector": "0xee9c79da",
+      "familyId": "execution:0xee9c79da:abi-4ab473b4d6a224a7ff327e2c76d26c00187155814877309ba5d5d8d8725d0670",
+      "signature": "function debond(uint256, address[], uint8[])",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-ee9c79da-family/selector-ee9c79da.json",
+      "sha256": "30583ee28dbce53b94638d84f2e256b5e0224cbd3d9e8384d17daf822da54426",
+      "semanticHash": "bd84b0b9d25d478a92e35c5c30e832bf93cc2c57416a7f1211e713bd5e36c874",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:b2ba672e07fea3dcbad9ac1cf3ed2cb4350a48da1d12840899d3183c72b0035f",
+          "mode": "execution-extension",
+          "migrationKey": "typed:peapods-debond:single-asset"
+        }
+      ]
+    },
+    {
+      "selector": "0xf196187f",
+      "familyId": "execution:0xf196187f:abi-c8fa2d527fc2143fe3cf276514f8aed36de1393a80e21b6798d8b0a0af6ebecf",
+      "signature": "function swap((address, address, bytes32), bool, int128, uint96, uint256, int256, address)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-f196187f-family/selector-f196187f.json",
+      "sha256": "ba093504df16d83706780f6e9f5ecd0ebc56a8d7ab4015a25154b27a2df344e4",
+      "semanticHash": "bc1457909e9cce954417604b8c9272ea2ed85c189fabc670740c5acc5698ad34",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:fe38bc8a7bbd37e91556203edfbb715973c68d834c497d72670b46d34827eedd",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xf1dc3cc9",
+      "familyId": "execution:0xf1dc3cc9:abi-aa3630cdb6ed4cdcd032507606b91bec6b1418a57af538e9c9d2c692e7bf362e",
+      "signature": "function remove_liquidity_one_coin(uint256, uint256, uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-f1dc3cc9-family/selector-f1dc3cc9.json",
+      "sha256": "5f4e3f682f9c3bc41a65c3e059fbdae8e86c458ecbbd07dfb7abd034dfc64221",
+      "semanticHash": "bf9fc088cd1635b0739a535f179b179fee2645946c1bc815810904336f48ea34",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:b70c55e086023baf4dc3bc42c23b7b6d6ecb3c8d3db35c0402456996078de358",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:uint256:none:redeem"
+        },
+        {
+          "programKey": "parameters:6a9dad3f52370453fb65964f85b78f9b74bd58b201b20e857b6b9c198115f09c",
+          "mode": "execution-extension",
+          "migrationKey": "curve-lp:fee-claim:none:redeem"
+        }
+      ]
+    },
+    {
+      "selector": "0xf39b5b9b",
+      "familyId": "execution:0xf39b5b9b:abi-7f8ddd16ff0e73c29fddcfaa78aec6bb703d35f21ccd43a25eeda091325f2c17",
+      "signature": "function ethToTokenSwapInput(uint256, uint256)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-f39b5b9b-family/selector-f39b5b9b.json",
+      "sha256": "b97cb5d3ab4a9e3d4ed467ebdb952b64252201858c9b8e002d511035a658a7b7",
+      "semanticHash": "80d478a96b74e0e1494447832d80ae682941c9807406a61d3dac8b7048d0625a",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:f08218b2c74dcf57555bdd809c48b3f68d37ac94189a5ac157dc7844b52ed536",
+          "mode": "execution-extension"
+        }
+      ]
+    },
+    {
+      "selector": "0xf3cd914c",
+      "familyId": "execution:0xf3cd914c:abi-0c57e92ad2b0a2d3db087ce41e9da5088f795719d2c68bb33861a1c96eedb7d3",
+      "signature": "function swap((address, address, uint24, int24, address), (bool, int256, uint160), bytes)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-f3cd914c-family/selector-f3cd914c.json",
+      "sha256": "b0daa0f05519edfcd7a2356059ab7b23c34eac3ac6c1df28da1c922f098187ed",
+      "semanticHash": "c90b1ea7e5ca86ecb0db75631894685db0b2c8ac6946151adc00f445b8c57906",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Nested step of a retained complete execution program; it is not an independent route entry.",
+      "programs": []
+    },
+    {
+      "selector": "0xf4d2d412",
+      "familyId": "execution:0xf4d2d412:abi-c14311aeaf3f5c40d2f1b7edfa7e59b28fc6c228d5fa9d872fce2fa5fc40d236",
+      "signature": "function swap((address maker, uint256 traits, bytes data) order, address tokenIn, address tokenOut, uint256 amount, bytes takerTraitsAndData) returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash)",
+      "domain": "swap",
+      "file": "listener/src/searcher/venues/selector-native/selector-f4d2d412-family/selector-f4d2d412.json",
+      "sha256": "36daefdaf06e495af773be02a01656fd8cfe30c3a2d38e4eb8c97e3fc1b0b865",
+      "semanticHash": "bad376f64e19fb197c619c96475e9d51a0314658eea540de86895b10e781211b",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:a04f9f1042884783a9c96c1d966249f5a4788ddfe2444f9f6ccb9582dbd00784",
+          "mode": "execution-extension",
+          "migrationKey": "typed-aqua-swapvm-registered-order"
+        }
+      ]
+    },
+    {
+      "selector": "0xf5720c4a",
+      "familyId": "execution:0xf5720c4a:abi-d6bba2824d52f2748c56e3e05c5cf3ee767b8ca23feb9c4dd5884ac7133c0eae",
+      "signature": "function migrateBIT(uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-f5720c4a-family/selector-f5720c4a.json",
+      "sha256": "67733dd3d9d3ede69b00dee705c6b819bc49a7a5f2143fb99932f00b8ce7ef7d",
+      "semanticHash": "1039c37ff9f3202d36e93ef1db404090dd36c7629f74a03b1703eea07a48fffc",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:f2f286571e3e5f3cad719db223f1e29f0a94cef9d9616335731a4e38caee90a7",
+          "mode": "parameters-and-payment"
+        }
+      ]
+    },
+    {
+      "selector": "0xfa461e33",
+      "familyId": "execution:0xfa461e33:abi-8d4bde41dbab07a923372036bf5c1192cf381271a3bff5b322187876a3369359",
+      "signature": "function uniswapV3SwapCallback(int256, int256, bytes)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-fa461e33-family/selector-fa461e33.json",
+      "sha256": "cea7467bff9b1a872150d8f01f50c4825ccb06e57384a1054db45639cecd95dd",
+      "semanticHash": "fbf7a1f91399fa6c7d2cadb61e771f6e0889b283cb1eb2e382adfc3418aac97e",
+      "enabled": true,
+      "status": "observation-only",
+      "unsupportedReason": "Callback endpoint of a retained complete execution program; it is not an independent transaction entry.",
+      "programs": []
+    },
+    {
+      "selector": "0xfad3cc4b",
+      "familyId": "execution:0xfad3cc4b:abi-6910196da53c7671e49c0d6286b85da81673aef0f222b2b89407a409aac9fdfe",
+      "signature": "function deposit(uint256, uint256, uint256, address) returns (uint256)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-fad3cc4b-family/selector-fad3cc4b.json",
+      "sha256": "797377023efa9f026f0c99122a9bd80e63ea68034b3d1ea5d2b1456e88f90401",
+      "semanticHash": "938c322bd9e73ba241a782d75670ab437a7778527161b356ef8f639aa3c5e4aa",
+      "enabled": false,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:f953b8b863b8fa712affcf66dd7bc74c323a581caf1e735bc0cb2593e38ef6f5",
+          "mode": "execution-extension",
+          "migrationKey": "yieldbasis-lt:deposit:receiver"
+        }
+      ]
+    },
+    {
+      "selector": "0xfea53be1",
+      "familyId": "execution:0xfea53be1:abi-a30a2e81f44582ede9b6d3655f83d4fb94da8642ec232b7d1a9dfd2d1553bd17",
+      "signature": "function redeem(address, uint256, address, address)",
+      "domain": "protocol",
+      "file": "listener/src/searcher/venues/selector-native/selector-fea53be1-family/selector-fea53be1.json",
+      "sha256": "6a83c36c11f63c258d8cd58826fd61b162b74592a18fd1dac616232125080d8b",
+      "semanticHash": "29e10d8696ed2c5d394afa31be6d11a1d905c513ce956bc9e835188e70dd250c",
+      "enabled": true,
+      "status": "execution-programs",
+      "programs": [
+        {
+          "programKey": "parameters:3314185a8c69e4b241b3af3cbe0202905b9923c8d4ee9226b4d19d02df1c7aa6",
+          "mode": "execution-extension"
+        }
+      ]
+    }
+  ]
+}

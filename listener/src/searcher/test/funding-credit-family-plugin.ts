@@ -39,7 +39,7 @@ import {
 } from "../venues/family-capability-catalog.js";
 import { bindFamilyOwnedAction } from
   "../venues/family-owned-action.js";
-import { loadProductionFamilyModules } from
+import { loadStrictProductionFamilyPlugins } from
   "../venues/production-families/loader.js";
 
 const ADDRESS = `0x${"11".repeat(20)}`;
@@ -445,24 +445,26 @@ assert.throws(
   /not a route Family/,
 );
 
+// Internal Domain ports remain testable, but no handwritten plugin is a v2
+// production module. Native positive/activation/infra cases live in
+// selector-native-module.test.ts and exercise the actual public factory.
 const loaderRoot = await mkdtemp(resolve(tmpdir(), "strict-domain-loader-"));
 try {
-  await Promise.all([
-    writeFile(resolve(loaderRoot, "funding.production.ts"), ""),
-    writeFile(resolve(loaderRoot, "credit.production.ts"), ""),
-  ]);
-  const loaded = await loadProductionFamilyModules([], {
-    sourceDirectory: loaderRoot,
-    importEntry: async (sourceFile) => ({
-      plugin: sourceFile.startsWith("funding") ? funding : credit,
-    }),
-  });
-  assert.deepEqual(loaded.issues, []);
-  assert.deepEqual(
-    loaded.plugins.map((item) => item.familyId),
-    ["credit:fixture", "flash-loan:fixture"],
-    "automatic loader must recognize both strict non-route Domain brands",
-  );
+  await writeFile(resolve(loaderRoot, "legacy.production.ts"), "");
+  for (const namespace of [{ plugin: funding }, { plugin: credit },
+    { productionFamilyModule: { contractKind: "legacy-production-module" } },
+    { productionFamilyModule: {}, plugin: funding }]) {
+    const rejected = await loadStrictProductionFamilyPlugins({
+      sourceDirectory: loaderRoot, importEntry: async () => namespace,
+    });
+    assert.deepEqual(rejected.plugins, []);
+    assert.deepEqual(rejected.disabledPlugins, []);
+    assert.deepEqual(rejected.modules, []);
+    assert(Object.isFrozen(rejected.modules));
+    assert.equal(rejected.issues.length, 1);
+    assert.equal(rejected.issues[0]!.code, "invalid_module_contract");
+    assert.match(rejected.issues[0]!.message, /no longer supported/);
+  }
 } finally {
   await rm(loaderRoot, { recursive: true, force: true });
 }

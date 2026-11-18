@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x1d6e11f2",
+  "signature": "function distributeInterpolationRewards()",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_1D6E11F2_ENABLED"
+  },
+  "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

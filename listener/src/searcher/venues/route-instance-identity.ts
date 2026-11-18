@@ -160,6 +160,14 @@ export function edgeInstanceKey(edge: TokenEdge): string {
   return edge.instanceKey ?? edge.target.toLowerCase();
 }
 
+/**
+ * An explicit resource comparison takes precedence over legacy identity. Each
+ * caller keeps its own historical fallback when either edge lacks the field.
+ * Resource keys are opaque, case-sensitive values issued by the Graph runtime.
+ */
+export { explicitStateResourceEquality, explicitStateResourceOverlap, explicitStateResourceKeys,
+  stateResourceSetIdentity } from "./route-state-resources.js";
+
 export function edgeExecutionVariantKey(edge: TokenEdge): string {
   const bindingHash =
     validatedRouteImmutableBindingHash(edge.routeBinding);

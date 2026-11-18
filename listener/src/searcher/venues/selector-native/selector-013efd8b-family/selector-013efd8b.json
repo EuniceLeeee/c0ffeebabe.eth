@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x013efd8b",
+  "signature": "function tokenToEthSwapOutput(uint256, uint256, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_013EFD8B_ENABLED"
+  },
+  "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x0b0d9c09",
+  "signature": "function take(address, address, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_0B0D9C09_ENABLED"
+  },
+  "unsupportedReason": "Nested step of a retained complete execution program; it is not an independent route entry."
+}

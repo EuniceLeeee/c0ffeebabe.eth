@@ -1,0 +1,138 @@
+[
+  {
+    "cases": [
+      {
+        "selector": "0xb460af94",
+        "method": "withdraw",
+        "input": "888",
+        "output": "592",
+        "inputMode": "exact",
+        "readySimulations": 0,
+        "startupTransactions": 2,
+        "targetTransactions": 1,
+        "startupAmountSpent": "888",
+        "executionVerified": true,
+        "finalEncodedExecution": "local-EVM-balanced-deltas"
+      },
+      {
+        "selector": "0x94bf804d",
+        "alternativeRecipes": 2,
+        "pendingBindings": 2,
+        "quotedRecipes": 1,
+        "rejectedRecipes": 1,
+        "rejectedReason": "actual-EVM-missing-approval",
+        "sharedPhysicalResource": true
+      },
+      {
+        "selector": "0x94bf804d",
+        "method": "mint",
+        "input": "777",
+        "output": "1165",
+        "inputMode": "exact",
+        "readySimulations": 0,
+        "startupTransactions": 2,
+        "targetTransactions": 1,
+        "startupAmountSpent": "777",
+        "executionVerified": true,
+        "finalEncodedExecution": "local-EVM-balanced-deltas"
+      },
+      {
+        "selector": "0x8d7ef9bb",
+        "method": "buyGem",
+        "input": "1000000000000000123",
+        "output": "1000000",
+        "inputMode": "maximum",
+        "readySimulations": 0,
+        "startupTransactions": 2,
+        "targetTransactions": 1,
+        "startupAmountSpent": "1000000000000000000",
+        "executionVerified": true,
+        "finalEncodedExecution": "local-EVM-balanced-deltas"
+      }
+    ],
+    "rpcMethods": {
+      "eth_getBlockByHash": 1,
+      "eth_chainId": 1,
+      "eth_getCode": 6,
+      "eth_call": 22,
+      "eth_createAccessList": 6,
+      "eth_getStorageAt": 6
+    },
+    "simulationPolicy": "forbid-trace",
+    "startupTransport": "isolated-local-EVM-receipts; raw-V1-compatibility-not-claimed",
+    "broadcast": "local-fixture-only"
+  },
+  {
+    "scope": "local-EVM-regression",
+    "minimalSwap": true,
+    "identityReads": 0,
+    "readySimulations": 0,
+    "generatedEdges": 2,
+    "physicalPools": 2,
+    "pricedRows": 2,
+    "startupExecutions": 2,
+    "naturallyEnumerated": 1,
+    "forcedSelection": 0,
+    "plans": 1,
+    "exactSimulations": 32,
+    "selectedAmount": "1000000000000000000",
+    "finalSimulations": 1,
+    "finalDecision": "blockscan_submit_disabled",
+    "ev": "ev_gate_pass",
+    "sourceTransport": "read-only-no-trace",
+    "startupTransport": "isolated-local-EVM-receipts",
+    "broadcast": false
+  },
+  {
+    "scope": "local-EVM-only; strict V1 transport remains incompatible with bundled Anvil",
+    "runtimeBytes": 25272,
+    "runtimeCodeHash": "0xd564ee216cb98358d6e21c5434d812d1e767c4f76f82056b500845a2bfbbce47",
+    "codeSizeLimitRelaxed": true,
+    "nativePrefix": [
+      {
+        "maxInputPathHops": 4,
+        "actualLegs": 5,
+        "initialFundingOnly": true,
+        "targetBudget": "1600",
+        "targetSpent": "1593",
+        "targetOutput": "3200",
+        "fundingContext": 5
+      },
+      {
+        "maxInputPathHops": 6,
+        "actualLegs": 7,
+        "initialFundingOnly": true,
+        "targetBudget": "6400",
+        "targetSpent": "6393",
+        "targetOutput": "12800",
+        "fundingContext": 7
+      }
+    ],
+    "sourceNPrefix": {
+      "initialFundingOnly": true,
+      "deltas": [
+        "0",
+        "-190",
+        "400"
+      ],
+      "sourceUnchanged": true
+    },
+    "prefixBoundaryActualEvm": true,
+    "authenticatedFailureHops": [
+      5,
+      -1
+    ],
+    "rawV1Rejected": true,
+    "rpcCounts": {
+      "eth_getBlockByHash": 2,
+      "eth_chainId": 2,
+      "eth_getCode": 4,
+      "eth_call": 7,
+      "eth_createAccessList": 4,
+      "eth_getStorageAt": 4,
+      "eth_getBlockByNumber": 4,
+      "eth_simulateV1": 2
+    },
+    "traceRequests": 0
+  }
+]

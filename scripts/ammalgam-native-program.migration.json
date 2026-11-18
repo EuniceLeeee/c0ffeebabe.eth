@@ -1,0 +1,1783 @@
+{
+  "label": "ammalgam-pair:current-reserve-reference-execution",
+  "values": {
+    "abi": {
+      "swapEvents": [
+        "event Swap(address indexed sender,uint256 amountXIn,uint256 amountYIn,uint256 amountXOut,uint256 amountYOut,address indexed to)"
+      ]
+    },
+    "constants": {},
+    "expressions": {},
+    "programs": {},
+    "inputs": []
+  },
+  "binding": {
+    "candidate": {},
+    "facts": {
+      "pair": "$target",
+      "tokenX": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$arguments",
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "$scope.tokenIn",
+          "$scope.tokenOut"
+        ]
+      },
+      "tokenY": {
+        "op": "if",
+        "args": [
+          {
+            "op": "eq",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$arguments",
+                      0
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "$scope.tokenOut",
+          "$scope.tokenIn"
+        ]
+      }
+    },
+    "descriptor": {
+      "op": "merge",
+      "args": [
+        {
+          "familyId": "$facts.familyId",
+          "lineageId": "$facts.lineageId",
+          "instanceKey": "$facts.subject",
+          "provenance": "$facts.provenance",
+          "runtimeRequirements": []
+        },
+        "$facts.facts"
+      ]
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pair",
+    "venue": {
+      "kind": "address-pool",
+      "pool": "$descriptor.pair"
+    },
+    "directions": [
+      {
+        "id": "x-y",
+        "enabled": true,
+        "tokenIn": "$descriptor.tokenX",
+        "tokenOut": "$descriptor.tokenY",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pair": "$descriptor.pair",
+          "xForY": true
+        }
+      },
+      {
+        "id": "y-x",
+        "enabled": true,
+        "tokenIn": "$descriptor.tokenY",
+        "tokenOut": "$descriptor.tokenX",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pair": "$descriptor.pair",
+          "xForY": false
+        }
+      }
+    ]
+  },
+  "context": {},
+  "state": {},
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": [
+      "$descriptor.pair",
+      "$route.tokenIn",
+      "$route.tokenOut"
+    ],
+    "requireCanonicalSource": true,
+    "quoteOutput": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "reserves",
+          "static": true,
+          "call": {
+            "target": "$descriptor.pair",
+            "signature": "function getReserves() view returns(uint112,uint112,uint32)",
+            "args": [],
+            "save": {
+              "reserveX": 0,
+              "reserveY": 1
+            },
+            "checks": [
+              {
+                "left": {
+                  "op": "if",
+                  "args": [
+                    "$route.xForY",
+                    {
+                      "runtime": "reserveX"
+                    },
+                    {
+                      "runtime": "reserveY"
+                    }
+                  ]
+                },
+                "operator": "gte",
+                "right": {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              },
+              {
+                "left": {
+                  "op": "if",
+                  "args": [
+                    "$route.xForY",
+                    {
+                      "runtime": "reserveY"
+                    },
+                    {
+                      "runtime": "reserveX"
+                    }
+                  ]
+                },
+                "operator": "gte",
+                "right": {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "references",
+          "static": true,
+          "call": {
+            "target": "$descriptor.pair",
+            "signature": "function referenceReserves() view returns(uint112,uint112)",
+            "args": [],
+            "save": {
+              "referenceX": 0,
+              "referenceY": 1
+            },
+            "checks": [
+              {
+                "left": {
+                  "op": "if",
+                  "args": [
+                    "$route.xForY",
+                    {
+                      "runtime": "referenceX"
+                    },
+                    {
+                      "runtime": "referenceY"
+                    }
+                  ]
+                },
+                "operator": "gte",
+                "right": {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              },
+              {
+                "left": {
+                  "op": "if",
+                  "args": [
+                    "$route.xForY",
+                    {
+                      "runtime": "referenceY"
+                    },
+                    {
+                      "runtime": "referenceX"
+                    }
+                  ]
+                },
+                "operator": "gte",
+                "right": {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "assets",
+          "static": true,
+          "call": {
+            "target": "$descriptor.pair",
+            "signature": "function totalAssetsAndShares(bool) view returns(uint112[6],uint112[6])",
+            "args": [
+              false
+            ],
+            "save": {
+              "depositX": 1,
+              "depositY": 2,
+              "borrowX": 4,
+              "borrowY": 5
+            }
+          }
+        },
+        {
+          "id": "balanceIn",
+          "static": true,
+          "call": {
+            "target": "$route.tokenIn",
+            "signature": "function balanceOf(address) view returns(uint256)",
+            "args": [
+              "$descriptor.pair"
+            ],
+            "save": {
+              "balanceIn": 0
+            }
+          }
+        },
+        {
+          "id": "validateInput",
+          "math": {
+            "model": "netBalance",
+            "inputs": {
+              "balance": {
+                "runtime": "balanceIn"
+              },
+              "borrow": {
+                "op": "if",
+                "args": [
+                  "$route.xForY",
+                  {
+                    "runtime": "borrowX"
+                  },
+                  {
+                    "runtime": "borrowY"
+                  }
+                ]
+              },
+              "deposit": {
+                "op": "if",
+                "args": [
+                  "$route.xForY",
+                  {
+                    "runtime": "depositX"
+                  },
+                  {
+                    "runtime": "depositY"
+                  }
+                ]
+              },
+              "reserve": {
+                "op": "if",
+                "args": [
+                  "$route.xForY",
+                  {
+                    "runtime": "reserveX"
+                  },
+                  {
+                    "runtime": "reserveY"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "net": "netIn",
+              "reserveScaled": "reserveInScaled",
+              "missingScaled": "missingInScaled"
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "netIn"
+                },
+                "operator": "eq",
+                "right": {
+                  "op": "if",
+                  "args": [
+                    "$route.xForY",
+                    {
+                      "runtime": "reserveX"
+                    },
+                    {
+                      "runtime": "reserveY"
+                    }
+                  ]
+                }
+              },
+              {
+                "left": {
+                  "runtime": "reserveInScaled"
+                },
+                "operator": "gte",
+                "right": {
+                  "runtime": "missingInScaled"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "balanceOut",
+          "static": true,
+          "call": {
+            "target": "$route.tokenOut",
+            "signature": "function balanceOf(address) view returns(uint256)",
+            "args": [
+              "$descriptor.pair"
+            ],
+            "save": {
+              "balanceOut": 0
+            }
+          }
+        },
+        {
+          "id": "validateOutput",
+          "math": {
+            "model": "netBalance",
+            "inputs": {
+              "balance": {
+                "runtime": "balanceOut"
+              },
+              "borrow": {
+                "op": "if",
+                "args": [
+                  "$route.xForY",
+                  {
+                    "runtime": "borrowY"
+                  },
+                  {
+                    "runtime": "borrowX"
+                  }
+                ]
+              },
+              "deposit": {
+                "op": "if",
+                "args": [
+                  "$route.xForY",
+                  {
+                    "runtime": "depositY"
+                  },
+                  {
+                    "runtime": "depositX"
+                  }
+                ]
+              },
+              "reserve": {
+                "op": "if",
+                "args": [
+                  "$route.xForY",
+                  {
+                    "runtime": "reserveY"
+                  },
+                  {
+                    "runtime": "reserveX"
+                  }
+                ]
+              }
+            },
+            "outputs": {
+              "net": "netOut",
+              "reserveScaled": "reserveOutScaled",
+              "missingScaled": "missingOutScaled"
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "netOut"
+                },
+                "operator": "eq",
+                "right": {
+                  "op": "if",
+                  "args": [
+                    "$route.xForY",
+                    {
+                      "runtime": "reserveY"
+                    },
+                    {
+                      "runtime": "reserveX"
+                    }
+                  ]
+                }
+              },
+              {
+                "left": {
+                  "runtime": "reserveOutScaled"
+                },
+                "operator": "gte",
+                "right": {
+                  "runtime": "missingOutScaled"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "output",
+          "math": {
+            "model": "quadraticOutput",
+            "inputs": {
+              "reserveIn": {
+                "op": "if",
+                "args": [
+                  "$route.xForY",
+                  {
+                    "runtime": "reserveX"
+                  },
+                  {
+                    "runtime": "reserveY"
+                  }
+                ]
+              },
+              "reserveOut": {
+                "op": "if",
+                "args": [
+                  "$route.xForY",
+                  {
+                    "runtime": "reserveY"
+                  },
+                  {
+                    "runtime": "reserveX"
+                  }
+                ]
+              },
+              "referenceIn": {
+                "op": "if",
+                "args": [
+                  "$route.xForY",
+                  {
+                    "runtime": "referenceX"
+                  },
+                  {
+                    "runtime": "referenceY"
+                  }
+                ]
+              },
+              "amount": {
+                "runtime": "amountIn"
+              }
+            },
+            "outputs": {
+              "amountOut": "computedOut"
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "computedOut"
+                },
+                "operator": "gte",
+                "right": {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "result": {
+        "runtime": "computedOut"
+      },
+      "exports": {
+        "amountOut": {
+          "runtime": "computedOut"
+        }
+      }
+    },
+    "steps": [
+      {
+        "id": "pay",
+        "call": {
+          "target": "$route.tokenIn",
+          "signature": "function transfer(address,uint256) returns(bool)",
+          "args": [
+            "$descriptor.pair",
+            {
+              "runtime": "amountIn"
+            }
+          ]
+        },
+        "effects": [
+          {
+            "kind": "credit",
+            "token": "$route.tokenIn",
+            "account": "$descriptor.pair",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          }
+        ]
+      },
+      {
+        "id": "swap",
+        "call": {
+          "target": "$descriptor.pair",
+          "signature": "function swap(uint256 amountXOut,uint256 amountYOut,address to,bytes data)",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                "$route.xForY",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                },
+                {
+                  "quoteOutput": "amountOut"
+                }
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                "$route.xForY",
+                {
+                  "quoteOutput": "amountOut"
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            "$recipient",
+            "0x"
+          ]
+        },
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenOut",
+            "account": "$descriptor.pair",
+            "equals": {
+              "quoteOutput": "amountOut"
+            }
+          }
+        ]
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient",
+        "equals": {
+          "quoteOutput": "amountOut"
+        }
+      },
+      {
+        "kind": "supply",
+        "token": "$route.tokenIn",
+        "direction": "increase",
+        "equals": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        }
+      },
+      {
+        "kind": "supply",
+        "token": "$route.tokenOut",
+        "direction": "increase",
+        "equals": {
+          "op": "uint",
+          "args": [
+            "0"
+          ]
+        }
+      },
+      {
+        "kind": "unchanged-native"
+      }
+    ]
+  },
+  "runtimeMath": {
+    "version": 1,
+    "entries": {
+      "netBalance": {
+        "model": "reserve-reference:net-balance",
+        "version": 1
+      },
+      "quadraticOutput": {
+        "model": "reserve-reference:quadratic-output",
+        "version": 1
+      }
+    },
+    "models": [
+      {
+        "id": "reserve-reference:net-balance",
+        "version": 1,
+        "inputs": [
+          "balance",
+          "borrow",
+          "deposit",
+          "reserve"
+        ],
+        "outputs": [
+          "net",
+          "reserveScaled",
+          "missingScaled"
+        ],
+        "operations": [
+          {
+            "name": "balanceBorrow",
+            "op": "add",
+            "left": {
+              "input": "balance"
+            },
+            "right": {
+              "input": "borrow"
+            }
+          },
+          {
+            "name": "net",
+            "op": "sub",
+            "left": {
+              "local": "balanceBorrow"
+            },
+            "right": {
+              "input": "deposit"
+            }
+          },
+          {
+            "name": "minBorrowDeposit",
+            "op": "min",
+            "left": {
+              "input": "borrow"
+            },
+            "right": {
+              "input": "deposit"
+            }
+          },
+          {
+            "name": "missing",
+            "op": "sub",
+            "left": {
+              "input": "borrow"
+            },
+            "right": {
+              "local": "minBorrowDeposit"
+            }
+          },
+          {
+            "name": "reserveScaled",
+            "op": "mul",
+            "left": {
+              "input": "reserve"
+            },
+            "right": {
+              "constant": "19"
+            }
+          },
+          {
+            "name": "missingScaled",
+            "op": "mul",
+            "left": {
+              "local": "missing"
+            },
+            "right": {
+              "constant": "20"
+            }
+          }
+        ]
+      },
+      {
+        "id": "reserve-reference:quadratic-output",
+        "version": 1,
+        "inputs": [
+          "reserveIn",
+          "reserveOut",
+          "referenceIn",
+          "amount"
+        ],
+        "outputs": [
+          "amountOut"
+        ],
+        "operations": [
+          {
+            "name": "minReserveRef",
+            "op": "min",
+            "left": {
+              "input": "reserveIn"
+            },
+            "right": {
+              "input": "referenceIn"
+            }
+          },
+          {
+            "name": "delta",
+            "op": "sub",
+            "left": {
+              "input": "reserveIn"
+            },
+            "right": {
+              "local": "minReserveRef"
+            }
+          },
+          {
+            "name": "sign",
+            "op": "eq",
+            "left": {
+              "local": "delta"
+            },
+            "right": {
+              "constant": "0"
+            }
+          },
+          {
+            "name": "doubleDelta",
+            "op": "add",
+            "left": {
+              "local": "delta"
+            },
+            "right": {
+              "local": "delta"
+            }
+          },
+          {
+            "name": "feeAmount",
+            "op": "add",
+            "left": {
+              "local": "doubleDelta"
+            },
+            "right": {
+              "input": "amount"
+            }
+          },
+          {
+            "name": "scaledFeeAmount",
+            "op": "mul",
+            "left": {
+              "local": "feeAmount"
+            },
+            "right": {
+              "constant": "36893488147419103232000"
+            }
+          },
+          {
+            "name": "feeA",
+            "op": "div",
+            "left": {
+              "local": "scaledFeeAmount"
+            },
+            "right": {
+              "input": "referenceIn"
+            }
+          },
+          {
+            "name": "newBalance",
+            "op": "add",
+            "left": {
+              "input": "amount"
+            },
+            "right": {
+              "input": "reserveIn"
+            }
+          },
+          {
+            "name": "minNewRef",
+            "op": "min",
+            "left": {
+              "local": "newBalance"
+            },
+            "right": {
+              "input": "referenceIn"
+            }
+          },
+          {
+            "name": "pastBy",
+            "op": "sub",
+            "left": {
+              "local": "newBalance"
+            },
+            "right": {
+              "local": "minNewRef"
+            }
+          },
+          {
+            "name": "scaledPast",
+            "op": "mul",
+            "left": {
+              "local": "pastBy"
+            },
+            "right": {
+              "constant": "36893488147419103232000"
+            }
+          },
+          {
+            "name": "relativePast",
+            "op": "div",
+            "left": {
+              "local": "scaledPast"
+            },
+            "right": {
+              "input": "referenceIn"
+            }
+          },
+          {
+            "name": "quadraticPast",
+            "op": "mul",
+            "left": {
+              "local": "relativePast"
+            },
+            "right": {
+              "local": "pastBy"
+            }
+          },
+          {
+            "name": "feeB",
+            "op": "div",
+            "left": {
+              "local": "quadraticPast"
+            },
+            "right": {
+              "input": "amount"
+            }
+          },
+          {
+            "name": "inverseSign",
+            "op": "sub",
+            "left": {
+              "constant": "1"
+            },
+            "right": {
+              "local": "sign"
+            }
+          },
+          {
+            "name": "selectedB",
+            "op": "mul",
+            "left": {
+              "local": "feeB"
+            },
+            "right": {
+              "local": "sign"
+            }
+          },
+          {
+            "name": "selectedA",
+            "op": "mul",
+            "left": {
+              "local": "feeA"
+            },
+            "right": {
+              "local": "inverseSign"
+            }
+          },
+          {
+            "name": "selectedFee",
+            "op": "add",
+            "left": {
+              "local": "selectedA"
+            },
+            "right": {
+              "local": "selectedB"
+            }
+          },
+          {
+            "name": "minFee",
+            "op": "min",
+            "left": {
+              "local": "selectedFee"
+            },
+            "right": {
+              "constant": "1844674407370955161"
+            }
+          },
+          {
+            "name": "feeSum",
+            "op": "add",
+            "left": {
+              "local": "selectedFee"
+            },
+            "right": {
+              "constant": "1844674407370955161"
+            }
+          },
+          {
+            "name": "fee",
+            "op": "sub",
+            "left": {
+              "local": "feeSum"
+            },
+            "right": {
+              "local": "minFee"
+            }
+          },
+          {
+            "name": "newBalanceScaled",
+            "op": "mul",
+            "left": {
+              "local": "newBalance"
+            },
+            "right": {
+              "constant": "184467440737095516160000"
+            }
+          },
+          {
+            "name": "amountFee",
+            "op": "mul",
+            "left": {
+              "input": "amount"
+            },
+            "right": {
+              "local": "fee"
+            }
+          },
+          {
+            "name": "afterFeeScaled",
+            "op": "sub",
+            "left": {
+              "local": "newBalanceScaled"
+            },
+            "right": {
+              "local": "amountFee"
+            }
+          },
+          {
+            "name": "afterFee",
+            "op": "div",
+            "left": {
+              "local": "afterFeeScaled"
+            },
+            "right": {
+              "constant": "184467440737095516160000"
+            }
+          },
+          {
+            "name": "invariant",
+            "op": "mul",
+            "left": {
+              "input": "reserveIn"
+            },
+            "right": {
+              "input": "reserveOut"
+            }
+          },
+          {
+            "name": "ceilNumeratorPlusOne",
+            "op": "add",
+            "left": {
+              "local": "invariant"
+            },
+            "right": {
+              "local": "afterFee"
+            }
+          },
+          {
+            "name": "ceilNumerator",
+            "op": "sub",
+            "left": {
+              "local": "ceilNumeratorPlusOne"
+            },
+            "right": {
+              "constant": "1"
+            }
+          },
+          {
+            "name": "requiredOutBalance",
+            "op": "div",
+            "left": {
+              "local": "ceilNumerator"
+            },
+            "right": {
+              "local": "afterFee"
+            }
+          },
+          {
+            "name": "amountOut",
+            "op": "sub",
+            "left": {
+              "input": "reserveOut"
+            },
+            "right": {
+              "local": "requiredOutBalance"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "dependencies": [
+    "$descriptor.pair"
+  ],
+  "refreshPolicy": "on-touch",
+  "observations": {
+    "version": 1,
+    "events": [
+      {
+        "id": "swap-reserve-reference",
+        "signature": "event Swap(address indexed sender,uint256 amountXIn,uint256 amountYIn,uint256 amountXOut,uint256 amountYOut,address indexed to)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$log.address"
+                ]
+              }
+            ]
+          },
+          "amountXIn": "$args.amountXIn",
+          "amountYIn": "$args.amountYIn",
+          "amountXOut": "$args.amountXOut",
+          "amountYOut": "$args.amountYOut"
+        },
+        "valid": {
+          "op": "or",
+          "args": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$args.amountXIn",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$args.amountYIn",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$args.amountXOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "gt",
+                  "args": [
+                    "$args.amountYOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$args.amountYIn",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$args.amountXIn",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$args.amountYOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "gt",
+                  "args": [
+                    "$args.amountXOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$pool",
+                "$edge.target"
+              ]
+            },
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$args.amountXIn",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$args.amountYIn",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$args.amountXOut",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$args.amountYOut",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$edge.tokenIn",
+                        "$descriptor.tokenX"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$edge.tokenOut",
+                        "$descriptor.tokenY"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$args.amountYIn",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$args.amountXIn",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$args.amountYOut",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$args.amountXOut",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$edge.tokenIn",
+                        "$descriptor.tokenY"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$edge.tokenOut",
+                        "$descriptor.tokenX"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "requireReadyBinding": true,
+        "impact": {
+          "pool": "$pool",
+          "tokenIn": {
+            "op": "if",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amountXIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$args.amountYIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$args.amountXOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amountYOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "$descriptor.tokenX",
+              "$descriptor.tokenY"
+            ]
+          },
+          "tokenOut": {
+            "op": "if",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amountXIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$args.amountYIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$args.amountXOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amountYOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "$descriptor.tokenY",
+              "$descriptor.tokenX"
+            ]
+          },
+          "amountIn": {
+            "op": "if",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amountXIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$args.amountYIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$args.amountXOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amountYOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "$args.amountXIn",
+              "$args.amountYIn"
+            ]
+          },
+          "amountOut": {
+            "op": "if",
+            "args": [
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amountXIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$args.amountYIn",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$args.amountXOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "gt",
+                    "args": [
+                      "$args.amountYOut",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "$args.amountYOut",
+              "$args.amountXOut"
+            ]
+          },
+          "matchedAdapterId": "$edge.adapterId"
+        }
+      }
+    ],
+    "canonicalIntakeTargets": [],
+    "victimSupport": "detect-only"
+  },
+  "receiptChecks": {
+    "observe": [
+      "logs"
+    ],
+    "checks": [
+      {
+        "assert": {
+          "op": "event",
+          "args": [
+            {
+              "abi": "swapEvents",
+              "name": "Swap",
+              "address": "$descriptor.pair",
+              "result": "$result",
+              "fields": {
+                "sender": {
+                  "op": "address",
+                  "args": [
+                    "$executor"
+                  ]
+                },
+                "to": {
+                  "op": "address",
+                  "args": [
+                    "$executor"
+                  ]
+                },
+                "amountXIn": {
+                  "op": "if",
+                  "args": [
+                    "$route.xForY",
+                    "$amountIn",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                "amountYIn": {
+                  "op": "if",
+                  "args": [
+                    "$route.xForY",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    },
+                    "$amountIn"
+                  ]
+                },
+                "amountXOut": {
+                  "op": "if",
+                  "args": [
+                    "$route.xForY",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    },
+                    "$amountOut"
+                  ]
+                },
+                "amountYOut": {
+                  "op": "if",
+                  "args": [
+                    "$route.xForY",
+                    "$amountOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "error": "reserve-reference Swap event differs from actual execution"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                {
+                  "op": "filter",
+                  "args": [
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$result",
+                                "effects"
+                              ]
+                            },
+                            "logs"
+                          ]
+                        },
+                        []
+                      ]
+                    },
+                    "eventLog",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$eventLog.address",
+                            "$descriptor.pair"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$eventLog.topics",
+                                    0
+                                  ]
+                                }
+                              ]
+                            },
+                            "0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            1
+          ]
+        },
+        "error": "reserve-reference Swap event must be unique"
+      }
+    ]
+  }
+}

@@ -1,0 +1,187 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xcb70e273",
+  "signature": "function executePath(bytes, uint256[], address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_CB70E273_ENABLED"
+  },
+  "binding": {
+    "nomination": {
+      "parameterPaths": [
+        [
+          0
+        ]
+      ]
+    },
+    "descriptor": {
+      "router": {
+        "op": "address",
+        "args": [
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$target"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "curve": {
+        "op": "address",
+        "args": [
+          "$constants.curve"
+        ]
+      },
+      "vault": {
+        "op": "address",
+        "args": [
+          "$constants.vault"
+        ]
+      },
+      "tokenIn": {
+        "op": "address",
+        "args": [
+          "$constants.tokenIn"
+        ]
+      },
+      "tokenOut": {
+        "op": "address",
+        "args": [
+          "$constants.tokenOut"
+        ]
+      },
+      "pathHash": "$constants.pathHash"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.router",
+    "directions": [
+      {
+        "id": "msusd-to-usdc",
+        "enabled": true,
+        "tokenIn": "$descriptor.tokenIn",
+        "tokenOut": "$descriptor.tokenOut",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      }
+    ],
+    "venue": {
+      "kind": "address-path-protocol",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.router"
+            ]
+          }
+        ]
+      },
+      "pathHash": {
+        "op": "lower",
+        "args": [
+          "$descriptor.pathHash"
+        ]
+      }
+    },
+    "resources": [
+      {
+        "target": "$descriptor.curve"
+      },
+      {
+        "target": "$descriptor.vault"
+      }
+    ]
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": false
+    },
+    "protectedAddresses": [
+      "$descriptor.router",
+      "$descriptor.curve",
+      "$descriptor.vault"
+    ],
+    "steps": [
+      {
+        "id": "transferIn",
+        "call": {
+          "target": "$descriptor.tokenIn",
+          "signature": "function transfer(address,uint256) returns(bool)",
+          "args": [
+            "$descriptor.curve",
+            {
+              "runtime": "amountIn"
+            }
+          ]
+        }
+      },
+      {
+        "id": "exit",
+        "call": {
+          "target": "$descriptor.router",
+          "signature": "function executePath(bytes,uint256[],address)",
+          "args": [
+            "$constants.path",
+            [
+              {
+                "runtime": "amountIn"
+              }
+            ],
+            "$constants.zeroAddress"
+          ]
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "minimum": "$minAmountOut"
+      }
+    ]
+  },
+  "refreshPolicy": "on-touch",
+  "values": {
+    "constants": {
+      "curve": "0x9a9e2e70919c75d80aaaa1d483c46cdbb8ac4d1b",
+      "vault": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+      "tokenIn": "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "pathHash": "0x0fb85b1c1c841c3cf756600d6badf1549b1cd873192d257210eb9e941e7a5e74",
+      "path": "0x0102060067010000010201000246000103040500ff00000000000000000000009a9e2e70919c75d80aaaa1d483c46cdbb8ac4d1bab5eb14c09d416f0ac63661e57edb7aecdb9befa4f95c5ba0c7c69fb2f9340e190ccee890b3bd87ccacd6fd266af91b8aed52accc382b4e165586e29a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "zeroAddress": "0x0000000000000000000000000000000000000000"
+    }
+  },
+  "resourceValues": {
+    "constants": {
+      "curve": "0x9a9e2e70919c75d80aaaa1d483c46cdbb8ac4d1b",
+      "vault": "0x4f95c5ba0c7c69fb2f9340e190ccee890b3bd87c",
+      "tokenIn": "0xab5eb14c09d416f0ac63661e57edb7aecdb9befa",
+      "tokenOut": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+      "pathHash": "0x0fb85b1c1c841c3cf756600d6badf1549b1cd873192d257210eb9e941e7a5e74"
+    }
+  },
+  "meta": {
+    "label": "protocol:metronome-hgusdc/observed-path-active-quote-proof"
+  }
+}

@@ -1,0 +1,487 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xbd6015b4",
+  "signature": "function sellBase(address)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_BD6015B4_ENABLED"
+  },
+  "binding": {
+    "flow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "pool",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "selectorBinding:pool:baseToken",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingpoolbaseToken",
+                  "_BASE_TOKEN_()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:pool:quoteToken",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingpoolquoteToken",
+                  "_QUOTE_TOKEN_()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "result": {
+            "baseToken": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingpoolbaseToken",
+                        "_BASE_TOKEN_()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:pool:baseToken"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "quoteToken": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingpoolquoteToken",
+                        "_QUOTE_TOKEN_()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:pool:quoteToken"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "pool": {
+          "baseToken": "$steps.pool.baseToken",
+          "quoteToken": "$steps.pool.quoteToken"
+        }
+      }
+    },
+    "descriptor": {
+      "op": "merge",
+      "args": [
+        {
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$target"
+                ]
+              }
+            ]
+          },
+          "baseToken": "$binding.pool.baseToken",
+          "quoteToken": "$binding.pool.quoteToken"
+        }
+      ]
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pool",
+    "directions": [
+      {
+        "id": "sell-base",
+        "enabled": true,
+        "tokenIn": "$descriptor.baseToken",
+        "tokenOut": "$descriptor.quoteToken",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": "$descriptor.pool"
+        }
+      }
+    ],
+    "venue": {
+      "kind": "address-pool",
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.pool"
+            ]
+          }
+        ]
+      }
+    },
+    "checks": [
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.baseToken",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.quoteToken",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.baseToken",
+                    "$descriptor.quoteToken"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "dodo-v2 descriptor requires distinct base/quote tokens"
+      }
+    ]
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": [
+      "$descriptor.pool",
+      "$route.tokenIn",
+      "$route.tokenOut"
+    ],
+    "contextChecks": [
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$transactionOrigin"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$transactionOrigin",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$transactionOrigin"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$transactionOrigin"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "dodo-v2 runtime requires transaction origin"
+      }
+    ],
+    "steps": [
+      {
+        "id": "transferInput",
+        "call": {
+          "target": "$route.tokenIn",
+          "signature": "function transfer(address,uint256) returns(bool)",
+          "args": [
+            "$descriptor.pool",
+            {
+              "runtime": "amountIn"
+            }
+          ]
+        }
+      },
+      {
+        "id": "sell",
+        "call": {
+          "target": "$descriptor.pool",
+          "signature": {
+            "op": "if",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "direction"
+                    ]
+                  },
+                  "sell-base"
+                ]
+              },
+              "function sellBase(address) returns(uint256)",
+              "function sellQuote(address) returns(uint256)"
+            ]
+          },
+          "args": [
+            "$recipient"
+          ],
+          "save": {
+            "sellOut": 0
+          }
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient",
+        "equals": {
+          "runtime": "sellOut"
+        }
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenIn",
+        "account": "$recipient",
+        "when": "$externalRecipient"
+      }
+    ]
+  },
+  "observations": {
+    "version": 1,
+    "events": [
+      {
+        "id": "dodo-v2-swap-log",
+        "signature": "event DODOSwap(address fromToken,address toToken,uint256 fromAmount,uint256 toAmount,address trader,address receiver)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$log.address"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "pool": {
+            "op": "address",
+            "args": [
+              "$log.address"
+            ]
+          },
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$args.fromToken"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$args.toToken"
+            ]
+          },
+          "amountIn": "$args.fromAmount",
+          "amountOut": "$args.toAmount",
+          "trader": {
+            "op": "address",
+            "args": [
+              "$args.trader"
+            ]
+          },
+          "receiver": {
+            "op": "address",
+            "args": [
+              "$args.receiver"
+            ]
+          }
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$args.fromToken",
+                "$edge.tokenIn"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$args.toToken",
+                "$edge.tokenOut"
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": {
+            "op": "coalesce",
+            "args": [
+              "$edge.observationTarget",
+              "$edge.target"
+            ]
+          },
+          "tokenIn": "$edge.tokenIn",
+          "tokenOut": "$edge.tokenOut",
+          "amountIn": "$args.fromAmount",
+          "amountOut": "$args.toAmount",
+          "matchedAdapterId": "$edge.adapterId",
+          "poolToken0": "$edge.poolToken0",
+          "poolToken1": "$edge.poolToken1"
+        }
+      }
+    ],
+    "calls": [],
+    "canonicalIntakeTargets": [
+      "0xa356867fDCEa8e71AEaF87805808803806231FdC"
+    ],
+    "victimSupport": "detect-only"
+  },
+  "refreshPolicy": "each-block",
+  "values": {
+    "abi": {
+      "bindingpoolbaseToken": [
+        "function _BASE_TOKEN_() view returns(address)"
+      ],
+      "bindingpoolquoteToken": [
+        "function _QUOTE_TOKEN_() view returns(address)"
+      ]
+    }
+  },
+  "meta": {
+    "label": "custom-swap:dodo-v2/registry-member-3"
+  }
+}

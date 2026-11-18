@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { sha256EvidenceFile } from "./family-evidence-hash.js";
+import type { TransactionExecutionBinding } from "./family-transaction-selector.js";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,11 +10,10 @@ import { parseProtocolJsonAcceptanceCase } from "./protocol-json-acceptance-fact
 import { readFamilyTransaction, familyTransactionLegMissing, type FamilyTransaction, type FamilyTransactionLeg } from "./family-transaction-registry.js";
 
 import type { ReadyTransactionEvidence } from "../ready-transaction-input.js";
-import { resolveTransactionCaseBinding, type ObservedReadyRoute } from "./family-transaction-matching.js";
+import { resolveTransactionCaseBinding } from "./family-transaction-matching.js";
 import { validateTransactionStateSelection, type TransactionStateSelection } from "./family-transaction-source.js";
 
 const fixtures = fileURLToPath(new URL("./fixtures", import.meta.url));
-const sha = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
 const authorities = new WeakMap<object, { sample: unknown; pins: readonly { path: string; sha256: string }[] }>();
 export interface SampleRegistration {
   readonly kind: "index" | "fixture" | "transaction";
@@ -32,12 +32,12 @@ export function transactionTestActors(leg: FamilyTransactionLeg) {
 
 /** Historical output is deliberately excluded. Only current quote/simulation
  * effects determine the result for this immutable input seed. */
-export function transactionSimulationCase(transaction: FamilyTransaction, leg: FamilyTransactionLeg, stateSelection?: TransactionStateSelection, binding?: { lineageId: string; routeKey: string }) {
+export function transactionSimulationCase(transaction: FamilyTransaction, leg: FamilyTransactionLeg, stateSelection?: TransactionStateSelection, binding?: { lineageId: string; routeKey: string } & Partial<TransactionExecutionBinding>) {
   assert.notEqual(leg.domain, "funding", "Funding uses its own production capabilities");
   assert.deepEqual(familyTransactionLegMissing(leg), [], "incomplete simulation seed");
   assert(transaction.legs.some(item => isDeepStrictEqual(item, leg)), "transaction does not register this leg");
-  return parseProtocolJsonAcceptanceCase({ version: 1, familyId: leg.familyId, domain: leg.domain,
-    instanceKey: leg.instanceKey, lineageId: binding?.lineageId ?? leg.lineageId, source: validateTransactionStateSelection(leg.source!, stateSelection).executionSource, ...transactionTestActors(leg),
+  return parseProtocolJsonAcceptanceCase({ version: 1, familyId: binding?.familyId ?? leg.familyId, domain: binding?.domain ?? leg.domain,
+    instanceKey: binding?.instanceKey ?? leg.instanceKey, lineageId: binding?.lineageId ?? leg.lineageId, source: validateTransactionStateSelection(leg.source!, stateSelection).executionSource, ...transactionTestActors(leg),
     transactionHash: transaction.transactionHash, trials: [{ id: leg.id, tokenIn: leg.tokenIn, tokenOut: leg.tokenOut,
       amountIn: leg.amountIn, inputToleranceRawUnits: 0, outputToleranceRawUnits: 1,
       ...(binding?.routeKey || leg.routeKey ? { routeKey: binding?.routeKey ?? leg.routeKey } : {}), ...(leg.credit ? { credit: leg.credit } : {}) }] });
@@ -50,7 +50,7 @@ export function registerTransactionAcceptanceSample(sample: unknown, transaction
   const transaction = readFamilyTransaction(path), leg = transaction.legs.find(item => item.id === legId);
   assert(leg, "registered transaction leg missing");
   assert.deepEqual(sample, transactionSimulationCase(transaction, leg, stateSelection), "case differs from registered simulation input");
-  const pin = { path, sha256: sha(readFileSync(path)) };
+  const pin = { path, sha256: sha256EvidenceFile(path) };
   const token = Object.freeze({ kind: "transaction" as const, ...pin, transactionHash: transaction.transactionHash, legId });
   authorities.set(token, { sample: JSON.parse(JSON.stringify(sample)), pins: [pin] });
   return token;
@@ -63,16 +63,16 @@ export async function registerReadyTransactionAcceptanceSample(transactionPath: 
   const root = realpathSync(resolve(fixtures, "family-transactions")), path = realpathSync(transactionPath);
   assert.equal(resolve(path, ".."), root, "transaction seed must be in the centralized registry");
   const transaction = readFamilyTransaction(path), leg = transaction.legs.find(item => item.id === legId);
-  assert(leg && (leg.domain === "protocol" || leg.domain === "swap"));
+  assert(leg && (leg.domain === "protocol" || leg.domain === "swap" || leg.domain === "credit"));
   const { UniverseRebuildCheckpointStore } = await import("../universe-rebuild-checkpoint.js");
   const { transactionReadyRoutes } = await import("./family-json-ready.js");
   const envelope = await new UniverseRebuildCheckpointStore({ path: readyPath }).load();
   assert(envelope, "Ready checkpoint unavailable");
   const evidence = JSON.parse(readFileSync(evidencePath, "utf8")) as ReadyTransactionEvidence;
-  const binding = resolveTransactionCaseBinding({ transactionHash: transaction.transactionHash, expected: leg, evidence,
+  const binding = resolveTransactionCaseBinding({ transactionHash: transaction.transactionHash, expected: leg, evidence, familyBinding: "selector",
     routes: await transactionReadyRoutes(envelope, { source: stateSelection.executionSource, ...transactionTestActors(leg) }) });
   const sample = transactionSimulationCase(transaction, leg, stateSelection, binding.resolved);
-  const pins = [path, realpathSync(readyPath), realpathSync(evidencePath)].map(path => ({ path, sha256: sha(readFileSync(path)) }));
+  const pins = [path, realpathSync(readyPath), realpathSync(evidencePath)].map(path => ({ path, sha256: sha256EvidenceFile(path) }));
   const registration = Object.freeze({ kind: "transaction" as const, ...pins[0]!, transactionHash: transaction.transactionHash, legId });
   authorities.set(registration, { sample: JSON.parse(JSON.stringify(sample)), pins });
   return { sample, registration, binding };
@@ -89,7 +89,7 @@ export function registerAcceptanceSample(sample: any, casePath: string, fixtureR
   assert.deepEqual(sample.version === 1 && Array.isArray(sample.trials) ? parseProtocolJsonAcceptanceCase(supplied) : supplied,
     sample, "case file differs from the executed sample");
   const pins: { path: string; sha256: string }[] = [];
-  const pin = (path: string) => { const value = { path, sha256: sha(readFileSync(path)) }; pins.push(value); return value; };
+  const pin = (path: string) => { const value = { path, sha256: sha256EvidenceFile(path) }; pins.push(value); return value; };
   let record: SampleRegistration | undefined;
   // Indexed libraries retain their full provenance/identity/amount validator.
   // An unindexed file in cases/ cannot fall through to standalone-fixture mode.
@@ -125,5 +125,5 @@ export function assertRegisteredAcceptanceSample(sample: unknown, registration: 
   const proof = registration && authorities.get(registration);
   assert(proof, "acceptance requires a registered sample before execution");
   assert.deepEqual(sample, proof.sample, "executed sample differs from registration");
-  for (const pin of proof.pins) assert.equal(sha(readFileSync(pin.path)), pin.sha256, "registered sample/index changed during acceptance");
+  for (const pin of proof.pins) assert.equal(sha256EvidenceFile(pin.path), pin.sha256, "registered sample/index changed during acceptance");
 }

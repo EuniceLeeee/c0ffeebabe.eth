@@ -150,7 +150,7 @@ try {
     assert.equal(startupPrefixFailure(rejected.returnData, undefined, word(1n), failedProgram), undefined, "forged hop proof is not attribution");
   }
   const noPrefix = await simulator.simulateStartupPrefix({ amount: 100n, legs: [], source, header }, control());
-  assert.deepEqual(noPrefix.receipts, [{ hop: -1, amountIn: 100n, amountOut: 100n }]);
+  assert.deepEqual(noPrefix.receipts, [{ hop: -1, amountIn: 100n, amountSpent: 100n, amountOut: 100n }]);
   wrongParent = true;
   await assert.rejects(simulator.simulateStartupPrefix({ ...path, source, header }, control()), /header mismatch/); wrongParent = false;
   fakeReceipt = true;

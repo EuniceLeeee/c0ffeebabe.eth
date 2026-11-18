@@ -144,7 +144,8 @@ function main(): void {
   const fundingAddresses = strictFundingPrewarmAddresses({ catalog });
   assert.deepEqual(
     fundingAddresses,
-    Object.freeze([TARGET, LIQUIDITY_HOLDER].sort()),
+    Object.freeze([]),
+    "a Family catalog alone does not select any Funding provider",
   );
 
   console.log(

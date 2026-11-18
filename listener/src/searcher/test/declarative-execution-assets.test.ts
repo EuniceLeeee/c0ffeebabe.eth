@@ -31,6 +31,23 @@ function definition(): DeclarativeConversionExecution {
         account: "$component.account", role: "$component.role", minimum: op("uint", "$component.minimum") }))],
   };
 }
+
+for (const position of ["preflight", "steps", "reference-only"]) test(`conservation snapshots cannot be rebound through ${position}`, () => {
+  const d: any = definition();
+  const call = { target: TARGET, signature: "function expected() view returns(uint256)", args: [], save: { guard0Delta: 0 } };
+  d.envelopes = [{
+    ...(position === "preflight" ? { preflight: [call] } : position === "steps" ? { steps: [{ id: "read", static: true, call }] } : {}),
+    effects: [{ kind: "credit", token: SIDE, account: "$executor", equals: ref("guard0Delta") }],
+  }];
+  assert.throws(() => buildDeclarativeRuntimeLeg(d, context(), values), /private conservation|reserved/);
+});
+test("conservation preparation enforces unique public capture names within each group", () => {
+  const d: any = definition();
+  const call = { target: TARGET, signature: "function expected() view returns(uint256)", args: [], save: { expected: 0 } };
+  d.envelopes = [{ preflight: [call], steps: [{ id: "duplicate", static: true, call }],
+    effects: [{ kind: "credit", token: SIDE, account: "$executor", minimum: ref("expected") }] }];
+  assert.throws(() => buildDeclarativeRuntimeLeg(d, context(), values), /duplicate or reserved conservation capture/);
+});
 type Fault = "zero-debit" | "under-debit" | "over-debit" | "route-short" | "side-short" | "side-zero" | "side-inventory" | "wrong-recipient" | "native";
 function run(program: string, amount = 77n, external = false, fault?: Fault) {
   const recipient = external ? RECEIVER : EXECUTOR, balances = new Map<string, bigint>();

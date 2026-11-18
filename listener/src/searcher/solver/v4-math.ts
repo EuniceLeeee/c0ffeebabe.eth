@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import { ADDR } from "../../shared/constants/addresses.js";
 import { isStateCallAbortedError } from "../../shared/state/state-backend.js";
 import type { V4PoolKey } from "../planner/token-graph.js";
-import { v4HooksAffectSwap, v4PoolId } from "../venues/swaps/univ4-common.js";
+import { v4HooksAffectSwap, v4PoolId } from "../venues/v4-pool-key.js";
 import {
   computeSwapStep,
   getSqrtRatioAtTick,

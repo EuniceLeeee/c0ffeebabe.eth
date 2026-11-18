@@ -1,0 +1,1176 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xa6e81533",
+  "signature": "function addMarketOrder(address, address, uint112)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_A6E81533_ENABLED"
+  },
+  "binding": {
+    "nomination": {
+      "parameterPaths": [
+        [
+          0
+        ]
+      ]
+    },
+    "flow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "factory",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "selectorBinding:factory:stock",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingfactorystock",
+                  "stock()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:factory:money",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingfactorymoney",
+                  "money()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "result": {
+            "stock": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingfactorystock",
+                        "stock()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:factory:stock"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "money": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingfactorymoney",
+                        "money()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:factory:money"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "factory": {
+          "money": "$steps.factory.money",
+          "stock": "$steps.factory.stock"
+        }
+      }
+    },
+    "descriptor": {
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$target"
+            ]
+          }
+        ]
+      },
+      "money": "$binding.factory.money",
+      "stock": "$binding.factory.stock"
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pool",
+    "directions": {
+      "op": "map",
+      "args": [
+        [
+          true,
+          false
+        ],
+        "buy",
+        {
+          "op": "merge",
+          "args": [
+            {
+              "id": {
+                "op": "if",
+                "args": [
+                  "$buy",
+                  "buy",
+                  "sell"
+                ]
+              },
+              "enabled": true,
+              "tokenIn": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          "$buy",
+                          "$descriptor.money",
+                          "$descriptor.stock"
+                        ]
+                      },
+                      "$constants.zero"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$constants.weth"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          "$buy",
+                          "$descriptor.money",
+                          "$descriptor.stock"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "tokenOut": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          "$buy",
+                          "$descriptor.stock",
+                          "$descriptor.money"
+                        ]
+                      },
+                      "$constants.zero"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$constants.weth"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          "$buy",
+                          "$descriptor.stock",
+                          "$descriptor.money"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "adapterId": "execution:0xa6e81533:abi-75c15f8578e3bb04d30736a359dae30c8bc8da8936fbb41c113f8733ca8419a4:call",
+              "taxonomy": {
+                "slotKind": "swap"
+              },
+              "fields": {
+                "pool": "$descriptor.pool",
+                "buy": "$buy"
+              }
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$descriptor.stock",
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$descriptor.money",
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "executionAssets": {
+                    "input": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                "$buy",
+                                "$descriptor.money",
+                                "$descriptor.stock"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        },
+                        "native",
+                        "erc20"
+                      ]
+                    },
+                    "output": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "if",
+                              "args": [
+                                "$buy",
+                                "$descriptor.stock",
+                                "$descriptor.money"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        },
+                        "native",
+                        "erc20"
+                      ]
+                    }
+                  }
+                },
+                {}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "venue": {
+      "kind": "address-pool",
+      "pool": "$descriptor.pool"
+    }
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": {
+      "op": "concat",
+      "args": [
+        [
+          "$descriptor.pool",
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenIn"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenOut"
+            ]
+          }
+        ]
+      ]
+    },
+    "steps": [
+      {
+        "id": "transferInput",
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "buy"
+                      ]
+                    },
+                    "$descriptor.money",
+                    "$descriptor.stock"
+                  ]
+                },
+                "$constants.zero"
+              ]
+            }
+          ]
+        },
+        "call": {
+          "target": {
+            "op": "if",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "buy"
+                ]
+              },
+              "$descriptor.money",
+              "$descriptor.stock"
+            ]
+          },
+          "signature": "function transfer(address,uint256) returns (bool)",
+          "args": [
+            "$descriptor.pool",
+            {
+              "runtime": "amountIn"
+            }
+          ]
+        }
+      },
+      {
+        "id": "marketOrder",
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "buy"
+                      ]
+                    },
+                    "$descriptor.money",
+                    "$descriptor.stock"
+                  ]
+                },
+                "$constants.zero"
+              ]
+            }
+          ]
+        },
+        "call": {
+          "target": "$descriptor.pool",
+          "signature": "function addMarketOrder(address,address,uint112) payable returns (uint256)",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                },
+                "$descriptor.money",
+                "$descriptor.stock"
+              ]
+            },
+            "$recipient",
+            {
+              "runtime": "amountIn"
+            }
+          ],
+          "save": {
+            "marketReturn": 0
+          }
+        }
+      },
+      {
+        "id": "marketOrderNative",
+        "when": {
+          "op": "sameAddress",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                },
+                "$descriptor.money",
+                "$descriptor.stock"
+              ]
+            },
+            "$constants.zero"
+          ]
+        },
+        "call": {
+          "target": "$descriptor.pool",
+          "signature": "function addMarketOrder(address,address,uint112) payable returns (uint256)",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                },
+                "$descriptor.money",
+                "$descriptor.stock"
+              ]
+            },
+            "$recipient",
+            {
+              "runtime": "amountIn"
+            }
+          ],
+          "save": {
+            "marketReturn": 0
+          },
+          "value": {
+            "runtime": "amountIn"
+          }
+        }
+      }
+    ],
+    "effects": [
+      {
+        "op": "if",
+        "args": [
+          {
+            "op": "sameAddress",
+            "args": [
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "buy"
+                    ]
+                  },
+                  "$descriptor.money",
+                  "$descriptor.stock"
+                ]
+              },
+              "$constants.zero"
+            ]
+          },
+          [
+            {
+              "kind": "debit",
+              "asset": "native",
+              "account": "$executor",
+              "equals": {
+                "runtime": "amountIn"
+              }
+            }
+          ],
+          [
+            {
+              "kind": "debit",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenIn"
+                ]
+              },
+              "account": "$executor",
+              "equals": {
+                "runtime": "amountIn"
+              }
+            }
+          ]
+        ]
+      },
+      {
+        "op": "if",
+        "args": [
+          {
+            "op": "sameAddress",
+            "args": [
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "buy"
+                    ]
+                  },
+                  "$descriptor.stock",
+                  "$descriptor.money"
+                ]
+              },
+              "$constants.zero"
+            ]
+          },
+          [
+            {
+              "kind": "credit",
+              "asset": "native",
+              "account": "$recipient",
+              "equals": {
+                "runtime": "marketReturn"
+              }
+            }
+          ],
+          [
+            {
+              "kind": "credit",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenOut"
+                ]
+              },
+              "account": "$recipient",
+              "equals": {
+                "runtime": "marketReturn"
+              }
+            }
+          ]
+        ]
+      },
+      {
+        "op": "if",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              "$externalRecipient",
+              {
+                "op": "and",
+                "args": [
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$route",
+                                  "buy"
+                                ]
+                              },
+                              "$descriptor.money",
+                              "$descriptor.stock"
+                            ]
+                          },
+                          "$constants.zero"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          {
+                            "op": "if",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$route",
+                                  "buy"
+                                ]
+                              },
+                              "$descriptor.stock",
+                              "$descriptor.money"
+                            ]
+                          },
+                          "$constants.zero"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          [
+            {
+              "kind": "unchanged-token",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenIn"
+                ]
+              },
+              "account": "$recipient"
+            },
+            {
+              "kind": "unchanged-token",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenOut"
+                ]
+              },
+              "account": "$executor"
+            }
+          ],
+          []
+        ]
+      }
+    ]
+  },
+  "observations": {
+    "version": 1,
+    "canonicalIntakeTargets": [],
+    "victimSupport": "detect-only",
+    "events": [
+      {
+        "id": "oneswap-NewMarketOrder",
+        "signature": "event NewMarketOrder(uint256 word)",
+        "pool": {
+          "op": "get",
+          "args": [
+            "$log",
+            "address"
+          ]
+        },
+        "match": true,
+        "valid": {
+          "op": "lte",
+          "args": [
+            {
+              "op": "sub",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "word"
+                  ]
+                },
+                {
+                  "op": "mul",
+                  "args": [
+                    {
+                      "op": "div",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "word"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "256"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "256"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "name": "NewMarketOrder",
+          "buy": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "word"
+                    ]
+                  },
+                  {
+                    "op": "mul",
+                    "args": [
+                      {
+                        "op": "div",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$args",
+                              "word"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "256"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "256"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          "word": {
+            "op": "get",
+            "args": [
+              "$args",
+              "word"
+            ]
+          }
+        },
+        "impact": {
+          "op": "get",
+          "args": [
+            "$missing",
+            "impact"
+          ]
+        },
+        "classification": "swap",
+        "receiptMode": "mutation-only",
+        "mutationReason": "oneswap partial fill events require chain replay; refresh the complete AMM/orderbook state"
+      },
+      {
+        "id": "oneswap-DealWithPool",
+        "signature": "event DealWithPool(uint256 word)",
+        "pool": {
+          "op": "get",
+          "args": [
+            "$log",
+            "address"
+          ]
+        },
+        "match": true,
+        "valid": {
+          "op": "lte",
+          "args": [
+            {
+              "op": "sub",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "word"
+                  ]
+                },
+                {
+                  "op": "mul",
+                  "args": [
+                    {
+                      "op": "div",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "word"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "256"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "256"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "name": "DealWithPool",
+          "buy": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "word"
+                    ]
+                  },
+                  {
+                    "op": "mul",
+                    "args": [
+                      {
+                        "op": "div",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$args",
+                              "word"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "256"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "256"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          "word": {
+            "op": "get",
+            "args": [
+              "$args",
+              "word"
+            ]
+          }
+        },
+        "impact": {
+          "op": "get",
+          "args": [
+            "$missing",
+            "impact"
+          ]
+        },
+        "classification": "swap",
+        "receiptMode": "mutation-only",
+        "mutationReason": "oneswap partial fill events require chain replay; refresh the complete AMM/orderbook state"
+      },
+      {
+        "id": "oneswap-OrderChanged",
+        "signature": "event OrderChanged(uint256 word)",
+        "pool": {
+          "op": "get",
+          "args": [
+            "$log",
+            "address"
+          ]
+        },
+        "match": true,
+        "valid": {
+          "op": "lte",
+          "args": [
+            {
+              "op": "sub",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "word"
+                  ]
+                },
+                {
+                  "op": "mul",
+                  "args": [
+                    {
+                      "op": "div",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "word"
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "256"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "256"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "name": "OrderChanged",
+          "buy": {
+            "op": "eq",
+            "args": [
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "word"
+                    ]
+                  },
+                  {
+                    "op": "mul",
+                    "args": [
+                      {
+                        "op": "div",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$args",
+                              "word"
+                            ]
+                          },
+                          {
+                            "op": "uint",
+                            "args": [
+                              "256"
+                            ]
+                          }
+                        ]
+                      },
+                      {
+                        "op": "uint",
+                        "args": [
+                          "256"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          "word": {
+            "op": "get",
+            "args": [
+              "$args",
+              "word"
+            ]
+          }
+        },
+        "impact": {
+          "op": "get",
+          "args": [
+            "$missing",
+            "impact"
+          ]
+        },
+        "classification": "swap",
+        "receiptMode": "mutation-only",
+        "mutationReason": "oneswap partial fill events require chain replay; refresh the complete AMM/orderbook state"
+      }
+    ]
+  },
+  "refreshPolicy": "on-touch",
+  "values": {
+    "abi": {
+      "bindingfactorystock": [
+        "function stock() view returns(address)"
+      ],
+      "bindingfactorymoney": [
+        "function money() view returns(address)"
+      ]
+    },
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+    }
+  },
+  "resourceValues": {
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+    }
+  },
+  "meta": {
+    "label": "custom-swap:oneswap/proxy-and-bidirectional-factory-registration"
+  }
+}

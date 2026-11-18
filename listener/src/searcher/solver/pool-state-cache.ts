@@ -33,7 +33,7 @@ import {
 import {
   decodeCurveAddressResult,
   decodeCurveUint256Result,
-} from "../venues/swaps/curve-shared.js";
+} from "../venues/curve-state-codec.js";
 
 const curveIface = new ethers.Interface([
   "function A() view returns (uint256)",

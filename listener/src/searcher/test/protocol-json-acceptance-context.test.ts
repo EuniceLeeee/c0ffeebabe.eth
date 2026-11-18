@@ -41,13 +41,15 @@ test("context input requires explicit identities and a pinned historical source"
   ]) { const value = input(); change(value); assert.throws(() => validateAcceptanceContextInput(value)); }
 });
 
-test("context supports explicitly selected Swap without accepting another domain", () => {
+test("context treats Family IDs as opaque while validating the explicit domain contract", () => {
   assert.doesNotThrow(() => validateAcceptanceContextInput({ ...input(), domain: "swap", familyId: "balancer-v1" }));
   assert.doesNotThrow(() => validateAcceptanceContextInput({ ...input(), domain: "protocol" }));
-  assert.throws(() => validateAcceptanceContextInput({ ...input(), familyId: "balancer-v1" }), /domain/);
-  for (const domain of ["credit", "funding", "unknown", null])
+  assert.doesNotThrow(() => validateAcceptanceContextInput({ ...input(), familyId: "execution:0x95991276:abi-fixture" }));
+  assert.doesNotThrow(() => validateAcceptanceContextInput({ ...input(), domain: "credit", familyId: "opaque-credit-owner" }));
+  // Syntax cannot authenticate a Family's domain; runtime checks the manifest.
+  assert.doesNotThrow(() => validateAcceptanceContextInput({ ...input(), domain: "swap" }));
+  for (const domain of ["funding", "unknown", null])
     assert.throws(() => validateAcceptanceContextInput({ ...input(), domain } as any), /domain/);
-  assert.throws(() => validateAcceptanceContextInput({ ...input(), domain: "swap" }), /domain/);
 });
 
 test("header and receipt checks reject reorgs, wrong transactions, failed receipts and incomplete environments", () => {
@@ -175,18 +177,29 @@ test("source fingerprint includes dirty runtime files while keeping fixture/test
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("an installed JSON entry must reproduce the generated entry and identify the applicable root and variant files", async () => {
+test("an installed selector JSON entry must reproduce its generated root without old child files", async () => {
   const { inspectAcceptanceEntry } = await import("./protocol-json-acceptance-context.js");
-  const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog } = await import("../venues/production-family-composition.js");
-  const conversion = catalog.listAll().find(x => x.plugin.manifest.familyId === "protocol:token-conversion")!;
-  const record = await inspectAcceptanceEntry(conversion);
-  assert.equal(record.kind, "declarative-json");
-  if (record.kind !== "declarative-json") throw new Error("JSON production entry required");
-  assert(record.variants.some(v => v.id === "xwin-allocations-v1"));
-  assert(record.childDefinitions.every(f => /^[a-f0-9]{64}$/.test(f.sha256)));
+  const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog, PRODUCTION_STRICT_SHADOW_FAMILY_LOAD: load } = await import("../venues/production-family-composition.js");
+  const { getInstalledTransactionFamilies } = await import("./family-transaction-registry.js");
+  const all = catalog.listAll(), installed = await getInstalledTransactionFamilies();
+  assert.deepEqual(all.map(family => String(family.plugin.manifest.familyId)).sort(), installed.filter(family => family.enabled).map(family => family.familyId).sort());
+  assert.deepEqual(load.disabledPlugins.map(family => String(family.familyId)).sort(), installed.filter(family => !family.enabled).map(family => family.familyId).sort());
+  for (const family of load.disabledPlugins)
+    assert.equal((await inspectAcceptanceEntry(family)).kind, "not-installed", "a valid disabled module does not gain active acceptance authority");
+  assert(all.some(family => family.plugin.manifest.domain === "credit"));assert(all.some(family => family.plugin.manifest.domain === "funding"));
+  for (const family of all) {
+    const record = await inspectAcceptanceEntry(family);
+    assert.equal(record.kind, "selector-execution-json", String(family.plugin.manifest.familyId));
+    if (record.kind !== "selector-execution-json") throw new Error("JSON production entry required");
+    assert.equal(record.format, "selector-family/v2");
+    assert.match(record.definitionFile, /^src\/searcher\/venues\/selector-native\/selector-[a-f0-9]{8}-family\/selector-[a-f0-9]{8}\.json$/);
+    assert.match(record.entrySha256, /^[a-f0-9]{64}$/);assert.match(record.definitionSha256, /^[a-f0-9]{64}$/);
+  }
+  const conversion = all.find(x => String(x.plugin.manifest.familyId).startsWith("execution:0xba087652:"))!;
   const other = { ...conversion, plugin: { manifest: conversion.plugin.manifest } };
   assert.equal((await inspectAcceptanceEntry(other)).kind, "not-installed");
   await assert.rejects(inspectAcceptanceEntry({ ...conversion, sourceFile: "borrowed.production.ts" }));
+  await assert.rejects(inspectAcceptanceEntry({ ...conversion, definitionBoundaryHash: "0".repeat(64) }));
 });
 
 test("parent execution does not broaden the state RPC pin or receipt source", () => {

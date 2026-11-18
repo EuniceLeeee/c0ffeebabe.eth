@@ -1,0 +1,1140 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x95e3c50b",
+  "signature": "function tokenToEthSwapInput(uint256, uint256, uint256)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_95E3C50B_ENABLED"
+  },
+  "binding": {
+    "flow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "pool",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "selectorBinding:pool:token",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingpooltoken",
+                  "tokenAddress()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:pool:issuer",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingpoolissuer",
+                  "issuer()",
+                  []
+                ]
+              },
+              "completion": "return-or-revert-data",
+              "required": false
+            }
+          ],
+          "result": {
+            "token": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingpooltoken",
+                        "tokenAddress()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:pool:token"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "issuer": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "shape",
+                      "args": [
+                        "selectorBinding:pool:issuer"
+                      ]
+                    },
+                    "returned"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "bindingpoolissuer",
+                            "issuer()",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "selectorBinding:pool:issuer"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "0x0000000000000000000000000000000000000000"
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "pool": {
+          "token": "$steps.pool.token",
+          "issuer": "$steps.pool.issuer"
+        }
+      }
+    },
+    "descriptor": {
+      "op": "merge",
+      "args": [
+        {
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$target"
+                ]
+              }
+            ]
+          },
+          "token": "$binding.pool.token",
+          "issuer": "$binding.pool.issuer"
+        }
+      ]
+    }
+  },
+  "routes": {
+    "target": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "pool"
+      ]
+    },
+    "directions": [
+      {
+        "id": "buy",
+        "enabled": true,
+        "tokenIn": "$constants.weth",
+        "tokenOut": {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "token"
+          ]
+        },
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "buy": true
+        }
+      },
+      {
+        "id": "sell",
+        "enabled": true,
+        "tokenIn": {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "token"
+          ]
+        },
+        "tokenOut": "$constants.weth",
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "fields": {
+          "pool": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "buy": false
+        }
+      }
+    ],
+    "venue": {
+      "kind": "address-pool",
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "pool"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "checks": [
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "pool"
+                  ]
+                },
+                "$constants.zero"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 exchange cannot be zero"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token"
+                  ]
+                },
+                "$constants.zero"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 token cannot be zero"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token"
+                  ]
+                },
+                "$constants.weth"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 exchange token cannot be WETH"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token"
+                  ]
+                },
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "pool"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "univ1 token cannot be the exchange"
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "buy"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "direction"
+                  ]
+                },
+                "buy"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 route direction/buy mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "target"
+              ]
+            },
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 route target mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "tokenIn"
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                },
+                "$constants.weth",
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "univ1 route input direction mismatch"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "tokenOut"
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                },
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token"
+                  ]
+                },
+                "$constants.weth"
+              ]
+            }
+          ]
+        },
+        "error": "univ1 route output direction mismatch"
+      }
+    ]
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": {
+      "op": "concat",
+      "args": [
+        [
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "issuer"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token"
+            ]
+          }
+        ]
+      ]
+    },
+    "requireCanonicalSource": true,
+    "steps": [
+      {
+        "id": "withdrawNative",
+        "when": {
+          "op": "get",
+          "args": [
+            "$route",
+            "buy"
+          ]
+        },
+        "call": {
+          "target": "$constants.weth",
+          "signature": "function withdraw(uint256)",
+          "args": [
+            {
+              "runtime": "amountIn"
+            }
+          ]
+        }
+      },
+      {
+        "id": "buySwap",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "buy"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                "$externalRecipient"
+              ]
+            }
+          ]
+        },
+        "call": {
+          "target": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "signature": "function ethToTokenSwapInput(uint256,uint256)",
+          "args": [
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              ]
+            }
+          ],
+          "value": {
+            "runtime": "amountIn"
+          }
+        }
+      },
+      {
+        "id": "buyTransfer",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "buy"
+              ]
+            },
+            "$externalRecipient"
+          ]
+        },
+        "call": {
+          "target": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "signature": "function ethToTokenTransferInput(uint256,uint256,address)",
+          "args": [
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              ]
+            },
+            "$recipient"
+          ],
+          "value": {
+            "runtime": "amountIn"
+          }
+        }
+      },
+      {
+        "id": "sellSwap",
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "buy"
+              ]
+            }
+          ]
+        },
+        "approval": {
+          "token": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenIn"
+            ]
+          },
+          "spender": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "mode": "exact-clear"
+        },
+        "call": {
+          "target": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "signature": "function tokenToEthSwapInput(uint256,uint256,uint256)",
+          "args": [
+            {
+              "runtime": "amountIn"
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              ]
+            }
+          ]
+        },
+        "effects": [
+          {
+            "kind": "credit",
+            "asset": "native",
+            "account": "$executor"
+          }
+        ]
+      },
+      {
+        "id": "wrapReceipt",
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "buy"
+              ]
+            }
+          ]
+        },
+        "call": {
+          "target": "$constants.weth",
+          "signature": "function deposit()",
+          "args": [],
+          "value": {
+            "runtime": "stepEffect0X0Delta"
+          }
+        }
+      },
+      {
+        "id": "sellTransfer",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "buy"
+                  ]
+                }
+              ]
+            },
+            "$externalRecipient"
+          ]
+        },
+        "call": {
+          "target": "$constants.weth",
+          "signature": "function transfer(address,uint256)",
+          "args": [
+            "$recipient",
+            {
+              "runtime": "stepEffect0X0Delta"
+            }
+          ]
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenIn"
+          ]
+        },
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "$recipient"
+      },
+      {
+        "kind": "unchanged-native"
+      }
+    ]
+  },
+  "observations": {
+    "version": 1,
+    "events": [
+      {
+        "id": "univ1-TokenPurchase",
+        "signature": "event TokenPurchase(address indexed buyer,uint256 indexed eth_sold,uint256 indexed tokens_bought)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$log",
+                    "address"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "buy": true,
+          "buyer": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "buyer"
+                ]
+              }
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              "$args",
+              "eth_sold"
+            ]
+          },
+          "amountOut": {
+            "op": "get",
+            "args": [
+              "$args",
+              "tokens_bought"
+            ]
+          }
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "eth_sold"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "tokens_bought"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "coalesce",
+                  "args": [
+                    "$edge.observationTarget",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$edge",
+                        "target"
+                      ]
+                    }
+                  ]
+                },
+                "$pool"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "tokenIn"
+                  ]
+                },
+                "$constants.weth"
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": "$pool",
+          "tokenIn": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenOut"
+            ]
+          },
+          "matchedAdapterId": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "adapterId"
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              "$args",
+              "eth_sold"
+            ]
+          },
+          "amountOut": {
+            "op": "get",
+            "args": [
+              "$args",
+              "tokens_bought"
+            ]
+          }
+        }
+      },
+      {
+        "id": "univ1-EthPurchase",
+        "signature": "event EthPurchase(address indexed buyer,uint256 indexed tokens_sold,uint256 indexed eth_bought)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$log",
+                    "address"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "buy": false,
+          "buyer": {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "buyer"
+                ]
+              }
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              "$args",
+              "tokens_sold"
+            ]
+          },
+          "amountOut": {
+            "op": "get",
+            "args": [
+              "$args",
+              "eth_bought"
+            ]
+          }
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "tokens_sold"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "eth_bought"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "coalesce",
+                  "args": [
+                    "$edge.observationTarget",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$edge",
+                        "target"
+                      ]
+                    }
+                  ]
+                },
+                "$pool"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$edge",
+                    "tokenOut"
+                  ]
+                },
+                "$constants.weth"
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": "$pool",
+          "tokenIn": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenOut"
+            ]
+          },
+          "matchedAdapterId": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "adapterId"
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              "$args",
+              "tokens_sold"
+            ]
+          },
+          "amountOut": {
+            "op": "get",
+            "args": [
+              "$args",
+              "eth_bought"
+            ]
+          }
+        }
+      }
+    ],
+    "canonicalIntakeTargets": [],
+    "victimSupport": "detect-only"
+  },
+  "refreshPolicy": "on-touch",
+  "values": {
+    "abi": {
+      "bindingpooltoken": [
+        "function tokenAddress() view returns(address)"
+      ],
+      "bindingpoolissuer": [
+        "function issuer() view returns(address)"
+      ]
+    },
+    "constants": {
+      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "zero": "0x0000000000000000000000000000000000000000"
+    }
+  },
+  "resourceValues": {
+    "constants": {
+      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "zero": "0x0000000000000000000000000000000000000000"
+    }
+  },
+  "meta": {
+    "label": "custom-swap:uniswap-v1/immutable-vyper-clone-factory-registration"
+  }
+}

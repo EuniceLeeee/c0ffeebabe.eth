@@ -1,0 +1,93 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x5c38449e",
+  "signature": "function flashLoan(address recipient,address[] tokens,uint256[] amounts,bytes userData)",
+  "domain": "funding",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_BALANCER_FLASH_ENABLED"
+  },
+  "meta": {
+    "label": "Balancer V2 compatible flashLoan"
+  },
+  "parameters": [
+    {
+      "path": [
+        0
+      ],
+      "role": "executor"
+    },
+    {
+      "path": [
+        1
+      ],
+      "role": "tokenIn"
+    },
+    {
+      "path": [
+        2
+      ],
+      "role": "amountIn"
+    },
+    {
+      "path": [
+        3
+      ],
+      "role": "children"
+    }
+  ],
+  "execution": {
+    "callback": {
+      "signature": "function receiveFlashLoan(address[] tokens,uint256[] amounts,uint256[] feeAmounts,bytes userData)",
+      "dataArgument": 3,
+      "args": [
+        [
+          "$tokenIn"
+        ],
+        [
+          "$amountIn"
+        ],
+        [
+          "$fee"
+        ],
+        "$children"
+      ]
+    },
+    "repayment": {
+      "mode": "transfer"
+    }
+  },
+  "funding": {
+    "liquidity": {
+      "target": "$tokenIn",
+      "signature": "function balanceOf(address) view returns(uint256)",
+      "args": [
+        "$provider"
+      ],
+      "result": 0
+    },
+    "fee": {
+      "kind": "rate",
+      "reads": [
+        {
+          "target": "$provider",
+          "signature": "function getProtocolFeesCollector() view returns(address)",
+          "args": [],
+          "result": 0
+        },
+        {
+          "target": "$previous.0",
+          "signature": "function getFlashLoanFeePercentage() view returns(uint256)",
+          "args": [],
+          "result": 0
+        }
+      ],
+      "scale": "1000000000000000000",
+      "rounding": "ceil"
+    },
+    "priority": {
+      "planning": 1,
+      "liquidity": 0
+    }
+  }
+}

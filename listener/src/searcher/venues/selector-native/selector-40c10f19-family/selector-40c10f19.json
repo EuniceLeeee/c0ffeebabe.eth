@@ -1,0 +1,48 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x40c10f19",
+  "signature": "function mint(address, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_40C10F19_ENABLED"
+  },
+  "parameters": [
+    {
+      "path": [
+        0
+      ],
+      "role": "executor"
+    },
+    {
+      "path": [
+        1
+      ],
+      "role": "amountIn"
+    }
+  ],
+  "payment": {
+    "kind": "approval"
+  },
+  "binding": {
+    "descriptor": {
+      "tokenIn": {
+        "op": "coalesce",
+        "args": [
+          "$scope.tokenIn",
+          "0x45804880De22913dAFE09f4980848ECE6EcbAf78"
+        ]
+      },
+      "tokenOut": {
+        "op": "coalesce",
+        "args": [
+          "$scope.tokenOut",
+          "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0"
+        ]
+      }
+    }
+  },
+  "meta": {
+    "label": "protocol:goldx/active-unit-mint"
+  }
+}

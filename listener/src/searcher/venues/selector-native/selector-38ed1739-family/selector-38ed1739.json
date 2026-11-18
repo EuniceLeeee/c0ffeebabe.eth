@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x38ed1739",
+  "signature": "function swapExactTokensForTokens(uint256, uint256, address[], address, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_38ED1739_ENABLED"
+  },
+  "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

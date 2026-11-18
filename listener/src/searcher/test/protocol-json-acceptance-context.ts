@@ -13,6 +13,7 @@ import type { PinnedNodeRpc } from "../simulator/node-input-funding.js";
 import { cachedFamilySimulation, familyFactCacheDirectory } from "./family-transaction-cache.js";
 
 import { validateTransactionStateSelection, type TransactionStateSelection } from "./family-transaction-source.js";
+import { sha256EvidenceFile } from "./family-evidence-hash.js";
 
 const ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const hash = (value: Buffer | string) => createHash("sha256").update(value).digest("hex");
@@ -36,7 +37,7 @@ export async function inspectAcceptanceEntry(family: { sourceFile: string; defin
   const file = resolve(root, "src/searcher/venues/production-families", installed.sourceFile);
   const source = readFileSync(file, "utf8");
   const provenance = { sourceFile: installed.sourceFile, entrySha256: hash(source), definitionBoundaryHash: installed.definitionBoundaryHash };
-  if (!source.startsWith("// Generated from Family JSON by build-declarative-production.ts.")) return { kind: "handwritten", ...provenance } as const;
+  if (!source.startsWith("// Generated from selector-native JSON. Do not edit.")) return { kind: "handwritten", ...provenance } as const;
   const ref = /^\/\/ Definition: (src\/searcher\/venues\/[a-z0-9/-]+\.json)$/m.exec(source);
   assert(ref, "generated entry missing its definition");
   const definitionFile = resolve(root, ref[1]), bytes = readFileSync(definitionFile);
@@ -45,11 +46,8 @@ export async function inspectAcceptanceEntry(family: { sourceFile: string; defin
   const rendered = renderDeclarativeProductionEntry({ rootDirectory: root, definitionFile, entryFile: file, document });
   assert.equal(rendered.familyId, family.plugin.manifest.familyId);
   assert.equal(rendered.source, source, "installed entry differs from the production generator");
-  if (rendered.format === "bindings-v1") return { kind: "json-bindings", ...provenance } as const;
-  const variants = [document.standard, ...rendered.childFiles.map(f => JSON.parse(readFileSync(f,"utf8")))];
-  return { kind: "declarative-json", ...provenance, definitionFile: ref[1], definitionSha256: hash(bytes),
-    variants: variants.map(({ id, lineageId }) => ({ id, lineageId })), childDefinitions: rendered.childFiles.map(f =>
-      ({ file: relative(root,f), sha256: hash(readFileSync(f)) })) } as const;
+  return { kind: "selector-execution-json", ...provenance, format: rendered.format,
+    definitionFile: ref[1], definitionSha256: hash(bytes) } as const;
 }
 
 export interface ProtocolJsonAcceptanceContextInput {
@@ -254,7 +252,7 @@ export async function openFamilyAcceptanceRuntimeContext(input: FamilyAcceptance
     const readyPath = realpathSync(input.readyPath), rpcFile = realpathSync(input.rpcFile);
     const artifactPath = resolve(ROOT, "out/BotVM.sol/BotVM.json"), artifactBytes = readFileSync(artifactPath);
     const pins = [...new Set([readyPath, rpcFile, artifactPath, fileURLToPath(import.meta.url), ...(input.inputPaths ?? []).map(path => realpathSync(path))])].map(path => {
-      assert(statSync(path).isFile(), "acceptance input must be a file"); return { path, sha256: hash(readFileSync(path)) };
+      assert(statSync(path).isFile(), "acceptance input must be a file"); return { path, sha256: sha256EvidenceFile(path) };
     });
     const sourceFiles = verifyAcceptanceBotVmArtifact(ROOT, artifactBytes);
     const sourceTreeSha256 = acceptanceSourceFingerprint(ROOT);
@@ -376,7 +374,7 @@ export async function openFamilyAcceptanceRuntimeContext(input: FamilyAcceptance
         getStorage: async (address, slot, n, extra) => { assert.equal(n, source.number); return request("eth_getStorageAt", [address, slot, pin], extra); },
       } });
     const assertUnchanged = async () => {
-      for (const entry of [...pins, ...sourceFiles]) assert.equal(hash(readFileSync(entry.path)), entry.sha256, "acceptance input/source changed");
+      for (const entry of [...pins, ...sourceFiles]) assert.equal(sha256EvidenceFile(entry.path), entry.sha256, "acceptance input/source changed");
       assert.equal(acceptanceSourceFingerprint(ROOT), sourceTreeSha256, "production source changed");
       const currentHeader = await request("eth_getBlockByNumber", [ethers.toQuantity(source.number), false]);
       assertAcceptanceHeader(currentHeader, source); assert.deepEqual(currentHeader, header, "historical header environment changed");

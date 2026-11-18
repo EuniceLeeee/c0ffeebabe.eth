@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xbd6d894d",
+  "signature": "function exchangeRateCurrent()",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_BD6D894D_ENABLED"
+  },
+  "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

@@ -62,7 +62,7 @@ const fixture = async (run: (f: {
   state: { active: number; peak: number; responder: (calls: RpcCall[]) => Promise<{ status?: number; body?: unknown }> };
 }) => Promise<void>, options: { timeout?: number; delay?: number; retries?: number } = {}) => {
   const calls: RpcCall[][] = [];
-  const state = { active: 0, peak: 0, responder: async (batch: RpcCall[]) => ({ body: batch.map(ok) }) as
+  const state = { active: 0, peak: 0, responder: (async (batch: RpcCall[]) => ({ body: batch.map(ok) })) as
     (calls: RpcCall[]) => Promise<{ status?: number; body?: unknown }> };
   const server = createServer(async (request, response) => {
     let text = ""; for await (const part of request) text += part;

@@ -127,9 +127,25 @@ test("actor extraction requires original executor observation and unique actual 
   ]) { const i = context(); mutate(i); assert.throws(() => executorFromObservedSimulation(i)); }
 });
 test("JSON cannot provide script, actor authority, arbitrary funds, or external settlement", () => {
-  for (const extra of [{ script: "0x01" }, { caller: { kind: "executor" } }, { preCalls: [] }, { overrideIntent: {} }, { amountIn: "0" }, { observe: ["total-supply-delta"] }, { observe: ["trace"] }])
-    assert.throws(() => buildDeclarativeExecutionSimulation({ ...declaration, ...extra } as any, input, values, execution, { math }));
+  for (const extra of [{ script: "0x01" }, { caller: { kind: "executor" } }, { preCalls: [] }, { overrideIntent: {} }, { amountIn: "0" }, { totalSupplies: [{}] }, { observe: ["trace"] }, { observe: ["total-supply-delta", "total-supply-delta"] }])
+    assert.throws(() => buildDeclarativeExecutionSimulation({ ...declaration, ...extra } as any, input, values, execution, { math }), JSON.stringify(extra));
   assert.throws(() => buildDeclarativeExecutionSimulation(declaration, { ...input, settlement: { kind: "direct-output", recipient: a(99) } }, values, execution, { math }));
+  assert.throws(() => buildDeclarativeExecutionSimulation(declaration, { ...input, recipient: a(99) }, values, execution, { math }));
+});
+
+test("declared supply observations add no execution authority and require exact receipt scope", () => {
+  const extended = buildDeclarativeExecutionSimulation({ ...declaration, totalSupplies: [INPUT], observe: ["total-supply-delta"] }, input, values, execution, { math });
+  assert.deepEqual(extended.call, request().call);
+  assert.deepEqual(extended.overrideIntent, request().overrideIntent);
+  assert.equal(extended.preCalls, undefined);
+  assert.deepEqual(extended.observeTotalSupplies, [INPUT]);
+  assert(extended.observe.includes("total-supply-delta"));
+  const observed = () => ({ ...context(), request: extended, result: { ...receipt(), effects: { ...receipt().effects, totalSupplyDeltas: [{ token: INPUT, delta: -17n }] } } });
+  assert.equal(decodeDeclarativeExecutionSimulationReceipt(observed()), 34n);
+  for (const supply of [undefined, [], [{ token: OUTPUT, delta: -17n }], [{ token: INPUT, delta: -17n }, { token: INPUT, delta: -17n }]]) {
+    const changed = observed(); changed.result.effects.totalSupplyDeltas = supply;
+    assert.throws(() => decodeDeclarativeExecutionSimulationReceipt(changed), /supply scope mismatch/);
+  }
 });
 
 test("raw native declarations use the existing central strict asset boundary", () => {

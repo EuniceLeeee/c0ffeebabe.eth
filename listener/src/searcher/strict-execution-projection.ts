@@ -3,7 +3,10 @@ import type { FamilyCapabilityCatalog } from
 import type {
   ExecutionRuntimeHop,
   ExecutionRuntimeProjection,
+  FundingExecutionResource,
 } from "./venues/adapter-family-plugin.js";
+import { getAddress } from "ethers";
+import type { ResolvedPlanNode } from "../types.js";
 
 export type StrictExecutionHop = ExecutionRuntimeHop;
 export type StrictExecutionAdapterProjection = ExecutionRuntimeProjection;
@@ -56,28 +59,50 @@ function validateExecutionRuntimeProjection(
   return value;
 }
 
-/**
- * Best-effort prewarm projection from strict Funding definitions. Repayment
- * targets are static Family semantics, so warming them does not require a
- * runtime publication view and does not confer offer/execution authority.
- * Funding offers remain issuer-bound to the current-source strict session.
- */
+/** Metadata for a selected root, checked by its actual owned encoder. No offer
+ * authority is created here; final source-bound simulation is still mandatory. */
+export function strictFundingExecutionResource(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly node: ResolvedPlanNode;
+  readonly executor: string;
+}): FundingExecutionResource {
+  const family = input.catalog.forStrictFamily(input.catalog.ownerOfAction(input.node.adapterId));
+  if (family.plugin.manifest.domain !== "funding" || !("funding" in family.plugin) ||
+      family.plugin.funding.repayment.executionResource === undefined) {
+    throw new Error("selected root has no Funding execution-resource projection");
+  }
+  const actions = family.plugin.actionAdapters.filter(action => action.id === input.node.adapterId);
+  if (actions.length !== 1) throw new Error("selected Funding root has no unique owned encoder");
+  const node = Object.freeze({ ...input.node, params: Object.freeze({ ...input.node.params }),
+    children: Object.freeze([...input.node.children]) }) as unknown as ResolvedPlanNode;
+  actions[0]!.encode(node, getAddress(input.executor), new Uint8Array());
+  const projected = family.plugin.funding.repayment.executionResource({ node, executor: input.executor });
+  if (!projected || typeof projected !== "object" ||
+      typeof projected.fundingId !== "string" || !projected.fundingId ||
+      typeof projected.liquidityResourceKey !== "string" || !projected.liquidityResourceKey ||
+      typeof projected.amount !== "bigint" || projected.amount <= 0n || projected.amount !== node.amount ||
+      getAddress(projected.target) !== getAddress(node.target) ||
+      getAddress(projected.asset) !== getAddress(node.tokenIn) || getAddress(node.tokenIn) !== getAddress(node.tokenOut)) {
+    throw new Error("Funding resource projection differs from the encoded root");
+  }
+  return Object.freeze({ fundingId: projected.fundingId, target: getAddress(projected.target).toLowerCase(),
+    liquidityHolder: getAddress(projected.liquidityHolder).toLowerCase(), liquidityResourceKey: projected.liquidityResourceKey,
+    asset: getAddress(projected.asset).toLowerCase(), amount: projected.amount });
+}
+
+/** Before plan selection there is no provider to warm. Every supplied root is
+ * projected independently so one selector can warm several chosen providers. */
 export function strictFundingPrewarmAddresses(input: {
   readonly catalog: FamilyCapabilityCatalog;
+  readonly selectedRoots?: readonly ResolvedPlanNode[];
+  readonly executor?: string;
 }): readonly string[] {
   const addresses = new Set<string>();
-  for (const family of input.catalog.listAll()) {
-    if (family.plugin.manifest.domain !== "funding") continue;
-    if (!("funding" in family.plugin) || family.plugin.funding === undefined) {
-      throw new Error(
-        `strict Funding definition ${family.plugin.manifest.familyId} ` +
-          "has no funding semantics",
-      );
-    }
-    addresses.add(family.plugin.funding.repayment.target.toLowerCase());
-    addresses.add(
-      family.plugin.funding.repayment.liquidityHolder.toLowerCase(),
-    );
+  for (const node of input.selectedRoots ?? []) {
+    if (input.executor === undefined) throw new Error("Funding prewarm requires the selected executor");
+    const resource = strictFundingExecutionResource({ catalog: input.catalog, node, executor: input.executor });
+    addresses.add(resource.target);
+    addresses.add(resource.liquidityHolder);
   }
   return Object.freeze([...addresses].sort());
 }

@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {readFileSync,readdirSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {AbiCoder,ZeroAddress,solidityPackedKeccak256,dataSlice,getAddress,toBeHex} from 'ethers';
+import {bindSelectorNativeMath} from '../venues/selector-native-math.js';
+const root=fileURLToPath(new URL('../venues/selector-native/',import.meta.url));
+const definitions=readdirSync(root).map(dir=>JSON.parse(readFileSync(resolve(root,dir,dir.replace(/-family$/,'')+'.json'),'utf8')));
+const models=new Map<string,any>();
+for(const doc of definitions)for(const p of doc.programs??[])for(const m of p.math?.models??[]){
+ const previous=models.get(m.id);if(previous)assert.deepEqual(m,previous,'inline model identity must preserve semantics');models.set(m.id,m);
+}
+const get=(id:string)=>{const model=models.get(id);assert(model,'missing migrated inline value calculation');return bindSelectorNativeMath({version:1,entries:{value:{model:id,version:1}},models:[model]}).value!;};
+const address=(n:string)=>'0x'+n.repeat(40);
+test('all installed native parameter model bindings are self-contained data',()=>{
+ assert.equal(models.size,4);for(const doc of definitions)for(const p of doc.programs??[])if(p.math)assert.doesNotThrow(()=>bindSelectorNativeMath(p.math));
+});
+test('inline models reject I/O, functions, missing handlers and imported models',()=>{
+ const model={id:'sample',version:1,program:[{return:{op:'sumUint',args:['$input']}}]},data:any={version:1,entries:{value:{model:'sample',version:1}},models:[model]};
+ assert.equal(bindSelectorNativeMath(data).value!([1n,2n]),3n);
+ for(const op of ['result','returned','programReceipt','simulationActor','model','decodeCanonical'])assert.throws(()=>bindSelectorNativeMath({...data,models:[{...model,program:[{return:{op,args:['input']}}]}]}),/pure/);
+ assert.throws(()=>bindSelectorNativeMath({...data,models:[{...model,handler:()=>1n}]}));assert.throws(()=>bindSelectorNativeMath({...data,models:[]}));assert.throws(()=>bindSelectorNativeMath({...data,models:[model,model]}),/duplicate/);
+});
+test('checked uint sum keeps eight-weight bound and overflow behavior',()=>{
+ const sum=get('balancer-v1:sum-weights');assert.equal(sum([1n,3n,5n]),9n);assert.equal(sum([]),0n);
+ assert.throws(()=>sum(Array(9).fill(1n)));assert.throws(()=>sum([-1n]));assert.throws(()=>sum([1]));assert.throws(()=>sum([(1n<<256n)-1n,1n]));
+});
+test('hook arguments bind executor and a deterministic separate sell key',()=>{
+ const fn=get('univ4-fee-hook:sat1-hook-data'),executor=address('1'),hook=address('2');
+ const forward=fn({executor,hook,direction:'zero-for-one'}) as any,backward=fn({executor,hook,direction:'one-for-zero'}) as any;
+ const abi=AbiCoder.defaultAbiCoder(),seller=getAddress(dataSlice(solidityPackedKeccak256(['string','address','address'],['univ4-fee-hook:sat1:sell:v1',executor,hook]),12));
+ assert.equal(abi.decode(['address'],forward.hookData)[0],getAddress(executor));assert.equal(abi.decode(['address'],backward.hookData)[0],seller);
+ assert.notEqual(seller,getAddress(executor));assert.notDeepEqual(backward,fn({executor,hook:address('3'),direction:'one-for-zero'}));assert.throws(()=>fn({executor,hook,direction:'unknown'}));
+});
+test('signed packed flow binds payment to the opposite receipt',()=>{
+ const fn=get('ekubo:core-swap-log'),pack=(a:bigint,b:bigint)=>({balanceUpdate:toBeHex((BigInt.asUintN(128,a)<<128n)|BigInt.asUintN(128,b),32)});
+ assert.deepEqual(fn(pack(15n,-27n)),{delta0:15n,delta1:-27n,isToken1:false,directed:true,amountIn:15n,amountOut:27n});
+ assert.deepEqual(fn(pack(-18n,33n)),{delta0:-18n,delta1:33n,isToken1:true,directed:true,amountIn:33n,amountOut:18n});
+ assert.equal((fn(pack(0n,0n)) as any).directed,false);assert.throws(()=>fn(pack(1n,1n)));assert.throws(()=>fn(pack(-1n,-1n)));assert.throws(()=>fn({balanceUpdate:'0x01'}));
+});
+function proxyFixture(flag=1n,unit=100n){
+ let pattern='';const visit=(v:any)=>{if(v&&typeof v==='object'){if(v.op==='matches')pattern=v.args[1];Object.values(v).forEach(visit);}};visit(models.get('oneswap:proxy'));
+ const fields=[BigInt(address('1')),0n,BigInt(address('2')),BigInt(address('3')),(flag<<192n)|(unit<<128n)|(2n<<64n)|3n];let index=0;
+ const code=pattern.slice(1,-1).replaceAll('[0-9a-f]{64}',()=>toBeHex(fields[index++]!,32).slice(2));assert.equal(index,5);return {code,pool:address('4')};
+}
+test('immutable byte layout stays in JSON and rejects collapsed resources',()=>{
+ const fn=get('oneswap:proxy');assert.deepEqual(fn(proxyFixture()),{factory:address('1'),money:ZeroAddress,stock:address('2'),ones:address('3'),isOnlySwap:true,stockUnit:100n,priceMul:2n,priceDiv:3n});
+ assert.equal(fn(proxyFixture(2n)),null);assert.equal(fn(proxyFixture(0n,0n)),null);assert.equal(fn({...proxyFixture(),pool:address('1')}),null);assert.equal(fn({...proxyFixture(),code:'0x1234'}),null);
+ const value=proxyFixture();assert.deepEqual(fn({...value,code:value.code.toUpperCase().replace('0X','0x')}),fn(value));
+});

@@ -3,7 +3,7 @@ import type { BoundRequestProgram, DependentRequestProgram } from "./adapter-fam
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource, RequestRequirements } from "./adapter-request-program.js";
 import { RequiredAdapterRequestError } from "./adapter-request-failure.js";
 import { validateDeclarativeStatements, validateDeclarativeValue } from "./declarative-values.js";
-import { assertSource } from "./protocols/standard-family/common.js";
+import { assertSource } from "./selector-execution-evidence.js";
 
 type Value = any;
 export type ReadFlowInput = Readonly<Record<string, Value>> & { readonly source: CanonicalSource };

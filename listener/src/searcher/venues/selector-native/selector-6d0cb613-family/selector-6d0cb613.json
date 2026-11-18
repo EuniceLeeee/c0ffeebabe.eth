@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x6d0cb613",
+  "signature": "function multihopSwap((((address, address, bytes32), uint96, uint256)[], (address, int128)), int256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_6D0CB613_ENABLED"
+  },
+  "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

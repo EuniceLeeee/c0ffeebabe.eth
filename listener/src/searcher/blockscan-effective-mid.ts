@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { keccak256, toUtf8Bytes } from "ethers";
 import { gasReferenceInput } from "./blockscan-amount-reference.js";
 import type { StrictProductionRuntimeSession } from "./strict-production-runtime-session.js";
 import type { CanonicalSource } from "./venues/adapter-request-program.js";
@@ -11,6 +12,9 @@ import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import { observeAdapterRequests } from "./adapter-request-observation.js";
 import type { EffectiveEthColumns } from "./blockscan-eth-view.js";
+import { DEFAULT_EFFECTIVE_INPUT_PATH_HOPS, effectiveInputPathHops,
+  resolveEffectiveInputPathHops } from "./effective-input-path-policy.js";
+export { effectiveInputPathHops, resolveEffectiveInputPathHops } from "./effective-input-path-policy.js";
 
 export type EffectivePricingInput = Pick<BlockScanStateSnapshot,
   "sourceBlock" | "sourceBlockHash" | "generation" | "pricingStateKeyByEdgeKey"> & {
@@ -23,7 +27,7 @@ export type EffectivePricingInput = Pick<BlockScanStateSnapshot,
  * Exact reuses the resulting row amount and hands that same input to Solver. */
 export const DEFAULT_EFFECTIVE_WETH_INPUT = 2_000_000_000_000_000n;
 /** Maximum successful forward quotes used to derive an input amount. */
-export const MAX_EFFECTIVE_INPUT_PATH_HOPS = 4;
+export const MAX_EFFECTIVE_INPUT_PATH_HOPS = DEFAULT_EFFECTIVE_INPUT_PATH_HOPS;
 
 export interface EffectiveMidRow {
   readonly edgeId: string;
@@ -32,6 +36,14 @@ export interface EffectiveMidRow {
   readonly tokenOut: string;
   readonly amountIn: bigint | null;
   readonly amountOut: bigint | null;
+  /** The input budget remains amountIn, as in Exact. A simulation also records
+   * its actual debit, which may be smaller when the program returns change. */
+  readonly amountSpent?: bigint;
+  readonly pricingMethod?: "startup-simulation" | "exact";
+  /** The same funded transaction that supplied these amounts. The binding
+   * commits to this row and its existing amount lineage, without a second copy
+   * of all receipts. A pricing-method label alone grants no execution status. */
+  readonly executionVerification?: EffectiveExecutionVerification;
   /** Output raw units / input raw units. Fee already included in amountOut. */
   readonly effectiveMid: number | null;
   readonly status: "quoted" | "missing-valuation" | "unsupported" |
@@ -47,6 +59,13 @@ export interface EffectiveMidRow {
   readonly eth?: EffectiveEthColumns;
   /** Compatibility quote index points here; no separately owned price row. */
   readonly enumeration?: ResolvedBlockScanQuote;
+}
+
+export interface EffectiveExecutionVerification {
+  readonly kind: "startup-simulation";
+  readonly targetBlock: number;
+  readonly scriptHash: string;
+  readonly receiptHash: string;
 }
 
 export interface EffectiveMidProgress {
@@ -74,6 +93,8 @@ export interface EffectiveMidProgress {
 
 export interface EffectiveMidSnapshot {
   readonly source: CanonicalSource;
+  /** Omitted only by legacy snapshots, whose input-path policy was four. */
+  readonly maxInputPathHops?: number;
   readonly reference: "gas" | "default" | "fixed";
   /** Reference for newly quoted rows. Carried rows retain their original amounts. */
   readonly referenceWethInput: bigint;
@@ -92,8 +113,12 @@ export interface EffectiveAmountReference {
 // Process-local policy identity and dependencies. Serialized legacy snapshots
 // cannot prove that their inputs were derived without raw mids, so cannot carry.
 const amountReferenceState = new WeakMap<EffectiveMidSnapshot, {
+  readonly source: CanonicalSource;
   readonly weth: string;
   readonly references: ReadonlyMap<string, EffectiveAmountReference>;
+  /** Original authenticated samples admitted by this producer's existing
+   * complete-activity/untouched carry path. The row's quotedAt never changes. */
+  readonly verifiedExecutions: ReadonlySet<string>;
 }>();
 const rowAmountReferences = new WeakMap<EffectiveMidRow, EffectiveAmountReference>();
 
@@ -155,11 +180,72 @@ export function effectiveRowAmountReference(row: EffectiveMidRow): EffectiveAmou
   return rowAmountReferences.get(row);
 }
 
+const executionReceiptFields = (row: EffectiveMidRow) => [row.edgeId, row.instanceKey,
+  row.tokenIn, row.tokenOut, row.amountIn, row.amountSpent, row.amountOut,
+  row.quotedAt && [row.quotedAt.number, row.quotedAt.hash.toLowerCase(), row.quotedAt.generation]];
+
+/** A data binding issued by the existing authenticated startup receipt path.
+ * This digest is not an independent EVM authenticator. Replay still requires
+ * its original source, graph and complete amount lineage. */
+export function effectiveExecutionReceiptHash(row: EffectiveMidRow, reference: EffectiveAmountReference,
+  maxInputPathHops: number, targetBlock: number, scriptHash: string): string {
+  return keccak256(toUtf8Bytes(JSON.stringify({ kind: "startup-simulation", targetBlock, scriptHash,
+    maxInputPathHops, row: executionReceiptFields(row), path: reference.path.map(executionReceiptFields) },
+  (_, value) => typeof value === "bigint" ? value.toString() : value)));
+}
+
+/** Positive execution evidence belongs to the current price publication: a
+ * fresh SIM or an original SIM carried through the producer's verified activity
+ * boundary. Moving a table to another source cannot manufacture that authority. */
+export function effectiveRowExecutionVerified(snapshot: Pick<EffectiveMidSnapshot, "source" | "maxInputPathHops">,
+  row: EffectiveMidRow, edge: TokenEdge,
+  reference: EffectiveAmountReference | undefined = rowAmountReferences.get(row)): boolean {
+  const { source } = snapshot, policy = effectiveInputPathHops(snapshot.maxInputPathHops);
+  const authority = amountReferenceState.get(snapshot as EffectiveMidSnapshot);
+  if (authority && (authority.source.number !== source.number || authority.source.hash.toLowerCase() !== source.hash.toLowerCase() ||
+      authority.source.generation !== source.generation)) return false;
+  const observed = row.quotedAt;
+  const evidence = row.executionVerification;
+  if (!reference || reference.amountIn !== row.amountIn || reference.path.length > policy ||
+      row.edgeId !== blockScanEdgeKey(edge) || row.instanceKey !== edgeInstanceKey(edge) ||
+      row.tokenIn !== edge.tokenIn.toLowerCase() || row.tokenOut !== edge.tokenOut.toLowerCase() ||
+      !observed || typeof observed.hash !== "string" || observed.number > source.number || observed.generation > source.generation ||
+      (observed.number === source.number && observed.hash.toLowerCase() !== source.hash.toLowerCase()) ||
+      !evidence || evidence.kind !== "startup-simulation" || evidence.targetBlock !== observed.number + 1 ||
+      !/^0x[0-9a-f]{64}$/i.test(evidence.scriptHash)) return false;
+  if ((observed.number !== source.number || observed.generation !== source.generation ||
+       observed.hash.toLowerCase() !== source.hash.toLowerCase()) &&
+      !authority?.verifiedExecutions.has(evidence.receiptHash)) return false;
+  const steps = [...reference.path, row];
+  for (const [i, step] of steps.entries()) {
+    const proof = step.executionVerification, at = step.quotedAt;
+    if (step.status !== "quoted" || step.pricingMethod !== "startup-simulation" ||
+        !at || at.number !== observed.number || typeof at.hash !== "string" || at.hash.toLowerCase() !== observed.hash.toLowerCase() ||
+        at.generation !== observed.generation || typeof step.amountIn !== "bigint" || step.amountIn <= 0n ||
+        typeof step.amountOut !== "bigint" || step.amountOut <= 0n || typeof step.amountSpent !== "bigint" ||
+        step.amountSpent < 0n || step.amountSpent > step.amountIn ||
+        step.effectiveMid !== Number(step.amountOut) / Number(step.amountIn) ||
+        (i > 0 && (step.tokenIn !== steps[i - 1]!.tokenOut || step.amountIn !== steps[i - 1]!.amountOut)) ||
+        !proof || proof.kind !== "startup-simulation" || proof.targetBlock !== evidence.targetBlock ||
+        proof.scriptHash !== evidence.scriptHash || proof.receiptHash !== effectiveExecutionReceiptHash(step,
+          { amountIn: step.amountIn, path: reference.path.slice(0, i) }, policy, proof.targetBlock, proof.scriptHash)) return false;
+  }
+  return true;
+}
+
+function freezeExecutionVerification(row: EffectiveMidRow): void {
+  if (row.executionVerification) Object.freeze(row.executionVerification);
+  if (row.quotedAt) Object.freeze(row.quotedAt);
+}
+
 /** Data-only historical checkpoint. No session, request result or Exact authority
  * crosses the process boundary. Original paths must survive carried samples. */
 export interface EffectiveMidReplayState {
   readonly version: 1;
+  /** Binds persisted lineage/carry authorization to its publication envelope. */
+  readonly source?: CanonicalSource;
   readonly weth: string;
+  readonly maxInputPathHops?: number;
   readonly references: readonly EffectiveAmountReference[];
   readonly byToken: readonly (readonly [string, number])[];
   readonly byRow: readonly (readonly [string, number])[];
@@ -174,7 +260,7 @@ export function exportEffectiveMidReplayState(snapshot: EffectiveMidSnapshot): E
     if (value === undefined) { value = references.length; ids.set(reference, value); references.push(reference); }
     return value;
   };
-  return { version: 1, weth: state.weth, references,
+  return { version: 1, source: state.source, weth: state.weth, maxInputPathHops: effectiveInputPathHops(snapshot.maxInputPathHops), references,
     byToken: [...state.references].map(([token, reference]) => [token, id(reference)] as const),
     byRow: [...snapshot.rows].flatMap(([key, row]) => {
       const reference = rowAmountReferences.get(row);
@@ -184,6 +270,7 @@ export function exportEffectiveMidReplayState(snapshot: EffectiveMidSnapshot): E
 
 export interface EffectiveMidReplayDelta {
   readonly source: CanonicalSource;
+  readonly maxInputPathHops?: number;
   readonly reference: EffectiveMidSnapshot["reference"];
   readonly referenceWethInput: bigint;
   readonly wallMs: number;
@@ -207,11 +294,17 @@ export function exportEffectiveMidReplayDelta(snapshot: EffectiveMidSnapshot,
       const old = b.path[i]!;
       return row === old || row.edgeId === old.edgeId && row.instanceKey === old.instanceKey &&
         row.tokenIn === old.tokenIn && row.tokenOut === old.tokenOut && row.amountIn === old.amountIn &&
-        row.amountOut === old.amountOut && row.status === old.status && row.effectiveMid === old.effectiveMid &&
+        row.amountOut === old.amountOut && row.amountSpent === old.amountSpent && row.pricingMethod === old.pricingMethod &&
+        row.executionVerification?.kind === old.executionVerification?.kind &&
+        row.executionVerification?.targetBlock === old.executionVerification?.targetBlock &&
+        row.executionVerification?.scriptHash === old.executionVerification?.scriptHash &&
+        row.executionVerification?.receiptHash === old.executionVerification?.receiptHash &&
+        row.status === old.status && row.effectiveMid === old.effectiveMid &&
         row.quotedAt?.number === old.quotedAt?.number && row.quotedAt?.hash === old.quotedAt?.hash &&
         row.quotedAt?.generation === old.quotedAt?.generation;
     });
-  return { source: snapshot.source, reference: snapshot.reference, referenceWethInput: snapshot.referenceWethInput,
+  return { source: snapshot.source, maxInputPathHops: effectiveInputPathHops(snapshot.maxInputPathHops),
+    reference: snapshot.reference, referenceWethInput: snapshot.referenceWethInput,
     wallMs: snapshot.wallMs, removals: changes.removals,
     updates: changes.updates.map(([id, row]) => [id, row, rowAmountReferences.get(row) ?? null] as const),
     tokenUpdates: [...current.references].filter(([token, ref]) => !same(ref, prior.references.get(token))),
@@ -221,13 +314,26 @@ export function exportEffectiveMidReplayDelta(snapshot: EffectiveMidSnapshot,
 export function restoreEffectiveMidReplayState(snapshot: EffectiveMidSnapshot,
   state: EffectiveMidReplayState, edges: readonly TokenEdge[], weth: string): void {
   assert(snapshot.complete && state.version === 1 && state.weth === weth.toLowerCase(), "incompatible effective baseline");
+  const maxInputPathHops = effectiveInputPathHops(snapshot.maxInputPathHops);
+  assert(effectiveInputPathHops(state.maxInputPathHops) === maxInputPathHops, "effective input-path policy changed");
+  const anchored = state.source?.number === snapshot.source.number && state.source.hash.toLowerCase() === snapshot.source.hash.toLowerCase() &&
+    state.source.generation === snapshot.source.generation;
+  assert(state.source === undefined || anchored, "effective replay source anchor changed");
+  const verifiedExecutions = new Set<string>();
+  const verifyOriginalExecution = (row: EffectiveMidRow, edge: TokenEdge, reference: EffectiveAmountReference) => {
+    if (!row.quotedAt || (!anchored && (row.quotedAt.number !== snapshot.source.number ||
+        row.quotedAt.hash.toLowerCase() !== snapshot.source.hash.toLowerCase() || row.quotedAt.generation !== snapshot.source.generation))) return false;
+    if (!effectiveRowExecutionVerified({ source: row.quotedAt, maxInputPathHops }, row, edge, reference)) return false;
+    for (const step of [...reference.path, row]) verifiedExecutions.add(step.executionVerification!.receiptHash);
+    return true;
+  };
   const graph = graphEdgeIndex(edges);
   const references = state.references.map(reference => {
     assert(typeof reference.amountIn === "bigint" && reference.amountIn > 0n &&
-      Array.isArray(reference.path) && reference.path.length <= MAX_EFFECTIVE_INPUT_PATH_HOPS, "invalid amount lineage");
+      Array.isArray(reference.path) && reference.path.length <= maxInputPathHops, "invalid amount lineage");
     let token = state.weth, output: bigint | undefined;
     const visited = new Set([token]);
-    for (const step of reference.path) {
+    for (const [i, step] of reference.path.entries()) {
       const edge = graph.get(step.edgeId);
       assert(edge && !edge.leavesStandingPosition && step.status === "quoted" &&
         step.instanceKey === edgeInstanceKey(edge) && step.tokenIn === token &&
@@ -238,11 +344,17 @@ export function restoreEffectiveMidReplayState(snapshot: EffectiveMidSnapshot,
         step.quotedAt.number <= snapshot.source.number && step.quotedAt.generation <= snapshot.source.generation &&
         (step.quotedAt.number !== snapshot.source.number || step.quotedAt.hash.toLowerCase() === snapshot.source.hash.toLowerCase()),
       "invalid historical forward-quote path");
+      assert(edge.executionVerification !== "startup-simulation" || verifyOriginalExecution(
+        step, edge, { amountIn: step.amountIn, path: reference.path.slice(0, i) }),
+      "historical forward-quote path lacks current execution verification");
       assert(!visited.has(step.tokenOut), "cyclic historical forward-quote path");
       token = step.tokenOut; visited.add(token); output = step.amountOut;
     }
     assert(output === undefined || output === reference.amountIn, "lineage output differs from input amount");
-    return { reference: Object.freeze({ ...reference, path: Object.freeze(reference.path.map(row => Object.freeze({ ...row }))) }), token };
+    return { reference: Object.freeze({ ...reference, path: Object.freeze(reference.path.map(row => {
+      freezeExecutionVerification(row);
+      return Object.freeze({ ...row });
+    })) }), token };
   });
   const tokens = new Map<string, EffectiveAmountReference>();
   for (const [token, id] of state.byToken) {
@@ -270,6 +382,9 @@ export function restoreEffectiveMidReplayState(snapshot: EffectiveMidSnapshot,
         row.quotedAt.number <= snapshot.source.number && row.quotedAt.generation <= snapshot.source.generation &&
         (row.quotedAt.number !== snapshot.source.number || row.quotedAt.hash.toLowerCase() === snapshot.source.hash.toLowerCase()),
       "invalid historical quote observation");
+      const verified = rows.has(row) && verifyOriginalExecution(row, edge, rows.get(row)!);
+      assert(edge.executionVerification !== "startup-simulation" || verified,
+        "historical quote lacks current execution verification");
     } else assert((row.status === "no-output" ? row.amountOut === 0n : row.amountOut === null) &&
       row.effectiveMid === null, "unavailable row cannot supply a quote");
   }
@@ -277,11 +392,11 @@ export function restoreEffectiveMidReplayState(snapshot: EffectiveMidSnapshot,
   // Restore their producer invariant only after the entire input has validated;
   // this does not issue a native delta or bypass source/graph/ownership checks.
   for (const row of snapshot.rows.values()) {
-    if (row.quotedAt) Object.freeze(row.quotedAt);
+    freezeExecutionVerification(row);
     Object.freeze(row);
   }
   for (const [row, reference] of rows) rowAmountReferences.set(row, reference);
-  amountReferenceState.set(snapshot, { weth: state.weth, references: tokens });
+  amountReferenceState.set(snapshot, { source: Object.freeze({ ...snapshot.source }), weth: state.weth, references: tokens, verifiedExecutions });
 }
 
 export function resolveEffectiveAmountCascade(raw?: string): boolean {
@@ -351,7 +466,7 @@ export function visitEffectiveEnumerationQuotes(pricing: EffectiveEnumerationPri
   const effective = assertEffectiveEnumerationSource(pricing);
   const edges = graphEdgeIndex(pricing.graph.edges);
   for (const [key, row] of effective.rows) {
-    const quote = enumerationQuote(edges, key, row);
+    const quote = enumerationQuote(edges, key, row, effective);
     if (quote) visit(key, quote);
   }
 }
@@ -370,10 +485,10 @@ function assertEffectiveEnumerationSource(pricing: EffectiveEnumerationPricing):
 /** Same validation for a full initial table and for each native changed row. */
 export function effectiveEnumerationQuote(pricing: EffectiveEnumerationPricing, key: string,
   row: EffectiveMidRow): ResolvedBlockScanQuote | undefined {
-  return enumerationQuote(graphEdgeIndex(pricing.graph.edges), key, row);
+  return enumerationQuote(graphEdgeIndex(pricing.graph.edges), key, row, assertEffectiveEnumerationSource(pricing));
 }
 function enumerationQuote(edges: ReadonlyMap<string, TokenEdge>, key: string,
-  row: EffectiveMidRow): ResolvedBlockScanQuote | undefined {
+  row: EffectiveMidRow, snapshot: EffectiveMidSnapshot): ResolvedBlockScanQuote | undefined {
   if (row.status !== "quoted") return undefined;
   const edge = edges.get(key);
   const instance = edge && edgeInstanceKey(edge);
@@ -384,6 +499,7 @@ function enumerationQuote(edges: ReadonlyMap<string, TokenEdge>, key: string,
       typeof row.amountIn !== "bigint" || typeof row.amountOut !== "bigint" || row.amountIn <= 0n || row.amountOut <= 0n) {
     throw new Error("invalid effective enumeration row");
   }
+  if (edge.executionVerification === "startup-simulation" && !effectiveRowExecutionVerified(snapshot, row, edge)) return undefined;
   const cached = projectedRows.get(row);
   if (cached && cached.edge === edge && cached.quote.pool === instance &&
       cached.quote.mid === row.effectiveMid && cached.quote.quoteAmountIn === row.amountIn &&
@@ -403,10 +519,21 @@ function enumerationQuote(edges: ReadonlyMap<string, TokenEdge>, key: string,
 // The caller supplies executor/evidence through its source-bound session closure.
 type ExactCall = StrictProductionRuntimeSession["issueExact"];
 type RouteExactResult = Extract<Awaited<ReturnType<ExactCall>>, { readonly amountIn: bigint }>;
-type EffectiveMidQuote = (
-  input: Pick<Parameters<ExactCall>[0],
-    "edge" | "amountIn" | "control">,
-) => Promise<Pick<RouteExactResult, "source" | "amountIn" | "amountOut">>;
+export type EffectiveMidQuoteRequest = Pick<Parameters<ExactCall>[0],
+  "edge" | "amountIn" | "control"> & {
+  readonly source: CanonicalSource;
+  readonly reference: EffectiveAmountReference;
+  readonly maxInputPathHops: number;
+};
+export type EffectiveMidQuoteResult = Pick<RouteExactResult, "source" | "amountIn" | "amountOut"> & {
+  /** The same simulated prefix can refresh historical quantities. Its route
+   * topology and native seed must remain those requested by this build. */
+  readonly inputReference?: EffectiveAmountReference;
+  readonly amountSpent?: bigint;
+  readonly pricingMethod?: "startup-simulation" | "exact";
+  readonly executionVerification?: EffectiveExecutionVerification;
+};
+export type EffectiveMidQuote = (input: EffectiveMidQuoteRequest) => Promise<EffectiveMidQuoteResult>;
 
 /** One effective build only. A selected instance may bind several directions;
  * keep those source-bound sessions for later layers instead of reissuing them.
@@ -431,13 +558,15 @@ export function createEffectiveQuoteSessions(
 }
 
 /** Forward effective sampling: shortest successful WETH paths first, then the
- * greatest output at that depth. Depth-four tokens still quote their outgoing
- * edges, but those outputs cannot seed a fifth-hop sampling reference. */
+ * greatest output at that depth. Tokens at the configured maximum depth still
+ * quote outgoing edges; those outputs cannot seed another input reference. */
 export async function buildEffectiveMids(input: {
   /** Verified pricing-state identity; raw mids are deliberately not consumed. */
   readonly pricing: EffectivePricingInput;
   readonly quoteGraph?: VerifiedGraphView;
   readonly weth: string;
+  /** Shared with startup input preparation; omitted uses the one process setting. */
+  readonly maxInputPathHops?: number;
   readonly gasCostWei: bigint | null;
   /** Explicit diagnostic notional. Omitted by live callers. */
   readonly fixedWethInput?: bigint;
@@ -448,7 +577,7 @@ export async function buildEffectiveMids(input: {
   readonly quote: EffectiveMidQuote;
   /** Called once per nonempty fresh layer, after its input amounts are known.
    * All quotes from the previous layer have settled before new bindings are
-   * prepared. Effective samples never share an Exact prefix. */
+   * prepared. Simulation samples consume their explicit funding lineage. */
   readonly prepareQuote?: (requiredEdgeIds: ReadonlySet<string>) => Promise<void>;
   readonly control: AdapterWorkControl;
   readonly concurrency: number;
@@ -472,6 +601,7 @@ export async function buildEffectiveMids(input: {
       planningMs: number; sessionPrepareMs: number; quoteWorkMs: number; propagationMs: number }[],
   } : undefined;
   const { pricing, control } = input;
+  const maxInputPathHops = effectiveInputPathHops(input.maxInputPathHops ?? resolveEffectiveInputPathHops());
   if (!Number.isSafeInteger(input.concurrency) || input.concurrency < 1 ||
       !Number.isFinite(input.enumerationSpreadBps) || input.enumerationSpreadBps < 0) {
     throw new Error("invalid effective-mid work or spread policy");
@@ -491,6 +621,9 @@ export async function buildEffectiveMids(input: {
     gasReferenceInput(gasCostWei, { num: 1n, den: 1n }, input.enumerationSpreadBps)!;
   const weth = input.weth.toLowerCase();
   const edges = graphEdgeIndex((input.quoteGraph ?? pricing.graph).edges);
+  // A simple token path cannot use more distinct steps than the graph has
+  // edges. This allocation bound follows topology, not another funding policy.
+  const samplingDepthLimit = Math.min(maxInputPathHops, edges.size);
   const stateKeyFor = (edgeId: string, edge: (typeof pricing.graph.edges)[number]) =>
     (pricing.pricingStateKeyByEdgeKey?.get(edgeId) ?? edgeInstanceKey(edge)).toLowerCase();
   // Membership comes from the verified graph, never the availability of a raw
@@ -541,7 +674,8 @@ export async function buildEffectiveMids(input: {
   const closed = () => control.signal?.aborted === true ||
     (control.deadlineAtMs !== undefined && Date.now() >= control.deadlineAtMs);
   const writeRow = (index: number, result: Pick<EffectiveMidRow,
-    "status" | "amountOut" | "effectiveMid" | "quotedAt" | "carried" | "failureEvidence">) => {
+    "status" | "amountOut" | "effectiveMid" | "quotedAt" | "carried" | "failureEvidence" | "amountSpent" | "pricingMethod" |
+    "executionVerification">) => {
     const { edgeId, edge, amountIn } = work[index]!;
     storeRow(index, Object.freeze({ edgeId, instanceKey: edgeInstanceKey(edge),
       tokenIn: edge.tokenIn.toLowerCase(), tokenOut: edge.tokenOut.toLowerCase(), amountIn, ...result }));
@@ -554,24 +688,76 @@ export async function buildEffectiveMids(input: {
     const status = closed() ? "cancelled" :
       (error as { code?: unknown })?.code === "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" ? "unsupported" : "quote-failed";
     writeRow(index, { status, amountOut: null, effectiveMid: null,
-      ...(status === "quote-failed" && revertedResults > 0
+      ...(status === "quote-failed" && (revertedResults > 0 || (error as { code?: unknown })?.code === "STARTUP_EXECUTION_REVERT")
         ? { failureEvidence: "evm-revert-observed" as const } : {}) });
   };
   const accept = (index: number, result: Awaited<ReturnType<EffectiveMidQuote>>) => {
     if (closed()) { unavailable(index, "cancelled"); return; }
-    const { amountIn } = work[index]!;
+    const item = work[index]!;
+    if (result.inputReference !== undefined) {
+      const prior = item.reference, actual = result.inputReference;
+      if (!prior || result.pricingMethod !== "startup-simulation" ||
+          actual.path.length !== prior.path.length || actual.path.length > maxInputPathHops ||
+          typeof actual.amountIn !== "bigint" || actual.amountIn <= 0n) {
+        throw new Error("simulation changed the requested input lineage");
+      }
+      let token = weth, amount = prior.path[0]?.amountIn ?? prior.amountIn;
+      const path = actual.path.map((row, i) => {
+        const requested = prior.path[i]!, edge = edges.get(row.edgeId);
+        if (!edge || row.edgeId !== requested.edgeId || row.instanceKey !== edgeInstanceKey(edge) ||
+            row.instanceKey !== requested.instanceKey || row.tokenIn !== token ||
+            row.tokenIn !== edge.tokenIn.toLowerCase() || row.tokenOut !== edge.tokenOut.toLowerCase() ||
+            row.status !== "quoted" || row.amountIn !== amount ||
+            typeof row.amountOut !== "bigint" || row.amountOut <= 0n ||
+            row.quotedAt?.number !== source.number || row.quotedAt.hash.toLowerCase() !== source.hash ||
+            row.quotedAt.generation !== source.generation || input.disabledEdgeIds?.has(row.edgeId) ||
+            row.amountSpent !== undefined && (row.amountSpent < 0n || row.amountSpent > row.amountIn)) {
+          throw new Error("simulation input lineage does not match the requested route/source");
+        }
+        const rate = Number(row.amountOut) / Number(row.amountIn);
+        if (!Number.isFinite(rate) || rate <= 0 || row.effectiveMid !== rate) {
+          throw new Error("simulation input lineage has an invalid rate");
+        }
+        if (edge.executionVerification === "startup-simulation" && !effectiveRowExecutionVerified({ source, maxInputPathHops },
+          row, edge, { amountIn: row.amountIn, path: actual.path.slice(0, i) })) {
+          throw new Error("simulation input lineage lacks current execution verification");
+        }
+        token = row.tokenOut; amount = row.amountOut;
+        return Object.freeze({ ...row, quotedAt: source });
+      });
+      if (token !== item.edge.tokenIn.toLowerCase() || actual.amountIn !== amount || result.amountIn !== amount) {
+        throw new Error("simulation target budget differs from the prefix output");
+      }
+      item.reference = Object.freeze({ amountIn: actual.amountIn, path: Object.freeze(path) });
+      item.amountIn = actual.amountIn;
+    }
+    const { amountIn } = item;
     if (amountIn === null || result.source.number !== source.number || result.source.hash.toLowerCase() !== source.hash ||
         result.source.generation !== source.generation || result.amountIn !== amountIn) {
       throw new Error("effective quote changed source or amount");
     }
     const amountOut = result.amountOut;
     const rate = Number(amountOut) / Number(amountIn);
-    if (amountOut < 0n || !Number.isFinite(rate) || (amountOut > 0n && rate <= 0)) {
+    if (amountOut < 0n || !Number.isFinite(rate) || (amountOut > 0n && rate <= 0) ||
+        result.amountSpent !== undefined && (typeof result.amountSpent !== "bigint" ||
+          result.amountSpent < 0n || result.amountSpent > amountIn)) {
       throw new Error("invalid quote output");
     }
     const status = amountOut > 0n ? "quoted" : "no-output";
+    if (status === "quoted" && item.edge.executionVerification === "startup-simulation" &&
+        !effectiveRowExecutionVerified({ source, maxInputPathHops }, {
+          edgeId: item.edgeId, instanceKey: edgeInstanceKey(item.edge), tokenIn: item.edge.tokenIn.toLowerCase(),
+          tokenOut: item.edge.tokenOut.toLowerCase(), amountIn, amountOut, amountSpent: result.amountSpent,
+          effectiveMid: rate, status, quotedAt: source, pricingMethod: result.pricingMethod,
+          executionVerification: result.executionVerification,
+        }, item.edge, item.reference)) {
+      throw new Error("effective quote lacks current execution verification");
+    }
     if (closed()) { unavailable(index, "cancelled"); return; }
     writeRow(index, { status, amountOut, effectiveMid: amountOut > 0n ? rate : null,
+      ...(result.amountSpent === undefined ? {} : { amountSpent: result.amountSpent }),
+      ...(result.pricingMethod === undefined ? {} : { pricingMethod: result.pricingMethod }),
+      ...(result.executionVerification === undefined ? {} : { executionVerification: Object.freeze({ ...result.executionVerification }) }),
       ...(status === "quoted" ? { quotedAt: source } : {}) });
   };
 
@@ -580,12 +766,23 @@ export async function buildEffectiveMids(input: {
   const previous = input.previous;
   const previousState = previous && amountReferenceState.get(previous);
   const canReuse = previous !== undefined && previousState?.weth === weth && input.touchedStateKeys !== undefined &&
+    effectiveInputPathHops(previous.maxInputPathHops) === maxInputPathHops &&
     ((input.fixedWethInput === undefined && previous.reference !== "fixed") ||
       (previous.reference === "fixed" && previous.referenceWethInput === input.fixedWethInput)) &&
     ((source.number > previous.source.number && source.generation > previous.source.generation) ||
       (source.number === previous.source.number && source.generation >= previous.source.generation &&
         source.hash === previous.source.hash.toLowerCase()));
   const reusable = new Map<number, EffectiveMidRow>();
+  const referenceCanCarry = (reference: EffectiveAmountReference | undefined, requireExecution: boolean) => {
+    if (!reference) return !requireExecution;
+    const required = requireExecution || reference.path.some(row => edges.get(row.edgeId)?.executionVerification === "startup-simulation");
+    return reference.path.every((row, i) => {
+      const bound = edges.get(row.edgeId);
+      return bound !== undefined && (!required || previous !== undefined &&
+        !input.touchedStateKeys!.has(stateKeyFor(row.edgeId, bound)) && effectiveRowExecutionVerified(previous, row, bound,
+          { amountIn: row.amountIn!, path: reference.path.slice(0, i) }));
+    });
+  };
   const enabled = (index: number) => {
     const { edgeId, edge } = work[index]!;
     return !input.disabledEdgeIds?.has(edgeId) &&
@@ -615,7 +812,9 @@ export async function buildEffectiveMids(input: {
       if (prior && (prior.status === "quoted" || (previous!.complete && prior.status !== "cancelled")) && prior.edgeId === edgeId &&
           prior.instanceKey === edgeInstanceKey(edge) &&
           prior.tokenIn === edge.tokenIn.toLowerCase() && prior.tokenOut === edge.tokenOut.toLowerCase() &&
-          !input.touchedStateKeys!.has(stateKey)) {
+          !input.touchedStateKeys!.has(stateKey) && referenceCanCarry(rowAmountReferences.get(prior), edge.executionVerification === "startup-simulation") &&
+          (edge.executionVerification !== "startup-simulation" ||
+            effectiveRowExecutionVerified(previous!, prior, edge))) {
         reusable.set(index, prior);
         if (!input.cascadeAmountChanges) storeRow(index, prior, true);
       }
@@ -624,9 +823,9 @@ export async function buildEffectiveMids(input: {
 
   const references = new Map<string, EffectiveAmountReference>([[weth,
     Object.freeze({ amountIn: referenceWethInput, path: Object.freeze([]) })]]);
-  const pending = Array.from({ length: MAX_EFFECTIVE_INPUT_PATH_HOPS + 1 }, () => new Map<string, EffectiveAmountReference>());
+  const pending = Array.from({ length: samplingDepthLimit + 1 }, () => new Map<string, EffectiveAmountReference>());
   const offer = (token: string, reference: EffectiveAmountReference) => {
-    if (references.has(token) || reference.path.length === 0 || reference.path.length > MAX_EFFECTIVE_INPUT_PATH_HOPS) return;
+    if (references.has(token) || reference.path.length === 0 || reference.path.length > samplingDepthLimit) return;
     const candidates = pending[reference.path.length]!;
     const prior = candidates.get(token);
     // Equal outputs use the complete edge path, independent of graph ordering
@@ -638,7 +837,7 @@ export async function buildEffectiveMids(input: {
   };
   const offerOutput = (row: EffectiveMidRow, reference: EffectiveAmountReference) => {
     if (row.status !== "quoted" || edges.get(row.edgeId)!.leavesStandingPosition ||
-        reference.path.length >= MAX_EFFECTIVE_INPUT_PATH_HOPS || row.tokenOut === weth ||
+        reference.path.length >= maxInputPathHops || row.tokenOut === weth ||
         row.tokenOut === row.tokenIn || reference.path.some(step => step.tokenIn === row.tokenOut)) return;
     offer(row.tokenOut, Object.freeze({ amountIn: row.amountOut!,
       path: Object.freeze([...reference.path, row]) }));
@@ -682,7 +881,7 @@ export async function buildEffectiveMids(input: {
   const progressTimer = input.onProgress ? setInterval(report, 5000) : undefined;
   progressTimer?.unref();
   try {
-  for (let depth = 0; depth <= MAX_EFFECTIVE_INPUT_PATH_HOPS; depth++) {
+  for (let depth = 0; depth <= samplingDepthLimit; depth++) {
     const planningStartedAt = diagnostic ? performance.now() : 0;
     const layer: number[] = depth === 0 ? [...(workByToken.get(weth) ?? [])] : [];
     for (const [token, reference] of pending[depth]!) {
@@ -733,12 +932,12 @@ export async function buildEffectiveMids(input: {
         const index = fresh[next++];
         if (index === undefined) return;
         if (closed()) { unavailable(index, "cancelled"); continue; }
-        const { edge, amountIn } = work[index]!;
+        const { edge, amountIn, reference } = work[index]!;
         const observation = { revertedResults: 0 };
         quoteCallsStarted++;
         try {
           accept(index, await observeAdapterRequests(observation,
-            () => input.quote({ edge, amountIn: amountIn!, control })));
+            () => input.quote({ edge, amountIn: amountIn!, control, source, reference: reference!, maxInputPathHops })));
         } catch (error) { failed(index, error, observation.revertedResults); }
         finally {
           quoteCallsSettled++;
@@ -772,12 +971,20 @@ export async function buildEffectiveMids(input: {
     .map(row => Object.freeze([row.edgeId, row] as const));
   const present = new Set(keys);
   const removals = [...previousRows.keys()].filter(key => !present.has(key));
-  const snapshot: EffectiveMidSnapshot = Object.freeze({ source,
+  const snapshot: EffectiveMidSnapshot = Object.freeze({ source, maxInputPathHops,
     reference: input.fixedWethInput !== undefined ? "fixed" : gasCostWei === null ? "default" : "gas",
     referenceWethInput, rows: ownRows(deltaMap(previousRows, updates, removals),
       updates.length > 0 || removals.length > 0 || !canReuse),
     complete: !closed() && rows.every(row => row.status !== "cancelled"), wallMs: Date.now() - started });
-  amountReferenceState.set(snapshot, { weth, references });
+  const verifiedExecutions = new Set<string>();
+  for (const [index, row] of rows.entries()) {
+    const reference = rowAmountReferences.get(row), edge = work[index]!.edge;
+    const verified = effectiveRowExecutionVerified({ source, maxInputPathHops }, row, edge, reference) ||
+      reusedIndices.has(index) && previous !== undefined && referenceCanCarry(reference, true) &&
+        effectiveRowExecutionVerified(previous, row, edge, reference);
+    if (verified) for (const step of [...reference!.path, row]) verifiedExecutions.add(step.executionVerification!.receiptHash);
+  }
+  amountReferenceState.set(snapshot, { source, weth, references, verifiedExecutions });
   if (canReuse && immutableRows) nativeChanges.set(snapshot, Object.freeze({
     previous: new WeakRef(previous), edges: (input.quoteGraph ?? pricing.graph).edges,
     updates: Object.freeze(updates), removals: Object.freeze(removals),

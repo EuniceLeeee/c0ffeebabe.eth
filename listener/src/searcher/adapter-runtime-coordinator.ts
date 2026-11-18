@@ -25,7 +25,7 @@ import {
   type FundingSource,
   type PreparedFundingFamily,
   type RegisteredFundingFamily,
-} from "./venues/funding/funding-capability.js";
+} from "./venues/funding-capability.js";
 
 export interface FlashFundingCoverage {
   readonly expectedKeys: readonly string[];

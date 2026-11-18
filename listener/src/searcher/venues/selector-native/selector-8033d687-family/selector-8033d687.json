@@ -1,0 +1,588 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x8033d687",
+  "signature": "function take(address, uint256, address) returns (uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": false,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_8033D687_ENABLED"
+  },
+  "programs": [
+    {
+      "parameters": [
+        {
+          "path": [
+            0
+          ],
+          "role": "tokenOut"
+        },
+        {
+          "path": [
+            2
+          ],
+          "role": "recipient"
+        }
+      ],
+      "values": {
+        "abi": {
+          "metadata": [
+            "function decimals() view returns(uint8)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "metadata",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "tokenIn",
+                  "kind": "eth-call",
+                  "to": "$scope.tokenIn",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "metadata",
+                      "decimals",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "tokenOut",
+                  "kind": "eth-call",
+                  "to": "$scope.tokenOut",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "metadata",
+                      "decimals",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "result": {
+                "wantDecimals": {
+                  "op": "decode",
+                  "args": [
+                    "metadata",
+                    "decimals",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "tokenIn"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                },
+                "soldDecimals": {
+                  "op": "decode",
+                  "args": [
+                    "metadata",
+                    "decimals",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "tokenOut"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            }
+          ],
+          "result": "$steps.metadata"
+        },
+        "descriptor": {
+          "wantScale": {
+            "op": "pow",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  "10"
+                ]
+              },
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "18"
+                    ]
+                  },
+                  "$binding.wantDecimals"
+                ]
+              }
+            ]
+          },
+          "soldScale": {
+            "op": "pow",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  "10"
+                ]
+              },
+              {
+                "op": "sub",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "18"
+                    ]
+                  },
+                  "$binding.soldDecimals"
+                ]
+              }
+            ]
+          },
+          "denominator": {
+            "op": "mul",
+            "args": [
+              {
+                "op": "uint",
+                "args": [
+                  "1000000000000000000"
+                ]
+              },
+              {
+                "op": "pow",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "10"
+                    ]
+                  },
+                  {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "18"
+                        ]
+                      },
+                      "$binding.wantDecimals"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "priceProbe": {
+            "op": "mul",
+            "args": [
+              {
+                "op": "pow",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "10"
+                    ]
+                  },
+                  "$binding.soldDecimals"
+                ]
+              },
+              {
+                "op": "pow",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      "10"
+                    ]
+                  },
+                  {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "18"
+                        ]
+                      },
+                      "$binding.wantDecimals"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "runtimeMath": {
+        "version": 1,
+        "entries": {
+          "auctionfloorinverse": {
+            "model": "auction-floor-inverse",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "auction-floor-inverse",
+            "version": 1,
+            "inputs": [
+              "budget",
+              "quotedPrice",
+              "soldScale",
+              "denominator",
+              "available",
+              "receiver",
+              "actor"
+            ],
+            "outputs": [
+              "quantity",
+              "cost",
+              "receiverIsActor"
+            ],
+            "operations": [
+              {
+                "name": "receiverIsActor",
+                "op": "eq",
+                "left": {
+                  "input": "receiver"
+                },
+                "right": {
+                  "input": "actor"
+                }
+              },
+              {
+                "name": "price",
+                "op": "mul",
+                "left": {
+                  "input": "quotedPrice"
+                },
+                "right": {
+                  "input": "soldScale"
+                }
+              },
+              {
+                "name": "nextBudget",
+                "op": "add",
+                "left": {
+                  "input": "budget"
+                },
+                "right": {
+                  "constant": "1"
+                }
+              },
+              {
+                "name": "scaledBudget",
+                "op": "mul",
+                "left": {
+                  "local": "nextBudget"
+                },
+                "right": {
+                  "input": "denominator"
+                }
+              },
+              {
+                "name": "lastAffordable",
+                "op": "sub",
+                "left": {
+                  "local": "scaledBudget"
+                },
+                "right": {
+                  "constant": "1"
+                }
+              },
+              {
+                "name": "capacity",
+                "op": "div",
+                "left": {
+                  "local": "lastAffordable"
+                },
+                "right": {
+                  "local": "price"
+                }
+              },
+              {
+                "name": "quantity",
+                "op": "min",
+                "left": {
+                  "input": "available"
+                },
+                "right": {
+                  "local": "capacity"
+                }
+              },
+              {
+                "name": "numerator",
+                "op": "mul",
+                "left": {
+                  "local": "quantity"
+                },
+                "right": {
+                  "local": "price"
+                }
+              },
+              {
+                "name": "cost",
+                "op": "div",
+                "left": {
+                  "local": "numerator"
+                },
+                "right": {
+                  "input": "denominator"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "take",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": true,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function take(address,uint256,address) returns(uint256)",
+              "args": [
+                "$route.tokenOut",
+                {
+                  "quoteOutput": "quantity"
+                },
+                "$recipient"
+              ],
+              "save": {
+                "actualQuantity": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "actualQuantity"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "quoteOutput": "quantity"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "maximum": {
+              "runtime": "amountIn"
+            },
+            "equals": {
+              "quoteOutput": "cost"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "minimum": "$minAmountOut",
+            "equals": {
+              "quoteOutput": "quantity"
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ],
+        "quoteOutput": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "price",
+              "static": true,
+              "call": {
+                "target": "$target",
+                "signature": "function getAmountNeeded(address,uint256) view returns(uint256)",
+                "args": [
+                  "$route.tokenOut",
+                  "$descriptor.priceProbe"
+                ],
+                "save": {
+                  "quotedPrice": 0
+                },
+                "checks": [
+                  {
+                    "left": {
+                      "runtime": "quotedPrice"
+                    },
+                    "operator": "gte",
+                    "right": "$descriptor.wantScale"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "available",
+              "static": true,
+              "call": {
+                "target": "$target",
+                "signature": "function available(address) view returns(uint256)",
+                "args": [
+                  "$route.tokenOut"
+                ],
+                "save": {
+                  "available": 0
+                }
+              }
+            },
+            {
+              "id": "receiver",
+              "static": true,
+              "call": {
+                "target": "$target",
+                "signature": "function receiver() view returns(address)",
+                "args": [],
+                "save": {
+                  "receiver": 0
+                }
+              }
+            },
+            {
+              "id": "budget",
+              "math": {
+                "model": "auctionfloorinverse",
+                "inputs": {
+                  "budget": {
+                    "runtime": "amountIn"
+                  },
+                  "quotedPrice": {
+                    "runtime": "quotedPrice"
+                  },
+                  "soldScale": "$descriptor.soldScale",
+                  "denominator": "$descriptor.denominator",
+                  "available": {
+                    "runtime": "available"
+                  },
+                  "receiver": {
+                    "runtime": "receiver"
+                  },
+                  "actor": {
+                    "op": "uint",
+                    "args": [
+                      "$executor"
+                    ]
+                  }
+                },
+                "outputs": {
+                  "quantity": "quantity",
+                  "cost": "cost",
+                  "receiverIsActor": "receiverIsActor"
+                },
+                "checks": [
+                  {
+                    "left": {
+                      "runtime": "receiverIsActor"
+                    },
+                    "operator": "eq",
+                    "right": 0
+                  },
+                  {
+                    "left": {
+                      "runtime": "quantity"
+                    },
+                    "operator": "gte",
+                    "right": 1
+                  },
+                  {
+                    "left": {
+                      "runtime": "cost"
+                    },
+                    "operator": "gte",
+                    "right": 1
+                  },
+                  {
+                    "left": {
+                      "runtime": "amountIn"
+                    },
+                    "operator": "gte",
+                    "right": {
+                      "runtime": "cost"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "result": {
+            "runtime": "quantity"
+          },
+          "exports": {
+            "quantity": {
+              "runtime": "quantity"
+            },
+            "cost": {
+              "runtime": "cost"
+            }
+          }
+        }
+      },
+      "refreshPolicy": "each-block",
+      "meta": {
+        "sourceFamily": "yearn-auction",
+        "migrationKey": "typed:yearn-auction:take-3",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    }
+  ]
+}

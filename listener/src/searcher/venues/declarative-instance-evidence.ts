@@ -1,6 +1,6 @@
 import { getAddress, isHexString } from "ethers";
 import type { StaticEvidenceProgram } from "./adapter-request-program.js";
-import { assertSource } from "./protocols/standard-family/common.js";
+import { assertSource } from "./selector-execution-evidence.js";
 import { assertDeclarativeExecutionSource } from "./declarative-execution.js";
 import { RequiredAdapterRequestError } from "./adapter-request-failure.js";
 import type { ExecutionRuntimeProjection } from "./adapter-family-plugin.js";

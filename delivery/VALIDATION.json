@@ -1,0 +1,345 @@
+{
+  "format": "selector-family/v2-delivery-validation/v1",
+  "baseCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "assembledAtUtc": "2026-11-17T11:41:57.412606+00:00",
+  "scope": "Complete source ZIP after selector-family/v2 migration; executable coverage and actual local execution evidence are distinguished.",
+  "toolchain": {
+    "node": "v24.22.1",
+    "npm": "11.9.0",
+    "solc": "0.8.24",
+    "evm": "Local loopback Anvil; externally supplied tool paths, no tools or node_modules bundled"
+  },
+  "coverage": {
+    "baseFamilies": 52,
+    "coveredBaseFamilies": 52,
+    "selectorFamilies": 128,
+    "ordinaryExecutableFamilies": 89,
+    "ordinaryPrograms": 180,
+    "automaticParameterPrograms": 10,
+    "creditFamilies": 1,
+    "fundingFamilies": 2,
+    "observationOnlyFamilies": 36,
+    "enabledSelectorFamilies": 95
+  },
+  "inventory": "listener/src/searcher/generated/selector-family-v2-migration-inventory.generated.json",
+  "sourceBoundary": {
+    "format": "selector-family/v2",
+    "oldRuntimeFormatsAccepted": false,
+    "retiredFamilyRuntimeDependencies": 0,
+    "archivedBaselineFiles": 1311,
+    "archive": "reference/legacy-family-fdb859a.zip",
+    "productionSolidityChanged": false,
+    "rustEnumeratorChanged": false
+  },
+  "finalChecks": [
+    {
+      "name": "Whole listener TypeScript",
+      "cwd": "listener",
+      "command": "./node_modules/.bin/tsc --noEmit",
+      "exitCode": 0,
+      "log": "validation-run/full-typecheck-delivery.txt"
+    },
+    {
+      "name": "Full shared offline family cohort",
+      "cwd": "listener",
+      "argvPrefix": [
+        "node",
+        "--import",
+        "tsx",
+        "--test",
+        "--test-concurrency=2"
+      ],
+      "filesManifest": "validation-run/offline-suite-files.json",
+      "fileCount": 84,
+      "runner": "listener/scripts/test-protocol-json.mjs",
+      "note": "Exactly the checked-in runner file cohort, with concurrency 2 instead of the runner default 1. EVM opt-in entries are executed separately below.",
+      "exitCode": 0,
+      "tests": 1024,
+      "suites": 0,
+      "pass": 1021,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 3,
+      "todo": 0,
+      "log": "validation-run/offline-suite-final-2.txt"
+    },
+    {
+      "name": "Final test-only assertion import correction",
+      "changedFiles": [
+        {
+          "file": "listener/src/searcher/test/family-transaction-registry.test.ts",
+          "cohortStartSha256": "a84cacbc824a9fd025351ab4162d5c53ed02fb3c933d5e8706ee10745c2414c0",
+          "deliverySha256": "8ad7de3aa85dd29f45b4df765bd7043a41b4e48d782853ba08abd8b1b1aa4a49"
+        }
+      ],
+      "note": "Static import replaces a dynamic-import assertion call for TypeScript TS2775. No runtime source changed. This file was independently rerun on its final bytes, followed by the final complete TypeScript check.",
+      "cwd": "listener",
+      "command": "node --import tsx --test src/searcher/test/family-transaction-registry.test.ts",
+      "exitCode": 0,
+      "tests": 11,
+      "suites": 0,
+      "pass": 11,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "log": "validation-run/registry-final-typing.txt"
+    },
+    {
+      "name": "Actual local EVM delivery cohort",
+      "cwd": "listener",
+      "command": "npm run test:selector-programs:evm",
+      "environmentInputs": [
+        "OBSERVED_CALL_SOLC_MODULE",
+        "OBSERVED_CALL_ANVIL_BIN"
+      ],
+      "exitCode": 0,
+      "tests": 6,
+      "suites": 0,
+      "pass": 6,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "todo": 0,
+      "log": "validation-run/evm-suite-delivery.txt",
+      "observedFacts": "evm-observed-facts.json",
+      "coverage": [
+        "selector Ready and amount execution",
+        "both selector funding providers/callback/fees/repayment",
+        "shared four/six-hop funding preparation and actual spent vs budget",
+        "typed complex execution and conservation negatives",
+        "minimal swap through natural enumeration, Solver and mandatory final SIM/EV",
+        "16-component basket and side-asset theft rejection"
+      ]
+    },
+    {
+      "name": "Migration inventory regenerate and check",
+      "cwd": ".",
+      "command": "node --import ./listener/node_modules/tsx/dist/loader.mjs scripts/build-selector-migration-inventory.ts --check",
+      "exitCode": 0,
+      "regenerateLog": "validation-run/coverage-inventory-delivery.txt",
+      "coveredBaseFamilies": 52,
+      "baseFamilies": 52
+    },
+    {
+      "name": "Final manifest generation and check",
+      "cwd": "listener",
+      "commands": [
+        "node --import tsx src/searcher/build-family-capability-manifest.ts --write",
+        "node --import tsx src/searcher/build-family-capability-manifest.ts --check"
+      ],
+      "exitCodes": [
+        0,
+        0
+      ],
+      "logs": [
+        "validation-run/selector-c-manifest-delivery-write.log",
+        "validation-run/selector-c-manifest-delivery-check.log"
+      ],
+      "catalogSha256": "8fe695942a2b1305242b469a424350ca05a7c68121d4c41ed0233e338286077c"
+    },
+    {
+      "name": "Final browser UDF build, portable realm and raw integrity",
+      "exitCode": 0,
+      "familyCount": 128,
+      "buildSummary": "udf/build-summary.json",
+      "rawIntegrityLog": "validation-run/selector-c-delivery-raw-integrity.log",
+      "rawIntegrityTests": 1,
+      "retiredAdapterOrExecutionRuntimeImports": 0
+    },
+    {
+      "name": "Full SQL and BigQuery runner offline regressions",
+      "cwd": "listener",
+      "command": "npm run test:bigquery-json",
+      "pass": 52,
+      "fail": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "log": "validation-run/selector-c-sql-frozen.log",
+      "phase": "Full suite before deletion of one unused OneSwap math model. SQL/UDF code unchanged afterward; final catalog/UDF generation, portable realm and raw-byte integrity checked after deletion."
+    },
+    {
+      "name": "fdb859a subset/resume/checkpoint/hash and funding-hop compatibility",
+      "exitCode": 0,
+      "tests": 33,
+      "suites": 0,
+      "pass": 32,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 1,
+      "todo": 0,
+      "log": "validation-run/resume-funding-compat-final.txt",
+      "skippedReason": "One explicit opt-in stress test allocates beyond the V8 single-string capacity; ordinary streamed hash, journal, Ready and checkpoint regressions ran."
+    },
+    {
+      "name": "Credit integer math migration",
+      "command": "node --import tsx ../scripts/verify-selector-credit-migration.ts --base-source-root <fdb859a-source>",
+      "vectors": 131,
+      "matchingValues": 74,
+      "matchingRejections": 57,
+      "exitCode": 0,
+      "authorReport": "../scripts/selector-family-v2-author-audit.json"
+    },
+    {
+      "name": "Original ordinary program migration reproduction",
+      "programs": 94,
+      "matchingProgramKeys": 94,
+      "exitCode": 0,
+      "authorReport": "../scripts/selector-family-v2-author-audit.json"
+    }
+  ],
+  "localPipelineObserved": {
+    "identityReads": 0,
+    "readySimulations": 0,
+    "generatedEdges": 2,
+    "physicalPools": 2,
+    "startupExecutions": 2,
+    "pricedRows": 2,
+    "naturallyEnumerated": 1,
+    "forcedSelection": 0,
+    "plans": 1,
+    "exactSimulations": 32,
+    "finalSimulations": 1,
+    "ev": "ev_gate_pass",
+    "finalDecision": "blockscan_submit_disabled",
+    "enumerationBackend": "TypeScript",
+    "externalBroadcast": false
+  },
+  "limits": [
+    "52/52 is source-family migration coverage, not a claim that every historical mainnet transaction or every possible amount succeeds.",
+    "36 observation-only selectors had no independently implemented standalone Exact entry; they remain visible and do not gain executable admission.",
+    "Only 10 ordinary programs use parameters/payment automatic mode. The other 170 retain required execution semantics in the new independent v2 JSON.",
+    "Local EVM execution uses isolated receipt adapters. The bundled Anvil raw eth_simulateV1 behavior is explicitly rejected where it does not meet strict source requirements; production provider compatibility is not claimed from these tests.",
+    "Local deployment tests relax the contract code-size limit (observed BotVM runtime 25272 bytes). They are not a new deployment acceptance. Production Solidity is unchanged by this migration.",
+    "No authenticated BigQuery cloud query or mainnet historical full-pipeline acceptance was run in this delivery, and no external transaction was broadcast.",
+    "Old-format Ready/effective proof and cache state must be rebuilt under v2. Within v2, optional meta changes do not alter semantic identities, but raw authored-file integrity still requires regeneration.",
+    "The existing Rust enumerator was not modified or exercised in the local full-pipeline EVM regression."
+  ],
+  "authorReports": [
+    "execution-author-review.json",
+    "module-sql-author-review.json",
+    "../scripts/selector-family-v2-author-audit.json"
+  ],
+  "logs": [
+    {
+      "file": "validation-run/b-prune-oneswap-final.txt",
+      "bytes": 566,
+      "sha256": "0ad81027d860e3ebf83b62fa96b0d021793eea5e8bbc8da71616f469c4c47709"
+    },
+    {
+      "file": "validation-run/b-registry-acceptance-compat.txt",
+      "bytes": 2422,
+      "sha256": "7edaa900e19eafa0baaecf5f95f7b7637358b439546b9f86c261b256ac89ce9c"
+    },
+    {
+      "file": "validation-run/b-test-compat-final.txt",
+      "bytes": 19539,
+      "sha256": "f4bd6b23283da10c9118f4c63c06224574919c20ff941e593a52c497b39c9663"
+    },
+    {
+      "file": "validation-run/cleanup-compat-final.txt",
+      "bytes": 291,
+      "sha256": "2bf31d7ba78dc37f671d67b595188f3a81967b2069024b4d93108550a7b15fd0"
+    },
+    {
+      "file": "validation-run/coverage-inventory-delivery.txt",
+      "bytes": 349,
+      "sha256": "53688023ba261363f75ae4ff4cece7f5a9c21a6701b60050daaa0cb9375e0bf2"
+    },
+    {
+      "file": "validation-run/evm-suite-delivery.txt",
+      "bytes": 28030,
+      "sha256": "82600d840585d0e0503d40b0f20ade0030019b669b2f9d5d3a38ffa042d45f70"
+    },
+    {
+      "file": "validation-run/full-typecheck-delivery.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "validation-run/funding-hops-final.txt",
+      "bytes": 54205,
+      "sha256": "a5d56459a3fbe5235ad20918df833cc4c4ad31b724c24191e5dc96f38fe3ca88"
+    },
+    {
+      "file": "validation-run/models-reserve-final.txt",
+      "bytes": 1635,
+      "sha256": "32098d636baa5f0ce6bc7350c26197ab33685b93cc017208152f42eb8423e672"
+    },
+    {
+      "file": "validation-run/offline-suite-files.json",
+      "bytes": 14080,
+      "sha256": "98685cb7bfaf7f123a78fa08af497c204ae3bc446a5388fa5a49159f719a7820"
+    },
+    {
+      "file": "validation-run/offline-suite-final-2.txt",
+      "bytes": 221798,
+      "sha256": "165455fc78ec6583329d958ebc06f2b7a6b24aaca293d4502684894fa3840338"
+    },
+    {
+      "file": "validation-run/registry-final-typing.txt",
+      "bytes": 1190,
+      "sha256": "bc8f986487230c82850ae8183612e7221343b68a799e301d1a634364c4f62488"
+    },
+    {
+      "file": "validation-run/resume-funding-compat-final.txt",
+      "bytes": 55860,
+      "sha256": "b3bcea57b3525d3d75836d576ef441b4c680b71d234e72be770177499fc0a415"
+    },
+    {
+      "file": "validation-run/selector-c-delivery-raw-integrity.log",
+      "bytes": 225,
+      "sha256": "67ec9ad32fa848613481b2d43628ad61b285a06992c663111409aeedd296f59e"
+    },
+    {
+      "file": "validation-run/selector-c-manifest-delivery-check.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "validation-run/selector-c-manifest-delivery-write.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "validation-run/selector-c-sql-frozen.log",
+      "bytes": 26320,
+      "sha256": "7527b2c519feed56ef08be095e897b1e3b41006761e40be3138016a38e8f6b6e"
+    },
+    {
+      "file": "validation-run/selector-c-typed-binding-final.log",
+      "bytes": 1829,
+      "sha256": "0ddf6c391fc07454ab5acd1fd7b0a322abe87474efcd7ea5dc46e650a7e049a1"
+    },
+    {
+      "file": "validation-run/selector-c-v2-core-final.log",
+      "bytes": 1811,
+      "sha256": "0abb492c24c5b3781be8b34eefd3d91fff8c8499115719cf1ff8ff9d42caa079"
+    },
+    {
+      "file": "validation-run/selector-execution-v2-evm.log",
+      "bytes": 18368,
+      "sha256": "c7cd05e98f08fef8d7fcb60b57ed440782a93fb238fd7e42e4ee2b320f0c76da"
+    },
+    {
+      "file": "validation-run/selector-native-callback-final.log",
+      "bytes": 13579,
+      "sha256": "af7dd04251e47aa3197f668beb9c6282a3a593f9e2b381003c5b312736aa488f"
+    },
+    {
+      "file": "validation-run/selector-production-v2-final.log",
+      "bytes": 592,
+      "sha256": "54323ecd038383098acc5807f140ade10f1ebc74bbfee1ff030ef3167ffa495f"
+    },
+    {
+      "file": "validation-run/selector-ready-program-fix.log",
+      "bytes": 1848,
+      "sha256": "f392efb02565cbe8b0517f0f51e7c8e1decf15227f6b22ebc8fac5ccc5f5a107"
+    },
+    {
+      "file": "validation-run/tsconfig-selector-typed-a.json",
+      "bytes": 1041,
+      "sha256": "e3bfe499bdfb71af0aa6e459c27c8159f22c4844b5440dca571f64d00f486189"
+    }
+  ]
+}

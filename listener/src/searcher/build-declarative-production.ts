@@ -1,528 +1,133 @@
-import { inactiveDeclarativeModules } from "./venues/declarative-module-dependencies.js";
-import ts from "typescript";
-import { ROOT_ONLY_FAMILY_MODULES } from "./venues/declarative-family-modules.js";
 import { lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
-import { FAMILY_CAPABILITY_APPLICABILITY, type FamilyDomain } from "./venues/adapter-family-plugin.js";
+import type { FamilyDomain } from "./venues/adapter-family-plugin.js";
+import { selectorNativeFamilyId } from "./venues/selector-native-definition.js";
+import { selectorNativeFundingFamilyId } from "./venues/selector-native-funding-definition.js";
+import { selectorNativeCreditFamilyId } from "./venues/selector-native-credit-definition.js";
+import { normalizeSelectorFamilyDefinition } from "./venues/selector-family-definition.js";
 import { productionFamilySourceDirectory } from "./venues/production-families/tracked-sources.js";
-import { renderDeclarativeFamilyTypes, validateDeclarativeTypeMetadata } from "./venues/declarative-types.js";
-import { protocolModuleCatalog, readProtocolModules } from "./venues/declarative-protocol-modules.js";
 
-const MARKER = "// Generated from Family JSON by build-declarative-production.ts. Do not edit.";
-const CONSTRUCTORS = { swap: "defineSwapFamily", protocol: "defineProtocolFamily", funding: "defineFundingFamily", credit: "defineCreditFamily" } as const;
-type Binding = { readonly module: string; readonly export: string };
-type Declaration = {
-  readonly domain: FamilyDomain;
-  readonly activation: { readonly enabled: boolean; readonly envKey: string };
-  readonly bindings: Readonly<Record<string, Binding>>;
-  readonly actionAdapters: readonly Binding[];
-};
+const MARKER = "// Generated from selector-native JSON. Do not edit.";
 export interface DeclarativeProductionEntry {
-  readonly format: "bindings-v1" | "protocol-json-v2" | "swap-json-v2" | "credit-json-v2";
+  readonly format: "selector-family/v2";
   readonly definitionFile: string;
   readonly entryFile: string;
   readonly familyId: string;
   readonly domain: FamilyDomain;
   readonly source: string;
-  /** Build-validated static data and compiler roots. Runtime never loads paths. */
   readonly dependencyFiles: readonly string[];
   readonly childFiles: readonly string[];
   readonly ownedActionAdapterIds: readonly string[];
   readonly declaresOracleVictim?: boolean;
   readonly inactiveRuntimeModules?: readonly string[];
-  readonly typesFile?: string;
 }
-function object(value: unknown, label: string): Record<string, any> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
-  return value as Record<string, any>;
+function within(root: string, path: string): string {
+  const local = relative(root, path);
+  if (!local || local === ".." || local.startsWith(`..${sep}`) || resolve(root, local) !== path)
+    throw new Error("selector-native source escapes its root");
+  return local.split(sep).join("/");
 }
-function keys(value: Record<string, unknown>, expected: readonly string[], label: string) {
-  if (Object.keys(value).some(key => !expected.includes(key)) || expected.some(key => !Object.hasOwn(value, key)))
-    throw new Error(`${label} has missing or unknown keys`);
-}
-function localPath(root: string, path: string): string {
-  const rel = relative(root, path);
-  if (rel === "" || rel === ".." || rel.startsWith(`..${sep}`) || resolve(root, rel) !== path)
-    throw new Error("declarative production path escaped source directory");
-  return rel.split(sep).join("/");
-}
-function binding(value: unknown): Binding {
-  const b = object(value, "production binding");
-  keys(b, ["module", "export"], "production binding");
-  if (typeof b.module !== "string" || !/^(?:\.\/|\.\.\/)[a-zA-Z0-9_./-]+\.js$/.test(b.module) ||
-      typeof b.export !== "string" || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(b.export) || ["default", "__proto__", "constructor", "prototype"].includes(b.export))
-    throw new Error("production bindings require a relative source module and named export");
-  return b as Binding;
-}
-
-function dataOnly(value: unknown): void {
-  if (value === undefined || typeof value === "function" || typeof value === "bigint" ||
-      typeof value === "symbol" || (typeof value === "number" && !Number.isSafeInteger(value)))
-    throw new Error("Family definition must contain lossless JSON data");
-  if (value === null || typeof value !== "object") return;
-  for (const [key, child] of Object.entries(value)) {
-    if (["__proto__", "prototype", "constructor"].includes(key)) throw new Error("forbidden definition key");
-    if (["module", "export", "handler"].includes(key))
-      throw new Error("declarative protocol cannot reference TypeScript handlers");
-    dataOnly(child);
-  }
-}
-
-/** Validate the authored format here; the shared compiler alone expands and
- * interprets its semantics. Ordinary evidence fields named binding are data. */
-function variantDeclaration(child: Record<string, any>): void {
-  if (child.execution && Object.hasOwn(child.execution, "quoteOutput"))
-    throw new Error("quoteOutput must be declared in modules, not execution");
-  // A child can depend on a root module; validate its own fields here and
-  // resolve inherited capabilities in the common production compiler.
-  if (Object.hasOwn(child, "modules")) {
-    protocolModuleCatalog().read(child.modules);
-    if (ROOT_ONLY_FAMILY_MODULES.some(key => Object.hasOwn(child.modules, key)))
-      throw new Error("oracleVictim/instanceEvidence/executionProjection is a root-only module; variants cannot override it");
-  }
-  if (!Object.hasOwn(child, "admission")) {
-    object(child.identity, "variant identity"); // Existing expanded v2 declarations.
-    return;
-  }
-  if (Object.hasOwn(child, "identity") || Object.hasOwn(child, "programs"))
-    throw new Error("authored variant cannot mix admission with expanded identity/programs");
-  const admission = object(child.admission, "variant admission");
-  if (admission.version !== 1) throw new Error("unsupported variant admission version");
-  for (const name of ["match", "surface", "dependencies", "active"]) {
-    const stage = object(admission[name], `variant admission ${name}`);
-    if (!Array.isArray(stage.reads) || Object.hasOwn(stage, "requests"))
-      throw new Error("authored admission stages require declared reads");
-  }
-  object(child.models, "variant models");
-  const requestSets = object(child.requestSets, "variant request sets");
-  if (Object.values(requestSets).some(value => !Array.isArray(value)))
-    throw new Error("variant request sets must contain read arrays");
-  const reads = object(child.readPrograms, "variant read programs");
-  for (const read of Object.values(reads))
-    keys(object(read, "variant read program"), ["requests", "result"], "variant read program");
-}
-
-function uniqueIds(value: unknown, label: string): readonly string[] {
-  if (!Array.isArray(value) || value.some(id => typeof id !== "string" || !/^[a-z0-9][a-z0-9:._-]*$/.test(id)) ||
-      new Set(value).size !== value.length) throw new Error(`invalid ${label}`);
-  return value;
-}
-
-function renderDataFamilyEntry(input: {
-  root: string; sourceRoot: string; definitionFile: string; entryFile: string;
-  doc: Record<string, any>; activation: Record<string, any>;
-}): DeclarativeProductionEntry {
-  const { root, sourceRoot, definitionFile, entryFile, doc, activation } = input;
-  dataOnly(doc);
-  const domain = doc.production.domain as "protocol" | "swap" | "credit";
-  if (!["protocol", "swap", "credit"].includes(domain)) throw new Error("unsupported declarative v2 domain");
-  const suffix = domain === "swap" ? "Swap" : domain === "credit" ? "Credit" : "Protocol";
-  const constructor = `define${suffix}Family`, compile = `compileDeclarative${suffix}`;
-  const required = ["version", "scope", "production", "manifest", "discovery", "identity", "instance", "routes",
-    "pricing", domain, "standard", "actionAdapters", "variantFiles"];
-  keys(doc, [...required, ...(Object.hasOwn(doc, "types") ? ["types"] : []), ...(Object.hasOwn(doc, "modules") ? ["modules"] : [])], "declarative protocol");
-  const modules = readProtocolModules(doc.modules, doc.standard.modules);
-  if (doc.standard.execution && Object.hasOwn(doc.standard.execution, "quoteOutput"))
-    throw new Error("quoteOutput must be declared in modules, not execution");
-  if (Object.keys(modules.blocks.quoteOutput!).length && doc.standard.execution?.version !== 2)
-    throw new Error("quoteOutput requires execution version 2");
-  if (Object.hasOwn(doc, "types")) {
-    validateDeclarativeTypeMetadata(doc.types);
-    const contracts = object(doc.types.contracts, "protocol type contracts");
-    keys(contracts, ["candidate", "identity", "descriptor", "route", "pricingDraft", "pricingDescriptor", "pricingStatic", "exactEvidence",
-      ...(Object.hasOwn(contracts, "identityEvidence") ? ["identityEvidence"] : [])], "protocol type contracts");
-  }
-  for (const key of ["manifest", "discovery", "identity", "instance", "routes", "pricing", domain, "standard"])
-    object(doc[key], `${key} declaration`);
-  const manifest = doc.manifest;
-  if (manifest.familyId !== doc.scope.family || manifest.domain !== domain)
-    throw new Error("JSON Family/domain disagrees with its semantic manifest");
-  const ownedActionAdapterIds = uniqueIds(manifest.ownedActionAdapterIds, "owned action IDs");
-  uniqueIds(manifest.requiredInfraActionAdapterIds, "infrastructure action IDs");
-  const lineages = uniqueIds(manifest.supportedLineages, "supported lineages");
-  if (lineages.length === 0 || ownedActionAdapterIds.length === 0) throw new Error("protocol requires actions and lineages");
-  if (typeof doc.standard.id !== "string" || typeof doc.standard.lineageId !== "string" ||
-      !lineages.includes(doc.standard.lineageId)) throw new Error("invalid standard variant identity/lineage");
-  for (const key of ["abi", "constants", "expressions", "pricing", "exact", "readPrograms", "execution"])
-    object(doc.standard[key], `standard ${key}`);
-  object(doc.discovery.definition, "discovery definition");
-  object(doc.identity.definition, "identity definition");
-  if (!Array.isArray(doc.actionAdapters)) throw new Error("production actionAdapters must be an array");
-  const actions = doc.actionAdapters.map((value: unknown) => {
-    const action = object(value, "action declaration");
-    const descriptor = object(action.descriptor, "action descriptor");
-    return descriptor.adapterId;
-  });
-  uniqueIds(actions, "action descriptor IDs");
-  if (JSON.stringify([...actions].sort()) !== JSON.stringify([...ownedActionAdapterIds].sort()))
-    throw new Error("declared actions disagree with manifest owned actions");
-  if (domain === "protocol" && Object.hasOwn(doc.protocol, "oracleVictim")) throw new Error("oracleVictim must be declared in the root modules block");
-  if (!Array.isArray(doc.variantFiles) || doc.variantFiles.some((name: unknown) =>
-    typeof name !== "string" || !/^\.\/[a-z0-9][a-z0-9-]*\.json$/.test(name)))
-    throw new Error("variants must be same-directory static JSON references");
-  const childFiles = doc.variantFiles.map((name: string) => resolve(dirname(definitionFile), name));
-  if (childFiles.includes(definitionFile) || new Set(childFiles).size !== childFiles.length)
-    throw new Error("duplicate or cyclic child JSON reference");
-  if (lineages.length > childFiles.length + 1) throw new Error("variant references do not cover declared lineages");
-  const compiler = resolve(root, `src/searcher/venues/declarative-${domain}.ts`);
-  const relativeImport = (file: string) => {
-    localPath(sourceRoot, file);
-    const path = relative(dirname(entryFile), file).split(sep).join("/");
-    return path.startsWith(".") ? path : `./${path}`;
-  };
-  const typesFile = Object.hasOwn(doc, "types") ? resolve(root, "src/searcher/generated/declarative-family-types",
-    basename(definitionFile).replace(/\.json$/, ".generated.ts")) : undefined;
-  const source = [MARKER, `// Definition: ${localPath(root, definitionFile)}`,
-    '// Regenerate with: npm run family-capability-manifest:generate',
-    'import { defineFamilyActivation } from "./activation.js";',
-    `import { ${constructor} } from "../adapter-family-plugin.js";`,
-    `import { ${compile} } from ${JSON.stringify(relativeImport(compiler).replace(/\.ts$/, ".js"))};`,
-    ...(typesFile ? [`import type { FamilyTypes } from ${JSON.stringify(relativeImport(typesFile).replace(/\.ts$/, ".js"))};`] : []),
-    `import definition from ${JSON.stringify(relativeImport(definitionFile))};`,
-    ...childFiles.map((file: string, index: number) => `import child${index} from ${JSON.stringify(relativeImport(file))};`),
-    "", `export const activation = defineFamilyActivation(${JSON.stringify(activation)});`, "",
-    `export const plugin = ${constructor}(${compile}${typesFile ? "<FamilyTypes>" : ""}(definition, [${childFiles.map((_file: string, index: number) => `child${index}`).join(", ")}]));`, "",
-  ].join("\n");
-  return Object.freeze({ format: `${domain}-json-v2` as DeclarativeProductionEntry["format"], definitionFile, entryFile, familyId: doc.scope.family,
-    domain, source, childFiles: Object.freeze(childFiles), ownedActionAdapterIds: Object.freeze([...ownedActionAdapterIds]),
-    declaresOracleVictim: modules.get("oracleVictim") !== undefined,
-    ...(typesFile ? { typesFile } : {}),
-    // Hash the validated generated runtime, never the generator or type emitter.
-    // A generator edit that leaves this entry unchanged is not a Family rule change.
-    dependencyFiles: Object.freeze([definitionFile, ...childFiles, compiler]) });
-}
+/** The production authoring boundary accepts only self-contained selector data.
+ * Legacy root/children, TypeScript binding handlers and compiler fallbacks have
+ * no path through this generator. */
 export function renderDeclarativeProductionEntry(input: {
-  rootDirectory: string; definitionFile: string; productionDirectory?: string; entryFile?: string; document: unknown;
+  readonly rootDirectory: string;
+  readonly productionDirectory?: string;
+  readonly definitionFile: string;
+  readonly entryFile?: string;
+  readonly document: unknown;
 }): DeclarativeProductionEntry {
   const root = resolve(input.rootDirectory), sourceRoot = resolve(root, "src");
   const definitionFile = resolve(input.definitionFile);
-  localPath(sourceRoot, definitionFile);
-  const stem = basename(dirname(definitionFile)).replace(/-family$/, "");
-  if (!dirname(definitionFile).endsWith("-family") || !/^[a-z0-9][a-z0-9-]*$/.test(stem) || basename(definitionFile) !== `${stem}.json`)
-    throw new Error("production definition must be <name>-family/<name>.json");
-  const doc = object(input.document, "Family definition"), scope = object(doc.scope, "Family scope");
-  if (typeof scope.family !== "string" || !/^[a-z0-9][a-z0-9:-]*$/.test(scope.family)) throw new Error("Family scope requires a family ID");
-  const p = object(doc.production, "production");
-  keys(p, ["domain", "activation"], "production");
-  if (doc.version !== 1 && doc.version !== 2) throw new Error("unsupported production definition version");
-  if (typeof p.domain !== "string" || !Object.hasOwn(CONSTRUCTORS, p.domain)) throw new Error("unknown production domain");
-  const domain = p.domain as FamilyDomain;
-  const activation = object(p.activation, "production activation");
-  keys(activation, ["enabled", "envKey"], "production activation");
-  if (typeof activation.enabled !== "boolean" || typeof activation.envKey !== "string" ||
-      !/^SEARCHER_FAMILY_[A-Z0-9_]+_ENABLED$/.test(activation.envKey)) throw new Error("invalid production activation");
-  const productionDirectory = resolve(input.productionDirectory ?? productionFamilySourceDirectory(root));
-  const entryFile = resolve(input.entryFile ?? resolve(productionDirectory, `${stem}.production.ts`));
-  if (dirname(entryFile) !== productionDirectory || !/^[a-z0-9][a-z0-9-]*\.production\.ts$/.test(basename(entryFile)))
-    throw new Error("declarative entry must remain in the production directory");
-  localPath(sourceRoot, entryFile);
-  if (doc.version === 2) return renderDataFamilyEntry({ root, sourceRoot, definitionFile, entryFile, doc, activation });
-  const slots = FAMILY_CAPABILITY_APPLICABILITY[domain];
-  const allowed = ["version", "scope", "production", ...Object.keys(slots)];
-  if (Object.keys(doc).some(key => !allowed.includes(key))) throw new Error("unknown Family definition block");
-  const bindings: Record<string, Binding> = {};
-  for (const key of Object.keys(slots).filter(key => key !== "actionAdapters" && Object.hasOwn(doc, key))) {
-    const block = object(doc[key], `${key} block`);
-    if (!Object.hasOwn(block, "binding") || Object.keys(block).some(name => !(key === "discovery" || key === "identity" ? ["binding", "definition"] : ["binding"]).includes(name)))
-      throw new Error(`invalid ${key} definition block`);
-    bindings[key] = binding(block.binding);
-  }
-  for (const [key, value] of Object.entries(bindings)) {
-    if (!Object.hasOwn(slots, key) || key === "actionAdapters" || slots[key as keyof typeof slots] === "never")
-      throw new Error(`unsupported ${domain} production binding: ${key}`);
-    binding(value);
-  }
-  for (const [key, requirement] of Object.entries(slots)) {
-    if (requirement === "required" && key !== "actionAdapters" && !Object.hasOwn(bindings, key))
-      throw new Error(`missing ${domain} production binding: ${key}`);
-  }
-  if (!Array.isArray(doc.actionAdapters)) throw new Error("production actionAdapters must be an array");
-  doc.actionAdapters.forEach(binding);
-  const declarations: Declaration = { domain, activation: activation as Declaration["activation"], bindings, actionAdapters: doc.actionAdapters };
-  const imports: string[] = [], assignments: string[] = [];
-  function importBinding(b: Binding, alias: string): void {
-    const module = resolve(dirname(definitionFile), b.module);
-    localPath(sourceRoot, module);
-    let path = relative(dirname(entryFile), module).split(sep).join("/");
-    if (!path.startsWith(".")) path = `./${path}`;
-    imports.push(`import { ${b.export} as ${alias} } from ${JSON.stringify(path)};`);
-  }
-  for (const key of Object.keys(bindings).sort()) {
-    importBinding(bindings[key], `binding_${key}`);
-    assignments.push(`  ${key}: binding_${key},`);
-  }
-  declarations.actionAdapters.forEach((b, i) => importBinding(b, `action${i}`));
-  const source = [MARKER, `// Definition: ${localPath(root, definitionFile)}`,
+  within(sourceRoot, definitionFile);
+  const doc = normalizeSelectorFamilyDefinition(input.document);
+  const funding = doc.domain === "funding";
+  const rawDomain: unknown = funding ? "funding" : doc.domain;
+  if (rawDomain !== "funding" && rawDomain !== "credit" && rawDomain !== "protocol" && rawDomain !== "swap")
+    throw new Error("unsupported selector-native execution domain");
+  const domain = rawDomain;
+  const familyId = String(funding ? selectorNativeFundingFamilyId(doc) : doc.domain === "credit" ? selectorNativeCreditFamilyId(doc) : selectorNativeFamilyId(doc));
+  const moduleFile = resolve(sourceRoot, "searcher/venues/selector-family-module.ts");
+  const production = resolve(input.productionDirectory ?? productionFamilySourceDirectory(root));
+  within(sourceRoot, production);
+  const name = basename(definitionFile, ".json");
+  if (!/^selector-[a-z0-9-]+$/.test(name)) throw new Error("selector-native definition requires a selector filename");
+  const entryFile = resolve(input.entryFile ?? resolve(production, `${name}.production.ts`));
+  if (dirname(entryFile) !== production) throw new Error("production entry must be inside its source directory");
+  const modulePath = (path: string) => {
+    const local = relative(dirname(entryFile), path).split(sep).join("/");
+    return local.startsWith(".") ? local : `./${local}`;
+  };
+  const source = [MARKER,
+    `// Definition: ${within(root, definitionFile)}`,
     '// Regenerate with: npm run family-capability-manifest:generate',
-    'import { defineFamilyActivation } from "./activation.js";',
-    `import { ${CONSTRUCTORS[domain]} } from "../adapter-family-plugin.js";`,
-    ...imports, "", `export const activation = defineFamilyActivation(${JSON.stringify(activation)});`, "",
-    `export const plugin = ${CONSTRUCTORS[domain]}({`, ...assignments,
-    `  actionAdapters: [${declarations.actionAdapters.map((_b, i) => `action${i}`).join(", ")}],`, "});", ""].join("\n");
-  return Object.freeze({ format: "bindings-v1", definitionFile, entryFile, familyId: scope.family, domain, source,
-    childFiles: Object.freeze([]), ownedActionAdapterIds: Object.freeze([]),
-    dependencyFiles: Object.freeze([definitionFile]) });
+    `import { defineSelectorFamilyModule } from ${JSON.stringify(modulePath(moduleFile).replace(/\.ts$/, ".js"))};`,
+    `import definition from ${JSON.stringify(modulePath(definitionFile))};`, "",
+    `export const selectorFamilyModule = defineSelectorFamilyModule(definition);`, "",
+  ].join("\n");
+  return Object.freeze({ format: "selector-family/v2", definitionFile, entryFile, familyId, domain, source,
+    dependencyFiles: Object.freeze([definitionFile, moduleFile]), childFiles: Object.freeze([]),
+    ownedActionAdapterIds: Object.freeze([`${familyId}:call`]),
+  });
 }
-
-/** Read only the static identity of a handwritten strict entry. Never import or
- * execute its module. Unresolved/dynamic identities cannot authorize replacement. */
-async function handwrittenIdentity(file: string, regular: (path: string) => Promise<void>): Promise<{
-  familyId: string; domain: FamilyDomain;
-} | undefined> {
-  const sources = new Map<string, ts.SourceFile>();
-  const canonical = (name: string) => resolve(dirname(file), `../${name}.ts`);
-  function importedName(node: ts.Expression, module: string): string | undefined {
-    if (!ts.isIdentifier(node)) return undefined;
-    for (const statement of node.getSourceFile().statements) {
-      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-      if (!statement.moduleSpecifier.text.startsWith(".") ||
-          resolve(dirname(node.getSourceFile().fileName), statement.moduleSpecifier.text.replace(/\.js$/, ".ts")) !== canonical(module)) continue;
-      const names = statement.importClause?.namedBindings;
-      if (!names || !ts.isNamedImports(names) || statement.importClause?.isTypeOnly) continue;
-      const imported = names.elements.find(item => !item.isTypeOnly && item.name.text === node.text);
-      if (imported) return imported.propertyName?.text ?? imported.name.text;
-    }
-    return undefined;
-  }
-  function globalFreeze(node: ts.Expression): boolean {
-    if (!ts.isPropertyAccessExpression(node) || node.name.text !== "freeze" ||
-        !ts.isIdentifier(node.expression) || node.expression.text !== "Object") return false;
-    return !node.getSourceFile().statements.some(statement =>
-      (ts.isVariableStatement(statement) && statement.declarationList.declarations.some(d => d.name.getText() === "Object")) ||
-      ((ts.isClassDeclaration(statement) || ts.isFunctionDeclaration(statement) || ts.isModuleDeclaration(statement) ||
-        ts.isEnumDeclaration(statement)) && statement.name?.getText() === "Object") ||
-      (ts.isImportDeclaration(statement) && statement.importClause?.getText().includes("Object")));
-  }
-  async function source(path: string): Promise<ts.SourceFile> {
-    if (!sources.has(path)) {
-      await regular(path);
-      sources.set(path, ts.createSourceFile(path, await readFile(path, "utf8"), ts.ScriptTarget.Latest, true));
-    }
-    return sources.get(path)!;
-  }
-  async function value(node: ts.Expression, seen = new Set<string>()): Promise<ts.Expression | undefined> {
-    while (ts.isAsExpression(node) || ts.isSatisfiesExpression(node) || ts.isParenthesizedExpression(node)) node = node.expression;
-    if (ts.isCallExpression(node) && node.arguments.length === 1 &&
-        (globalFreeze(node.expression) || importedName(node.expression, "adapter-family-identifiers") === "familyId"))
-      return value(node.arguments[0]!, seen);
-    if (!ts.isIdentifier(node)) return node;
-    const owner = node.getSourceFile(), key = `${owner.fileName}:${node.text}`;
-    if (seen.has(key)) return undefined;
-    seen.add(key);
-    for (const statement of owner.statements) {
-      if (ts.isVariableStatement(statement)) for (const declaration of statement.declarationList.declarations) {
-        if (ts.isIdentifier(declaration.name) && declaration.name.text === node.text && declaration.initializer)
-          return value(declaration.initializer, seen);
-      }
-      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) ||
-          !statement.moduleSpecifier.text.startsWith(".")) continue;
-      const names = statement.importClause?.namedBindings;
-      if (!names || !ts.isNamedImports(names)) continue;
-      const imported = names.elements.find(item => item.name.text === node.text);
-      if (!imported) continue;
-      const target = await source(resolve(dirname(owner.fileName), statement.moduleSpecifier.text.replace(/\.js$/, ".ts")));
-      const exportName = imported.propertyName?.text ?? imported.name.text;
-      for (const item of target.statements) if (ts.isVariableStatement(item) &&
-          item.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
-        for (const declaration of item.declarationList.declarations) if (ts.isIdentifier(declaration.name) &&
-            declaration.name.text === exportName && declaration.initializer) return value(declaration.initializer, seen);
-      }
-    }
-    return undefined;
-  }
-  async function property(node: ts.Expression, name: string): Promise<ts.Expression | undefined> {
-    const resolved = await value(node);
-    if (!resolved || !ts.isObjectLiteralExpression(resolved) || resolved.properties.some(ts.isSpreadAssignment)) return undefined;
-    const item = resolved.properties.find(item => item.name &&
-      (ts.isIdentifier(item.name) || ts.isStringLiteral(item.name)) && item.name.text === name);
-    return item && ts.isPropertyAssignment(item) ? value(item.initializer)
-      : item && ts.isShorthandPropertyAssignment(item) ? value(item.name) : undefined;
-  }
-  for (const statement of (await source(file)).statements) if (ts.isVariableStatement(statement)) {
-    for (const declaration of statement.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name) || declaration.name.text !== "plugin" || !declaration.initializer) continue;
-      if (!statement.modifiers?.some(modifier => modifier.kind === ts.SyntaxKind.ExportKeyword) ||
-          !(statement.declarationList.flags & ts.NodeFlags.Const)) throw new Error(`unresolved handwritten strict entry: ${file}`);
-      const call = declaration.initializer;
-      if (!ts.isCallExpression(call) || call.arguments.length !== 1) throw new Error(`unresolved handwritten strict entry: ${file}`);
-      const constructor = importedName(call.expression, "adapter-family-plugin");
-      const domain = (Object.keys(CONSTRUCTORS) as FamilyDomain[]).find(key => CONSTRUCTORS[key] === constructor);
-      const manifest = await property(call.arguments[0]!, "manifest");
-      if (!domain || !manifest) throw new Error(`unresolved handwritten strict entry: ${file}`);
-      const id = await property(manifest, "familyId"), declaredDomain = await property(manifest, "domain");
-      if (id && ts.isStringLiteralLike(id) && declaredDomain && ts.isStringLiteralLike(declaredDomain) && declaredDomain.text === domain)
-        return { familyId: id.text, domain };
-      throw new Error(`unresolved handwritten strict entry: ${file}`);
-    }
-  }
-  return undefined;
-}
-
-/** Build-time only. Runtime keeps the existing generated static imports and
- * domain constructors; JSON cannot import code dynamically or issue authority. */
+/** Build-time scan of the sole authored execution registry. A stale or foreign
+ * production entry is an error; generation never re-enables a retired adapter. */
 export async function syncDeclarativeProductionEntries(input: {
-  rootDirectory: string; productionDirectory?: string; mode: "write" | "check";
+  readonly rootDirectory: string;
+  readonly productionDirectory?: string;
+  readonly mode: "write" | "check";
 }): Promise<ReadonlyMap<string, DeclarativeProductionEntry>> {
   const root = resolve(input.rootDirectory), sourceRoot = resolve(root, "src");
-  const productionDirectory = resolve(input.productionDirectory ?? productionFamilySourceDirectory(root));
-  const entries = new Map<string, DeclarativeProductionEntry>(), familyIds = new Set<string>();
-  const typeArtifacts = new Map<string, string>();
-  async function regular(path: string): Promise<void> {
-    const stat = await lstat(path);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`production source must be a regular file: ${path}`);
-    localPath(await realpath(sourceRoot), await realpath(path));
-    // Reject links in ancestor directories as well as at the leaf. A static
-    // child reference must identify the exact on-disk file in this source tree.
-    let current = dirname(path);
+  const registry = resolve(sourceRoot, "searcher/venues/selector-native");
+  const production = resolve(input.productionDirectory ?? productionFamilySourceDirectory(root));
+  const entries = new Map<string, DeclarativeProductionEntry>(), ids = new Set<string>();
+  async function regular(path: string) {
+    within(sourceRoot, path);
+    let current = path;
     while (current !== sourceRoot) {
-      localPath(sourceRoot, current);
-      if ((await lstat(current)).isSymbolicLink()) throw new Error("production source ancestor must not be a symlink");
+      const stat = await lstat(current);
+      if (stat.isSymbolicLink() || (current === path ? !stat.isFile() : !stat.isDirectory()))
+        throw new Error("selector-native source must use regular files and directories");
       current = dirname(current);
     }
+    within(await realpath(sourceRoot), await realpath(path));
   }
-  async function generatedParent(path: string): Promise<void> {
-    let current = dirname(path);
-    while (current !== sourceRoot) {
-      localPath(sourceRoot, current);
-      try {
-        const stat = await lstat(current);
-        if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("generated type ancestor must be a directory, not a symlink");
-        localPath(await realpath(sourceRoot), await realpath(current));
-      } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-      current = dirname(current);
-    }
+  const directories = await readdir(registry, { withFileTypes: true });
+  for (const item of directories.sort((a,b) => a.name.localeCompare(b.name))) {
+    if (!item.isDirectory() || !item.name.endsWith("-family")) continue;
+    const definitionFile = resolve(registry, item.name, `${item.name.slice(0,-7)}.json`);
+    await regular(definitionFile);
+    const entry = renderDeclarativeProductionEntry({ rootDirectory: root, productionDirectory: production,
+      definitionFile, document: JSON.parse(await readFile(definitionFile, "utf8")) });
+    if (entries.has(entry.entryFile) || ids.has(entry.familyId)) throw new Error("duplicate selector-native family or output entry");
+    for (const path of entry.dependencyFiles) await regular(path);
+    entries.set(entry.entryFile, entry); ids.add(entry.familyId);
   }
-  const handwritten = new Map<string, { familyId: string; domain: FamilyDomain }>();
-  const generatedByDefinition = new Map<string, string>();
-  const productionFiles = await readdir(productionDirectory).catch(error => {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [] as string[]; throw error;
-  });
-  for (const name of productionFiles.filter(name => name.endsWith(".production.ts")).sort()) {
-    const path = resolve(productionDirectory, name);
-    await regular(path);
-    const text = await readFile(path, "utf8");
-    if (text.startsWith(MARKER)) {
-      const definition = /^\/\/ Definition: (.+)$/m.exec(text)?.[1];
-      if (definition) {
-        const key = resolve(root, definition);
-        if (generatedByDefinition.has(key)) throw new Error("duplicate generated Family definition");
-        generatedByDefinition.set(key, path);
-      }
-    } else {
-      const identity = await handwrittenIdentity(path, regular);
-      if (identity) handwritten.set(path, identity);
-    }
-  }
-  async function visit(directory: string): Promise<void> {
-    let children;
-    try { children = await readdir(directory, { withFileTypes: true }); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
-    for (const child of children.sort((a, b) => a.name.localeCompare(b.name))) {
-      if (!child.isDirectory()) continue; // Never traverse symlinks.
-      const path = resolve(directory, child.name);
-      if (!child.name.endsWith("-family")) { await visit(path); continue; }
-      const definitionFile = resolve(path, `${child.name.slice(0, -7)}.json`);
-      let text;
-      try { await regular(definitionFile); text = await readFile(definitionFile, "utf8"); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
-      const document = JSON.parse(text);
-      if (!Object.hasOwn(object(document, "Family definition"), "production")) continue;
-      const matches = [...handwritten].filter(([, identity]) => identity.familyId === document.scope?.family);
-      if (matches.length > 1) throw new Error("duplicate handwritten Family ID");
-      if (matches[0] && matches[0][1].domain !== document.production.domain) throw new Error("JSON/handwritten Family domain disagrees");
-      const generated = generatedByDefinition.get(definitionFile);
-      if (generated && matches.length) throw new Error("duplicate JSON/handwritten Family registration");
-      const entryFile = generated ?? matches[0]?.[0];
-      const entry = renderDeclarativeProductionEntry({ rootDirectory: root, productionDirectory, entryFile, definitionFile, document });
-      if (entries.has(entry.entryFile) || familyIds.has(entry.familyId)) throw new Error("duplicate declarative production entry or Family ID");
-      const documents = [document];
-      if (entry.format !== "bindings-v1") {
-        const ids = new Set<string>([document.standard.id]), lineages = new Set<string>([document.standard.lineageId]);
-        const childTypes: unknown[] = [];
-        for (const childFile of entry.childFiles) {
-          await regular(childFile);
-          const child = object(JSON.parse(await readFile(childFile, "utf8")), "variant JSON");
-          dataOnly(child);
-          documents.push(child);
-          if (Object.hasOwn(child, "variantFiles") || Object.hasOwn(child, "production"))
-            throw new Error("nested or cyclic variant JSON references are unsupported");
-          if (child.version !== 1 || typeof child.id !== "string" || typeof child.lineageId !== "string" ||
-              !document.manifest.supportedLineages.includes(child.lineageId) || ids.has(child.id))
-            throw new Error("invalid or duplicate variant identity/lineage");
-          variantDeclaration(child);
-          if (Object.hasOwn(child, "types")) {
-            if (!entry.typesFile) throw new Error("child type metadata requires a root type declaration");
-            childTypes.push(child.types);
-          }
-          ids.add(child.id); lineages.add(child.lineageId);
-        }
-        if (lineages.size !== document.manifest.supportedLineages.length)
-          throw new Error("variant identity/lineage coverage is incomplete");
-        if (entry.typesFile) typeArtifacts.set(entry.typesFile, renderDeclarativeFamilyTypes(document.types, childTypes));
-        for (const dependency of entry.dependencyFiles) await regular(dependency);
-      } else {
-        const references = Object.keys(FAMILY_CAPABILITY_APPLICABILITY[entry.domain])
-          .filter(key => key !== "actionAdapters" && Object.hasOwn(document, key))
-          .map(key => binding(document[key].binding));
-        for (const b of [...references, ...document.actionAdapters as Binding[]])
-          await regular(resolve(path, b.module.replace(/\.js$/, ".ts")));
-      }
-      entries.set(entry.entryFile, entry.format === "bindings-v1" ? entry : Object.freeze({ ...entry,
-        inactiveRuntimeModules: inactiveDeclarativeModules(documents),
-      })); familyIds.add(entry.familyId);
-    }
-  }
-  await visit(resolve(root, "src/searcher/venues"));
-  // Removed declarations must not leave an old generated module enabled.
-  for (const file of await readdir(productionDirectory).catch(error => {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [] as string[]; throw error;
-  })) {
+  if (!entries.size) throw new Error("selector-native production catalog is empty");
+  await mkdir(production, { recursive: true });
+  for (const file of await readdir(production)) {
     if (!file.endsWith(".production.ts")) continue;
-    const path = resolve(productionDirectory, file);
-    await regular(path);
-    if ((await readFile(path, "utf8")).startsWith(MARKER) && !entries.has(path))
-      throw new Error(`orphaned declarative production entry: ${path}`);
+    const path = resolve(production, file);
+    if (!entries.has(path)) throw new Error(`retired/unregistered production entry must be removed: ${file}`);
   }
-  if (entries.size > 0) localPath(await realpath(sourceRoot), await realpath(productionDirectory));
-  const pending: DeclarativeProductionEntry[] = [];
   for (const entry of entries.values()) {
-    let current: string | undefined;
-    try { await regular(entry.entryFile); current = await readFile(entry.entryFile, "utf8"); }
+    let previous: string | undefined;
+    try { await regular(entry.entryFile); previous = await readFile(entry.entryFile, "utf8"); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    if (current !== undefined && !current.startsWith(MARKER)) {
-      const identity = handwritten.get(entry.entryFile);
-      if (identity?.familyId !== entry.familyId || identity.domain !== entry.domain)
-        throw new Error(`refusing to overwrite an unverified handwritten production entry: ${entry.entryFile}`);
-    }
-    if (current !== entry.source) {
-      if (input.mode === "check") throw new Error(`declarative production entry is missing or stale: ${entry.entryFile}`);
-      pending.push(entry);
+    if (previous !== entry.source) {
+      if (input.mode === "check") throw new Error(`selector-native production entry missing or stale: ${entry.entryFile}`);
+      if (previous !== undefined && !previous.startsWith(MARKER))
+        throw new Error(`retired production source must be removed before migration: ${entry.entryFile}`);
+      await writeFile(entry.entryFile, entry.source);
     }
   }
-  const pendingTypes: { path: string; source: string }[] = [];
-  const typesDirectory = resolve(sourceRoot, "searcher/generated/declarative-family-types");
-  for (const file of await readdir(typesDirectory).catch(error => {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [] as string[]; throw error;
-  })) {
-    if (!file.endsWith(".generated.ts")) continue;
-    const path = resolve(typesDirectory, file);
-    await regular(path);
-    if ((await readFile(path, "utf8")).startsWith("// Generated from Family JSON type metadata. Do not edit.") && !typeArtifacts.has(path))
-      throw new Error(`orphaned declarative Family types: ${path}`);
+  const registryFile = resolve(sourceRoot, "searcher/generated/selector-execution-families.generated.ts");
+  const content = '// Generated from selector-native execution declarations. Do not edit.\n' +
+    `export const PRODUCTION_SELECTOR_EXECUTION_FAMILY_IDS: readonly string[] = Object.freeze(${JSON.stringify([...entries.values()].map(entry=>entry.familyId).sort(),null,2)});\n`;
+  const previous = await readFile(registryFile,"utf8").catch(error=>{if(error.code==="ENOENT")return null;throw error;});
+  if (previous !== content) {
+    if (input.mode === "check") throw new Error("selector-native family registry is stale");
+    await mkdir(dirname(registryFile),{recursive:true}); await writeFile(registryFile,content);
   }
-  for (const [path, source] of typeArtifacts) {
-    await generatedParent(path);
-    let current: string | undefined;
-    try { await regular(path); current = await readFile(path, "utf8"); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
-    if (current !== undefined && !current.startsWith("// Generated from Family JSON type metadata. Do not edit."))
-      throw new Error(`refusing to overwrite handwritten type output: ${path}`);
-    if (current !== source) {
-      if (input.mode === "check") throw new Error(`declarative Family types are missing or stale: ${path}`);
-      pendingTypes.push({ path, source });
-    }
-  }
-  for (const { path, source } of pendingTypes) { await mkdir(dirname(path), { recursive: true }); await writeFile(path, source); }
-  for (const entry of pending) await writeFile(entry.entryFile, entry.source);
   return entries;
 }

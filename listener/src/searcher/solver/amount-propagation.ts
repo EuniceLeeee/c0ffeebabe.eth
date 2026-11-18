@@ -17,7 +17,7 @@ import {
 import type { RuntimeEvidence } from
   "../venues/adapter-family-plugin.js";
 import type { AdapterWorkControl } from "../adapter-work-intent.js";
-import { edgeInstanceKey } from "../venues/route-instance-identity.js";
+import { edgeInstanceKey, explicitStateResourceOverlap, explicitStateResourceKeys } from "../venues/route-instance-identity.js";
 import { AmountNotExecutableError } from "./amount-rejection.js";
 
 export interface PropagatedAmounts {
@@ -87,17 +87,17 @@ export async function propagateAmountsWithRawOutputs(
   const amounts: bigint[] = [flashAmount];
   const rawOutputs: bigint[] = [];
   const exactHandles: StrictProductionExactHandle[] = [];
-  // Route-level quote policy: independent instances use source-state quotes.
-  // Any repeated instance retains the complete trial from the first hop, not
-  // just the repeated edge. Instance identity comes from the verified Graph;
-  // singleton execution targets and per-direction state keys are not pool IDs.
-  const instances = new Set<string>();
-  const needsPriorState = path.edges.some(edge => {
-    const key = edgeInstanceKey(edge);
-    if (instances.has(key)) return true;
-    instances.add(key);
-    return false;
-  });
+  // Shared resources retain the complete trial from the first hop, including
+  // calls through another selector. Legacy edges retain the instance fallback.
+  // A mixed pair at one target cannot prove independence from an old instance
+  // name alone; conservatively retain its prefix as well. Resource identity
+  // never deduplicates the different call variants that access that resource.
+  const needsPriorState = path.edges.some((edge, index) =>
+    path.edges.slice(0, index).some(prior =>
+      explicitStateResourceOverlap(prior, edge) ??
+        (edgeInstanceKey(prior) === edgeInstanceKey(edge) ||
+          ((explicitStateResourceKeys(prior) === undefined) !== (explicitStateResourceKeys(edge) === undefined) &&
+            prior.target.toLowerCase() === edge.target.toLowerCase()))));
   let cur = flashAmount;
   const toleranceRawUnits = options.toleranceRawUnits;
   if (toleranceRawUnits !== undefined && toleranceRawUnits !== 0n && toleranceRawUnits !== 1n) {

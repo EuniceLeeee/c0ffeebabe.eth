@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { copyFileSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { sha256EvidenceFile } from "./family-evidence-hash.js";
+import { constants, copyFileSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { familyTestSourceFingerprint } from "../../../scripts/test-family.mjs";
@@ -13,7 +13,7 @@ import { basicRouteAcceptanceStages, verifyBasicRouteAcceptance } from "./protoc
 import { runProtocolJsonAcceptance } from "./protocol-json-acceptance.js";
 import { parseFundingAcceptanceCase, runFamilyFundingAcceptance, verifyFundingAcceptanceReport,
   fundingAcceptanceStages } from "./family-funding-acceptance.js";
-import { assertFundingTransactionReady } from "./family-funding-acceptance-context.js";
+import { assertFundingTransactionReady, resolveFundingTransactionCase } from "./family-funding-acceptance-context.js";
 import { nodeSimulateV1Environment } from "../simulator/node-simulate-v1.js";
 import { UniverseRebuildCheckpointStore } from "../universe-rebuild-checkpoint.js";
 import { loadBotVmRuntimeCode } from "../../shared/executor/botvm-executor.js";
@@ -28,7 +28,6 @@ import { matchFamilyTransactionInput, resolveTransactionCaseBinding } from "./fa
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const REPO = resolve(ROOT, "..");
 const ORIGINAL_INPUT_REFERENCE = Object.freeze({ status: "reference-only", required: false });
-const sha = (data: Uint8Array | string) => createHash("sha256").update(data).digest("hex");
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const safe = (error: unknown) => String(error instanceof Error ? error.message : error).replace(/https?:\/\/[^\s"<>]+/g, "[REDACTED_URL]");
 const json = (value: unknown) => JSON.stringify(value, (_key, item) => typeof item === "bigint" ? { $type: "bigint", value: item.toString() } : item, 2) + "\n";
@@ -43,22 +42,24 @@ const read = (path: string) => JSON.parse(readFileSync(path, "utf8"), (_key, val
 const save = (path: string, value: unknown) => {
   writeFileSync(`${path}.tmp`, json(value), { mode: 0o600 }); renameSync(`${path}.tmp`, path);
 };
-const fileEvidence = (path: string) => ({ file: basename(path), sha256: sha(readFileSync(path)) });
+const fileEvidence = (path: string) => ({ file: basename(path), sha256: sha256EvidenceFile(path) });
+const reportedOwner = (report: any) => ({ familyId: report.executionBinding?.familyId ?? report.familyId,
+  domain: report.executionBinding?.domain ?? report.domain,
+  ...(report.bindingMode === "selector" ? { referenceFamilyId: report.familyId } : {}) });
 
 export { transactionSimulationCase };
-export function transactionFundingCase(transaction: FamilyTransaction, leg: FamilyTransactionLeg, stateSelection?: TransactionStateSelection) {
-  assert.equal(leg.domain, "funding"); assert.deepEqual(familyTransactionLegMissing(leg), []);
-  familyTransactionInputFingerprint(transaction, leg);
-  return parseFundingAcceptanceCase({ version: 1, domain: "funding", id: leg.id, familyId: leg.familyId,
-    instanceKey: leg.instanceKey, lineageId: leg.lineageId, source: validateTransactionStateSelection(leg.source!, stateSelection).executionSource, ...transactionTestActors(leg),
-    transactionHash: transaction.transactionHash, token: leg.tokenIn, amountIn: leg.amountIn });
+export function transactionFundingCase(transaction: FamilyTransaction, leg: FamilyTransactionLeg,
+ stateSelection:TransactionStateSelection|undefined, envelope:import("../universe-rebuild-checkpoint.js").StartupCheckpointEnvelope) {
+  assert.equal(leg.domain,"funding");assert.deepEqual(familyTransactionLegMissing(leg),[]);
+  familyTransactionInputFingerprint(transaction,leg);
+  return resolveFundingTransactionCase(envelope,transaction,leg,stateSelection);
 }
 
 function evidenceFile(reportPath: string, evidence: any): string {
   assert(evidence && typeof evidence.file === "string" && basename(evidence.file) === evidence.file && !isAbsolute(evidence.file), "invalid evidence filename");
   const root = realpathSync(dirname(reportPath)), path = realpathSync(resolve(root, evidence.file));
   assert.equal(dirname(path), root, "evidence escaped its case directory");
-  assert.equal(sha(readFileSync(path)), evidence.sha256, "raw evidence hash mismatch");
+  assert.equal(sha256EvidenceFile(path), evidence.sha256, "raw evidence hash mismatch");
   return path;
 }
 
@@ -80,7 +81,7 @@ export function verifyContextEvidence(raw: any, transaction: FamilyTransaction, 
   assert(same(e.actors?.executor, actors.executor) && same(e.actors?.owner, actors.owner), "simulation actor binding mismatch");
   assert.equal(e.code?.sourceTreeSha256, acceptanceSourceFingerprint(REPO), "production implementation changed");
   assert(Array.isArray(e.inputs) && e.inputs.length > 0 && Array.isArray(e.code.executorSources) && e.code.executorSources.length > 0);
-  for (const pin of [...e.inputs, ...e.code.executorSources]) assert.equal(sha(readFileSync(pin.path)), pin.sha256, "case/code input changed after execution");
+  for (const pin of [...e.inputs, ...e.code.executorSources]) assert.equal(sha256EvidenceFile(pin.path), pin.sha256, "case/code input changed after execution");
   assert(e.executorProvisioning?.protocolOverrides === false && e.executorProvisioning.signing === false && e.executorProvisioning.broadcast === false);
   assert.equal(e.admission?.currentDefinition, true);
   assert(Array.isArray(e.simulations) && e.simulations.length > 0, "no raw node simulations were retained");
@@ -110,13 +111,29 @@ export async function verifyFamilyTransactionBindingReport(reportPath: string, t
   assert.equal(report.familyId, leg.familyId); assert.equal(report.domain, leg.domain);
   assert.equal(report.sourceFingerprint, familyTestSourceFingerprint(ROOT), "test/source/seed tree changed");
   assert.equal(report.inputFingerprint, familyTransactionInputFingerprint(transaction, leg));
-  assert(leg.domain === "protocol" || leg.domain === "swap", "ordinary route TX binding required");
+  assert(leg.domain === "protocol" || leg.domain === "swap" || leg.domain === "credit", "priced route TX binding required");
+  assert.equal(report.bindingMode, "selector", "route facts require selector binding mode");
   const envelope = await new UniverseRebuildCheckpointStore({ path: evidenceFile(reportPath, report.evidence?.ready) }).load();
   assert(envelope);
+  const evidence = read(evidenceFile(reportPath, report.evidence?.transaction));
+  const routes = await transactionReadyRoutes(envelope, { source: stateSelection.executionSource, ...transactionTestActors(leg) });
   const binding = matchFamilyTransactionInput({ transactionHash: transaction.transactionHash,
-    evidence: read(evidenceFile(reportPath, report.evidence?.transaction)), expected: leg,
-    routes: await transactionReadyRoutes(envelope, { source: stateSelection.executionSource, ...transactionTestActors(leg) }) });
+    evidence, expected: leg, familyBinding: "selector", routes });
   assert.deepEqual(report.stages.transactionBinding, binding, "reported TX binding differs from raw evidence");
+  const resolveBinding = async () => resolveTransactionCaseBinding({ transactionHash: transaction.transactionHash,
+    evidence, expected: leg, familyBinding: "selector", routes });
+  if (report.executionBinding !== undefined) {
+    const current = await resolveBinding();
+    assert.equal(current.selection, "selector-call");
+    assert.deepEqual(report.executionBinding, current.resolved, "reported selector owner differs from Ready/TX evidence");
+    assert.deepEqual(report.caseBinding, current, "reported case binding differs from Ready/TX evidence");
+  } else {
+    assert(["incomplete", "failed"].includes(report.result), "completed selector facts have no execution owner");
+    // An unresolved reference may lack transfer attribution even when the
+    // current selector owner is unique. Never mint execution authority here.
+    if (["unverified-selector", "ambiguous-selector"].includes(binding.status))
+      await assert.rejects(resolveBinding, /selector Ready binding absent|selector Ready binding ambiguous/);
+  }
   return binding;
 }
 
@@ -134,7 +151,7 @@ export async function verifyFamilyTransactionFactsReport(reportPath: string, tra
   const rawPath = evidenceFile(reportPath, report.evidence?.acceptance), readyPath = evidenceFile(reportPath, report.evidence?.ready);
   const raw = read(rawPath), envelope = await new UniverseRebuildCheckpointStore({ path: readyPath }).load();
   assert(envelope && envelope.inProgressRun === null);
-  if (leg.domain === "protocol" || leg.domain === "swap") {
+  if (leg.domain === "protocol" || leg.domain === "swap" || leg.domain === "credit") {
     await verifyFamilyTransactionBindingReport(reportPath, transaction, leg);
   }
   verifyContextEvidence(raw, transaction, leg, report.execution, stateSelection);
@@ -143,27 +160,38 @@ export async function verifyFamilyTransactionFactsReport(reportPath: string, tra
     stateRoot: raw.evidence.header.stateRoot, ...actors, executorRuntimeCode: loadBotVmRuntimeCode(actors.owner),
     simulations: raw.evidence.simulations,
     executions: leg.domain === "funding" ? raw.executions : raw.samples.flatMap((sample: any) => sample.executions) });
-  const installed = (await getInstalledTransactionFamilies()).find(row => row.familyId === leg.familyId);
-  assert(installed && installed.domain === leg.domain);
+  let installed = (await getInstalledTransactionFamilies()).find(row => row.familyId === leg.familyId);
   if (leg.domain === "funding") {
-    const sample = transactionFundingCase(transaction, leg, stateSelection);
+    const sample = await transactionFundingCase(transaction, leg, stateSelection, envelope);
     const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog } = await import("../venues/production-family-composition.js");
-    const family = catalog.forStrictFamily(leg.familyId as never);
+    const family = catalog.forStrictFamily(sample.familyId as never);
+    assert.equal(report.bindingMode,"selector");
+    assert.deepEqual(report.executionBinding,{familyId:sample.familyId,domain:"funding",instanceKey:sample.instanceKey,fundingId:sample.fundingId,lineageId:sample.lineageId});
     const target = await assertFundingTransactionReady({ envelope, sample });
     assert.deepEqual(raw.source, target.source, "execution source differs from target checkpoint");
     await verifyFundingAcceptanceReport(sample, raw, family);
     assert.deepEqual(report.stages, { ...fundingAcceptanceStages(sample, raw), discoveryCheckpoint: { status: "pass", ...target } });
   } else {
-    const current = leg.domain === "protocol" || leg.domain === "swap"
+    const current = leg.domain === "protocol" || leg.domain === "swap" || leg.domain === "credit"
       ? resolveTransactionCaseBinding({ transactionHash: transaction.transactionHash, expected: leg,
         evidence: read(evidenceFile(reportPath, report.evidence.transaction)),
+        familyBinding: "selector",
         routes: await transactionReadyRoutes(envelope, { source: stateSelection.executionSource, ...transactionTestActors(leg) }) }) : undefined;
-    if (current) assert.deepEqual(report.caseBinding, current, "reported case binding differs from Ready/TX evidence");
+    if (current) {
+      assert.deepEqual(report.caseBinding, current, "reported case binding differs from Ready/TX evidence");
+      if (current.selection === "selector-call") {
+        assert.deepEqual(report.executionBinding, current.resolved, "reported selector owner differs from Ready/TX evidence");
+        installed = (await getInstalledTransactionFamilies()).find(row => row.familyId === current.resolved.familyId);
+        assert(installed?.selectorExecution && installed.enabled && installed.domain === current.resolved.domain,
+          "resolved execution owner is not an active selector Family");
+      }
+    }
+    assert(installed, "execution owner unavailable");
     const sample = transactionSimulationCase(transaction, leg, stateSelection, current?.resolved), target = await assertAcceptanceReadyTarget(envelope, sample);
     assert.deepEqual(raw.source, target.source, "execution source differs from target checkpoint");
     assert.deepEqual(report.stages, { discoveryCheckpoint: { status: "pass", ...target },
-      ...verifyBasicRouteAcceptance(sample, raw, installed.ordinaryRuntimeLeg),
-      ...(leg.domain === "protocol" || leg.domain === "swap" ? { transactionBinding: report.stages.transactionBinding } : {}) });
+      ...verifyBasicRouteAcceptance(sample, raw, installed!.ordinaryRuntimeLeg),
+      ...(leg.domain === "protocol" || leg.domain === "swap" || leg.domain === "credit" ? { transactionBinding: report.stages.transactionBinding } : {}) });
   }
 }
 
@@ -184,13 +212,12 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     if (argv[0] === "--verify-binding") {
       const binding = await verifyFamilyTransactionBindingReport(reportPath, transaction, leg);
       const report = read(reportPath);
-      assert.equal(report.result, "incomplete"); assert.equal(report.failure?.stage, "transactionBinding");
-      assert.notEqual(binding.status, "matched", "an incomplete binding cannot report matched");
-      console.log(json({ result: "input-binding-diagnostic-verified", binding, report: reportPath }));
+      console.log(json({ result: "input-binding-diagnostic-verified", binding,
+        executionBinding: report.executionBinding ?? null, report: reportPath }));
       return { exitCode: 0, reportPath, report };
     }
     await verifyFamilyTransactionFactsReport(reportPath, transaction, leg);
-    console.log(json({ result: "raw-evidence-verified", familyId: leg.familyId, legId: leg.id, report: reportPath }));
+    console.log(json({ result: "raw-evidence-verified", ...reportedOwner(read(reportPath)), legId: leg.id, report: reportPath }));
     return { exitCode: 0, reportPath, report: read(reportPath) };
   }
   const args = new Map<string, string>();
@@ -218,13 +245,14 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     const transaction = readFamilyTransaction(transactionPath), leg = transaction.legs.find(item => item.id === args.get("--leg"));
     assert(leg, "unknown transaction leg");
     Object.assign(report, { transactionHash: transaction.transactionHash, legId: leg.id, familyId: leg.familyId, domain: leg.domain,
-      inputFingerprint: familyTransactionInputFingerprint(transaction, leg), seed: { tokenIn: leg.tokenIn, tokenOut: leg.tokenOut,
+      inputFingerprint: familyTransactionInputFingerprint(transaction, leg),
+      fixtureReference: { familyId: leg.familyId, domain: leg.domain, instanceKey: leg.instanceKey, lineageId: leg.lineageId, status: "reference-only" }, seed: { tokenIn: leg.tokenIn, tokenOut: leg.tokenOut,
         amountIn: leg.amountIn, amountScope: leg.amountScope } });
     const missing = familyTransactionLegMissing(leg);
     if (missing.length) { report.result = "incomplete"; throw new Error(`incomplete simulation input: ${missing.join(", ")}`); }
-    const installed = (await getInstalledTransactionFamilies()).find(row => row.familyId === leg.familyId);
-    assert(installed && installed.domain === leg.domain, "case is not the installed Family/domain");
-    const mode = args.get("--executor-code-mode") ?? "deployed", method = args.get("--simulation-method") ?? "debug_traceCall";
+    let installed = (await getInstalledTransactionFamilies()).find(row => row.familyId === leg.familyId);
+    report.bindingMode = "selector";
+    const mode = args.get("--executor-code-mode") ?? "counterfactual", method = args.get("--simulation-method") ?? "eth_simulateV1";
     assert(["deployed", "counterfactual"].includes(mode)); assert(["debug_traceCall", "eth_simulateV1"].includes(method));
     report.execution = { executorCodeMode: mode, simulationMethod: method };
     const actors = transactionTestActors(leg), rpcFile = realpathSync(resolve(args.get("--rpc-file")!));
@@ -238,7 +266,7 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     const executionSource = stateSelection.executionSource;
     report.stateSelection = stateSelection; checkpoint();
     stage = "discoveryCheckpoint";
-    const envelope = args.has("--ready") ? (copyFileSync(realpathSync(resolve(args.get("--ready")!)), readyPath),
+    const envelope = args.has("--ready") ? (copyFileSync(realpathSync(resolve(args.get("--ready")!)), readyPath, constants.COPYFILE_FICLONE),
       await new UniverseRebuildCheckpointStore({ path: readyPath }).load())
       : await prepareFamilyReady({ familyId: leg.familyId, domain: leg.domain, source: executionSource, ...actors, rpcFile, out: readyPath,
         target: { transactionHash: transaction.transactionHash, instanceKey: leg.instanceKey!,
@@ -246,7 +274,7 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
         executorCodeMode: mode as "deployed" | "counterfactual", simulationMethod: method as "debug_traceCall" | "eth_simulateV1" });
     assert(envelope, "Ready checkpoint unavailable");
     let prepared: Awaited<ReturnType<typeof registerReadyTransactionAcceptanceSample>> | undefined;
-    if (leg.domain === "protocol" || leg.domain === "swap") {
+    if (leg.domain === "protocol" || leg.domain === "swap" || leg.domain === "credit") {
       stage = "transactionBinding";
       const rpc = read(rpcFile);
       assert(typeof rpc.MAINNET_RPC_URL === "string", "RPC configuration lacks MAINNET_RPC_URL");
@@ -255,7 +283,7 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
       save(transactionEvidencePath, evidence);
       report.transactionEvidenceCache = evidence.cache;
       report.evidence = { ready: fileEvidence(readyPath), transaction: fileEvidence(transactionEvidencePath) };
-      report.stages.transactionBinding = matchFamilyTransactionInput({ transactionHash: transaction.transactionHash, evidence, expected: leg,
+      report.stages.transactionBinding = matchFamilyTransactionInput({ transactionHash: transaction.transactionHash, evidence, expected: leg, familyBinding: "selector",
         routes: await transactionReadyRoutes(envelope, { source: stateSelection.executionSource, ...actors }) });
       checkpoint();
       // Registry variants deliberately test new amounts and directions. Keep
@@ -266,37 +294,53 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
         throw new Error(`TX/Ready input binding: ${report.stages.transactionBinding.status}`);
       }
       if (requestedStage === "match") {
+        const binding = resolveTransactionCaseBinding({ transactionHash: transaction.transactionHash, evidence, expected: leg,
+          familyBinding: "selector", routes: await transactionReadyRoutes(envelope, { source: stateSelection.executionSource, ...actors }) });
+        report.caseBinding = binding; report.executionBinding = binding.resolved;
         report.result = "match-only"; checkpoint();
-        console.log(json({ result: report.result, binding: report.stages.transactionBinding, report: reportPath }));
+        console.log(json({ result: report.result, ...reportedOwner(report), binding: report.stages.transactionBinding, report: reportPath }));
         return { exitCode: 0, reportPath, report };
       }
-      stage = "discoveryCheckpoint";
+      stage = "transactionBinding";
       prepared = await registerReadyTransactionAcceptanceSample(transactionPath, leg.id, readyPath, transactionEvidencePath, stateSelection);
       report.caseBinding = prepared.binding;
+      assert(prepared.binding.selection === "selector-call", "route facts require selector execution ownership");
+      report.executionBinding = prepared.binding.resolved;
+      installed = (await getInstalledTransactionFamilies()).find(row => row.familyId === prepared!.sample.familyId);
+      assert(installed?.enabled && installed.selectorExecution && installed.domain === prepared.sample.domain,
+        "resolved execution owner is not an active selector Family");
       save(resolve(out, "simulation-case.json"), prepared.sample);
       checkpoint();
-    } else if (requestedStage === "match") throw new Error("TX action matching currently requires an ordinary Swap/Protocol route");
+    } else if (requestedStage === "match") throw new Error("TX action matching requires a priced route");
+    const fundingSample = leg.domain === "funding" ? await transactionFundingCase(transaction, leg, stateSelection, envelope) : undefined;
+    if (fundingSample) {
+      report.executionBinding = { familyId: fundingSample.familyId, domain: "funding", instanceKey: fundingSample.instanceKey, fundingId: fundingSample.fundingId, lineageId: fundingSample.lineageId };
+      installed = (await getInstalledTransactionFamilies()).find(row => row.familyId === fundingSample.familyId);
+      assert(installed?.enabled && installed.domain === "funding", "resolved Funding owner is not active");
+      save(resolve(out, "simulation-case.json"), fundingSample);
+    }
     stage = "discoveryCheckpoint";
     if (requestedStage === "ready") {
       const target = leg.domain === "funding"
-        ? await assertFundingTransactionReady({ envelope, sample: transactionFundingCase(transaction, leg, stateSelection) })
+        ? await assertFundingTransactionReady({ envelope, sample: fundingSample! })
         : await assertAcceptanceReadyTarget(envelope, prepared?.sample ?? transactionSimulationCase(transaction, leg, stateSelection));
       report.stages.discoveryCheckpoint = { status: "pass", ...target };
       report.evidence = { ...report.evidence, ready: fileEvidence(readyPath) };
       report.result = "ready-only"; checkpoint();
-      console.log(json({ result: report.result, familyId: leg.familyId, legId: leg.id, report: reportPath }));
+      console.log(json({ result: report.result, ...reportedOwner(report), legId: leg.id, report: reportPath }));
       return { exitCode: 0, reportPath, report };
     }
-    const input = { readyPath, rpcFile, familyId: leg.familyId, domain: leg.domain, instanceKey: leg.instanceKey!, source: executionSource,
+    const input = { readyPath, rpcFile, familyId: prepared?.sample.familyId ?? leg.familyId, domain: prepared?.sample.domain ?? leg.domain, instanceKey: prepared?.sample.instanceKey ?? leg.instanceKey!, source: executionSource,
       ...(stateSelection.mode === "parent" ? { transactionHash: transaction.transactionHash, transactionState: stateSelection } : {}),
       ...actors, chainId: transaction.chainId, allowExecutorCodeOverride: mode === "counterfactual",
       simulationMethod: method as "debug_traceCall" | "eth_simulateV1", inputPaths: [transactionPath] };
     const raw: Record<string, any> = {};
     if (leg.domain === "funding") {
-      const sample = transactionFundingCase(transaction, leg, stateSelection);
+      const sample = fundingSample!;
       const target = await assertFundingTransactionReady({ envelope, sample });
       report.stages.discoveryCheckpoint = { status: "pass", ...target }; checkpoint();
-      stage = "execution"; context = await openFamilyAcceptanceRuntimeContext(input);
+      report.executionBinding = { familyId: sample.familyId, domain: "funding", instanceKey: sample.instanceKey, fundingId: sample.fundingId, lineageId: sample.lineageId };
+      stage = "execution"; context = await openFamilyAcceptanceRuntimeContext({ ...input, familyId: sample.familyId, instanceKey: sample.instanceKey });
       await runFamilyFundingAcceptance(sample, context, raw, () => save(rawPath, raw));
       raw.diagnostics = context.counters(); raw.evidence = context.evidence; save(rawPath, raw);
       report.stages = { ...report.stages, ...fundingAcceptanceStages(sample, raw), discoveryCheckpoint: { status: "pass", ...target } };
@@ -305,10 +349,10 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
       report.stages.discoveryCheckpoint = { status: "pass", ...target }; checkpoint();
       const registration = prepared?.registration ?? registerTransactionAcceptanceSample(sample, transactionPath, leg.id, undefined, stateSelection);
       stage = "execution";
-      const routeContext = await openProtocolJsonAcceptanceContext({ ...input, domain: leg.domain }); context = routeContext;
+      const routeContext = await openProtocolJsonAcceptanceContext({ ...input, domain: sample.domain ?? leg.domain }); context = routeContext;
       await runProtocolJsonAcceptance(sample, routeContext, raw, () => save(rawPath, raw), registration);
       raw.diagnostics = context.counters(); save(rawPath, raw);
-      report.stages = { ...report.stages, ...basicRouteAcceptanceStages(sample, raw, installed.ordinaryRuntimeLeg) };
+      report.stages = { ...report.stages, ...basicRouteAcceptanceStages(sample, raw, installed!.ordinaryRuntimeLeg) };
     }
     await context.close(); context = undefined;
     assert.equal(report.sourceFingerprint, familyTestSourceFingerprint(ROOT), "source changed while facts ran");
@@ -317,10 +361,11 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     // This entry verifies one selected action. Broader settlement/route coverage
     // remains in acceptance.json; it is not evidence of failure of this action.
     if (leg.domain === "funding") assert.equal(raw.result, "pass", JSON.stringify({ failure: raw.failure, stages: report.stages }));
-    else verifyBasicRouteAcceptance(prepared?.sample ?? transactionSimulationCase(transaction, leg, stateSelection), raw, installed.ordinaryRuntimeLeg);
+    else verifyBasicRouteAcceptance(prepared?.sample ?? transactionSimulationCase(transaction, leg, stateSelection), raw, installed!.ordinaryRuntimeLeg);
     report.result = "pass"; checkpoint(); stage = "evidenceVerification";
     await verifyFamilyTransactionFactsReport(reportPath, transaction, leg);
   } catch (error) {
+    if ((error as any)?.evidence?.status === "unverified-selector" || (error as any)?.evidence?.status === "ambiguous-selector") report.result = "incomplete";
     if (report.result !== "incomplete") report.result = "failed";
     report.failure = { stage, reason: safe(error), ...((error as any)?.evidence ? { evidence: (error as any).evidence } : {}) };
     if (stage === "discoveryCheckpoint") report.stages.discoveryCheckpoint = { status: "failed", failure: safe(error) };
@@ -328,7 +373,7 @@ export async function familyTransactionFactsMain(argv = process.argv.slice(2)) {
     if (context) try { await context.close(); } catch (error) { report.result = "failed"; report.closeFailure = safe(error); }
     report.finished = new Date().toISOString(); checkpoint();
   }
-  console.log(json({ familyId: report.familyId, legId: report.legId, result: report.result, stages: report.stages, report: reportPath }));
+  console.log(json({ ...reportedOwner(report), legId: report.legId, result: report.result, stages: report.stages, report: reportPath }));
   return { exitCode: report.result === "pass" ? 0 : 1, reportPath, report };
 }
 

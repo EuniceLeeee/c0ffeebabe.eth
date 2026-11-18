@@ -66,7 +66,7 @@ export function loadFamilyJsonSamples(indexPath: string, domain: AcceptanceFamil
       assert(!paths.has(path), "duplicate case file"); paths.add(path);
       const data = parseProtocolJsonAcceptanceCase(JSON.parse(readFileSync(path, "utf8")));
       assert.equal(data.domain ?? "protocol", domain, "case/library domain mismatch");
-      assert.equal(data.familyId, family.familyId); assert.equal(data.instanceKey, sample.instanceKey);
+      assert.equal(data.familyId, family.familyId, "case/library Family reference mismatch"); assert.equal(data.instanceKey, sample.instanceKey);
       assert.equal(data.lineageId, sample.lineageId); assert.deepEqual(data.source, sample.source);
       assert(sample.actors && same(data.executor, sample.actors.executor) && same(data.owner, sample.actors.owner), "case/test actor mismatch");
       assert(data.transactionHash && sample.transactionHash && same(data.transactionHash, sample.transactionHash), "case/reference transaction mismatch");

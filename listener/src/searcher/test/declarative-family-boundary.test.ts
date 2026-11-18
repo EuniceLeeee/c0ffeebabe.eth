@@ -105,11 +105,11 @@ test("declarative Family test bridge is usable by tests but not a production esc
   assert.deepEqual(boundaryFindings(resolve(familyRoot, "test/sample.ts"), 'import "./public-api.js";'), []);
 });
 
-test("ERC4626 Family root contains definitions and tests, with no handwritten compatibility modules", () => {
-  const forbidden = readdirSync(familyRoot, { withFileTypes: true }).filter(entry =>
-    !(entry.isFile() && entry.name.endsWith(".json")) && !(entry.isDirectory() && entry.name === "test"));
-  assert.deepEqual(forbidden.map(entry => entry.name).sort(), [], "Family root must contain only JSON and test/");
+test("retired ERC4626 definitions exist only in the reference archive", () => {
+  assert.equal(existsSync(familyRoot), false, "retired Family directory must not remain in the source closure");
   assert.equal(existsSync(`${legacyPlugin}.ts`), false, "retired plugin bridge must be removed");
+  assert.equal(existsSync(resolve(listenerRoot, "../reference/legacy-family-fdb859a.zip")), true,
+    "the explicitly non-runtime reference archive must remain available");
 });
 
 test("all source imports respect the retired-module and production/test boundaries", () => {
@@ -117,14 +117,18 @@ test("all source imports respect the retired-module and production/test boundari
   assert.deepEqual(findings, [], findings.join("\n"));
 });
 
-test("generated ERC4626 contracts exactly match the current main and child JSON type declarations", async () => {
-  const generated = resolve(sourceRoot, "searcher/generated/declarative-family-types/erc4626.generated.ts");
-  assert(existsSync(generated), "generated Family contracts are required");
-  const definition = JSON.parse(readFileSync(resolve(familyRoot, "erc4626.json"), "utf8"));
-  const children = definition.variantFiles.map((file: string) =>
-    JSON.parse(readFileSync(resolve(familyRoot, file), "utf8")));
-  const { renderDeclarativeFamilyTypes } = await import("../venues/declarative-types.js");
-  assert.equal(readFileSync(generated, "utf8"),
-    renderDeclarativeFamilyTypes(definition.types, children.map((child: { types: unknown }) => child.types)),
-    "generated contracts are stale relative to the Family JSON");
+test("native declarations need no per-family TypeScript or generated child contracts", () => {
+  const native = resolve(sourceRoot, "searcher/venues/selector-native");
+  const families = readdirSync(native, { withFileTypes: true }).filter(entry => entry.isDirectory());
+  const inventory = JSON.parse(readFileSync(resolve(sourceRoot, "searcher/generated/selector-family-v2-migration-inventory.generated.json"), "utf8"));
+  assert.equal(families.length, inventory.counts.selectorFamilies);
+  assert.deepEqual(families.map(family => family.name).sort(), inventory.declarations.map((declaration: { selector: string }) =>
+    `selector-${declaration.selector.slice(2)}-family`).sort(), "every inventoried declaration must have exactly one standalone directory");
+  for (const family of families) {
+    const files = readdirSync(resolve(native, family.name));
+    assert.deepEqual(files, [family.name.replace(/-family$/, "") + ".json"]);
+    const definition = JSON.parse(readFileSync(resolve(native, family.name, files[0]!), "utf8"));
+    assert.equal(definition.format, "selector-family/v2");
+    assert.equal(definition.variantFiles, undefined); assert.equal(definition.bindingPlugin, undefined);
+  }
 });

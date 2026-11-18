@@ -1,0 +1,202 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x93316212",
+  "signature": "function swap(address, address, address) returns (uint256)",
+  "domain": "swap",
+  "activation": {
+    "enabled": false,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_93316212_ENABLED"
+  },
+  "programs": [
+    {
+      "parameters": [
+        {
+          "path": [
+            0
+          ],
+          "role": "tokenIn"
+        },
+        {
+          "path": [
+            1
+          ],
+          "role": "tokenOut"
+        },
+        {
+          "path": [
+            2
+          ],
+          "role": "recipient"
+        }
+      ],
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "openingBalance",
+            "static": true,
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function balanceOf(address) view returns(uint256)",
+              "args": [
+                "$target"
+              ],
+              "save": {
+                "openingBalance": 0
+              }
+            }
+          },
+          {
+            "id": "openingAccounted",
+            "static": true,
+            "call": {
+              "target": "$target",
+              "signature": "function tokenBalances(address) view returns(uint256)",
+              "args": [
+                "$route.tokenIn"
+              ],
+              "save": {
+                "openingAccounted": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "openingAccounted"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "runtime": "openingBalance"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "pay",
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function transfer(address,uint256)",
+              "args": [
+                "$target",
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            },
+            "effects": [
+              {
+                "kind": "credit",
+                "token": "$route.tokenIn",
+                "account": "$target",
+                "equals": {
+                  "runtime": "amountIn"
+                }
+              }
+            ]
+          },
+          {
+            "id": "swap",
+            "call": {
+              "target": "$target",
+              "signature": "function swap(address,address,address) returns(uint256)",
+              "args": [
+                "$route.tokenIn",
+                "$route.tokenOut",
+                "$recipient"
+              ],
+              "save": {
+                "output": 0
+              }
+            }
+          },
+          {
+            "id": "closingAccounted",
+            "static": true,
+            "call": {
+              "target": "$target",
+              "signature": "function tokenBalances(address) view returns(uint256)",
+              "args": [
+                "$route.tokenIn"
+              ],
+              "save": {
+                "closingAccounted": 0
+              }
+            }
+          },
+          {
+            "id": "closingBalance",
+            "static": true,
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function balanceOf(address) view returns(uint256)",
+              "args": [
+                "$target"
+              ],
+              "save": {
+                "closingBalance": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "closingBalance"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "runtime": "closingAccounted"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "minimum": "$minAmountOut",
+            "equals": {
+              "runtime": "output"
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "meta": {
+        "sourceFamily": "vault-spot",
+        "migrationKey": "typed:vault-spot:pretransfer-accounted",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    }
+  ]
+}

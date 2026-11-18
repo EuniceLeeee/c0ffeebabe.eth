@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xfa461e33",
+  "signature": "function uniswapV3SwapCallback(int256, int256, bytes)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_FA461E33_ENABLED"
+  },
+  "unsupportedReason": "Callback endpoint of a retained complete execution program; it is not an independent transaction entry."
+}

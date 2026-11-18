@@ -1,0 +1,12 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xba087652",
+  "signature": "function redeem(uint256 shares,address receiver,address owner) returns(uint256 assets)",
+  "domain": "protocol",
+  "parameters": [
+    { "path": [0], "role": "amountIn" },
+    { "path": [1], "role": "recipient" },
+    { "path": [2], "role": "executor" }
+  ],
+  "payment": { "kind": "none" }
+}

@@ -1,0 +1,343 @@
+{
+  "runner": "scripts/test-protocol-json.mjs",
+  "runnerSha256": "d46cf1d684bed1cdb531534438f701ed6bd1c7e20af14006b6ba9cf4b1b2f5e4",
+  "testConcurrency": 2,
+  "files": [
+    {
+      "file": "src/searcher/test/declarative-activation-selection.test.ts",
+      "sha256": "4dd6a4d2b6a7379fa220db08ee7bbbf22a98ebadf70022a0c55c4d08a606b6ad"
+    },
+    {
+      "file": "src/searcher/test/declarative-callback.test.ts",
+      "sha256": "8b4170df07bb76717c7d05e746dccccd94653b0b80b7361c99e191ffb559161c"
+    },
+    {
+      "file": "src/searcher/test/declarative-credit-domain.test.ts",
+      "sha256": "70d7761c5b18a5226e8af00e01d97d93b9020325d10925959d779b585815835c"
+    },
+    {
+      "file": "src/searcher/test/declarative-discovery-mapping.test.ts",
+      "sha256": "77a2b9005d3590e0d13e93e8ba243f90324483319de621c83c3f61e533514fbb"
+    },
+    {
+      "file": "src/searcher/test/declarative-discovery-seeding.test.ts",
+      "sha256": "50720c844046e34f576a743f1944159b63f1aa9ee3e919c1b5c8ea3b9c836240"
+    },
+    {
+      "file": "src/searcher/test/declarative-dynamic-reads.test.ts",
+      "sha256": "7fa323b47dce41350e33734078e2020520f29b5027e3d9189d3c0015964874a8"
+    },
+    {
+      "file": "src/searcher/test/declarative-execution-assets.test.ts",
+      "sha256": "878ab68c37794ce0100eef4355048e10c62841caef5d940456ee602b8dba1271"
+    },
+    {
+      "file": "src/searcher/test/declarative-execution.test.ts",
+      "sha256": "b69b4cb8248c690d0057ddbc3b62bdfb58d2581bc975065235126f3e9b366cde"
+    },
+    {
+      "file": "src/searcher/test/declarative-family-boundary.test.ts",
+      "sha256": "7cf460c87f05824c43db6a2c339dd33adcf088d541486da6393a34bc81fd834b"
+    },
+    {
+      "file": "src/searcher/test/declarative-historical-deferred.test.ts",
+      "sha256": "3f7a4a9822115bc735c75e5f06e0ac494013076fcf52bee752c69cb0a1c171f4"
+    },
+    {
+      "file": "src/searcher/test/declarative-module-dependencies.test.ts",
+      "sha256": "76c33b544542a9bb6b87c7f6fc98f4c164a65f663797b9131b737b8657872a07"
+    },
+    {
+      "file": "src/searcher/test/declarative-modules.test.ts",
+      "sha256": "ae5485ef9b65772720ecf60b17973b06298463b2541ab0312e826dc1f7639081"
+    },
+    {
+      "file": "src/searcher/test/declarative-multicall-proof.test.ts",
+      "sha256": "b7282f71a87a8bb5da3af4a555bcf2ea1e2d1b5987e99fdd0fc2ddae5c13b0e9"
+    },
+    {
+      "file": "src/searcher/test/declarative-multistep-execution.test.ts",
+      "sha256": "fea006a485f1fe01b29d6270d82d67846930c864093c3382e9274210e3f55b6e"
+    },
+    {
+      "file": "src/searcher/test/declarative-production.test.ts",
+      "sha256": "d65caf785de0ca47f2ebdb9a67d28aedd3a0d02b5dfbdf7f0a5711e12b022cbe"
+    },
+    {
+      "file": "src/searcher/test/declarative-quote-proof-extended.test.ts",
+      "sha256": "6d8da1f47648ad2d217433847099b5b158fd946ca2eb3e01dbee0204f901d991"
+    },
+    {
+      "file": "src/searcher/test/declarative-quote-proof.test.ts",
+      "sha256": "1bf41bf19f0341417ae084dc4ecd83b9298b2c337023d2742b95383ea20f5ed8"
+    },
+    {
+      "file": "src/searcher/test/declarative-read-flow-map.test.ts",
+      "sha256": "b4d0651b96138c2239829eaa7457e1087618804e4f07a94e8f6eb068c0f101b5"
+    },
+    {
+      "file": "src/searcher/test/declarative-read-flow.test.ts",
+      "sha256": "de9a4f197d4cf7edd0d6e3d817b0ee86fc00a991f23a4ee3d225be6f1c83abb0"
+    },
+    {
+      "file": "src/searcher/test/declarative-ready-rule-bindings.test.ts",
+      "sha256": "aaa6859b0a46c8ab51eb2e3d93ab9a5e61241280abeb4a3551ba909efdbf48ee"
+    },
+    {
+      "file": "src/searcher/test/declarative-regression-round.test.ts",
+      "sha256": "d97749af8597df9a08e13bb62d6b653d561c8ea74b2c47574c40a4fdca1880c0"
+    },
+    {
+      "file": "src/searcher/test/declarative-runtime-math.test.ts",
+      "sha256": "0fff5032989521f066f03ce890e41f389edcd10a7aec0d470bb13055dd08e09e"
+    },
+    {
+      "file": "src/searcher/test/declarative-runtime-rejections.test.ts",
+      "sha256": "ee3d485f38cad0492412bf002941d3bedebd05232ba98feb2557a14e459edde7"
+    },
+    {
+      "file": "src/searcher/test/declarative-simulation-binding.test.ts",
+      "sha256": "4c8166ef174da4c9744c6e8f763670299520035091476ef98294f5392c6bda5c"
+    },
+    {
+      "file": "src/searcher/test/declarative-simulation.test.ts",
+      "sha256": "42728cfef90cdb0f7ee6539116fcae7d64aaf589d8c920410c621d1827668020"
+    },
+    {
+      "file": "src/searcher/test/declarative-swap-execution-gaps.test.ts",
+      "sha256": "fc56aa90bcd39e528331ad0617ab254bcab2d8b8a41734670d81f8e170b6f646"
+    },
+    {
+      "file": "src/searcher/test/declarative-swap-observation.test.ts",
+      "sha256": "14d0ce3107b37d44f19fe8b0d8322ed1fc0df4d51688795846a71eb34deb49ba"
+    },
+    {
+      "file": "src/searcher/test/declarative-trial-state.test.ts",
+      "sha256": "edc8a8609fece11eb9ff53dd59ff4b6cddbe7c6630980b1d7707f0a8f36748e6"
+    },
+    {
+      "file": "src/searcher/test/declarative-values.test.ts",
+      "sha256": "33e05b2ce72c4cc4ac89b5dc55b55e8905cf71e548d66384cf5ae45e13258bdc"
+    },
+    {
+      "file": "src/searcher/test/effective-execution-verification.test.ts",
+      "sha256": "1c9aa9c974b4b82737b518366ee78df4e08111fe586b6995d1008f25133e08e0"
+    },
+    {
+      "file": "src/searcher/test/effective-startup-simulation-pricing.test.ts",
+      "sha256": "a290fc8fc9c4d1e9e86171c79de6cea40e153f3ddba3c95d52df95120228be6e"
+    },
+    {
+      "file": "src/searcher/test/family-evidence-hash.test.ts",
+      "sha256": "19d9e65a8616404dfb4aa8ca5e4dee4a1ac104669832c2a0b1d2bf91926a61ce"
+    },
+    {
+      "file": "src/searcher/test/family-funding-acceptance.test.ts",
+      "sha256": "043ba8785afe44f768cdb0415c0bdf6bc47c6b94b64d00a972c30a274c33a51a"
+    },
+    {
+      "file": "src/searcher/test/family-node-receipt-verification.test.ts",
+      "sha256": "cba4607406d438c39cbaa6a1158cbfa9893fd2a8f89f6a0a94e0fbe79bac82d7"
+    },
+    {
+      "file": "src/searcher/test/family-transaction-cache.test.ts",
+      "sha256": "75157c692e527b0d7f9950c438adba2339a6c599c18f318d9b0159190f77e3e3"
+    },
+    {
+      "file": "src/searcher/test/family-transaction-facts.test.ts",
+      "sha256": "0500af76ad97ee9586ba2c192a745852c74792eb0335de9f6464b97576e2a3fc"
+    },
+    {
+      "file": "src/searcher/test/family-transaction-main.test.ts",
+      "sha256": "053c295989ee6ef0e59d478f5b88d5d3ecada3a46150333fbc275c7d8b682940"
+    },
+    {
+      "file": "src/searcher/test/family-transaction-matching.test.ts",
+      "sha256": "8c859515751e1826766eca51e2099a42b3c9683e933faa29cb9bbe266ff2e900"
+    },
+    {
+      "file": "src/searcher/test/family-transaction-ready.test.ts",
+      "sha256": "5726a82f37fc49a5360e89a5292f17e8215eb87626c625e995884f29dd3dd955"
+    },
+    {
+      "file": "src/searcher/test/family-transaction-registry.test.ts",
+      "sha256": "a84cacbc824a9fd025351ab4162d5c53ed02fb3c933d5e8706ee10745c2414c0"
+    },
+    {
+      "file": "src/searcher/test/family-transaction-selector.test.ts",
+      "sha256": "934a5f4dcbabeb939ce44fdc39b9a6260dbf468a85b8bca7c182a7886596dbff"
+    },
+    {
+      "file": "src/searcher/test/node-simulate-v1.test.ts",
+      "sha256": "058c525536b5d61abd28c749d9f0aa0299c45e74da2e36728d98c6ad6e3dccca"
+    },
+    {
+      "file": "src/searcher/test/node-trace-policy.test.ts",
+      "sha256": "b34e47df4a270ad444854d2f990409e0099efbeba3ed837ff4de696f5f1296c1"
+    },
+    {
+      "file": "src/searcher/test/protocol-json-acceptance-context.test.ts",
+      "sha256": "9dda57a36c8502befae14b96272f67d22bc039192411622f79335497118ca33c"
+    },
+    {
+      "file": "src/searcher/test/protocol-json-acceptance-facts.test.ts",
+      "sha256": "e7de0672f6cf4bbea5a1d3602d350d5b3b1f10f0df016627fd9853f291556ced"
+    },
+    {
+      "file": "src/searcher/test/protocol-json-acceptance-runner.test.ts",
+      "sha256": "7169181d91fc92de9007c2b0b63a83af591c17b7f728ec58938f6470a0a75250"
+    },
+    {
+      "file": "src/searcher/test/protocol-json-regression-evidence.test.ts",
+      "sha256": "67a6d6037d3966325df372a43a0c7581795954bf41dcc720e55296af1979e198"
+    },
+    {
+      "file": "src/searcher/test/protocol-json-sample-registration.test.ts",
+      "sha256": "f7d36d9b7ddf7b6722912cc7c5c6f718c311589daf61edb60769de95d1c72115"
+    },
+    {
+      "file": "src/searcher/test/protocol-json-samples.test.ts",
+      "sha256": "2e79fdcdc5e44b2057be5a471ff262faa0c5dc0de025da4613999e9424154445"
+    },
+    {
+      "file": "src/searcher/test/ready-proof-simulation.test.ts",
+      "sha256": "c94d034d4ba4c4895820dc0cfef9948acea7e87f299b33d9d1d912f3270bfd91"
+    },
+    {
+      "file": "src/searcher/test/ready-selector-candidate-pattern.test.ts",
+      "sha256": "79666f8c72937f8b4536fd5a7cd4a86025e5203b851ae7304be5d59753cc20e1"
+    },
+    {
+      "file": "src/searcher/test/ready-selector-census.test.ts",
+      "sha256": "0e9084fc97363a73f7c46af6b18b3d540a5b3b1277019dc7f840b46392449ebe"
+    },
+    {
+      "file": "src/searcher/test/ready-selector-cli-compat.test.ts",
+      "sha256": "fbd41bbbc5ed0cb63a9f4b8611c0e9ad7ff37c109ccdc42f8ae9f864e3363840"
+    },
+    {
+      "file": "src/searcher/test/ready-selector-coverage.test.ts",
+      "sha256": "933501d3bc8a5c0931c32c87a57b8fceee1e321f810fe556a63331a80d609225"
+    },
+    {
+      "file": "src/searcher/test/ready-selector-edges.test.ts",
+      "sha256": "23c17f16d7e00a8895868b2eebb77b76a27ede725d05453c3f5710baaa5f2a6b"
+    },
+    {
+      "file": "src/searcher/test/ready-selector-funding.test.ts",
+      "sha256": "3f6503e1af8666832a21989c6a30b18bbc3b145ead854e9d509c920712edab52"
+    },
+    {
+      "file": "src/searcher/test/selector-execution-keys.test.ts",
+      "sha256": "1f64ada04d5b669bd66aaddb58794f4f70caa9a57e956030b457c63b97e829b4"
+    },
+    {
+      "file": "src/searcher/test/selector-execution-observation.test.ts",
+      "sha256": "7639240ddd23c944dae9647984baa64f414bedc5bd662dfda390a84ae18c3d41"
+    },
+    {
+      "file": "src/searcher/test/selector-family-v2-credit.test.ts",
+      "sha256": "677934ee92912ef3c83d2f720e9322dabad9e865f216c40556e5532b977fbf50"
+    },
+    {
+      "file": "src/searcher/test/selector-family-v2-execution.test.ts",
+      "sha256": "f98fa31012f58f95e858187e6e01a0fe90b280279c59a113f89783188f9876fa"
+    },
+    {
+      "file": "src/searcher/test/selector-family-v2-migration.test.ts",
+      "sha256": "470dc382bd80af1ddacabc7647910ab25277e7265adc2b51ed4fb8ceb4e2e9c3"
+    },
+    {
+      "file": "src/searcher/test/selector-native-aqua.test.ts",
+      "sha256": "a8c53e731c7a9cdf9d82ea79d71f11ba61e10dc7cac806fae1ad0c28a8c2b782"
+    },
+    {
+      "file": "src/searcher/test/selector-native-build.test.ts",
+      "sha256": "a8f7e8f24ea3aec6aedb351dd92473a2291f91bb67b10796ed943b45acba1684"
+    },
+    {
+      "file": "src/searcher/test/selector-native-discovery.test.ts",
+      "sha256": "ac168e048a69bfa75cae6b23356857825fb61663e3b8da4ef436217b4a1c4e61"
+    },
+    {
+      "file": "src/searcher/test/selector-native-execution-evm.test.ts",
+      "sha256": "1aeaf25396facfaf8a984be8df19fe9719e9c1a38b36956f2996fa647d6c7598"
+    },
+    {
+      "file": "src/searcher/test/selector-native-execution.test.ts",
+      "sha256": "f82bfa01ba1c56b177be1702c52709a26cae1d51354af201dc2a26e687ee90a6"
+    },
+    {
+      "file": "src/searcher/test/selector-native-funding-evm.test.ts",
+      "sha256": "ad504d41f86bf4c4fa81e3b6f29e7c320e7a8eeb3eaede5e0f9ee5468cc44da4"
+    },
+    {
+      "file": "src/searcher/test/selector-native-funding.test.ts",
+      "sha256": "06101de4e0a2ce38f86e3d9eeb22dd7953b13d422443dc0222d9e3a1c6319f91"
+    },
+    {
+      "file": "src/searcher/test/selector-native-module.test.ts",
+      "sha256": "9ebd631682d2d8c6043d936d3d997fee6561412242f4e4e6c74241d53cbb67dd"
+    },
+    {
+      "file": "src/searcher/test/selector-native-reserve-reference.test.ts",
+      "sha256": "1253b6184699301814f40983722e0dd7d29386c4a7be8125a951f0724c8be784"
+    },
+    {
+      "file": "src/searcher/test/selector-native-resource-wiring.test.ts",
+      "sha256": "2404006a73cbcb3a70d51075d6bd8389f6ef13f9b1d6aa65fd8d3e4e03d8ef17"
+    },
+    {
+      "file": "src/searcher/test/selector-native-typed-callbacks.test.ts",
+      "sha256": "7a04e2e6a42cd403fbeec4d57ea16cd5a5b442b9c0d4744a853adf4027eac8ed"
+    },
+    {
+      "file": "src/searcher/test/selector-native-value-models.test.ts",
+      "sha256": "0191f4779df79c29e64612b478c74be6ab1f2c1f1c4633511412b5ae4956e9c6"
+    },
+    {
+      "file": "src/searcher/test/selector-typed-a-evm.test.ts",
+      "sha256": "63b78d6f8767d8efb8955e932835894ca62e5e0083ff8970c86edad7f17c164e"
+    },
+    {
+      "file": "src/searcher/test/selector-typed-a-migration.test.ts",
+      "sha256": "448e7a8ebde89073684988acd819f567f12c04b9398a466a66cddd9a72b6c4be"
+    },
+    {
+      "file": "src/searcher/test/selector-typed-root-runtime.test.ts",
+      "sha256": "565e79058007950909be3079835f5dd41191f68d03f0f698eb7dd36f6423769e"
+    },
+    {
+      "file": "src/searcher/test/swap-json-samples.test.ts",
+      "sha256": "3d630b4d7edc905b81c67aeb4bf742353ec86110145907fc882011bffe4f75f0"
+    },
+    {
+      "file": "src/searcher/test/node-rpc-simulation.ts",
+      "sha256": "15827fa7b713c72924e31bde4080962f0e173edeae7b9ef6637cc0790aaf73af"
+    },
+    {
+      "file": "src/searcher/test/settlement-registrar-evidence.test.ts",
+      "sha256": "8840ac47b6227a63e748d39560efd43f33cb08ad889d227b3d5780f89624a6b0"
+    },
+    {
+      "file": "src/searcher/test/declarative-callback-frames.ts",
+      "sha256": "a381d13392c79215b878330783b460820d197a9831da197514ee3ca6cd2b8da6"
+    },
+    {
+      "file": "src/searcher/test/funding-credit-family-plugin.ts",
+      "sha256": "b3006db64352247f8e42fe32eece37b8db268388f4b14dbb7fa88de0979df58c"
+    },
+    {
+      "file": "src/searcher/test/blockscan-at-block-cli.ts",
+      "sha256": "b56be231f88a72b70e4405259b7171f3c49c372685e9f80fb827e32138f1b224"
+    },
+    {
+      "file": "src/searcher/test/strict-execution-projection.ts",
+      "sha256": "29e8098b217c69a9e6180eef329761d2307cd17d173fa084e3d007271a768d64"
+    },
+    {
+      "file": "src/searcher/test/revm-canonical-anchor.ts",
+      "sha256": "ca468ef02d109226c01274c13fe765c396f6dd1d0bcf4d8aa6549a3aaec60e45"
+    }
+  ]
+}

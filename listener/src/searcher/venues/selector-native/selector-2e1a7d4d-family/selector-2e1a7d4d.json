@@ -1,0 +1,1317 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x2e1a7d4d",
+  "signature": "function withdraw(uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_2E1A7D4D_ENABLED"
+  },
+  "programs": [
+    {
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "vault",
+              "requirements": {
+                "transports": [
+                  "eth-call",
+                  "get-storage"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "selectorBinding:vault:asset",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingvaultasset",
+                      "token()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "selectorBinding:vault:strategy",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingvaultstrategy",
+                      "strategy()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "selectorBinding:vault:vaultImplementation",
+                  "kind": "get-storage",
+                  "address": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+                },
+                {
+                  "id": "selectorBinding:vault:vaultAdmin",
+                  "kind": "get-storage",
+                  "address": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "slot": "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
+                }
+              ],
+              "result": {
+                "asset": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "bindingvaultasset",
+                            "token()",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "selectorBinding:vault:asset"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "strategy": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "bindingvaultstrategy",
+                            "strategy()",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "selectorBinding:vault:strategy"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "vaultImplementation": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "selectorBinding:vault:vaultImplementation"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                },
+                "vaultAdmin": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "selectorBinding:vault:vaultAdmin"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "strategy",
+              "requirements": {
+                "transports": [
+                  "eth-call",
+                  "get-storage"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "selectorBinding:strategy:locker",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$steps.vault.strategy"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingstrategylocker",
+                      "LOCKER()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "selectorBinding:strategy:strategyImplementation",
+                  "kind": "get-storage",
+                  "address": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$steps.vault.strategy"
+                        ]
+                      }
+                    ]
+                  },
+                  "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+                },
+                {
+                  "id": "selectorBinding:strategy:strategyAdmin",
+                  "kind": "get-storage",
+                  "address": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$steps.vault.strategy"
+                        ]
+                      }
+                    ]
+                  },
+                  "slot": "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103"
+                }
+              ],
+              "result": {
+                "locker": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "bindingstrategylocker",
+                            "LOCKER()",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "selectorBinding:strategy:locker"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "strategyImplementation": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "selectorBinding:strategy:strategyImplementation"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                },
+                "strategyAdmin": {
+                  "op": "addressWord",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "selectorBinding:strategy:strategyAdmin"
+                          ]
+                        },
+                        "data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "result": {
+            "vault": "$steps.vault",
+            "strategy": "$steps.strategy"
+          }
+        },
+        "descriptor": {
+          "vault": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "vaultImplementation": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "merge",
+                        "args": [
+                          "$binding.vault",
+                          "$binding.strategy",
+                          {
+                            "vault": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$target"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      "vaultImplementation"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "vaultAdmin": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "merge",
+                        "args": [
+                          "$binding.vault",
+                          "$binding.strategy",
+                          {
+                            "vault": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$target"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      "vaultAdmin"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "strategy": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "merge",
+                        "args": [
+                          "$binding.vault",
+                          "$binding.strategy",
+                          {
+                            "vault": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$target"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      "strategy"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "strategyImplementation": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "merge",
+                        "args": [
+                          "$binding.vault",
+                          "$binding.strategy",
+                          {
+                            "vault": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$target"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      "strategyImplementation"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "strategyAdmin": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "merge",
+                        "args": [
+                          "$binding.vault",
+                          "$binding.strategy",
+                          {
+                            "vault": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$target"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      "strategyAdmin"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "asset": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "merge",
+                        "args": [
+                          "$binding.vault",
+                          "$binding.strategy",
+                          {
+                            "vault": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$target"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      "asset"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "locker": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "merge",
+                        "args": [
+                          "$binding.vault",
+                          "$binding.strategy",
+                          {
+                            "vault": {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$target"
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      "locker"
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "routes": {
+        "target": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.vault"
+              ]
+            }
+          ]
+        },
+        "directions": [
+          {
+            "id": "redeem",
+            "enabled": true,
+            "tokenIn": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.vault"
+                  ]
+                }
+              ]
+            },
+            "tokenOut": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.asset"
+                  ]
+                }
+              ]
+            },
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "redeem"
+            }
+          }
+        ],
+        "assertions": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                "$route.direction",
+                "redeem"
+              ]
+            },
+            "error": "badger-sett route binding mismatch"
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$route.tokenIn",
+                "$descriptor.vault"
+              ]
+            },
+            "error": "badger-sett route binding mismatch"
+          },
+          {
+            "assert": {
+              "op": "sameAddress",
+              "args": [
+                "$route.tokenOut",
+                "$descriptor.asset"
+              ]
+            },
+            "error": "badger-sett route binding mismatch"
+          },
+          {
+            "assert": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.taxonomy.slotKind",
+                    "protocol"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.taxonomy.protocolAction",
+                    "redeem"
+                  ]
+                }
+              ]
+            },
+            "error": "badger-sett route binding mismatch"
+          }
+        ]
+      },
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": [
+          "$descriptor.vault",
+          "$descriptor.vaultImplementation",
+          "$descriptor.strategy",
+          "$descriptor.strategyImplementation",
+          "$descriptor.asset",
+          "$descriptor.locker",
+          "$descriptor.vaultAdmin",
+          "$descriptor.strategyAdmin"
+        ],
+        "preflight": [
+          {
+            "target": "$descriptor.vault",
+            "signature": "function token() view returns(address)",
+            "args": [],
+            "save": {
+              "boundToken": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "boundToken"
+                },
+                "operator": "eq",
+                "right": "$descriptor.asset"
+              }
+            ]
+          },
+          {
+            "target": "$descriptor.vault",
+            "signature": "function strategy() view returns(address)",
+            "args": [],
+            "save": {
+              "boundStrategy": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "boundStrategy"
+                },
+                "operator": "eq",
+                "right": "$descriptor.strategy"
+              }
+            ]
+          },
+          {
+            "target": "$descriptor.strategy",
+            "signature": "function vault() view returns(address)",
+            "args": [],
+            "save": {
+              "boundVault": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "boundVault"
+                },
+                "operator": "eq",
+                "right": "$descriptor.vault"
+              }
+            ]
+          },
+          {
+            "target": "$descriptor.strategy",
+            "signature": "function want() view returns(address)",
+            "args": [],
+            "save": {
+              "boundWant": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "boundWant"
+                },
+                "operator": "eq",
+                "right": "$descriptor.asset"
+              }
+            ]
+          },
+          {
+            "target": "$descriptor.strategy",
+            "signature": "function LOCKER() view returns(address)",
+            "args": [],
+            "save": {
+              "boundLocker": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "boundLocker"
+                },
+                "operator": "eq",
+                "right": "$descriptor.locker"
+              }
+            ]
+          }
+        ],
+        "steps": [
+          {
+            "id": "sharesBefore",
+            "static": true,
+            "call": {
+              "target": "$descriptor.vault",
+              "signature": "function balanceOf(address) view returns(uint256)",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$executor"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "save": {
+                "sharesBefore": 0
+              }
+            }
+          },
+          {
+            "id": "auraBefore",
+            "static": true,
+            "call": {
+              "target": "$descriptor.asset",
+              "signature": "function balanceOf(address) view returns(uint256)",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$executor"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "save": {
+                "auraBefore": 0
+              }
+            }
+          },
+          {
+            "id": "backing",
+            "static": true,
+            "call": {
+              "target": "$descriptor.vault",
+              "signature": "function balance() view returns(uint256)",
+              "args": [],
+              "save": {
+                "backing": 0
+              }
+            }
+          },
+          {
+            "id": "supply",
+            "static": true,
+            "call": {
+              "target": "$descriptor.vault",
+              "signature": "function totalSupply() view returns(uint256)",
+              "args": [],
+              "save": {
+                "supply": 0
+              }
+            }
+          },
+          {
+            "id": "vaultIdle",
+            "static": true,
+            "call": {
+              "target": "$descriptor.asset",
+              "signature": "function balanceOf(address) view returns(uint256)",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.vault"
+                  ]
+                }
+              ],
+              "save": {
+                "vaultIdle": 0
+              }
+            }
+          },
+          {
+            "id": "strategyIdle",
+            "static": true,
+            "call": {
+              "target": "$descriptor.asset",
+              "signature": "function balanceOf(address) view returns(uint256)",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$descriptor.strategy"
+                  ]
+                }
+              ],
+              "save": {
+                "strategyIdle": 0
+              }
+            }
+          },
+          {
+            "id": "feeBps",
+            "static": true,
+            "call": {
+              "target": "$descriptor.vault",
+              "signature": "function withdrawalFee() view returns(uint256)",
+              "args": [],
+              "save": {
+                "feeBps": 0
+              }
+            }
+          },
+          {
+            "id": "terms",
+            "math": {
+              "model": "badgerTerms",
+              "inputs": {
+                "amountIn": {
+                  "runtime": "amountIn"
+                },
+                "backing": {
+                  "runtime": "backing"
+                },
+                "supply": {
+                  "runtime": "supply"
+                },
+                "vaultIdle": {
+                  "runtime": "vaultIdle"
+                },
+                "strategyIdle": {
+                  "runtime": "strategyIdle"
+                },
+                "feeBps": {
+                  "runtime": "feeBps"
+                }
+              },
+              "outputs": {
+                "net": "net"
+              }
+            }
+          },
+          {
+            "id": "withdraw",
+            "call": {
+              "target": "$descriptor.vault",
+              "signature": "function withdraw(uint256)",
+              "args": [
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            }
+          },
+          {
+            "id": "sharesAfter",
+            "static": true,
+            "call": {
+              "target": "$descriptor.vault",
+              "signature": "function balanceOf(address) view returns(uint256)",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$executor"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "save": {
+                "sharesAfter": 0
+              }
+            }
+          },
+          {
+            "id": "auraAfter",
+            "static": true,
+            "call": {
+              "target": "$descriptor.asset",
+              "signature": "function balanceOf(address) view returns(uint256)",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$executor"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "save": {
+                "auraAfter": 0
+              }
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "minimum": {
+              "runtime": "net"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.vault",
+              "$route.tokenIn"
+            ]
+          },
+          "error": "badger-sett route binding mismatch"
+        }
+      ],
+      "refreshPolicy": "each-block",
+      "values": {
+        "abi": {
+          "bindingvaultasset": [
+            "function token() view returns(address)"
+          ],
+          "bindingvaultstrategy": [
+            "function strategy() view returns(address)"
+          ],
+          "bindingstrategylocker": [
+            "function LOCKER() view returns(address)"
+          ]
+        }
+      },
+      "runtimeMath": {
+        "version": 1,
+        "entries": {
+          "badgerTerms": {
+            "model": "badger-sett-withdraw:runtime-terms",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "badger-sett-withdraw:runtime-terms",
+            "version": 1,
+            "inputs": [
+              "amountIn",
+              "backing",
+              "supply",
+              "vaultIdle",
+              "strategyIdle",
+              "feeBps"
+            ],
+            "outputs": [
+              "net"
+            ],
+            "operations": [
+              {
+                "name": "grossProduct",
+                "op": "mul",
+                "left": {
+                  "input": "amountIn"
+                },
+                "right": {
+                  "input": "backing"
+                }
+              },
+              {
+                "name": "gross",
+                "op": "div",
+                "left": {
+                  "local": "grossProduct"
+                },
+                "right": {
+                  "input": "supply"
+                }
+              },
+              {
+                "name": "liquid",
+                "op": "add",
+                "left": {
+                  "input": "vaultIdle"
+                },
+                "right": {
+                  "input": "strategyIdle"
+                }
+              },
+              {
+                "name": "margin",
+                "op": "sub",
+                "left": {
+                  "local": "liquid"
+                },
+                "right": {
+                  "local": "gross"
+                }
+              },
+              {
+                "name": "feeComplement",
+                "op": "sub",
+                "left": {
+                  "constant": "200"
+                },
+                "right": {
+                  "input": "feeBps"
+                }
+              },
+              {
+                "name": "feeNumerator",
+                "op": "mul",
+                "left": {
+                  "local": "gross"
+                },
+                "right": {
+                  "local": "feeComplement"
+                }
+              },
+              {
+                "name": "fee",
+                "op": "div",
+                "left": {
+                  "local": "feeNumerator"
+                },
+                "right": {
+                  "constant": "10000"
+                }
+              },
+              {
+                "name": "net",
+                "op": "sub",
+                "left": {
+                  "local": "gross"
+                },
+                "right": {
+                  "local": "fee"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": {
+        "label": "protocol:badger-sett-withdraw/badger-sett-withdraw-liquid"
+      }
+    },
+    {
+      "binding": {
+        "descriptor": {
+          "token": {
+            "op": "address",
+            "args": [
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "nativeAnchor": {
+            "op": "address",
+            "args": [
+              "$constants.nativeAnchor"
+            ]
+          }
+        }
+      },
+      "routes": {
+        "target": "$descriptor.token",
+        "directions": [
+          {
+            "id": "withdraw-to-native",
+            "enabled": true,
+            "tokenIn": "$descriptor.token",
+            "tokenOut": "$descriptor.nativeAnchor",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "redeem"
+            },
+            "executionAssets": {
+              "input": "erc20",
+              "output": "native"
+            }
+          }
+        ]
+      },
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$descriptor.token"
+        ],
+        "steps": [
+          {
+            "id": "withdraw",
+            "call": {
+              "target": "$descriptor.token",
+              "signature": "function withdraw(uint256)",
+              "args": [
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "asset": "native",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "supply",
+            "token": "$descriptor.token",
+            "direction": "decrease",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$descriptor.token",
+                  "$descriptor.nativeAnchor"
+                ]
+              }
+            ]
+          },
+          "error": "ethertoken-native-redeem cannot claim canonical WETH execution"
+        }
+      ],
+      "refreshPolicy": "on-touch",
+      "values": {
+        "constants": {
+          "nativeAnchor": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        }
+      },
+      "resourceValues": {
+        "constants": {
+          "nativeAnchor": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+        }
+      },
+      "meta": {
+        "label": "protocol:ethertoken-native-redeem/active-ethertoken-native-effect-proof"
+      }
+    }
+  ]
+}

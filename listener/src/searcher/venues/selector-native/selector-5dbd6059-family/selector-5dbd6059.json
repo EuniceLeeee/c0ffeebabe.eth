@@ -1,0 +1,208 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x5dbd6059",
+  "signature": "function unwrapTo(uint256, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_5DBD6059_ENABLED"
+  },
+  "binding": {
+    "flow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "wrapper",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "selectorBinding:wrapper:asset",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingwrapperasset",
+                  "token()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "result": {
+            "asset": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingwrapperasset",
+                        "token()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:wrapper:asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "wrapper": {
+          "asset": "$steps.wrapper.asset"
+        }
+      }
+    },
+    "descriptor": {
+      "asset": {
+        "op": "address",
+        "args": [
+          "$binding.wrapper.asset"
+        ]
+      }
+    }
+  },
+  "routes": {
+    "directions": [
+      {
+        "id": "unwrap",
+        "enabled": true,
+        "tokenIn": "$descriptor.target",
+        "tokenOut": "$descriptor.asset",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "unwrap"
+        }
+      }
+    ]
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": [
+      {
+        "op": "address",
+        "args": [
+          "$descriptor.target"
+        ]
+      },
+      {
+        "op": "address",
+        "args": [
+          "$descriptor.asset"
+        ]
+      }
+    ],
+    "steps": [
+      {
+        "id": "convertTo",
+        "call": {
+          "target": {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          },
+          "signature": "function unwrapTo(uint256,address) returns(uint256)",
+          "args": [
+            {
+              "runtime": "amountIn"
+            },
+            "$recipient"
+          ],
+          "save": {
+            "converted": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "converted"
+              },
+              "operator": "eq",
+              "right": {
+                "runtime": "amountIn"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenIn",
+        "account": "$recipient",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-native"
+      }
+    ]
+  },
+  "refreshPolicy": "each-block",
+  "values": {
+    "abi": {
+      "bindingwrapperasset": [
+        "function token() view returns(address)"
+      ]
+    }
+  },
+  "meta": {
+    "label": "protocol:few-wrapped/factory-wrapper-effects"
+  }
+}

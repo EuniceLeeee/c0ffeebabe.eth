@@ -1,0 +1,3839 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xf196187f",
+  "signature": "function swap((address, address, bytes32), bool, int128, uint96, uint256, int256, address)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_F196187F_ENABLED"
+  },
+  "binding": {
+    "nomination": {
+      "parameterPaths": [
+        [
+          0
+        ]
+      ]
+    },
+    "descriptor": {
+      "op": "merge",
+      "args": [
+        {
+          "op": "merge",
+          "args": [
+            {
+              "poolId": {
+                "op": "expression",
+                "args": [
+                  "keyHash",
+                  {
+                    "t0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$args",
+                                    0
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "t1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    "$args",
+                                    0
+                                  ]
+                                },
+                                1
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "config": {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        2
+                      ]
+                    }
+                  }
+                ]
+              },
+              "poolKey": {
+                "token0": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "token1": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            {
+                              "op": "at",
+                              "args": [
+                                "$args",
+                                0
+                              ]
+                            },
+                            1
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "config": {
+                  "op": "at",
+                  "args": [
+                    {
+                      "op": "at",
+                      "args": [
+                        "$args",
+                        0
+                      ]
+                    },
+                    2
+                  ]
+                }
+              }
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "extensionOf",
+                        {
+                          "config": {
+                            "op": "at",
+                            "args": [
+                              {
+                                "op": "at",
+                                "args": [
+                                  "$args",
+                                  0
+                                ]
+                              },
+                              2
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                {},
+                {}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "routes": {
+    "target": "$constants.router",
+    "directions": {
+      "op": "map",
+      "args": [
+        [
+          false,
+          true
+        ],
+        "isToken1",
+        {
+          "op": "merge",
+          "args": [
+            {
+              "id": {
+                "op": "if",
+                "args": [
+                  "$isToken1",
+                  "token1-in",
+                  "token0-in"
+                ]
+              },
+              "enabled": true,
+              "tokenIn": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          "$isToken1",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "poolKey"
+                                ]
+                              },
+                              "token1"
+                            ]
+                          },
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "poolKey"
+                                ]
+                              },
+                              "token0"
+                            ]
+                          }
+                        ]
+                      },
+                      "$constants.zero"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$constants.weth"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "if",
+                            "args": [
+                              "$isToken1",
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$descriptor",
+                                      "poolKey"
+                                    ]
+                                  },
+                                  "token1"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$descriptor",
+                                      "poolKey"
+                                    ]
+                                  },
+                                  "token0"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "tokenOut": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          "$isToken1",
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "poolKey"
+                                ]
+                              },
+                              "token0"
+                            ]
+                          },
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "poolKey"
+                                ]
+                              },
+                              "token1"
+                            ]
+                          }
+                        ]
+                      },
+                      "$constants.zero"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      "$constants.weth"
+                    ]
+                  },
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "if",
+                            "args": [
+                              "$isToken1",
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$descriptor",
+                                      "poolKey"
+                                    ]
+                                  },
+                                  "token0"
+                                ]
+                              },
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$descriptor",
+                                      "poolKey"
+                                    ]
+                                  },
+                                  "token1"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              "adapterId": "execution:0xf196187f:abi-c8fa2d527fc2143fe3cf276514f8aed36de1393a80e21b6798d8b0a0af6ebecf:call",
+              "taxonomy": {
+                "slotKind": "swap"
+              },
+              "fields": {
+                "isToken1": "$isToken1",
+                "poolId": "$descriptor.poolId",
+                "poolKey": "$descriptor.poolKey"
+              }
+            },
+            {
+              "executionAssets": {
+                "input": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$descriptor",
+                                    "poolKey"
+                                  ]
+                                },
+                                "token0"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        },
+                        {
+                          "op": "not",
+                          "args": [
+                            "$isToken1"
+                          ]
+                        }
+                      ]
+                    },
+                    "native",
+                    "erc20"
+                  ]
+                },
+                "output": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$descriptor",
+                                    "poolKey"
+                                  ]
+                                },
+                                "token0"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        },
+                        "$isToken1"
+                      ]
+                    },
+                    "native",
+                    "erc20"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "venue": {
+      "kind": "manager-pool-id",
+      "manager": "$constants.core",
+      "poolId": "$descriptor.poolId"
+    },
+    "checks": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "poolId"
+              ]
+            },
+            {
+              "op": "expression",
+              "args": [
+                "keyHash",
+                {
+                  "t0": {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "poolKey"
+                        ]
+                      },
+                      "token0"
+                    ]
+                  },
+                  "t1": {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "poolKey"
+                        ]
+                      },
+                      "token1"
+                    ]
+                  },
+                  "config": {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "poolKey"
+                        ]
+                      },
+                      "config"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "error": "ekubo inconsistent pool identity"
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "extensionOf",
+                    {
+                      "config": {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$descriptor",
+                              "poolKey"
+                            ]
+                          },
+                          "config"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "extensionOf",
+                        {
+                          "config": {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "poolKey"
+                                ]
+                              },
+                              "config"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$descriptor",
+                                "poolKey"
+                              ]
+                            },
+                            "token0"
+                          ]
+                        },
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "ekubo missing supported behavior binding"
+      }
+    ],
+    "assertions": [
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "poolId"
+              ]
+            },
+            {
+              "op": "expression",
+              "args": [
+                "keyHash",
+                {
+                  "t0": {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "poolKey"
+                        ]
+                      },
+                      "token0"
+                    ]
+                  },
+                  "t1": {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "poolKey"
+                        ]
+                      },
+                      "token1"
+                    ]
+                  },
+                  "config": {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "poolKey"
+                        ]
+                      },
+                      "config"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "error": "ekubo inconsistent pool identity"
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "expression",
+                  "args": [
+                    "extensionOf",
+                    {
+                      "config": {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$descriptor",
+                              "poolKey"
+                            ]
+                          },
+                          "config"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "expression",
+                      "args": [
+                        "extensionOf",
+                        {
+                          "config": {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "poolKey"
+                                ]
+                              },
+                              "config"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$descriptor",
+                                "poolKey"
+                              ]
+                            },
+                            "token0"
+                          ]
+                        },
+                        "$constants.zero"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "ekubo missing supported behavior binding"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "tokenIn"
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$route",
+                            "isToken1"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$descriptor",
+                                "poolKey"
+                              ]
+                            },
+                            "token1"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$descriptor",
+                                "poolKey"
+                              ]
+                            },
+                            "token0"
+                          ]
+                        }
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$constants.weth"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$route",
+                                "isToken1"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$descriptor",
+                                    "poolKey"
+                                  ]
+                                },
+                                "token1"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$descriptor",
+                                    "poolKey"
+                                  ]
+                                },
+                                "token0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "ekubo route input token"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "tokenOut"
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$route",
+                            "isToken1"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$descriptor",
+                                "poolKey"
+                              ]
+                            },
+                            "token0"
+                          ]
+                        },
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$descriptor",
+                                "poolKey"
+                              ]
+                            },
+                            "token1"
+                          ]
+                        }
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$constants.weth"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "if",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$route",
+                                "isToken1"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$descriptor",
+                                    "poolKey"
+                                  ]
+                                },
+                                "token0"
+                              ]
+                            },
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$descriptor",
+                                    "poolKey"
+                                  ]
+                                },
+                                "token1"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "ekubo route output token"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "taxonomy"
+                  ]
+                },
+                "slotKind"
+              ]
+            },
+            "swap"
+          ]
+        },
+        "error": "ekubo route taxonomy"
+      }
+    ],
+    "resource": {
+      "target": "$constants.core",
+      "poolId": "$descriptor.poolId"
+    }
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": {
+      "op": "concat",
+      "args": [
+        [
+          "$constants.router"
+        ]
+      ]
+    },
+    "steps": [
+      {
+        "id": "swapErc20",
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$descriptor",
+                            "poolKey"
+                          ]
+                        },
+                        "token0"
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "isToken1"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "approval": {
+          "op": "if",
+          "args": [
+            "$directSettlement",
+            {
+              "mode": "exact-clear",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenIn"
+                ]
+              },
+              "spender": "$constants.router"
+            },
+            {
+              "mode": "ensure",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenIn"
+                ]
+              },
+              "spender": "$constants.router"
+            }
+          ]
+        },
+        "call": {
+          "target": "$constants.router",
+          "signature": "function swap((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead,int256 calculatedAmountThreshold,address recipient) payable returns (bytes32 balanceUpdate)",
+          "args": [
+            {
+              "token0": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "poolKey"
+                    ]
+                  },
+                  "token0"
+                ]
+              },
+              "token1": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "poolKey"
+                    ]
+                  },
+                  "token1"
+                ]
+              },
+              "config": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "poolKey"
+                    ]
+                  },
+                  "config"
+                ]
+              }
+            },
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "isToken1"
+              ]
+            },
+            {
+              "runtime": "amountIn"
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            },
+            "$recipient"
+          ],
+          "save": {
+            "swapReturn": 0
+          }
+        }
+      },
+      {
+        "id": "swapNative",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "poolKey"
+                      ]
+                    },
+                    "token0"
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "isToken1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "call": {
+          "target": "$constants.router",
+          "signature": "function swap((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead,int256 calculatedAmountThreshold,address recipient) payable returns (bytes32 balanceUpdate)",
+          "args": [
+            {
+              "token0": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "poolKey"
+                    ]
+                  },
+                  "token0"
+                ]
+              },
+              "token1": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "poolKey"
+                    ]
+                  },
+                  "token1"
+                ]
+              },
+              "config": {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "poolKey"
+                    ]
+                  },
+                  "config"
+                ]
+              }
+            },
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "isToken1"
+              ]
+            },
+            {
+              "runtime": "amountIn"
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "1"
+              ]
+            },
+            "$recipient"
+          ],
+          "value": {
+            "runtime": "amountIn"
+          },
+          "save": {
+            "swapReturn": 0
+          }
+        }
+      },
+      {
+        "id": "swapReturnMath",
+        "when": {
+          "op": "and",
+          "args": [
+            "$directSettlement",
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$descriptor",
+                            "poolKey"
+                          ]
+                        },
+                        "token0"
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "math": {
+          "model": "swapReturn",
+          "inputs": {
+            "word": {
+              "runtime": "swapReturn"
+            },
+            "flag": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "isToken1"
+                  ]
+                },
+                1,
+                0
+              ]
+            }
+          },
+          "outputs": {
+            "specified": "routerSpecified",
+            "magnitude": "routerAmountOut",
+            "calculatedHigh": "routerCalculatedHigh"
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "routerSpecified"
+              },
+              "operator": "eq",
+              "right": {
+                "runtime": "amountIn"
+              }
+            },
+            {
+              "left": {
+                "runtime": "routerCalculatedHigh"
+              },
+              "operator": "eq",
+              "right": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "allowanceCheck",
+        "static": true,
+        "when": {
+          "op": "and",
+          "args": [
+            "$directSettlement",
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                "$descriptor",
+                                "poolKey"
+                              ]
+                            },
+                            "token0"
+                          ]
+                        },
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$route",
+                            "isToken1"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "call": {
+          "target": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenIn"
+            ]
+          },
+          "signature": "function allowance(address,address) view returns (uint256)",
+          "args": [
+            "$executor",
+            "$constants.router"
+          ],
+          "save": {
+            "allowanceAfter": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "allowanceAfter"
+              },
+              "operator": "eq",
+              "right": 0
+            }
+          ]
+        }
+      }
+    ],
+    "effects": [
+      {
+        "op": "if",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "poolKey"
+                        ]
+                      },
+                      "token0"
+                    ]
+                  },
+                  "$constants.zero"
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$route",
+                      "isToken1"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          [
+            {
+              "kind": "debit",
+              "asset": "native",
+              "account": "$executor",
+              "equals": {
+                "runtime": "amountIn"
+              }
+            }
+          ],
+          [
+            {
+              "kind": "debit",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenIn"
+                ]
+              },
+              "account": "$executor",
+              "equals": {
+                "runtime": "amountIn"
+              }
+            }
+          ]
+        ]
+      },
+      {
+        "op": "if",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "poolKey"
+                        ]
+                      },
+                      "token0"
+                    ]
+                  },
+                  "$constants.zero"
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "isToken1"
+                ]
+              }
+            ]
+          },
+          [
+            {
+              "kind": "credit",
+              "asset": "native",
+              "account": "$recipient"
+            }
+          ],
+          []
+        ]
+      },
+      {
+        "op": "if",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "poolKey"
+                                ]
+                              },
+                              "token0"
+                            ]
+                          },
+                          "$constants.zero"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          "$route",
+                          "isToken1"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "and",
+                "args": [
+                  "$directSettlement",
+                  {
+                    "op": "not",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "poolKey"
+                                ]
+                              },
+                              "token0"
+                            ]
+                          },
+                          "$constants.zero"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          [
+            {
+              "kind": "credit",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenOut"
+                ]
+              },
+              "account": "$recipient",
+              "equals": {
+                "runtime": "routerAmountOut"
+              }
+            }
+          ],
+          []
+        ]
+      },
+      {
+        "op": "if",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  "$descriptor",
+                                  "poolKey"
+                                ]
+                              },
+                              "token0"
+                            ]
+                          },
+                          "$constants.zero"
+                        ]
+                      },
+                      {
+                        "op": "get",
+                        "args": [
+                          "$route",
+                          "isToken1"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "and",
+                    "args": [
+                      "$directSettlement",
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$descriptor",
+                                      "poolKey"
+                                    ]
+                                  },
+                                  "token0"
+                                ]
+                              },
+                              "$constants.zero"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          [
+            {
+              "kind": "credit",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenOut"
+                ]
+              },
+              "account": "$recipient"
+            }
+          ],
+          []
+        ]
+      },
+      {
+        "op": "if",
+        "args": [
+          {
+            "op": "and",
+            "args": [
+              "$directSettlement",
+              {
+                "op": "not",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$descriptor",
+                              "poolKey"
+                            ]
+                          },
+                          "token0"
+                        ]
+                      },
+                      "$constants.zero"
+                    ]
+                  }
+                ]
+              },
+              "$externalRecipient"
+            ]
+          },
+          [
+            {
+              "kind": "unchanged-token",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenIn"
+                ]
+              },
+              "account": "$recipient"
+            },
+            {
+              "kind": "unchanged-token",
+              "token": {
+                "op": "get",
+                "args": [
+                  "$route",
+                  "tokenOut"
+                ]
+              },
+              "account": "$executor"
+            }
+          ],
+          []
+        ]
+      }
+    ]
+  },
+  "observations": {
+    "version": 1,
+    "canonicalIntakeTargets": [],
+    "victimSupport": "detect-only",
+    "events": [
+      {
+        "id": "ekubo-core-pool-initialized",
+        "signature": "event PoolInitialized(bytes32 poolId,(address token0,address token1,bytes32 config) poolKey,int32 tick,uint96 fee)",
+        "pool": {
+          "op": "get",
+          "args": [
+            "$args",
+            "poolId"
+          ]
+        },
+        "payload": {
+          "poolId": {
+            "op": "get",
+            "args": [
+              "$args",
+              "poolId"
+            ]
+          }
+        },
+        "match": true,
+        "impact": {
+          "op": "get",
+          "args": [
+            "$missing",
+            "impact"
+          ]
+        },
+        "classification": "mutation",
+        "receiptMode": "mutation-only",
+        "mutationReason": "ekubo pool initialized"
+      },
+      {
+        "id": "ekubo-core-swap",
+        "packed": {
+          "address": "0x00000000000014aa86c5d3c41765bb24e11bd701",
+          "dataLengthBytes": 116,
+          "identityOffsetBytes": 20,
+          "fields": [
+            {
+              "name": "locker",
+              "offsetBytes": 0,
+              "lengthBytes": 20,
+              "encoding": "address"
+            },
+            {
+              "name": "poolId",
+              "offsetBytes": 20,
+              "lengthBytes": 32,
+              "encoding": "bytes"
+            },
+            {
+              "name": "balanceUpdate",
+              "offsetBytes": 52,
+              "lengthBytes": 32,
+              "encoding": "bytes"
+            },
+            {
+              "name": "stateAfter",
+              "offsetBytes": 84,
+              "lengthBytes": 32,
+              "encoding": "bytes"
+            }
+          ]
+        },
+        "pool": {
+          "op": "get",
+          "args": [
+            "$args",
+            "poolId"
+          ]
+        },
+        "payload": {
+          "op": "merge",
+          "args": [
+            {
+              "op": "model",
+              "args": [
+                "coreSwapLog",
+                {
+                  "balanceUpdate": {
+                    "op": "get",
+                    "args": [
+                      "$args",
+                      "balanceUpdate"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "poolId": {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "poolId"
+                ]
+              },
+              "locker": {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "locker"
+                ]
+              },
+              "stateAfter": {
+                "op": "get",
+                "args": [
+                  "$args",
+                  "stateAfter"
+                ]
+              }
+            }
+          ]
+        },
+        "match": {
+          "op": "if",
+          "args": [
+            {
+              "op": "defined",
+              "args": [
+                "$descriptor"
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "merge",
+                      "args": [
+                        {
+                          "op": "model",
+                          "args": [
+                            "coreSwapLog",
+                            {
+                              "balanceUpdate": {
+                                "op": "get",
+                                "args": [
+                                  "$args",
+                                  "balanceUpdate"
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "poolId": {
+                            "op": "get",
+                            "args": [
+                              "$args",
+                              "poolId"
+                            ]
+                          },
+                          "locker": {
+                            "op": "get",
+                            "args": [
+                              "$args",
+                              "locker"
+                            ]
+                          },
+                          "stateAfter": {
+                            "op": "get",
+                            "args": [
+                              "$args",
+                              "stateAfter"
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    "directed"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "merge",
+                          "args": [
+                            {
+                              "op": "model",
+                              "args": [
+                                "coreSwapLog",
+                                {
+                                  "balanceUpdate": {
+                                    "op": "get",
+                                    "args": [
+                                      "$args",
+                                      "balanceUpdate"
+                                    ]
+                                  }
+                                }
+                              ]
+                            },
+                            {
+                              "poolId": {
+                                "op": "get",
+                                "args": [
+                                  "$args",
+                                  "poolId"
+                                ]
+                              },
+                              "locker": {
+                                "op": "get",
+                                "args": [
+                                  "$args",
+                                  "locker"
+                                ]
+                              },
+                              "stateAfter": {
+                                "op": "get",
+                                "args": [
+                                  "$args",
+                                  "stateAfter"
+                                ]
+                              }
+                            }
+                          ]
+                        },
+                        "isToken1"
+                      ]
+                    },
+                    {
+                      "op": "expression",
+                      "args": [
+                        "directionIsToken1",
+                        {
+                          "descriptor": "$descriptor",
+                          "edge": "$edge"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            false
+          ]
+        },
+        "impact": {
+          "pool": {
+            "op": "coalesce",
+            "args": [
+              "$edge.observationTarget",
+              {
+                "op": "get",
+                "args": [
+                  "$edge",
+                  "target"
+                ]
+              }
+            ]
+          },
+          "poolId": {
+            "op": "get",
+            "args": [
+              {
+                "op": "merge",
+                "args": [
+                  {
+                    "op": "model",
+                    "args": [
+                      "coreSwapLog",
+                      {
+                        "balanceUpdate": {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "balanceUpdate"
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "poolId": {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        "poolId"
+                      ]
+                    },
+                    "locker": {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        "locker"
+                      ]
+                    },
+                    "stateAfter": {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        "stateAfter"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "poolId"
+            ]
+          },
+          "tokenIn": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenOut"
+            ]
+          },
+          "matchedAdapterId": {
+            "op": "get",
+            "args": [
+              "$edge",
+              "adapterId"
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              {
+                "op": "merge",
+                "args": [
+                  {
+                    "op": "model",
+                    "args": [
+                      "coreSwapLog",
+                      {
+                        "balanceUpdate": {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "balanceUpdate"
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "poolId": {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        "poolId"
+                      ]
+                    },
+                    "locker": {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        "locker"
+                      ]
+                    },
+                    "stateAfter": {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        "stateAfter"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "amountIn"
+            ]
+          },
+          "amountOut": {
+            "op": "get",
+            "args": [
+              {
+                "op": "merge",
+                "args": [
+                  {
+                    "op": "model",
+                    "args": [
+                      "coreSwapLog",
+                      {
+                        "balanceUpdate": {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "balanceUpdate"
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "poolId": {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        "poolId"
+                      ]
+                    },
+                    "locker": {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        "locker"
+                      ]
+                    },
+                    "stateAfter": {
+                      "op": "get",
+                      "args": [
+                        "$args",
+                        "stateAfter"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "amountOut"
+            ]
+          },
+          "poolToken0": {
+            "op": "if",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "merge",
+                    "args": [
+                      {
+                        "op": "model",
+                        "args": [
+                          "coreSwapLog",
+                          {
+                            "balanceUpdate": {
+                              "op": "get",
+                              "args": [
+                                "$args",
+                                "balanceUpdate"
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "poolId": {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "poolId"
+                          ]
+                        },
+                        "locker": {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "locker"
+                          ]
+                        },
+                        "stateAfter": {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "stateAfter"
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "isToken1"
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$edge",
+                  "tokenOut"
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$edge",
+                  "tokenIn"
+                ]
+              }
+            ]
+          },
+          "poolToken1": {
+            "op": "if",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  {
+                    "op": "merge",
+                    "args": [
+                      {
+                        "op": "model",
+                        "args": [
+                          "coreSwapLog",
+                          {
+                            "balanceUpdate": {
+                              "op": "get",
+                              "args": [
+                                "$args",
+                                "balanceUpdate"
+                              ]
+                            }
+                          }
+                        ]
+                      },
+                      {
+                        "poolId": {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "poolId"
+                          ]
+                        },
+                        "locker": {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "locker"
+                          ]
+                        },
+                        "stateAfter": {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "stateAfter"
+                          ]
+                        }
+                      }
+                    ]
+                  },
+                  "isToken1"
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$edge",
+                  "tokenIn"
+                ]
+              },
+              {
+                "op": "get",
+                "args": [
+                  "$edge",
+                  "tokenOut"
+                ]
+              }
+            ]
+          }
+        },
+        "classification": "swap"
+      }
+    ],
+    "calls": [
+      {
+        "id": "ekubo-vanilla-exact-input",
+        "signature": "function swap((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead,int256 calculatedAmountThreshold,address recipient) payable returns (bytes32 balanceUpdate)",
+        "classification": "swap",
+        "payload": {
+          "poolId": {
+            "op": "codeHash",
+            "args": [
+              {
+                "op": "abiEncode",
+                "args": [
+                  [
+                    "address",
+                    "address",
+                    "bytes32"
+                  ],
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "poolKey"
+                          ]
+                        },
+                        "token0"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "poolKey"
+                          ]
+                        },
+                        "token1"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "poolKey"
+                          ]
+                        },
+                        "config"
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          },
+          "isToken1": {
+            "op": "get",
+            "args": [
+              "$args",
+              "isToken1"
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              "$args",
+              "amount"
+            ]
+          }
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "amount"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "amount"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "$constants.maxExactInput"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "sqrtRatioLimit"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "skipAhead"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        {
+                          "op": "abiEncode",
+                          "args": [
+                            [
+                              "address"
+                            ],
+                            [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$args",
+                                      "poolKey"
+                                    ]
+                                  },
+                                  "token0"
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        {
+                          "op": "abiEncode",
+                          "args": [
+                            [
+                              "address"
+                            ],
+                            [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$args",
+                                      "poolKey"
+                                    ]
+                                  },
+                                  "token1"
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$args",
+                                    "poolKey"
+                                  ]
+                                },
+                                "token0"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            "$constants.weth"
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$args",
+                                        "poolKey"
+                                      ]
+                                    },
+                                    "token0"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$args",
+                                    "poolKey"
+                                  ]
+                                },
+                                "token1"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            "$constants.weth"
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$args",
+                                        "poolKey"
+                                      ]
+                                    },
+                                    "token1"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "bytes",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$args",
+                                        "poolKey"
+                                      ]
+                                    },
+                                    "config"
+                                  ]
+                                },
+                                0,
+                                20
+                              ]
+                            }
+                          ]
+                        },
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "uint",
+                          "args": [
+                            {
+                              "op": "bytes",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$args",
+                                        "poolKey"
+                                      ]
+                                    },
+                                    "config"
+                                  ]
+                                },
+                                28,
+                                4
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "ekubo-vanilla-exact-input-no-receiver",
+        "signature": "function swap((address token0,address token1,bytes32 config) poolKey,bool isToken1,int128 amount,uint96 sqrtRatioLimit,uint256 skipAhead,int256 calculatedAmountThreshold) payable returns (bytes32 balanceUpdate)",
+        "classification": "swap",
+        "payload": {
+          "poolId": {
+            "op": "codeHash",
+            "args": [
+              {
+                "op": "abiEncode",
+                "args": [
+                  [
+                    "address",
+                    "address",
+                    "bytes32"
+                  ],
+                  [
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "poolKey"
+                          ]
+                        },
+                        "token0"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "poolKey"
+                          ]
+                        },
+                        "token1"
+                      ]
+                    },
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "get",
+                          "args": [
+                            "$args",
+                            "poolKey"
+                          ]
+                        },
+                        "config"
+                      ]
+                    }
+                  ]
+                ]
+              }
+            ]
+          },
+          "isToken1": {
+            "op": "get",
+            "args": [
+              "$args",
+              "isToken1"
+            ]
+          },
+          "amountIn": {
+            "op": "get",
+            "args": [
+              "$args",
+              "amount"
+            ]
+          }
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "amount"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "amount"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "$constants.maxExactInput"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "sqrtRatioLimit"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$args",
+                    "skipAhead"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "lt",
+                  "args": [
+                    {
+                      "op": "uint",
+                      "args": [
+                        {
+                          "op": "abiEncode",
+                          "args": [
+                            [
+                              "address"
+                            ],
+                            [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$args",
+                                      "poolKey"
+                                    ]
+                                  },
+                                  "token0"
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        {
+                          "op": "abiEncode",
+                          "args": [
+                            [
+                              "address"
+                            ],
+                            [
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "get",
+                                    "args": [
+                                      "$args",
+                                      "poolKey"
+                                    ]
+                                  },
+                                  "token1"
+                                ]
+                              }
+                            ]
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$args",
+                                    "poolKey"
+                                  ]
+                                },
+                                "token0"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            "$constants.weth"
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$args",
+                                        "poolKey"
+                                      ]
+                                    },
+                                    "token0"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    "$args",
+                                    "poolKey"
+                                  ]
+                                },
+                                "token1"
+                              ]
+                            },
+                            "$constants.zero"
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            "$constants.weth"
+                          ]
+                        },
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$args",
+                                        "poolKey"
+                                      ]
+                                    },
+                                    "token1"
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "bytes",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$args",
+                                        "poolKey"
+                                      ]
+                                    },
+                                    "config"
+                                  ]
+                                },
+                                0,
+                                20
+                              ]
+                            }
+                          ]
+                        },
+                        "$constants.zero"
+                      ]
+                    },
+                    {
+                      "op": "eq",
+                      "args": [
+                        {
+                          "op": "uint",
+                          "args": [
+                            {
+                              "op": "bytes",
+                              "args": [
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "get",
+                                      "args": [
+                                        "$args",
+                                        "poolKey"
+                                      ]
+                                    },
+                                    "config"
+                                  ]
+                                },
+                                28,
+                                4
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "refreshPolicy": "each-block",
+  "values": {
+    "expressions": {
+      "keyHash": {
+        "op": "codeHash",
+        "args": [
+          {
+            "op": "abiEncode",
+            "args": [
+              [
+                "address",
+                "address",
+                "bytes32"
+              ],
+              [
+                "$t0",
+                "$t1",
+                "$config"
+              ]
+            ]
+          }
+        ]
+      },
+      "extensionOf": {
+        "op": "address",
+        "args": [
+          {
+            "op": "bytes",
+            "args": [
+              "$config",
+              0,
+              20
+            ]
+          }
+        ]
+      },
+      "directionIsToken1": {
+        "op": "sameAddress",
+        "args": [
+          {
+            "op": "get",
+            "args": [
+              "$edge",
+              "tokenIn"
+            ]
+          },
+          {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          "$descriptor",
+                          "poolKey"
+                        ]
+                      },
+                      "token1"
+                    ]
+                  },
+                  "$constants.zero"
+                ]
+              },
+              {
+                "op": "lower",
+                "args": [
+                  "$constants.weth"
+                ]
+              },
+              {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      {
+                        "op": "get",
+                        "args": [
+                          {
+                            "op": "get",
+                            "args": [
+                              "$descriptor",
+                              "poolKey"
+                            ]
+                          },
+                          "token1"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "constants": {
+      "router": "0xd26f20001a72a18c002b00e6710000d68700ce00",
+      "zero": "0x0000000000000000000000000000000000000000",
+      "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "core": "0x00000000000014aa86c5d3c41765bb24e11bd701",
+      "maxExactInput": "170141183460469231731687303715884105727"
+    }
+  },
+  "resourceValues": {
+    "expressions": {
+      "keyHash": {
+        "op": "codeHash",
+        "args": [
+          {
+            "op": "abiEncode",
+            "args": [
+              [
+                "address",
+                "address",
+                "bytes32"
+              ],
+              [
+                "$t0",
+                "$t1",
+                "$config"
+              ]
+            ]
+          }
+        ]
+      },
+      "extensionOf": {
+        "op": "address",
+        "args": [
+          {
+            "op": "bytes",
+            "args": [
+              "$config",
+              0,
+              20
+            ]
+          }
+        ]
+      }
+    },
+    "constants": {
+      "router": "0xd26f20001a72a18c002b00e6710000d68700ce00",
+      "zero": "0x0000000000000000000000000000000000000000",
+      "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "core": "0x00000000000014aa86c5d3c41765bb24e11bd701"
+    }
+  },
+  "math": {
+    "version": 1,
+    "entries": {
+      "coreSwapLog": {
+        "model": "ekubo:core-swap-log",
+        "version": 1
+      }
+    },
+    "models": [
+      {
+        "id": "ekubo:core-swap-log",
+        "version": 1,
+        "program": [
+          {
+            "assert": {
+              "op": "matches",
+              "args": [
+                "$input.balanceUpdate",
+                "^0x[0-9a-fA-F]{64}$"
+              ]
+            },
+            "error": "packed balance update word"
+          },
+          {
+            "let": "packed",
+            "value": {
+              "op": "uint",
+              "args": [
+                "$input.balanceUpdate"
+              ]
+            }
+          },
+          {
+            "let": "delta0",
+            "value": {
+              "op": "signedWord",
+              "args": [
+                {
+                  "op": "shrUint",
+                  "args": [
+                    "$packed",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "128"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "128"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "delta1",
+            "value": {
+              "op": "signedWord",
+              "args": [
+                {
+                  "op": "andUint",
+                  "args": [
+                    "$packed",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "340282366920938463463374607431768211455"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "128"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "assert": {
+              "op": "not",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$delta0",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "gt",
+                          "args": [
+                            "$delta1",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "lt",
+                          "args": [
+                            "$delta0",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lt",
+                          "args": [
+                            "$delta1",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "0"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "invalid signed swap deltas"
+          },
+          {
+            "let": "isToken1",
+            "value": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$delta1",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lt",
+                  "args": [
+                    "$delta0",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "let": "directed",
+            "value": {
+              "op": "or",
+              "args": [
+                "$isToken1",
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$delta0",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lt",
+                      "args": [
+                        "$delta1",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "return": {
+              "delta0": "$delta0",
+              "delta1": "$delta1",
+              "isToken1": "$isToken1",
+              "directed": "$directed",
+              "amountIn": {
+                "op": "if",
+                "args": [
+                  "$directed",
+                  {
+                    "op": "if",
+                    "args": [
+                      "$isToken1",
+                      "$delta1",
+                      "$delta0"
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              },
+              "amountOut": {
+                "op": "if",
+                "args": [
+                  "$directed",
+                  {
+                    "op": "if",
+                    "args": [
+                      "$isToken1",
+                      {
+                        "op": "sub",
+                        "args": [
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          },
+                          "$delta0"
+                        ]
+                      },
+                      {
+                        "op": "sub",
+                        "args": [
+                          {
+                            "op": "uint",
+                            "args": [
+                              "0"
+                            ]
+                          },
+                          "$delta1"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "runtimeMath": {
+    "version": 1,
+    "entries": {
+      "swapReturn": {
+        "model": "ekubo:swap-return",
+        "version": 1
+      }
+    },
+    "models": [
+      {
+        "id": "ekubo:swap-return",
+        "version": 1,
+        "inputs": [
+          "word",
+          "flag"
+        ],
+        "outputs": [
+          "specified",
+          "magnitude",
+          "calculatedHigh"
+        ],
+        "operations": [
+          {
+            "name": "high",
+            "op": "shr",
+            "left": {
+              "input": "word"
+            },
+            "right": {
+              "constant": "128"
+            }
+          },
+          {
+            "name": "low",
+            "op": "and",
+            "left": {
+              "input": "word"
+            },
+            "right": {
+              "constant": "340282366920938463463374607431768211455"
+            }
+          },
+          {
+            "name": "inverse",
+            "op": "sub",
+            "left": {
+              "constant": "1"
+            },
+            "right": {
+              "input": "flag"
+            }
+          },
+          {
+            "name": "lowSelected",
+            "op": "mul",
+            "left": {
+              "local": "low"
+            },
+            "right": {
+              "input": "flag"
+            }
+          },
+          {
+            "name": "highSelected",
+            "op": "mul",
+            "left": {
+              "local": "high"
+            },
+            "right": {
+              "local": "inverse"
+            }
+          },
+          {
+            "name": "specified",
+            "op": "add",
+            "left": {
+              "local": "lowSelected"
+            },
+            "right": {
+              "local": "highSelected"
+            }
+          },
+          {
+            "name": "highSelectedCalc",
+            "op": "mul",
+            "left": {
+              "local": "high"
+            },
+            "right": {
+              "input": "flag"
+            }
+          },
+          {
+            "name": "lowSelectedCalc",
+            "op": "mul",
+            "left": {
+              "local": "low"
+            },
+            "right": {
+              "local": "inverse"
+            }
+          },
+          {
+            "name": "calculated",
+            "op": "add",
+            "left": {
+              "local": "highSelectedCalc"
+            },
+            "right": {
+              "local": "lowSelectedCalc"
+            }
+          },
+          {
+            "name": "magnitude",
+            "op": "sub",
+            "left": {
+              "constant": "340282366920938463463374607431768211456"
+            },
+            "right": {
+              "local": "calculated"
+            }
+          },
+          {
+            "name": "calculatedHigh",
+            "op": "shr",
+            "left": {
+              "local": "magnitude"
+            },
+            "right": {
+              "constant": "127"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "label": "custom-swap:ekubo-router-v1/vanilla-core-key-active-quote"
+  }
+}

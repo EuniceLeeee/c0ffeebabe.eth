@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x01ec954a",
+  "signature": "function onSwap((uint8, address, address, uint256, bytes32, uint256, address, address, bytes), uint256[], uint256, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_01EC954A_ENABLED"
+  },
+  "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

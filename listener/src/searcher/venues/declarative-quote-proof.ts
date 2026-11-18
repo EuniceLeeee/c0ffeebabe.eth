@@ -1,6 +1,6 @@
 import { ErrorFragment, FunctionFragment, Interface, getAddress, type ParamType } from "ethers";
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource } from "./adapter-request-program.js";
-import { assertSource } from "./protocols/standard-family/common.js";
+import { assertSource } from "./selector-execution-evidence.js";
 import { verifiedMulticallItem } from "./declarative-multicall-proof.js";
 import { validateDeclarativeValue } from "./declarative-values.js";
 

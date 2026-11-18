@@ -1,0 +1,1828 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x8201aa3f",
+  "signature": "function swapExactAmountIn(address, uint256, address, uint256, uint256)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_8201AA3F_ENABLED"
+  },
+  "programs": [
+    {
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "pool",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "selectorBinding:pool:tokens",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingpooltokens",
+                      "getFinalTokens()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "selectorBinding:pool:swapFee",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingpoolswapFee",
+                      "getSwapFee()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "result": {
+                "tokens": {
+                  "op": "decode",
+                  "args": [
+                    "bindingpooltokens",
+                    "getFinalTokens()",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "selectorBinding:pool:tokens"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                },
+                "swapFee": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingpoolswapFee",
+                        "getSwapFee()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:pool:swapFee"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "weights",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": {
+                "op": "flatMap",
+                "args": [
+                  "$steps.pool.tokens",
+                  "item",
+                  [
+                    {
+                      "id": {
+                        "op": "join",
+                        "args": [
+                          [
+                            "selectorBinding:weights:weight:",
+                            {
+                              "op": "string",
+                              "args": [
+                                "$item"
+                              ]
+                            }
+                          ],
+                          ""
+                        ]
+                      },
+                      "kind": "eth-call",
+                      "to": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$target"
+                            ]
+                          }
+                        ]
+                      },
+                      "data": {
+                        "op": "encode",
+                        "args": [
+                          "bindingweightsweight",
+                          "getDenormalizedWeight(address)",
+                          [
+                            "$item"
+                          ]
+                        ]
+                      },
+                      "completion": "return-data"
+                    }
+                  ]
+                ]
+              },
+              "result": {
+                "op": "map",
+                "args": [
+                  "$steps.pool.tokens",
+                  "item",
+                  {
+                    "item": "$item",
+                    "weight": {
+                      "op": "uint",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "bindingweightsweight",
+                            "getDenormalizedWeight(address)",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    {
+                                      "op": "join",
+                                      "args": [
+                                        [
+                                          "selectorBinding:weights:weight:",
+                                          {
+                                            "op": "string",
+                                            "args": [
+                                              "$item"
+                                            ]
+                                          }
+                                        ],
+                                        ""
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "result": {
+            "pool": {
+              "tokens": "$steps.pool.tokens",
+              "swapFee": "$steps.pool.swapFee"
+            },
+            "weights": "$steps.weights"
+          }
+        },
+        "descriptor": {
+          "op": "merge",
+          "args": [
+            {
+              "pool": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "factory": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$constants.crptFactory"
+                    ]
+                  }
+                ]
+              },
+              "model": "$constants.crptModel",
+              "tokens": "$binding.pool.tokens",
+              "swapFee": "$binding.pool.swapFee",
+              "weights": {
+                "op": "map",
+                "args": [
+                  "$binding.weights",
+                  "row",
+                  "$row.weight"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "routes": {
+        "target": "$descriptor.pool",
+        "directions": {
+          "op": "flatMap",
+          "args": [
+            {
+              "op": "map",
+              "args": [
+                "$descriptor.tokens",
+                "token",
+                {
+                  "token": "$token",
+                  "position": "$index"
+                }
+              ]
+            },
+            "left",
+            {
+              "op": "flatMap",
+              "args": [
+                {
+                  "op": "map",
+                  "args": [
+                    "$descriptor.tokens",
+                    "token",
+                    {
+                      "token": "$token",
+                      "position": "$index"
+                    }
+                  ]
+                },
+                "right",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$left.position",
+                        "$right.position"
+                      ]
+                    },
+                    [],
+                    [
+                      {
+                        "id": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "$left.position",
+                              "$right.position"
+                            ],
+                            ":"
+                          ]
+                        },
+                        "enabled": true,
+                        "tokenIn": "$left.token",
+                        "tokenOut": "$right.token",
+                        "adapterId": "execution:0x8201aa3f:abi-c1a49ed51e1b9db7fdee6d0e9f8c8e9e11a80f8d24c09921007dc9082dfcb8b6:call",
+                        "taxonomy": {
+                          "slotKind": "swap"
+                        },
+                        "fields": {
+                          "pool": "$descriptor.pool",
+                          "i": "$left.position",
+                          "j": "$right.position"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "venue": {
+          "kind": "address-pool",
+          "pool": "$descriptor.pool"
+        },
+        "checks": [
+          {
+            "assert": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$descriptor.factory",
+                            "$constants.factory"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$descriptor.model",
+                            "$constants.model"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$descriptor.factory",
+                            "$constants.crptFactory"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$descriptor.model",
+                            "$constants.crptModel"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$descriptor.pool"
+                          ]
+                        }
+                      ]
+                    },
+                    "$descriptor.pool"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$descriptor.pool",
+                    "$constants.zero"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$descriptor.pool",
+                    "$constants.factory"
+                  ]
+                },
+                {
+                  "op": "gte",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.tokens"
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.tokens"
+                      ]
+                    },
+                    8
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.weights"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.tokens"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            "$descriptor.tokens"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.tokens"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "every",
+                  "args": [
+                    "$descriptor.tokens",
+                    "token",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$token"
+                                  ]
+                                }
+                              ]
+                            },
+                            "$token"
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            "$token",
+                            "$constants.zero"
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            "$token",
+                            "$descriptor.pool"
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            "$token",
+                            "$constants.factory"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "every",
+                  "args": [
+                    "$descriptor.weights",
+                    "weight",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gte",
+                          "args": [
+                            "$weight",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "1000000000000000000"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lte",
+                          "args": [
+                            "$weight",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "50000000000000000000"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    {
+                      "op": "model",
+                      "args": [
+                        "sumWeights",
+                        "$descriptor.weights"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "50000000000000000000"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "gte",
+                  "args": [
+                    "$descriptor.swapFee",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1000000000000"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    "$descriptor.swapFee",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "100000000000000000"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "balancer-v1 incompatible descriptor"
+          }
+        ]
+      },
+      "execution": {
+        "version": 1,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": {
+          "op": "concat",
+          "args": [
+            [
+              "$descriptor.pool"
+            ],
+            "$descriptor.tokens"
+          ]
+        },
+        "requireCanonicalSource": true,
+        "rejectRuntimeEvidence": true,
+        "approval": {
+          "token": "$route.tokenIn",
+          "spender": "$descriptor.pool",
+          "mode": "exact-clear",
+          "verifyAllowance": true
+        },
+        "call": {
+          "target": "$descriptor.pool",
+          "signature": "function swapExactAmountIn(address,uint256,address,uint256,uint256) returns(uint256,uint256)",
+          "args": [
+            "$route.tokenIn",
+            {
+              "runtime": "amountIn"
+            },
+            "$route.tokenOut",
+            "$minAmountOut",
+            {
+              "op": "uint",
+              "args": [
+                "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              ]
+            }
+          ],
+          "save": {
+            "output": 0
+          }
+        },
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "equals": {
+              "runtime": "output"
+            },
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "observations": {
+        "version": 1,
+        "events": [
+          {
+            "id": "balancer-v1-LOG_SWAP",
+            "signature": "event LOG_SWAP(address indexed caller,address indexed tokenIn,address indexed tokenOut,uint256 tokenAmountIn,uint256 tokenAmountOut)",
+            "classification": "swap",
+            "pool": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$log.address"
+                  ]
+                }
+              ]
+            },
+            "payload": {
+              "tokenIn": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$args.tokenIn"
+                    ]
+                  }
+                ]
+              },
+              "tokenOut": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$args.tokenOut"
+                    ]
+                  }
+                ]
+              },
+              "amountIn": "$args.tokenAmountIn",
+              "amountOut": "$args.tokenAmountOut"
+            },
+            "valid": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$args.tokenIn"
+                          ]
+                        }
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$args.tokenOut"
+                          ]
+                        }
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$args.tokenIn",
+                        "$args.tokenOut"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "match": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        "$edge.observationTarget",
+                        "$edge.target"
+                      ]
+                    },
+                    "$pool"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenIn",
+                    "$payload.tokenIn"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenOut",
+                    "$payload.tokenOut"
+                  ]
+                }
+              ]
+            },
+            "impact": {
+              "op": "merge",
+              "args": [
+                {
+                  "pool": {
+                    "op": "coalesce",
+                    "args": [
+                      "$edge.observationTarget",
+                      "$edge.target"
+                    ]
+                  },
+                  "matchedAdapterId": "$edge.adapterId"
+                },
+                "$payload"
+              ]
+            }
+          }
+        ],
+        "canonicalIntakeTargets": [],
+        "victimSupport": "detect-only"
+      },
+      "refreshPolicy": "on-touch",
+      "values": {
+        "abi": {
+          "bindingpooltokens": [
+            "function getFinalTokens() view returns(address[])"
+          ],
+          "bindingpoolswapFee": [
+            "function getSwapFee() view returns(uint256)"
+          ],
+          "bindingweightsweight": [
+            "function getDenormalizedWeight(address) view returns(uint256)"
+          ]
+        },
+        "constants": {
+          "factory": "0x3bd9c0df645d22be0c34b5e7566fb316b4f3aac7",
+          "model": "balancer-v1-crpt-bpool-fork-v1",
+          "zero": "0x0000000000000000000000000000000000000000"
+        }
+      },
+      "resourceValues": {
+        "constants": {
+          "crptFactory": "0x3bd9c0df645d22be0c34b5e7566fb316b4f3aac7",
+          "crptModel": "balancer-v1-crpt-bpool-fork-v1",
+          "factory": "0x9424b1412450d0f8fc2255faf6046b98213b76bd",
+          "model": "balancer-v1-finalized-bpool-0.5.12",
+          "zero": "0x0000000000000000000000000000000000000000"
+        }
+      },
+      "math": {
+        "version": 1,
+        "entries": {
+          "sumWeights": {
+            "model": "balancer-v1:sum-weights",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "balancer-v1:sum-weights",
+            "version": 1,
+            "program": [
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$input"
+                      ]
+                    },
+                    8
+                  ]
+                },
+                "error": "weight vector bound"
+              },
+              {
+                "return": {
+                  "op": "sumUint",
+                  "args": [
+                    "$input"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": {
+        "label": "balancer-v1/crpt-created-finalized-bpool"
+      }
+    },
+    {
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "pool",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "selectorBinding:pool:tokens",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingpooltokens",
+                      "getFinalTokens()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "selectorBinding:pool:swapFee",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingpoolswapFee",
+                      "getSwapFee()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "result": {
+                "tokens": {
+                  "op": "decode",
+                  "args": [
+                    "bindingpooltokens",
+                    "getFinalTokens()",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "selectorBinding:pool:tokens"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                },
+                "swapFee": {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingpoolswapFee",
+                        "getSwapFee()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:pool:swapFee"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "weights",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": {
+                "op": "flatMap",
+                "args": [
+                  "$steps.pool.tokens",
+                  "item",
+                  [
+                    {
+                      "id": {
+                        "op": "join",
+                        "args": [
+                          [
+                            "selectorBinding:weights:weight:",
+                            {
+                              "op": "string",
+                              "args": [
+                                "$item"
+                              ]
+                            }
+                          ],
+                          ""
+                        ]
+                      },
+                      "kind": "eth-call",
+                      "to": {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$target"
+                            ]
+                          }
+                        ]
+                      },
+                      "data": {
+                        "op": "encode",
+                        "args": [
+                          "bindingweightsweight",
+                          "getDenormalizedWeight(address)",
+                          [
+                            "$item"
+                          ]
+                        ]
+                      },
+                      "completion": "return-data"
+                    }
+                  ]
+                ]
+              },
+              "result": {
+                "op": "map",
+                "args": [
+                  "$steps.pool.tokens",
+                  "item",
+                  {
+                    "item": "$item",
+                    "weight": {
+                      "op": "uint",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "bindingweightsweight",
+                            "getDenormalizedWeight(address)",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    {
+                                      "op": "join",
+                                      "args": [
+                                        [
+                                          "selectorBinding:weights:weight:",
+                                          {
+                                            "op": "string",
+                                            "args": [
+                                              "$item"
+                                            ]
+                                          }
+                                        ],
+                                        ""
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "result": {
+            "pool": {
+              "tokens": "$steps.pool.tokens",
+              "swapFee": "$steps.pool.swapFee"
+            },
+            "weights": "$steps.weights"
+          }
+        },
+        "descriptor": {
+          "op": "merge",
+          "args": [
+            {
+              "pool": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "factory": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$constants.factory"
+                    ]
+                  }
+                ]
+              },
+              "model": "$constants.model",
+              "tokens": "$binding.pool.tokens",
+              "swapFee": "$binding.pool.swapFee",
+              "weights": {
+                "op": "map",
+                "args": [
+                  "$binding.weights",
+                  "row",
+                  "$row.weight"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "routes": {
+        "target": "$descriptor.pool",
+        "directions": {
+          "op": "flatMap",
+          "args": [
+            {
+              "op": "map",
+              "args": [
+                "$descriptor.tokens",
+                "token",
+                {
+                  "token": "$token",
+                  "position": "$index"
+                }
+              ]
+            },
+            "left",
+            {
+              "op": "flatMap",
+              "args": [
+                {
+                  "op": "map",
+                  "args": [
+                    "$descriptor.tokens",
+                    "token",
+                    {
+                      "token": "$token",
+                      "position": "$index"
+                    }
+                  ]
+                },
+                "right",
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$left.position",
+                        "$right.position"
+                      ]
+                    },
+                    [],
+                    [
+                      {
+                        "id": {
+                          "op": "join",
+                          "args": [
+                            [
+                              "$left.position",
+                              "$right.position"
+                            ],
+                            ":"
+                          ]
+                        },
+                        "enabled": true,
+                        "tokenIn": "$left.token",
+                        "tokenOut": "$right.token",
+                        "adapterId": "execution:0x8201aa3f:abi-c1a49ed51e1b9db7fdee6d0e9f8c8e9e11a80f8d24c09921007dc9082dfcb8b6:call",
+                        "taxonomy": {
+                          "slotKind": "swap"
+                        },
+                        "fields": {
+                          "pool": "$descriptor.pool",
+                          "i": "$left.position",
+                          "j": "$right.position"
+                        }
+                      }
+                    ]
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "venue": {
+          "kind": "address-pool",
+          "pool": "$descriptor.pool"
+        },
+        "checks": [
+          {
+            "assert": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "or",
+                  "args": [
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$descriptor.factory",
+                            "$constants.factory"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$descriptor.model",
+                            "$constants.model"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$descriptor.factory",
+                            "$constants.crptFactory"
+                          ]
+                        },
+                        {
+                          "op": "eq",
+                          "args": [
+                            "$descriptor.model",
+                            "$constants.crptModel"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$descriptor.pool"
+                          ]
+                        }
+                      ]
+                    },
+                    "$descriptor.pool"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$descriptor.pool",
+                    "$constants.zero"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    "$descriptor.pool",
+                    "$constants.factory"
+                  ]
+                },
+                {
+                  "op": "gte",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.tokens"
+                      ]
+                    },
+                    2
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.tokens"
+                      ]
+                    },
+                    8
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.weights"
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.tokens"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        {
+                          "op": "unique",
+                          "args": [
+                            "$descriptor.tokens"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.tokens"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "every",
+                  "args": [
+                    "$descriptor.tokens",
+                    "token",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "eq",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    "$token"
+                                  ]
+                                }
+                              ]
+                            },
+                            "$token"
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            "$token",
+                            "$constants.zero"
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            "$token",
+                            "$descriptor.pool"
+                          ]
+                        },
+                        {
+                          "op": "ne",
+                          "args": [
+                            "$token",
+                            "$constants.factory"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "every",
+                  "args": [
+                    "$descriptor.weights",
+                    "weight",
+                    {
+                      "op": "and",
+                      "args": [
+                        {
+                          "op": "gte",
+                          "args": [
+                            "$weight",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "1000000000000000000"
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "op": "lte",
+                          "args": [
+                            "$weight",
+                            {
+                              "op": "uint",
+                              "args": [
+                                "50000000000000000000"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    {
+                      "op": "model",
+                      "args": [
+                        "sumWeights",
+                        "$descriptor.weights"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "50000000000000000000"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "gte",
+                  "args": [
+                    "$descriptor.swapFee",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1000000000000"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    "$descriptor.swapFee",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "100000000000000000"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "error": "balancer-v1 incompatible descriptor"
+          }
+        ]
+      },
+      "execution": {
+        "version": 1,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": {
+          "op": "concat",
+          "args": [
+            [
+              "$descriptor.pool"
+            ],
+            "$descriptor.tokens"
+          ]
+        },
+        "requireCanonicalSource": true,
+        "rejectRuntimeEvidence": true,
+        "approval": {
+          "token": "$route.tokenIn",
+          "spender": "$descriptor.pool",
+          "mode": "exact-clear",
+          "verifyAllowance": true
+        },
+        "call": {
+          "target": "$descriptor.pool",
+          "signature": "function swapExactAmountIn(address,uint256,address,uint256,uint256) returns(uint256,uint256)",
+          "args": [
+            "$route.tokenIn",
+            {
+              "runtime": "amountIn"
+            },
+            "$route.tokenOut",
+            "$minAmountOut",
+            {
+              "op": "uint",
+              "args": [
+                "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+              ]
+            }
+          ],
+          "save": {
+            "output": 0
+          }
+        },
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "equals": {
+              "runtime": "output"
+            },
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "observations": {
+        "version": 1,
+        "events": [
+          {
+            "id": "balancer-v1-LOG_SWAP",
+            "signature": "event LOG_SWAP(address indexed caller,address indexed tokenIn,address indexed tokenOut,uint256 tokenAmountIn,uint256 tokenAmountOut)",
+            "classification": "swap",
+            "pool": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$log.address"
+                  ]
+                }
+              ]
+            },
+            "payload": {
+              "tokenIn": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$args.tokenIn"
+                    ]
+                  }
+                ]
+              },
+              "tokenOut": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$args.tokenOut"
+                    ]
+                  }
+                ]
+              },
+              "amountIn": "$args.tokenAmountIn",
+              "amountOut": "$args.tokenAmountOut"
+            },
+            "valid": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$args.tokenIn"
+                          ]
+                        }
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$args.tokenOut"
+                          ]
+                        }
+                      ]
+                    },
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$args.tokenIn",
+                        "$args.tokenOut"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "match": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "coalesce",
+                      "args": [
+                        "$edge.observationTarget",
+                        "$edge.target"
+                      ]
+                    },
+                    "$pool"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenIn",
+                    "$payload.tokenIn"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenOut",
+                    "$payload.tokenOut"
+                  ]
+                }
+              ]
+            },
+            "impact": {
+              "op": "merge",
+              "args": [
+                {
+                  "pool": {
+                    "op": "coalesce",
+                    "args": [
+                      "$edge.observationTarget",
+                      "$edge.target"
+                    ]
+                  },
+                  "matchedAdapterId": "$edge.adapterId"
+                },
+                "$payload"
+              ]
+            }
+          }
+        ],
+        "canonicalIntakeTargets": [],
+        "victimSupport": "detect-only"
+      },
+      "refreshPolicy": "on-touch",
+      "values": {
+        "abi": {
+          "bindingpooltokens": [
+            "function getFinalTokens() view returns(address[])"
+          ],
+          "bindingpoolswapFee": [
+            "function getSwapFee() view returns(uint256)"
+          ],
+          "bindingweightsweight": [
+            "function getDenormalizedWeight(address) view returns(uint256)"
+          ]
+        },
+        "constants": {
+          "factory": "0x9424b1412450d0f8fc2255faf6046b98213b76bd",
+          "model": "balancer-v1-finalized-bpool-0.5.12",
+          "crptFactory": "0x3bd9c0df645d22be0c34b5e7566fb316b4f3aac7",
+          "crptModel": "balancer-v1-crpt-bpool-fork-v1",
+          "zero": "0x0000000000000000000000000000000000000000"
+        }
+      },
+      "resourceValues": {
+        "constants": {
+          "factory": "0x9424b1412450d0f8fc2255faf6046b98213b76bd",
+          "model": "balancer-v1-finalized-bpool-0.5.12",
+          "crptFactory": "0x3bd9c0df645d22be0c34b5e7566fb316b4f3aac7",
+          "crptModel": "balancer-v1-crpt-bpool-fork-v1",
+          "zero": "0x0000000000000000000000000000000000000000"
+        }
+      },
+      "math": {
+        "version": 1,
+        "entries": {
+          "sumWeights": {
+            "model": "balancer-v1:sum-weights",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "balancer-v1:sum-weights",
+            "version": 1,
+            "program": [
+              {
+                "assert": {
+                  "op": "lte",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$input"
+                      ]
+                    },
+                    8
+                  ]
+                },
+                "error": "weight vector bound"
+              },
+              {
+                "return": {
+                  "op": "sumUint",
+                  "args": [
+                    "$input"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "meta": {
+        "label": "balancer-v1/factory-created-finalized-bpool"
+      }
+    }
+  ]
+}

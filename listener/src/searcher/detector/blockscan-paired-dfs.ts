@@ -1,10 +1,13 @@
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
 import { selectTopHopTokens } from "./blockscan-hop-quotes.js";
+import { stateResourceSetsOverlap } from "../venues/route-state-resources.js";
 
 /** Pure, amount-sensitive directed enumeration. No protocol state or RPC. */
 export interface DfsQuote {
   readonly id: string;
   readonly instance: string;
+  /** Complete physical set; instance remains a stable grouping summary. */
+  readonly resources?: readonly string[];
   readonly tokenIn: string;
   readonly tokenOut: string;
   readonly num: bigint;
@@ -12,6 +15,8 @@ export interface DfsQuote {
   /** Output reference value / input reference value; null is ineligible. */
   readonly value: { readonly num: bigint; readonly den: bigint } | null;
 }
+export const quoteResourceKeys = (quote: DfsQuote): readonly string[] => quote.resources ?? [quote.instance];
+export const quotesShareResource = (a: DfsQuote, b: DfsQuote): boolean => stateResourceSetsOverlap(quoteResourceKeys(a), quoteResourceKeys(b));
 export interface DirectedPriceSignal {
   readonly token: string;
   readonly buy: string;

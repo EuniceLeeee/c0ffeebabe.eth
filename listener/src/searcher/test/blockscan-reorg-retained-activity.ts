@@ -12,13 +12,9 @@ const block = (number: number, id = number, parentId = id - 1) => ({
 });
 type Header = ReturnType<typeof block>;
 type Resolver = activity.BlockTouchedStateKeyResolver;
-// On the pre-fix source this is exactly the old reorg callback. It fails the
-// orphan regression on the missing trace, rather than failing an import.
 const retained = (provider: activity.BlockTouchedProvider, h: Header, resolver?: Resolver,
   control?: { signal?: AbortSignal; deadlineAtMs?: number }, poolManager = manager) =>
-  "readRetainedBlockTouchedStateKeys" in activity
-    ? activity.readRetainedBlockTouchedStateKeys(provider, h.number, poolManager, h, resolver, control)
-    : activity.readBlockTouchedStateKeys(provider, h.number, poolManager, h, undefined, resolver);
+  activity.readRetainedBlockTouchedStateKeys(provider, h.number, poolManager, h, resolver, control);
 
 function fixture(headers: Header[]) {
   const byHash = new Map(headers.map(h => [h.hash, h]));

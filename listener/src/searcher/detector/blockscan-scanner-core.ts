@@ -6,7 +6,8 @@ import type { BlockScanOpportunity } from "./detector.js";
 import { type TokenEdge, v4PoolId } from "../planner/token-graph.js";
 import { pathLeavesStandingPosition, isBlockScanConversionEdge } from "../strategy-taxonomy.js";
 import { blockScanEdgeKey } from "../venues/blockscan-state-capability.js";
-import { edgeInstanceKey } from "../venues/route-instance-identity.js";
+import { edgeExecutionVariantKey, edgeInstanceKey, explicitStateResourceKeys } from "../venues/route-instance-identity.js";
+import { edgeObservationIdentity } from "../venues/route-observation-identity.js";
 import {
   validatedRouteImmutableBindingHash,
 } from "../venues/route-immutable-binding.js";
@@ -245,6 +246,16 @@ export function scanBlockStateFromResolvedMids(input: {
     funding: [...input.cfg.pricedTokens].filter(([, value]) => value.maxBorrow > 0n).map(([token]) => token),
     onCycle(path, estSpreadBps) {
       const seedEdges = path.map(q => edgesById.get(q.id)!);
+      // Graph metadata owns state resources even when a caller supplied an
+      // older ETH projection whose quote rows did not carry the plural set.
+      if (!allowRepeatedPools) {
+        const resources = new Set<string>();
+        for (const edge of seedEdges) {
+          const current = explicitStateResourceKeys(edge) ?? [edgeInstanceKey(edge)];
+          if (current.some(key => resources.has(key))) return;
+          current.forEach(key => resources.add(key));
+        }
+      }
       // The enumerator joins from the signal token using whole-cycle profit,
       // then rotates the completed cycle to this funded execution start.
       if (input.routeEligible && !input.routeEligible(seedEdges)) return;
@@ -310,6 +321,7 @@ function readEdgeVenueMid(
 }
 
 function edgeVenueIdentity(edge: TokenEdge): string {
+  if (edge.observationTarget !== undefined || edge.observationPoolId !== undefined) return edgeObservationIdentity(edge);
   if (edge.poolId) return edge.poolId.toLowerCase();
   if (edge.v4PoolKey) return v4PoolId(edge.v4PoolKey).toLowerCase();
   return edge.target.toLowerCase();
@@ -565,6 +577,12 @@ function uniqueLowercase(values: string[]): string[] {
 
 function directedRouteFingerprint(edges: TokenEdge[], deduplicateRotations: boolean): string {
   const parts = edges.map((edge) => {
+    if (explicitStateResourceKeys(edge) !== undefined) {
+      return JSON.stringify([
+        edge.adapterId, edge.target.toLowerCase(), edge.tokenIn.toLowerCase(), edge.tokenOut.toLowerCase(),
+        explicitStateResourceKeys(edge), edgeInstanceKey(edge), edgeExecutionVariantKey(edge),
+      ]);
+    }
     const legacy =
       `${edge.adapterId.toLowerCase()}|${edgeVenueIdentity(edge)}|` +
       `${edge.tokenIn.toLowerCase()}>${edge.tokenOut.toLowerCase()}`;
@@ -613,13 +631,13 @@ export function protocolRepeatEligible(edges: readonly TokenEdge[]): boolean {
   const instances = new Set<string>();
   for (let i = 1; i < closing; i++) {
     const entering = edges[i - 1]!;
-    const instance = entering.instanceKey ?? "";
+    const resources = explicitStateResourceKeys(entering) ?? [entering.instanceKey ?? ""];
     if (seen.has(tokens[i]!)) {
       if (entering.slotKind !== "protocol") return false;
-      if (instance.length === 0 || instances.has(instance)) return false;
+      if (resources.some(resource => !resource || instances.has(resource))) return false;
     }
     seen.add(tokens[i]!);
-    instances.add(instance);
+    resources.forEach(resource => instances.add(resource));
   }
   return true;
 }

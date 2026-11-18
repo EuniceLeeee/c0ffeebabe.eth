@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { Interface, getAddress, JsonRpcProvider, toBeHex, toQuantity } from "ethers";
+import { Interface, getAddress, JsonRpcProvider, keccak256, toBeHex, toQuantity } from "ethers";
 import { RuntimeAmountProgram, runtimeProgramScript } from "../../adapters/runtime-amount-program.js";
 import { concatBytes } from "../../encoder.js";
 import { buildSubscriptCalldata } from "../../shared/executor/botvm-program-entry.js";
@@ -19,7 +19,10 @@ import { hashReadyCatalogSnapshot, hashReadyGraphSnapshot, hashReadyPublicationS
 import { familyMemoDefinitionHash } from "../universe-rebuild-production.js";
 import { buildFamilyRouteGraphView } from "../adapter-family-graph-runtime.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../venues/production-family-composition.js";
-import { runUniv2Lifecycle, UNIV2_FIXTURE_FACTORY } from "../architecture-migration-fixture-replay.js";
+import { createStrictCentralAdapterRuntime } from "../strict-central-adapter-runtime.js";
+import { runStrictFamilyLifecycle } from "../strict-family-lifecycle-runner.js";
+import { readySelectorCensusFromTransaction } from "../ready-selector-census.js";
+import { selectorFamilyIdentity } from "../venues/selector-execution-keys.js";
 
 import { selectTransactionExecutionSource, validateTransactionStateSelection } from "./family-transaction-source.js";
 
@@ -248,26 +251,45 @@ test("checkpoint comparison requires exactly one complete target edge, not a non
  * The registered TX is a seed here, not a claim about its on-chain trace. */
 async function withFactsMainFixture(run: (input: any) => Promise<void>, parent = false) {
   const directory = mkdtempSync(join(tmpdir(), "family-facts-main-"));
-  const transactionPath = fileURLToPath(new URL("./fixtures/family-transactions/0xf2de7499db881f03066f051055bcc6dc95dc5ad0c57576bceda49dc70efcc10b.json", import.meta.url));
+  const transactionPath = fileURLToPath(new URL("./fixtures/family-transactions/0x03d6a2efb77d0f80b21ff295674120f2dff2465f6a0497b58d9dfbe057703c72.json", import.meta.url));
   const transaction = readFamilyTransaction(transactionPath), leg = transaction.legs[0]!;
   const source = { ...(parent ? { number: leg.source!.number - 1, hash: toBeHex(99, 32) } : leg.source!), generation: leg.source!.number };
-  const publication = await runUniv2Lifecycle(source, { pool: getAddress(leg.instanceKey!), factory: UNIV2_FIXTURE_FACTORY,
-    token0: getAddress(leg.tokenIn!), token1: getAddress(leg.tokenOut!),
-    reserves: { reserve0: 1_000_000_000n, reserve1: 2_000_000_000n, blockTimestampLast: 1 } });
+  const selectorABI = new Interface(["function sellGem(address,uint256)", "function gem() view returns(address)",
+    "function dai() view returns(address)", "function to18ConversionFactor() view returns(uint256)"]);
+  const signature = "function sellGem(address,uint256)", familyId = selectorFamilyIdentity(signature).familyId;
+  const calldata = selectorABI.encodeFunctionData("sellGem", [address(80), BigInt(leg.amountIn!)]);
+  const census = readySelectorCensusFromTransaction({ chain_id: 1, tx_hash: transaction.transactionHash,
+    block_number: source.number, block_hash: source.hash, transaction_index: 0, receipt_status: 1,
+    from: address(80), to: leg.instanceKey, input: calldata, value: "0", logs: [], traces: [] });
+  let readySimulations = 0;
+  const runtime = createStrictCentralAdapterRuntime({ executor: leg.actors!.executor, transactionOrigin: leg.actors!.owner,
+    generationFence: { assertCurrent(generation, at) { assert.equal(generation, source.generation); assert.deepEqual(at, source); } },
+    provider: { async getCode() { return "0x60016000"; }, async getStorage() { assert.fail("selector Ready must not run legacy identity proof"); },
+      async call(tx) { const call = selectorABI.parseTransaction({ data: tx.data }); assert(call);
+        const result = call.name === "gem" ? leg.tokenIn : call.name === "dai" ? leg.tokenOut
+          : call.name === "to18ConversionFactor" ? 10n ** 12n : assert.fail("unexpected current-price call " + call.name);
+        return selectorABI.encodeFunctionResult(call.fragment, [result]); } },
+    simulator: { executorProgramCodeHash: keccak256("0x60016000"), async simulate() { readySimulations++; assert.fail("Ready duplicated startup simulation"); } },
+  });
+  const publication = await runStrictFamilyLifecycle({ catalog, familyId, source, runtime,
+    observations: [{ kind: "call", source, target: leg.instanceKey!, sender: address(80), data: calldata,
+      transactionHash: transaction.transactionHash, traceAddress: [], opaque: { selectorCensus: census, callId: census.calls[0]!.id } as any }] });
+  assert.equal(readySimulations, 0);
+  assert.notEqual(publication.familyId, leg.familyId, "old protocol label cannot own the selector instance");
   const instance = publication.instances[0]!, family = catalog.forFamily(publication.familyId);
   const encode = (value: unknown) => JSON.parse(JSON.stringify(value, (_key, item) => typeof item === "bigint"
     ? { $durableType: "bigint", value: item.toString() }
     : item && typeof item.entries === "function" && typeof item.get === "function"
       ? { $durableType: "map", entries: [...item.entries()] } : item));
   const memo: any = { familyCandidateKey: "offline-fixture-candidate", familyInstanceKey: "offline-fixture-instance",
-    familyId: leg.familyId, candidateKey: instance.candidateKey, instanceKey: instance.instanceKey,
-    candidateFingerprint: "offline-fixture", familyDefinitionHash: familyMemoDefinitionHash(leg.familyId),
+    familyId: publication.familyId, candidateKey: instance.candidateKey, instanceKey: instance.instanceKey,
+    candidateFingerprint: "offline-fixture", familyDefinitionHash: familyMemoDefinitionHash(publication.familyId),
     validity: { policy: "immutable-code", authorityFingerprint: "offline-fixture", proofSource: { number: source.number, hash: source.hash } },
     verifiedIdentity: { lineageId: instance.lineageId }, compiledDescriptor: encode(instance.descriptor),
     staticProjection: encode({ routes: instance.routes, pricingInstances: instance.pricingInstances,
       staticBindingFingerprint: instance.staticBindingFingerprint, staticEvidenceFingerprint: instance.staticEvidenceFingerprint,
       evidenceRefs: instance.evidenceRefs }), evidenceFingerprint: instance.staticEvidenceFingerprint,
-    candidateSnapshot: { familyId: leg.familyId, address: leg.instanceKey }, memoFingerprint: "" };
+    candidateSnapshot: { ...(instance.descriptor as any).candidate, familyId: publication.familyId, address: leg.instanceKey }, memoFingerprint: "" };
   memo.memoFingerprint = durableVerifiedMemoFingerprint(memo);
   const edges = buildFamilyRouteGraphView({ routes: instance.routes.map((route, index) => ({
     family, descriptor: instance.descriptor, route, handle: instance.routeHandles[index]!,
@@ -284,7 +306,7 @@ async function withFactsMainFixture(run: (input: any) => Promise<void>, parent =
         graphSnapshot, graphHash: hashReadyGraphSnapshot(graphSnapshot),
         candidateAccounting: { total: memos.length, verified: memos.length, terminalRejected: 0, retryable: 0, remainingUnaccounted: 0 },
         observedThrough: { number: source.number, hash: source.hash }, appliedThrough: { number: source.number, hash: source.hash },
-        sourceCoverage: [{ familyId: leg.familyId, sourceId: "offline-fixture", completeThroughBlock: source.number, completeThroughHash: source.hash }] } };
+        sourceCoverage: [{ familyId: publication.familyId, sourceId: "offline-fixture", completeThroughBlock: source.number, completeThroughHash: source.hash }] } };
   };
   const readyPath = join(directory, "ready.json"), rpcFile = join(directory, "rpc.json");
   writeFileSync(readyPath, "offline fixture checkpoint bytes\n");
@@ -301,12 +323,12 @@ async function withFactsMainFixture(run: (input: any) => Promise<void>, parent =
     if (method === "debug_traceTransaction") {
       assert.equal(params[1].tracerConfig.withLog, true);
       return { type: "CALL", from: address(80), to: leg.instanceKey,
-        input: new Interface(["function swap(uint256,uint256,address,bytes)"]).encodeFunctionData("swap", [0n, 1n, address(80), "0x"]),
+        input: calldata,
         gas: "0xffff", value: "0x0", output: "0x", gasUsed: "0x1", logs: [] };
     }
     if (method === "trace_transaction") return [{ type: "call", traceAddress: [], subtraces: 0,
       transactionHash: transaction.transactionHash, blockNumber: leg.source!.number, blockHash: leg.source!.hash,
-      action: { from: address(80), to: leg.instanceKey, input: new Interface(["function swap(uint256,uint256,address,bytes)"]).encodeFunctionData("swap", [0n, 1n, address(80), "0x"]), callType: "call", gas: "0xffff", value: "0x0" },
+      action: { from: address(80), to: leg.instanceKey, input: calldata, callType: "call", gas: "0xffff", value: "0x0" },
       result: { output: "0x", gasUsed: "0x1" } }];
     throw new Error("offline fixture execution boundary: " + method);
   };
@@ -327,20 +349,37 @@ async function withFactsMainFixture(run: (input: any) => Promise<void>, parent =
 }
 
 test("actual facts runner keeps historical mismatch as reference and reaches execution only through current Ready", async () => {
-  await withFactsMainFixture(async ({ execute }) => {
+  await withFactsMainFixture(async ({ execute, transaction, leg }) => {
     const normal = await execute();
     assert(normal.report.stages.transactionBinding, JSON.stringify(normal.report.failure));
     assert.deepEqual(normal.report.originalTransactionInput, { status: "reference-only", required: false });
+    assert.deepEqual(normal.report.execution, { executorCodeMode: "counterfactual", simulationMethod: "eth_simulateV1" });
     assert.equal(normal.report.stages.transactionBinding.status, "evidence-incomplete");
     assert.equal(normal.report.stages.discoveryCheckpoint.status, "pass");
+    assert.match(normal.report.executionBinding.familyId, /^execution:0x95991276:abi-/);
+    assert.equal(normal.report.familyId, "protocol:psm", "immutable fixture label stays reference provenance");
     assert.equal(normal.report.failure.stage, "execution", "current admitted route must get past historical matching");
     assert.equal(normal.report.result, "failed", "the fixture does not supply execution proof");
     assert.equal(normal.report.stages.exact.status, "not-run");
+    assert.equal((await verifyFamilyTransactionBindingReport(normal.reportPath, transaction, leg)).status, "evidence-incomplete",
+      "a failed execution retains an independently verifiable selector owner");
+    const original = readFileSync(normal.reportPath, "utf8");
+    for (const mutate of [
+      (report: any) => { report.bindingMode = "legacy"; },
+      (report: any) => { delete report.bindingMode; },
+      (report: any) => { report.executionBinding.familyId = leg.familyId; },
+      (report: any) => { report.caseBinding.resolved.domain = "swap"; },
+    ]) {
+      const changed = JSON.parse(original); mutate(changed); writeFileSync(normal.reportPath, JSON.stringify(changed));
+      await assert.rejects(verifyFamilyTransactionBindingReport(normal.reportPath, transaction, leg),
+        /selector binding mode|reported selector owner|reported case binding/);
+    }
+    writeFileSync(normal.reportPath, original);
     const missing = await execute("all", false);
-    assert.equal(missing.report.stages.transactionBinding.status, "direction-not-admitted");
-    assert.equal(missing.report.failure.stage, "discoveryCheckpoint");
-    assert.match(missing.report.failure.reason, /one admitted Ready identity/);
-    assert.equal(missing.report.stages.discoveryCheckpoint.status, "failed");
+    assert.equal(missing.report.stages.transactionBinding.status, "unverified-selector");
+    assert.equal(missing.report.failure.stage, "transactionBinding");
+    assert.match(missing.report.failure.reason, /selector Ready binding absent/);
+    assert.equal(missing.report.stages.discoveryCheckpoint.status, "not-run");
   });
 });
 

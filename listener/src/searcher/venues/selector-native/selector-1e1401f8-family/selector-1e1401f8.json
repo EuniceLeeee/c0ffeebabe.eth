@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x1e1401f8",
+  "signature": "function getReturn(address, address, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_1E1401F8_ENABLED"
+  },
+  "unsupportedReason": "Quote/read helper retained by its complete source program; ABI membership does not define a standalone execution route."
+}

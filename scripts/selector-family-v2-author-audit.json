@@ -1,0 +1,341 @@
+{
+  "format": "selector-family-v2-implementation-audit/v1",
+  "baseCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "createdUtc": "2026-11-17T11:16:59.702478+00:00",
+  "claim": "Implemented and locally verified migration; not mainnet replay, production-gap closure, deployment or broadcast approval.",
+  "scope": {
+    "originalInventory": "93 ordinary declarations (57 executable, 36 observed-only) plus two funding declarations; these are the original cohort, not the final repository total.",
+    "originalExecutablePrograms": 94,
+    "legacyExactReferences": 99,
+    "legacyReferenceMappings": 100,
+    "legacyOrdinaryRoots": 38,
+    "automaticParameterPrograms": 10,
+    "necessaryExecutionExtensionPrograms": 84,
+    "prunedLegacyProvenancePrograms": 10,
+    "creditAdditionalRoot": "credit/fluid-family/fluid.json, enabled at base, now migrated as credit domain; operates under existing position and repayment gates.",
+    "typedFamiliesOutsideThisLane": "The complete base production inventory, including additional typed families, is recorded in listener/src/searcher/generated/selector-family-v2-migration-inventory.generated.json.",
+    "observationMeaning": "The original 36 observed-only entries did not have an executable Exact recipe. Complete typed/credit migrations may upgrade these entries; an observation-only declaration is not a failed migration."
+  },
+  "schema": {
+    "format": "selector-family/v2; omitted means v2; explicit old v1 rejects.",
+    "ordinary": "Single program fields can be top-level. Multiple independent recipes remain programs. Ten original recipes actually use parameters plus payment and the common call compiler.",
+    "funding": "Shared selector/signature/parameters/meta naming, domain funding. Callback/repayment belong to execution; current liquidity/fee/priority belong to funding. Old root params/identity/observation/callback fields reject.",
+    "metadata": "Meta is stripped before normalization, program/declaration fingerprints, candidate ownership and module contract hashes; metadata-only changes preserve encoded execution and Ready ownership. Required behavior is never moved into meta.",
+    "identity": "No protocol identity admission prerequisite in the new funding or credit schemas. Selector plus complete canonical ABI owns family; target/pool/bound parameters and token identity scope instances/offers."
+  },
+  "funding": {
+    "templates": [
+      {
+        "selector": "0x5c38449e",
+        "signature": "flashLoan(address,address[],uint256[],bytes)",
+        "enabled": true,
+        "envKey": "SEARCHER_FAMILY_BALANCER_FLASH_ENABLED",
+        "roles": [
+          "executor",
+          "tokenIn[]",
+          "amountIn[]",
+          "children"
+        ],
+        "callback": "receiveFlashLoan(address[],uint256[],uint256[],bytes), authenticated selected caller and exact asset/amount/fee/children",
+        "repayment": "transfer principal plus current amount-specific fee to selected provider",
+        "liquidity": "selected token balanceOf(declared holder)",
+        "fee": "Current provider fee collector and current percentage, ceil(amount * rate / 1e18)"
+      },
+      {
+        "selector": "0xe0232b42",
+        "signature": "flashLoan(address,uint256,bytes)",
+        "enabled": true,
+        "envKey": "SEARCHER_FAMILY_MORPHO_FLASH_ENABLED",
+        "roles": [
+          "tokenIn",
+          "amountIn",
+          "children"
+        ],
+        "callback": "onMorphoFlashLoan(uint256,bytes), authenticated selected caller and exact amount/children",
+        "repayment": "approve-pull for exact principal, followed by full top-level final simulation",
+        "liquidity": "selected token balanceOf(declared holder)",
+        "fee": "Declared constant zero, as the existing funding entry template"
+      }
+    ],
+    "providerScope": "Every source/offer binds family, instance, provider, declared liquidity holder, pool scope, asset and offer ID; selection reaches encoder/repayment. No first-offer fallback.",
+    "capacity": "ERC20 balanceOf(holder) capacity key is chain plus holder plus asset, excluding selector and logical pool. Multiple selectors/pools cannot multiply one real balance.",
+    "currentState": "Current-session refresh obtains declared capacity and fee under the current source. Missing fee reads remain unresolved. Fee cache cannot be reused across selected amounts.",
+    "security": "Callback selector, caller, argument prefix and exact child bytes authenticated; amount/fee/source/actor mismatches reject. The full borrow-children-repay final simulation and profit/conservation gates remain.",
+    "preparation": "Existing shared effective-input max-hops policy still bounds simulation preparation; no funding-specific fixed four-hop constant introduced.",
+    "behaviorChange": "Balancer prior zero-fee template now reads current dynamic fee and rounds upward for the chosen amount; changed/missing fee cannot silently fall back to zero.",
+    "primaryFeeSources": [
+      "https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/vault/contracts/Fees.sol",
+      "https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/solidity-utils/contracts/math/FixedPoint.sol",
+      "https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/vault/contracts/ProtocolFeesCollector.sol",
+      "https://raw.githubusercontent.com/morpho-org/morpho-blue/main/src/Morpho.sol"
+    ]
+  },
+  "credit": {
+    "base": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+    "source": "credit/fluid-family/fluid.json",
+    "destination": "listener/src/searcher/venues/selector-native/selector-032d2276-family/selector-032d2276.json",
+    "enabled": true,
+    "domain": "credit",
+    "selector": "0x032d2276",
+    "execution": "operate(collateral,debt,new-position)",
+    "preserved": [
+      "current config/oracle/exchange-price reads",
+      "integer CF/tick/fee rounding model",
+      "three source-bound debt fractions",
+      "actual position/return/token-delta proof",
+      "exact-clear approval",
+      "standing-position/final repayment gate"
+    ],
+    "removedIdentityGates": [
+      "factory reverse lookup",
+      "vault/token code identity",
+      "fixed probe actor"
+    ],
+    "normalization": "same selector + full ABI owns candidate, instance and route; metadata is not semantic",
+    "baseNonEntry": {
+      "action": "fluid-dex-liquidate",
+      "selector": "0x8433ea22",
+      "signature": "liquidate(uint256,uint256,address,bool)",
+      "destination": "listener/src/searcher/venues/selector-native/selector-8433ea22-family/selector-8433ea22.json",
+      "status": "observed-only",
+      "reason": "Base action/trace registration only; no projected route, Exact quote or execution recipe existed."
+    },
+    "mathEquivalence": {
+      "comparison": "New pure JSON integer models versus base-fdb math.ts in offline migration verifier only",
+      "vectors": 131,
+      "matchingSuccessfulValues": 74,
+      "matchingRejections": 57
+    },
+    "runtimeDependencies": "Production credit compiler uses generic native binding/execution and existing generic credit risk semantics; no retired Fluid TS/root JSON loader. Pure discovery imports read-flow/risk types only.",
+    "proofs": "Ready verifies actual current-executor operation, positive newly returned position, exact collateral/debt returns and token effects, source and transaction origin. Risk quote requires current config/oracle/exchange prices plus issued debt proof. No ordinary startup-simulation exemption or ordinary RuntimeLeg is advertised.",
+    "policyIdentity": "Credit and pricing policy semantic hash is compiler-owned program data; changing risk policy invalidates the candidate. Meta-only changes do not.",
+    "historicalHarness": "Fixture label may remain provenance, but selected credit family comes from observed selector/ABI and issued Ready routes. Full credit graph, domain and target checked; dedicated credit risk quote path preserved."
+  },
+  "provenancePruning": {
+    "changedPrograms": [
+      {
+        "selector": "0x2668dfaa",
+        "legacyLabel": "fluid-dex/factory-child-active-quote",
+        "newProgramKey": "parameters:0483e65d66454626c590895e4d37db1cc2b43371bc571b61f2e18566dbd9a2de",
+        "notes": [
+          "Removed unused legacy candidate label/projection.",
+          "Removed the unused factory reverse-lookup call and factoryBinding provenance projection. Current constants/asset reads, native mapping, quote and execution effects remain unchanged."
+        ]
+      },
+      {
+        "selector": "0x48c89491",
+        "legacyLabel": "univ4/singleton-poolkey-active-proof",
+        "newProgramKey": "parameters:e279a9bd0d6e5da8ecddba7aa6f75eebd4f3c48df2452bd69cf3f55ba6e77982",
+        "notes": [
+          "Removed an unused manager-code hash read. The current pool-key read and full ABI-encoded poolId equality remain mandatory; that keccak is a resource identifier, not an identity allowlist."
+        ]
+      },
+      {
+        "selector": "0x6e553f65",
+        "legacyLabel": "protocol:erc4626/morpho-vault-v2",
+        "newProgramKey": "parameters:a13461b3d8d17e702390f852d6724005f2dbf23362aee81ed9d84b6fee9292d5",
+        "notes": [
+          "Removed unused legacy candidate label/projection.",
+          "Removed the unused vault runtime-code hash and share/asset-decimal reads from an identity object whose two direction branches were identical; active execution return/effect guards are unchanged."
+        ]
+      },
+      {
+        "selector": "0x6e553f65",
+        "legacyLabel": "protocol:staked-usdat/source-bound-staked-usdat-deposit",
+        "newProgramKey": "parameters:8082346582adf5c0f1912397ef33cb6fc9cdae441ecb0b74ba002e34e6e10199",
+        "notes": [
+          "Removed unused legacy candidate label/projection.",
+          "Removed unused proxy/implementation hashes and the implementation-slot read; kept asset, oracle and withdrawal-queue reads because execution preflight binds those actual dependencies."
+        ]
+      },
+      {
+        "selector": "0x86b01724",
+        "legacyLabel": "ella-exchange/verified-native-base-runtime",
+        "newProgramKey": "parameters:e82a3edd815dc93002b6fbe8dbfbc6b9e662ea98a558614ce301420f328edefe",
+        "notes": [
+          "Removed unused legacy candidate label/projection.",
+          "Removed unused factory/oracle storage, token-decimal/aggregator calls and pool/factory code hashes; only the storage read that identifies the actual traded token remains. Native execution/effect guards are unchanged."
+        ]
+      },
+      {
+        "selector": "0x94bf804d",
+        "legacyLabel": "protocol:erc4626/morpho-vault-v2",
+        "newProgramKey": "parameters:af9716a627682e4ee7b0bee88afed1df8ab19ebeae0b25ec8833726922493f52",
+        "notes": [
+          "Removed unused legacy candidate label/projection.",
+          "Removed the unused vault runtime-code hash and share/asset-decimal reads from an identity object whose two direction branches were identical; active execution return/effect guards are unchanged."
+        ]
+      },
+      {
+        "selector": "0xa6e81533",
+        "legacyLabel": "custom-swap:oneswap/proxy-and-bidirectional-factory-registration",
+        "newProgramKey": "parameters:7f99bfc9ef53a94c1d812f513c851d0b7a62d93cbd82022b326389a7077c89bd",
+        "notes": [
+          "Removed unused legacy candidate label/projection.",
+          "Removed adapterId/bindingRef assertions superseded by native descriptor, route and action ownership validation.",
+          "Removed the stale proxy-model/get-code projection and its unused oneswap:proxy math model/entry. Current stock()/money() getters and the execution target fully determine the descriptor; actual asset reads and execution guards remain."
+        ]
+      },
+      {
+        "selector": "0xb460af94",
+        "legacyLabel": "protocol:erc4626/morpho-vault-v2",
+        "newProgramKey": "parameters:3eec3e29df38f8d066cae977069946d0b854bc5421992262aa854671a69d3a0a",
+        "notes": [
+          "Removed unused legacy candidate label/projection.",
+          "Removed the unused vault runtime-code hash and share/asset-decimal reads from an identity object whose two direction branches were identical; active execution return/effect guards are unchanged."
+        ]
+      },
+      {
+        "selector": "0xba087652",
+        "legacyLabel": "protocol:erc4626/morpho-vault-v2",
+        "newProgramKey": "parameters:c94459093122c6e3e0af966ca3beac9ef2542f76d06707c63f7a10c05f978fbe",
+        "notes": [
+          "Removed unused legacy candidate label/projection.",
+          "Removed the unused vault runtime-code hash and share/asset-decimal reads from an identity object whose two direction branches were identical; active execution return/effect guards are unchanged."
+        ]
+      },
+      {
+        "selector": "0xd0137d8d",
+        "legacyLabel": "ella-exchange/verified-native-base-runtime",
+        "newProgramKey": "parameters:86178dd2e8e9ab2887fd378e7c17111d8937500b97304a0994b8778872560957",
+        "notes": [
+          "Removed unused legacy candidate label/projection.",
+          "Removed unused factory/oracle storage, token-decimal/aggregator calls and pool/factory code hashes; only the storage read that identifies the actual traded token remains. Native execution/effect guards are unchanged."
+        ]
+      }
+    ],
+    "preservedNecessaryReads": [
+      "Custodian proxy code derives protected proxy-admin address; this is an execution recipient/protected-address boundary, not a code identity allowlist.",
+      "Xwin admin slot and Badger vault/strategy implementation/admin slots feed protectedAddresses.",
+      "V2 token bytecode selects the explicit transfer-tax amount model and its exact output/payment guards; nominal token behavior remains supported and still requires simulation.",
+      "Curve raw code extracts the registry used to obtain actual underlying/protected token lists; lending LP storage identifies a real execution asset.",
+      "V4 current pool key ABI hash must equal the poolId; it identifies the physical pool and is not a runtime-code identity test.",
+      "Balancer pool and token reads bind the actual poolId/resource and validate the complete asset set."
+    ],
+    "regression": "All ten pruned program.execution SHA256 values exactly equal their old migration source program.execution hashes; eight representative actual binding decode/verify flows complete without the retired identity reads.",
+    "reproducibility": "Migration --report-only from archived original v1 source regenerates the same 94/94 new program keys after the final OneSwap unused-math cleanup; compact byte counts 1642185 to 1558938 cover only the original cohort.",
+    "oneSwapFinalCleanup": "Removed the unreferenced oneswap:proxy model and proxy math binding after its obsolete read/projection was removed. The production declaration contains no proxy identity model; stock()/money() bindings and original execution SHA remain unchanged."
+  },
+  "executedChecks": [
+    {
+      "command": "node --import tsx --test src/searcher/test/selector-native-funding.test.ts",
+      "result": "10/10 passed in current v2 worktree",
+      "kind": "offline contract/unit"
+    },
+    {
+      "command": "node --import tsx --test src/searcher/test/ready-selector-funding.test.ts",
+      "result": "2/2 passed in current v2 worktree",
+      "kind": "offline Ready and shared historical fixture issuer integration"
+    },
+    {
+      "command": "node --import tsx --test src/searcher/test/family-funding-acceptance.test.ts",
+      "result": "4/4 passed in current v2 worktree",
+      "kind": "offline acceptance evidence verification"
+    },
+    {
+      "command": "SELECTOR_FUNDING_EVM_TEST=1 OBSERVED_CALL_SOLC_MODULE=<local solc> OBSERVED_CALL_ANVIL_BIN=<local anvil> node --import tsx --test src/searcher/test/selector-native-funding-evm.test.ts",
+      "result": "1/1 passed, executed, not skipped; current base BotVM Solidity compiled and deployed locally",
+      "kind": "real local EVM contract execution",
+      "coverage": "Both selector templates, two providers each, callback/child authentication, repayment, nonzero fee and negative mutation controls"
+    },
+    {
+      "command": "node --import tsx --test src/searcher/test/selector-family-v2-credit.test.ts",
+      "result": "5/5 passed after final historical harness changes",
+      "kind": "offline math, source-bound issuer, actual effect and historical selector binding contract tests"
+    },
+    {
+      "command": "node --import tsx --test src/searcher/test/declarative-credit-domain.test.ts",
+      "result": "10/10 passed with new credit suite earlier in this worktree (14/14 combined before fifth credit test)",
+      "kind": "generic credit risk authority regression"
+    },
+    {
+      "command": "node --import tsx --test src/searcher/test/selector-family-v2-migration.test.ts",
+      "result": "4/4 passed after final OneSwap unused math removal, including stock/money binding, no proxy model and unchanged original execution SHA",
+      "kind": "full original cohort coverage and compiler/binding regression"
+    },
+    {
+      "command": "node --import tsx ../scripts/verify-selector-credit-migration.ts --base-source-root <base-fdb-source>",
+      "result": "131/131 boundary vectors match base integer semantics: 74 values and 57 rejections",
+      "kind": "offline independently sourced math comparison"
+    },
+    {
+      "command": "node --import tsx ../scripts/migrate-selector-families-v2.ts --source-root <archived-v1> --base-source-root <base-fdb-source> --report-only --report <audit output>",
+      "result": "94/94 program keys match checked-in migration report",
+      "kind": "read-only reproduction; no production JSON overwritten"
+    },
+    {
+      "command": "node --import tsx --test src/searcher/test/ready-selector-candidate-pattern.test.ts",
+      "result": "2/2 passed in independent read-only review after the final candidate-pattern changes",
+      "kind": "multi-program selection and candidate substitution negative controls"
+    },
+    {
+      "command": "node --import tsx --test src/searcher/test/declarative-regression-round.test.ts src/searcher/test/declarative-simulation.test.ts",
+      "result": "160/160 passed; 128 installed declarations all retained, zero skipped",
+      "kind": "final test-contract compatibility",
+      "coverage": "v2 public module authenticity, normalized declaration/hash/manifest/lineage equality; script/actor/funding/trace/external settlement rejection and authenticated scoped total-supply observation controls"
+    },
+    {
+      "command": "node --import tsx --test src/searcher/test/family-transaction-registry.test.ts src/searcher/test/protocol-json-acceptance-context.test.ts",
+      "result": "23/23 passed, zero skipped",
+      "kind": "final registry and acceptance entry compatibility",
+      "coverage": "Every installed enabled/disabled v2 execution, credit and funding entry is authenticated; active acceptance entries reproduce the generated root, disabled entries cannot gain active acceptance authority, and forged plugin/source/hash still reject."
+    }
+  ],
+  "checkLimitations": [
+    "This report records the listed implementation and local checks. Whole-repository builds, the final generated catalog and cross-family integration results are recorded separately in the delivery evidence.",
+    "No external archive/current-chain RPC, historical mainnet fork, mainnet broadcast or production profitability verdict is asserted here. Local fixtures and local EVM demonstrate contracts, not live protocol compatibility at an untested state."
+  ],
+  "fileSha256": {
+    "listener/src/searcher/venues/selector-native-funding-definition.ts": "3987c6ae3d184e4e4e757d456ede5d37ee3ca0e99813e27bc3b5d08a9c1eccfa",
+    "listener/src/searcher/venues/selector-native-funding.ts": "d63ec8459e21b2ada96dff2430d51f14e498a50265eea643fb02127682d892d4",
+    "listener/src/searcher/venues/selector-native-credit-definition.ts": "385a25b05bce8768ba4577f8acb2b7b1b7caf74ed0275b79fb2955257a85c177",
+    "listener/src/searcher/venues/selector-native-credit.ts": "a861782f06abe22738e705bfdef3aca77a1bde1bccff40450bed6501391fbcfe",
+    "listener/src/searcher/test/selector-native-funding.test.ts": "06101de4e0a2ce38f86e3d9eeb22dd7953b13d422443dc0222d9e3a1c6319f91",
+    "listener/src/searcher/test/ready-selector-funding.test.ts": "3f6503e1af8666832a21989c6a30b18bbc3b145ead854e9d509c920712edab52",
+    "listener/src/searcher/test/family-funding-acceptance.test.ts": "043ba8785afe44f768cdb0415c0bdf6bc47c6b94b64d00a972c30a274c33a51a",
+    "listener/src/searcher/test/selector-native-funding-evm.test.ts": "ad504d41f86bf4c4fa81e3b6f29e7c320e7a8eeb3eaede5e0f9ee5468cc44da4",
+    "listener/src/searcher/test/selector-family-v2-credit.test.ts": "677934ee92912ef3c83d2f720e9322dabad9e865f216c40556e5532b977fbf50",
+    "listener/src/searcher/test/selector-family-v2-migration.test.ts": "470dc382bd80af1ddacabc7647910ab25277e7265adc2b51ed4fb8ceb4e2e9c3",
+    "listener/src/searcher/test/fixtures/selector-credit-v2-math.json": "13ccd09b2b71cd8f35b7c60a160dba495e4f775de13a64ebd485f236ece81654",
+    "listener/src/searcher/test/family-json-ready.ts": "becea10dae30ee20072ef0105bd3acfa646c4bcdb9bc280d6ad225d84ecd3628",
+    "listener/src/searcher/test/family-transaction-selector.ts": "aea99a92f0bfe9d08341a577dfb13478bfe86a979b9ca3d45ff6e94d22aafc07",
+    "listener/src/searcher/test/family-transaction-selector.test.ts": "934a5f4dcbabeb939ce44fdc39b9a6260dbf468a85b8bca7c182a7886596dbff",
+    "listener/src/searcher/test/family-transaction-registry.ts": "98d489dba728061072d4ed4f495d9f15d3eb9be49a90178b2f320025fcaa8991",
+    "listener/src/searcher/test/family-transaction-facts.ts": "d44e9446b5f150bab4322b900c35af82e3c9cdadfd96b94a2de631c5d3992b15",
+    "listener/src/searcher/test/family-transaction-matching.ts": "9b689b4ef1b1f726ecf37a195087b3cb5d506dfb1b8c86f141343146303577cf",
+    "listener/src/searcher/test/protocol-json-sample-registration.ts": "636479f885fc674426d79e7bf1e0200c28102f8ac876273fc5fd48779dc6f2e3",
+    "scripts/migrate-selector-families-v2.ts": "9a76560db2c3b8a69f9cb4545818a9d5030cfe93a642ecdf279f753d5d054765",
+    "scripts/selector-family-v2-prune.ts": "2e24ff22574cd42360b43199c481e335a7a86dbb02e7de744d624a04c72aa243",
+    "scripts/selector-family-v2-migration.json": "6a2d0c5ade9fcc68a6925e4f1b05e4bc06035c9f0d126cb6ba924378c95d3d4c",
+    "scripts/migrate-selector-credit-v2.ts": "eedf5af48974b2b76a8d4761f9dd589745e4d2e81ccf6762c321df93b9e1ad7b",
+    "scripts/verify-selector-credit-migration.ts": "e29d295c305efb4365200dec80d554dd9f480a9a2ec76c4cd53ab0585715f104",
+    "scripts/selector-credit-v2-migration.json": "4e5970b1431c64503f9d7da8ffadbbf3b5e24385e56b56bc939e1e7b431dc49c",
+    "listener/src/searcher/test/declarative-regression-round.test.ts": "d97749af8597df9a08e13bb62d6b653d561c8ea74b2c47574c40a4fdca1880c0",
+    "listener/src/searcher/test/declarative-simulation.test.ts": "42728cfef90cdb0f7ee6539116fcae7d64aaf589d8c920410c621d1827668020",
+    "listener/src/searcher/test/family-transaction-registry.test.ts": "a84cacbc824a9fd025351ab4162d5c53ed02fb3c933d5e8706ee10745c2414c0",
+    "listener/src/searcher/test/protocol-json-acceptance-context.test.ts": "9dda57a36c8502befae14b96272f67d22bc039192411622f79335497118ca33c"
+  },
+  "area": "Funding, original declarative migration and Fluid credit",
+  "independentCandidatePatternReview": {
+    "scope": [
+      "listener/src/searcher/ready-selector-candidate-pattern.ts",
+      "listener/src/searcher/universe-rebuild-production.ts",
+      "listener/src/searcher/strict-identity-attestation.ts"
+    ],
+    "findings": [],
+    "basis": [
+      "The supplied transaction observation is checked against candidate target, transaction hash and original source before selecting a catalog pattern.",
+      "Selection rebuilds every matching program candidate and requires both the candidate key and every decoder-owned field to match exactly; zero or multiple complete matches reject.",
+      "onlyPatternId is allowed only with an explicit family and supplied observation. Strict attestation selects exactly that catalog pattern and then runs the complete current-source lifecycle; a foreign pattern cannot fall back to the first recipe.",
+      "Reanchoring preserves the original evidence source while the current-source lifecycle checks the execution source. The selected recipe is not replaced after reanchoring.",
+      "The current change leaves the existing subset/resume runner and checkpoint code unchanged: candidate membership/hash, retained candidate accounting, parent/scope binding, source-plan resume checks, canonical fences and complete graph validation remain present."
+    ],
+    "verification": "Independent execution of the two candidate-pattern tests passed, including the later recipe and program/key/pool/parameters/declaration/sender mutations."
+  },
+  "testCompatibilityFollowup": {
+    "productionChanges": false,
+    "installedDefinitions": "The retired entry.plugin assertion was replaced by the new sole selectorFamilyModule public contract plus semantic normalization/hash and complete lineage comparison. Every installed definition is still checked, including disabled and observation-only entries.",
+    "simulation": "Total-supply-delta is now a supported read-only observation. It has a positive scoped request/receipt check, plus missing, wrong-token and duplicate-supply evidence rejection. Existing script, actor, arbitrary funding, pre-call, zero input, trace and external settlement rejection tests are retained.",
+    "registryAcceptance": "Installed inventory includes credit. All installed entries bind the sole v2 public module, normalized JSON, semantic hash and full lineage list. The acceptance inspector reproduces each active generated entry from its current standalone root JSON; disabled modules return not-installed, and forged plugins, borrowed source files or changed definition boundary hashes reject."
+  }
+}

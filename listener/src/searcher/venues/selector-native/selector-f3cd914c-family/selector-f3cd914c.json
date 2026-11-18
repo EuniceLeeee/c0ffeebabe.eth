@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xf3cd914c",
+  "signature": "function swap((address, address, uint24, int24, address), (bool, int256, uint160), bytes)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_F3CD914C_ENABLED"
+  },
+  "unsupportedReason": "Nested step of a retained complete execution program; it is not an independent route entry."
+}

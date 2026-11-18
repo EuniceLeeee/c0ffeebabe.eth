@@ -1,0 +1,71 @@
+{
+  "baseCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "rows": [
+    {
+      "selector": "0x5c833bfd",
+      "signature": "function redeem(address, uint256, address)",
+      "sourceFamily": "set-redemption",
+      "recipe": "typed:set:basic-basket",
+      "file": "listener/src/searcher/venues/selector-native/selector-5c833bfd-family/selector-5c833bfd.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x1c2a0e40",
+      "signature": "function redeemAndWithdrawTo(address, address, uint256, uint256)",
+      "sourceFamily": "set-redemption",
+      "recipe": "typed:set:legacy-redemption:unary",
+      "file": "listener/src/searcher/venues/selector-native/selector-1c2a0e40-family/selector-1c2a0e40.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x1c2a0e40",
+      "signature": "function redeemAndWithdrawTo(address, address, uint256, uint256)",
+      "sourceFamily": "set-redemption",
+      "recipe": "typed:set:legacy-redemption:basket",
+      "file": "listener/src/searcher/venues/selector-native/selector-1c2a0e40-family/selector-1c2a0e40.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x867904b4",
+      "signature": "function issue(address, uint256)",
+      "sourceFamily": "set-redemption",
+      "recipe": "typed:set:legacy-issue:self:plain",
+      "file": "listener/src/searcher/venues/selector-native/selector-867904b4-family/selector-867904b4.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x867904b4",
+      "signature": "function issue(address, uint256)",
+      "sourceFamily": "set-redemption",
+      "recipe": "typed:set:legacy-issue:self:fee",
+      "file": "listener/src/searcher/venues/selector-native/selector-867904b4-family/selector-867904b4.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x73088bf7",
+      "signature": "function issueTo(address, address, uint256)",
+      "sourceFamily": "set-redemption",
+      "recipe": "typed:set:legacy-issue:to:plain",
+      "file": "listener/src/searcher/venues/selector-native/selector-73088bf7-family/selector-73088bf7.json",
+      "enabledByDefault": false
+    },
+    {
+      "selector": "0x73088bf7",
+      "signature": "function issueTo(address, address, uint256)",
+      "sourceFamily": "set-redemption",
+      "recipe": "typed:set:legacy-issue:to:fee",
+      "file": "listener/src/searcher/venues/selector-native/selector-73088bf7-family/selector-73088bf7.json",
+      "enabledByDefault": false
+    }
+  ],
+  "observationOnly": [
+    {
+      "signature": "redeem(address,uint256)",
+      "reason": "Original Core observation pattern credits the vault; its implemented execution used redeemAndWithdrawTo, now a separate selector family."
+    },
+    {
+      "signature": "redeemTo(address,address,uint256)",
+      "reason": "Original Core observation pattern credits the vault; its implemented execution used redeemAndWithdrawTo, now a separate selector family."
+    }
+  ]
+}

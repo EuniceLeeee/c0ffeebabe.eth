@@ -1213,7 +1213,7 @@ test(`runHead wires deferred gross selection through the production pipeline: ${
           async submit() { sends.push("gross"); return { ...result("fallback", true), profitMode: "positive-gross-profit" }; },
           discard(reason: string) { discarded.push(reason); return result(reason); },
         } };
-      assert.deepEqual(sends, [], "gross must not precede a later finalist");
+      assert.equal(sends.length, 0, "gross must not precede a later finalist");
       if (selection === "cancel") { f.runtimeAbort.abort(new Error("fixture cancelled")); throw f.runtimeAbort.signal.reason; }
       if (selection === "fallback") return result("below_ev_gate");
       sends.push("ev");

@@ -15,6 +15,9 @@ export interface CapabilityEntryRootReceipt {
   readonly entrySourceFile: string | null;
   readonly entryExport: string | null;
   readonly additionalSourceFiles: readonly string[];
+  /** Authored file byte integrity is intentionally outside semantic capability
+   * identity. Metadata changes require a fresh artifact, not fresh Ready. */
+  readonly authoringIntegrity?: readonly Readonly<{ sourceFile: string; sha256: string }>[];
   readonly absence: "declared-absent" | null;
 }
 
@@ -379,7 +382,23 @@ function assertExactShadowRecord(value: unknown): void {
     "capability",
     "entryExport",
     "entrySourceFile",
+    ...("authoringIntegrity" in value.root ? ["authoringIntegrity"] : []),
   ]);
+  if ("authoringIntegrity" in value.root) {
+    if (!Array.isArray(value.root.authoringIntegrity) || !value.root.authoringIntegrity.length)
+      throw new Error("capability authoring integrity must be nonempty");
+    const paths: string[] = [];
+    for (const row of value.root.authoringIntegrity) {
+      if (!isPlainRecord(row)) throw new Error("capability authoring integrity row must be a record");
+      assertExactObjectKeys(row, ["sourceFile", "sha256"]);
+      const path = canonicalString(row.sourceFile, "capability authoring source");
+      if (path.startsWith("/") || path.split(/[\\/]/).some(part => part === "..") || !path.endsWith(".json"))
+        throw new Error("capability authoring integrity path must be a relative JSON source");
+      assertSha256(row.sha256, "capability authoring byte hash");
+      paths.push(path);
+    }
+    canonicalStringArray(paths, "capability authoring integrity paths");
+  }
   if (value.root.capability !== value.identity.capability) {
     throw new Error("capability-exact root and identity capability disagree");
   }
@@ -391,7 +410,7 @@ function assertExactShadowRecord(value: unknown): void {
     if (
       value.root.entrySourceFile !== null ||
       value.root.entryExport !== null ||
-      additional.length !== 0
+      additional.length !== 0 || "authoringIntegrity" in value.root
     ) {
       throw new Error("declared-absent capability root is invalid");
     }
@@ -402,6 +421,10 @@ function assertExactShadowRecord(value: unknown): void {
   }
   canonicalString(value.root.entrySourceFile, "capability root source file");
   canonicalString(value.root.entryExport, "capability root export");
+  if (value.root.entryExport === "defineSelectorFamilyModule" &&
+      (!Array.isArray(value.root.authoringIntegrity) || value.root.authoringIntegrity.length !== 1 ||
+        !additional.includes((value.root.authoringIntegrity[0] as { sourceFile: string }).sourceFile)))
+    throw new Error("selector-family/v2 capability requires its authored JSON byte integrity");
 }
 
 function canonicalStringArray(value: unknown, label: string): readonly string[] {
@@ -488,6 +511,7 @@ function exactProjection(record: CapabilityExactShadowRecord): CanonicalValue {
       entrySourceFile: record.root.entrySourceFile,
       entryExport: record.root.entryExport,
       additionalSourceFiles: record.root.additionalSourceFiles,
+      ...(record.root.authoringIntegrity === undefined ? {} : { authoringIntegrity: record.root.authoringIntegrity }),
       absence: record.root.absence,
     },
   };

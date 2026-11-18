@@ -23,6 +23,7 @@ import {
 } from "../adapter-family-exact-quote-cache.js";
 import {
   assertDefinedFamilyPlugin,
+  type AnyProtocolFamilyPlugin,
   type CompiledInstanceDescriptor,
   type BoundRequestProgram,
   type DiscoverySemantics,
@@ -128,6 +129,8 @@ export interface PreparedPricingStateInstance {
   readonly snapshot: object;
   readonly mids: ReadonlyMap<RouteKey, RouteVenueMid>;
   readonly unavailable: ReadonlyMap<RouteKey, string>;
+  /** Static binding only; the startup table owns current execution and price. */
+  readonly executionVerification?: "startup-simulation";
   readonly dependencies: readonly string[];
   /** Framework-owned ownership/binding integrity, independent of Family projection. */
   readonly groupBindingFingerprint: string;
@@ -144,7 +147,7 @@ export interface PreparedFamilyInstance {
   readonly candidateKey: string;
   readonly instanceKey: InstanceKey;
   readonly descriptor: CompiledInstanceDescriptor;
-  /** Only routes backed by a successfully decoded StateInstance are present. */
+  /** Routes backed by a decoded state or an explicit startup execution requirement. */
   readonly routes: readonly FamilyRouteDescriptor[];
   /**
    * Process-local route capabilities issued by the central runtime. Callers
@@ -188,6 +191,33 @@ export interface AdapterFamilyLifecycleResult {
   readonly generation: number;
   readonly outcomes: readonly AdapterInstanceOutcome[];
   readonly publication: AdapterFamilyPublication | null;
+}
+
+/** Chain-verified identity/descriptor and Family-projected routes before
+ * pricing. This is nomination evidence, never an admitted instance, route
+ * handle, publication or Ready credential. */
+export interface FamilyCandidateRoutePreview {
+  readonly kind: "family-candidate-route-preview";
+  readonly familyId: FamilyId;
+  readonly lineageId: LineageId;
+  readonly candidateKey: string;
+  readonly instanceKey: InstanceKey;
+  readonly descriptor: CompiledInstanceDescriptor;
+  readonly routes: readonly FamilyRouteDescriptor[];
+  readonly source: CanonicalSource;
+  readonly generation: number;
+  readonly staticBindingFingerprint: string;
+  readonly staticEvidenceFingerprint: string;
+  readonly evidenceRefs: readonly string[];
+  readonly outcomes: readonly AdapterInstanceOutcome[];
+}
+
+export interface FamilyCandidateRoutePreviewResult {
+  readonly familyId: FamilyId;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+  readonly outcomes: readonly AdapterInstanceOutcome[];
+  readonly preview: FamilyCandidateRoutePreview | null;
 }
 
 /** Shadow Credit lifecycle result; no production publication is implied. */
@@ -412,6 +442,7 @@ type IdentityResult = VerifiedIdentityResult | TerminalIdentityResult;
 interface PreparedCandidate {
   readonly instance: PreparedFamilyInstance | null;
   readonly outcomes: readonly AdapterInstanceOutcome[];
+  readonly routePreview?: FamilyCandidateRoutePreview;
   /** Binding-only preparation never issues an admitted instance or route handle. */
   readonly binding?: {
     readonly instanceKey: InstanceKey;
@@ -477,6 +508,14 @@ function snapshotCanonicalSource(source: CanonicalSource): CanonicalSource {
   });
 }
 
+function snapshotObservationOpaque(value: CanonicalValue): CanonicalValue {
+  hashCanonical(value); // Reject getters, sparse arrays, cycles and non-data values.
+  const copy = (item: CanonicalValue): CanonicalValue => item === null || typeof item !== "object" ? item :
+    Array.isArray(item) ? Object.freeze(item.map(copy)) :
+      Object.freeze(Object.fromEntries(Object.entries(item).map(([key, child]) => [key, copy(child)])));
+  return copy(value);
+}
+
 function snapshotFamilyLifecycleMatch(
   match: FamilyLifecycleMatch,
 ): FamilyLifecycleMatch {
@@ -494,6 +533,8 @@ function snapshotFamilyLifecycleMatch(
             ? {}
             : { sender: observation.sender }),
           data: observation.data,
+          ...(observation.opaque === undefined ? {} : { opaque: snapshotObservationOpaque(observation.opaque) }),
+          ...(observation.evidenceSource === undefined ? {} : { evidenceSource: snapshotCanonicalSource(observation.evidenceSource) }),
           ...(observation.transactionHash === undefined
             ? {}
             : { transactionHash: observation.transactionHash }),
@@ -694,7 +735,7 @@ export async function executeAdapterFamilyLifecycleBatch(input: {
     );
   }
   assertFamilyCapabilities(captured.family);
-  const limits = resolveLimits(captured.limits);
+  const limits = resolveLimits(captured.limits, captured.family.plugin.identity.requiredReadRounds);
   for (const match of captured.matches) {
     assertMatchSource(captured.family, match, captured.source);
   }
@@ -911,8 +952,8 @@ export async function executeCreditFamilyInstanceLifecycle(input: {
     source,
     generation: input.generation,
     runtime: input.runtime,
-    maxSteps: input.maxIdentityStepsPerVariant ??
-      DEFAULT_LIMITS.maxIdentityStepsPerVariant,
+    maxSteps: resolveLimits(input.maxIdentityStepsPerVariant === undefined ? undefined :
+      { maxIdentityStepsPerVariant: input.maxIdentityStepsPerVariant }, plugin.identity.requiredReadRounds).maxIdentityStepsPerVariant,
   });
   if (identityResult.status !== "verified") {
     outcomes.push(makeOutcome({
@@ -3259,13 +3300,66 @@ export async function recheckFamilyInstanceMemoBinding(input: {
     source,
     decoded: { candidate, candidateKey },
     sharedBindingResolver: createFamilySharedBindingBatchResolver({ ...input, source }),
-    limits: DEFAULT_LIMITS,
+    limits: resolveLimits(undefined, input.family.plugin.identity.requiredReadRounds),
     bindingOnly: true,
   });
   // A changed binding is not an admission credential. The rebuild caller must
   // fall back to full strict attestation before issuing a replacement memo.
   input.runtime.generationFence.assertCurrent(input.generation, source);
   return prepared.binding ?? null;
+}
+
+/** Resolve a raw Family nomination through the ordinary chain identity,
+ * instance/static evidence, shared binding and route validation stages. The
+ * caller may use this evidence to acquire an execution template before Graph
+ * admission; normal lifecycle pricing/publication must still run afterward.
+ * Existing memo-recheck opt-in and binding-only behavior are independent. */
+export async function previewFamilyCandidateRoutes(input: {
+  readonly family: LoadedPricedFamilyPlugin;
+  readonly candidate: FamilyCandidate;
+  readonly source: CanonicalSource;
+  readonly generation: number;
+  readonly runtime: CentralAdapterRuntime;
+  readonly limits?: Partial<AdapterFamilyLifecycleLimits>;
+}): Promise<FamilyCandidateRoutePreviewResult> {
+  rejectCallerSharedBindingInjection(input);
+  const captured = Object.freeze({
+    family: input.family,
+    candidate: structuredClone(input.candidate),
+    source: snapshotCanonicalSource(input.source),
+    generation: input.generation,
+    runtime: input.runtime,
+    limits: resolveLimits(input.limits, input.family.plugin.identity.requiredReadRounds),
+  });
+  assertIssuedLoadedFamilyBox(captured.family);
+  assertDefinedFamilyPlugin(captured.family.plugin);
+  assertSource(captured.source, captured.generation);
+  assertFamilyCapabilities(captured.family);
+  if (captured.runtime.staticEvidenceCache !== undefined) {
+    assertIssuedAdapterFamilyLifecycleContentCache(captured.runtime.staticEvidenceCache);
+  }
+  deepFreezeOpaqueRuntimeValue(captured.candidate, "route preview candidate");
+  captured.runtime.generationFence.assertCurrent(captured.generation, captured.source);
+  const candidateKey = canonicalKey(captured.family.plugin.discovery.candidateKey(captured.candidate), "candidate key");
+  const prepared = await prepareCandidate({
+    family: captured.family,
+    decoded: { candidate: captured.candidate, candidateKey },
+    source: captured.source,
+    generation: captured.generation,
+    runtime: captured.runtime,
+    sharedBindingResolver: createFamilySharedBindingBatchResolver(captured),
+    limits: captured.limits,
+    routePreviewOnly: true,
+  });
+  // Even a terminal outcome may not escape after its source was superseded.
+  captured.runtime.generationFence.assertCurrent(captured.generation, captured.source);
+  return Object.freeze({
+    familyId: captured.family.plugin.manifest.familyId,
+    source: captured.source,
+    generation: captured.generation,
+    outcomes: prepared.outcomes,
+    preview: prepared.routePreview ?? null,
+  });
 }
 
 async function prepareCandidate(input: {
@@ -3277,6 +3371,7 @@ async function prepareCandidate(input: {
   readonly sharedBindingResolver: FamilySharedBindingBatchResolver;
   readonly limits: AdapterFamilyLifecycleLimits;
   readonly bindingOnly?: boolean;
+  readonly routePreviewOnly?: boolean;
 }): Promise<PreparedCandidate> {
   const familyId = input.family.plugin.manifest.familyId;
   const { candidate, candidateKey } = input.decoded;
@@ -3525,6 +3620,26 @@ async function prepareCandidate(input: {
     evidenceRefs: instanceEvidenceRefs,
   }));
 
+  if (input.routePreviewOnly) {
+    const frozenOutcomes = Object.freeze([...outcomes]);
+    const routePreview: FamilyCandidateRoutePreview = Object.freeze({
+      kind: "family-candidate-route-preview",
+      familyId,
+      lineageId: identity.lineageId,
+      candidateKey,
+      instanceKey,
+      descriptor,
+      routes,
+      source: snapshotCanonicalSource(input.source),
+      generation: input.generation,
+      staticBindingFingerprint: instanceBindingFingerprint,
+      staticEvidenceFingerprint: instanceStaticFingerprint,
+      evidenceRefs: uniqueSorted(instanceEvidenceRefs),
+      outcomes: frozenOutcomes,
+    });
+    return Object.freeze({ instance: null, outcomes: frozenOutcomes, routePreview });
+  }
+
   const groups = groupRoutes(input.family, routes, input, candidateKey,
     identity, instanceKey, outcomes, instanceEvidenceRefs);
   const pricing = await Promise.all([...groups.entries()].map(
@@ -3599,6 +3714,17 @@ async function resolveIdentity(input: {
   // or silently reusing a configuration-dependent identity verdict.
   const executionRoundingRawUnits = MAX_EXECUTION_ROUNDING_RAW_UNITS;
   const plugin = runtimeInstanceLifecyclePlugin(input.family);
+  const callerSubject = Object.freeze({ familyId: plugin.manifest.familyId });
+  const callerBinding = Object.freeze({ stage: "identity" as const,
+    familyId: plugin.manifest.familyId, subject: callerSubject,
+    subjectKey: adapterWorkSubjectKey(callerSubject), source: input.source,
+    callerRole: "none" as const });
+  const caller = snapshotCentralCallerAuthority(input.runtime.callerAuthority.bind(callerBinding));
+  const assertCaller = (): void => {
+    const current = snapshotCentralCallerAuthority(input.runtime.callerAuthority.bind(callerBinding));
+    if (current.executor !== caller.executor || current.transactionOrigin !== caller.transactionOrigin)
+      throw new Error("identity execution caller changed");
+  };
   const applicable: IdentityVariant<FamilyCandidate, VerifiedIdentity, unknown>[] = [];
   const applicabilityFailures: string[] = [];
   for (const variant of plugin.identity.variants) {
@@ -3628,11 +3754,15 @@ async function resolveIdentity(input: {
     let step = 0;
     let successfulEvidenceSteps = 0;
     for (;;) {
+      assertCaller();
       const stepInput = Object.freeze({
         candidate: input.candidate.candidate,
         ...(evidence === undefined ? {} : { evidence }),
         step,
         executionRoundingRawUnits,
+        source: snapshotCanonicalSource(input.source),
+        ...(caller.executor === undefined ? {} : { executor: caller.executor }),
+        ...(caller.transactionOrigin === undefined ? {} : { transactionOrigin: caller.transactionOrigin }),
       });
       let decision;
       try {
@@ -3645,7 +3775,8 @@ async function resolveIdentity(input: {
       }
       if (decision.status === "verified") {
         if (
-          (plugin.manifest.domain === "protocol" ||
+          (plugin.manifest.domain === "protocol" &&
+            (plugin as AnyProtocolFamilyPlugin).protocol.activeBehaviorProof !== "startup-simulation" ||
             plugin.manifest.domain === "credit") &&
           successfulEvidenceSteps === 0
         ) {
@@ -3734,6 +3865,7 @@ async function resolveIdentity(input: {
         },
         runtime: input.runtime,
       });
+      assertCaller();
       if (work.status === "unresolved") {
         // No central chain-revert inference exists: whether a reverted or
         // empty result negates identity is the Family's own decision
@@ -3999,6 +4131,7 @@ async function preparePricingState(input: {
     "pricing-descriptor-compiled", evidenceRefs));
   return await executePreparedPricingCurrent({
     family: input.family,
+    instanceDescriptor: input.descriptor,
     candidateKey: input.candidateKey,
     identity: input.identity,
     instanceKey: input.instanceKey,
@@ -4019,8 +4152,28 @@ async function preparePricingState(input: {
   });
 }
 
+/** A pricing group cannot mix deferred execution and legacy current pricing. */
+function pricingExecutionVerification(
+  family: LoadedPricedFamilyPlugin,
+  descriptor: CompiledInstanceDescriptor,
+  routes: readonly FamilyRouteDescriptor[],
+): "startup-simulation" | undefined {
+  const policies = new Set<"startup-simulation" | undefined>();
+  for (const route of routes) {
+    const first = family.plugin.routes.projectGraph({ descriptor, route }).executionVerification;
+    const second = family.plugin.routes.projectGraph({ descriptor, route }).executionVerification;
+    if (first !== second || first !== undefined && first !== "startup-simulation") {
+      throw new Error("Family route execution verification is invalid or unstable");
+    }
+    policies.add(first);
+  }
+  if (policies.size > 1) throw new Error("Pricing group mixes execution verification policies");
+  return policies.values().next().value;
+}
+
 interface PreparedPricingCurrentInput {
   readonly family: LoadedPricedFamilyPlugin;
+  readonly instanceDescriptor: CompiledInstanceDescriptor;
   readonly candidateKey: string;
   readonly identity: Pick<VerifiedIdentity, "lineageId">;
   readonly instanceKey: InstanceKey;
@@ -4046,6 +4199,47 @@ async function executePreparedPricingCurrent(
   const familyId = input.family.plugin.manifest.familyId;
   const outcomes = [...input.inheritedOutcomes];
   const evidenceRefs = [...input.inheritedEvidenceRefs];
+  const executionVerification = pricingExecutionVerification(
+    input.family, input.instanceDescriptor, input.routes,
+  );
+  if (executionVerification === "startup-simulation") {
+    // Ready and current-source refresh share this boundary. Do not sample,
+    // call a preview getter, or execute before the startup funding path exists.
+    const snapshot = Object.freeze({
+      format: "awaiting-startup-simulation/v1",
+      source: snapshotCanonicalSource(input.source),
+    });
+    outcomes.push(pricingOutcome(input, "pricing-current", "unresolved",
+      "awaiting-startup-simulation", evidenceRefs));
+    const state: PreparedPricingStateInstance = Object.freeze({
+      familyId,
+      lineageId: input.identity.lineageId,
+      instanceKey: input.instanceKey,
+      stateKey: input.stateKey,
+      stateInstanceKey: `state-instance:${hashCanonical({
+        familyId, instanceKey: input.instanceKey, stateKey: input.stateKey,
+      })}`,
+      routes: Object.freeze([...input.routes]),
+      pricingDescriptor: input.pricingDescriptor,
+      snapshot,
+      mids: new SealedReadonlyMap<RouteKey, RouteVenueMid>(new Map()),
+      unavailable: new SealedReadonlyMap<RouteKey, string>(new Map()),
+      executionVerification,
+      dependencies: input.dependencies,
+      groupBindingFingerprint: input.groupBindingFingerprint,
+      staticBindingFingerprint: input.staticBindingFingerprint,
+      snapshotCompatibilityFingerprint: input.compatibilityFingerprint,
+      staticEvidenceFingerprint: input.staticEvidenceFingerprint,
+      // This fingerprint identifies a pending state, never execution evidence.
+      currentEvidenceFingerprint: hashCanonical({
+        format: "awaiting-startup-simulation/v1", source: canonicalSourceProjection(input.source),
+        groupBindingFingerprint: input.groupBindingFingerprint,
+        staticBindingFingerprint: input.staticBindingFingerprint,
+      }),
+      evidenceRefs: Object.freeze(uniqueSorted(evidenceRefs)),
+    });
+    return sealPricingPreparation(state, outcomes);
+  }
   const currentInput = Object.freeze({
     descriptor: input.pricingDescriptor,
     routes: input.routes,
@@ -4263,9 +4457,9 @@ export interface PreparedFamilyPricingRefreshResult {
 /**
  * Refresh only current-source pricing for a memo-rehydrated instance.
  * Identity, materialization, route projection and static evidence are not run
- * again; the strict plugin's current request/decode/derive program is the sole
- * source of current mids. Any unresolved shard makes the whole instance
- * unavailable to the current-source session.
+ * again. Legacy current request/decode/derive programs supply raw mids; routes
+ * requiring startup execution keep an explicit pending state for the existing
+ * effective price producer. A failed shard remains unavailable to the session.
  */
 export async function refreshPreparedFamilyInstancePricing(input: {
   readonly family: LoadedPricedFamilyPlugin;
@@ -4285,6 +4479,7 @@ export async function refreshPreparedFamilyInstancePricing(input: {
       });
       return await executePreparedPricingCurrent({
         family: input.family,
+        instanceDescriptor: input.instance.descriptor,
         candidateKey: input.instance.candidateKey,
         identity: Object.freeze({ lineageId: input.instance.lineageId }),
         instanceKey: input.instance.instanceKey,
@@ -5730,10 +5925,13 @@ function sealLifecycleResult(
 
 function resolveLimits(
   input: Partial<AdapterFamilyLifecycleLimits> | undefined,
+  requiredReadRounds?: number,
 ): AdapterFamilyLifecycleLimits {
+  if (requiredReadRounds !== undefined && (!Number.isSafeInteger(requiredReadRounds) ||
+      requiredReadRounds < 1 || requiredReadRounds > 256)) throw new Error("invalid declared binding read-round bound");
   const limits = {
     maxIdentityStepsPerVariant:
-      input?.maxIdentityStepsPerVariant ?? DEFAULT_LIMITS.maxIdentityStepsPerVariant,
+      input?.maxIdentityStepsPerVariant ?? Math.max(DEFAULT_LIMITS.maxIdentityStepsPerVariant, requiredReadRounds ?? 0),
     maxDependentReadRounds:
       input?.maxDependentReadRounds ?? DEFAULT_LIMITS.maxDependentReadRounds,
   };
@@ -5835,6 +6033,8 @@ function observationKey(observation: UnifiedObservation): string {
         target: observation.target,
         data: observation.data,
         source: canonicalSourceProjection(observation.source),
+        ...(observation.opaque === undefined ? {} : { opaque: observation.opaque }),
+        ...(observation.evidenceSource === undefined ? {} : { evidenceSource: canonicalSourceProjection(observation.evidenceSource) }),
       }
     : observation.kind === "log"
     ? {
@@ -5903,6 +6103,14 @@ function registerIssuedPreparedFamilyInstance(input: {
     if (!Object.isFrozen(pricing)) {
       throw new Error("Prepared Family pricing state must be frozen before issue");
     }
+    if (isPricedFamily(input.family)) {
+      const required = pricingExecutionVerification(input.family, input.instance.descriptor, pricing.routes);
+      if (pricing.executionVerification !== required || required === "startup-simulation" &&
+          (pricing.mids.size !== 0 || pricing.unavailable.size !== 0 ||
+           (pricing.snapshot as { format?: unknown }).format !== "awaiting-startup-simulation/v1")) {
+        throw new Error("Prepared pricing state changed its startup execution requirement");
+      }
+    }
     issuedPreparedPricingStateInstances.set(pricing, Object.freeze({
       family: input.family,
       instance: input.instance,
@@ -5937,6 +6145,7 @@ function preparedPricingStateIntegrityFingerprint(
     unavailable: [...pricing.unavailable]
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([routeKey, reason]) => ({ routeKey, reason })),
+    ...(pricing.executionVerification === undefined ? {} : { executionVerification: pricing.executionVerification }),
     dependencies: pricing.dependencies,
     groupBindingFingerprint: pricing.groupBindingFingerprint,
     staticBindingFingerprint: pricing.staticBindingFingerprint,

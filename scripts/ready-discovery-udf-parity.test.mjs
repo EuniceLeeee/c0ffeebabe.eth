@@ -16,6 +16,7 @@ process.env.SEARCHER_TEST_DISABLE_DOTENV='1';
 enableReadyFamilies(root);
 const {PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG:catalog}=await import('../listener/src/searcher/venues/production-family-composition.ts');
 const production=await import('../listener/src/searcher/universe-rebuild-production.ts');
+const {bindObservedCallTemplate}=await import('../listener/src/searcher/venues/observed-call-template.ts');
 const plain=x=>JSON.parse(JSON.stringify(x,(_k,v)=>typeof v==='bigint'?{$type:'bigint',value:String(v)}:v));
 const sort=rows=>rows.map(row=>JSON.stringify(row)).sort();
 const address=n=>'0x'+BigInt(n).toString(16).padStart(40,'0');
@@ -50,6 +51,7 @@ test('query sandbox and production agree for every packaged Family declaration a
     opaque+=actualOpaque.length;
     for(const row of actual)nominated.add(row.family);
     candidates+=actual.length;transactions++;
+    return actual;
   }
   for(const row of rules) {
     const d=catalog.forStrictFamily(row.familyId).plugin.discovery;
@@ -57,6 +59,31 @@ test('query sandbox and production agree for every packaged Family declaration a
     assert.deepEqual(row.logPatterns,plain(d?.logPatterns??[]),row.familyId+' logs');
     for(const pattern of d?.callPatterns??[]) {
       if(!pattern.signature)continue;
+      if(pattern.signature.startsWith('observed-selector:')) {
+        assert.equal(pattern.signature,'observed-selector:'+pattern.selector,'raw selector metadata must describe the exact selector');
+        const definition=report.roots.find(root=>root.familyId===row.familyId)?.declarative?.definition;
+        assert(definition,'learned selectors require a bound declarative Family');
+        const document=JSON.parse(readFileSync(definition,'utf8'));
+        const entries=(document.format==='selector-execution-family-v1'?document.entries:document.modules?.observedExecution?.entries)
+          ?.filter(entry=>entry.template.selector===pattern.selector);
+        assert(entries?.length,'raw selectors must have actual configured templates; do not invent an ABI');
+        for(const entry of entries) {
+          const sample=entry.template.sample;
+          const tx={tx_hash:'0x'+'33'.repeat(32),block_number:'25750000',block_hash:'0x'+'44'.repeat(32),receipt_status:'1',logs:[],
+            traces:[{trace_address:'',to_address:sample.target,from_address:sample.sender,call_type:'call',status:'1',input:entry.template.calldataTemplate}]};
+          assert(compare(tx).some(record=>record.family===row.familyId),'configured learned calldata must nominate its owner');
+          const minimum=BigInt(entry.minimumAmountIn),maximum=BigInt(entry.maximumAmountIn);
+          const changed={...tx,traces:[{...tx.traces[0],from_address:entry.executor,
+            input:bindObservedCallTemplate(entry.template,{amountIn:minimum<maximum?minimum+1n:minimum,executor:entry.executor})}]};
+          assert(compare(changed).some(record=>record.family===row.familyId),'rebound amount/actor words must retain learned nomination parity');
+          compare({...tx,receipt_status:'0'});
+          compare({...tx,traces:[{...tx.traces[0],status:'0'}]});
+          const targets=new Set(entries.map(binding=>binding.template.sample.target.toLowerCase()));
+          let foreign=1n;while(targets.has(address(foreign)))foreign++;
+          compare({...tx,traces:[{...tx.traces[0],to_address:address(foreign)}]});
+        }
+        continue;
+      }
       const abi=new Interface([pattern.signature.startsWith('function ')?pattern.signature:'function '+pattern.signature]);
       const fn=abi.fragments.find(x=>x.type==='function');
       const tx={tx_hash:'0x'+'33'.repeat(32),block_number:'25750000',block_hash:'0x'+'44'.repeat(32),receipt_status:'1',logs:[],

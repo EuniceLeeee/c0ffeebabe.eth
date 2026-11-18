@@ -54,6 +54,7 @@ export async function buildResolvedPlanFromPath(
   strictSession?: StrictProductionRuntimeSession,
   exactHandles?: readonly StrictProductionExactHandle[],
   quoteToleranceRawUnits: bigint = 0n,
+  fundingId?: string,
 ): Promise<ResolvedPlanNode> {
   if (amounts.length !== path.edges.length + 1) {
     throw new Error(
@@ -136,6 +137,7 @@ export async function buildResolvedPlanFromPath(
 
   return strictSession.buildFundingRoot({
     actionAdapterId: flashAdapterId,
+    ...(fundingId === undefined ? {} : { fundingId }),
     asset: flashToken,
     amount: flashAmount,
     minProfit,

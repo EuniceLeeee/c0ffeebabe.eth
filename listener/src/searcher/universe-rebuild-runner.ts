@@ -1,5 +1,7 @@
 import type { ReadyRuleCompatibility } from "./ready-rule-bindings.js";
 import { createHash } from "node:crypto";
+import type { ReadySelectorCensusTransaction } from "./ready-selector-census.js";
+import type { ReadySelectorCoverage } from "./ready-selector-coverage.js";
 import {
   AttestationCheckpointWriter,
   UniverseRebuildCheckpointStore,
@@ -11,6 +13,8 @@ import {
   hasDurableCandidateSnapshot,
   prepareReadyFamilyUpdate,
   immutableReadyValue,
+  memoExecutionVerification,
+  verifiedRunOutcomeForMemo,
   validateReadyFamilyGraph,
   type CandidateCoverageBinding,
   type CoveredCandidateOutcome,
@@ -68,6 +72,11 @@ export class UniverseRunIncomplete extends Error {
 
 export interface UniverseRebuildDependencies {
   readonly ruleCompatibility?: ReadyRuleCompatibility;
+  readonly selectorCensus?: readonly ReadySelectorCensusTransaction[];
+  readonly buildSelectorCoverage?: (input: {
+    readonly candidatesByKey: Readonly<Record<string, unknown>>;
+    readonly outcomesByCandidateKey: Readonly<Record<string, RunOutcome>>;
+  }) => ReadySelectorCoverage;
   readonly readyThrottle?: ReadyRpcThrottle;
   /** Stable complete caller discovery-input identity, separate from force or
    * attempt identity. Its existing output also binds sealed discovery reuse;
@@ -76,6 +85,9 @@ export interface UniverseRebuildDependencies {
   /** Discovery-only binding; proof environment changes must not rescan history. */
   readonly readyDiscoveryInputFingerprint?: () => string;
   readonly hasExplicitStartupCandidates?: boolean;
+  /** Keep previously observed nominations across replacement activity input;
+   * this never carries their proof or overrides an explicit candidate scope. */
+  readonly retainsReadyCandidates?: (familyId: string) => boolean;
   /** Freeze the canonical head, or one explicitly requested historical cutoff. */
   readonly freezeCanonicalHead: (
     requestedBlock?: number,
@@ -319,7 +331,7 @@ export async function rebuildUniverse(
   }
   const explicitRange = input.observationRange === undefined
     ? null
-    : validateExplicitObservationRange(input.observationRange);
+    : validateExplicitObservationRange(input.observationRange, input.selectorCensus !== undefined);
   const encodeCandidate = input.encodeCandidateSnapshot ?? ((value) => value);
   const decodeCandidate = input.decodeCandidateSnapshot ?? ((value) => value);
   let checkpoint = await input.store.load() ?? null;
@@ -427,12 +439,13 @@ export async function rebuildUniverse(
     throw new Error("universe rebuild: completed-outcome resume requires an unfinished run");
   }
   const retainedCandidates = Object.freeze(
-    (review ? [] : [
+    [
       ...Object.values(checkpoint?.verifiedMemos ?? {}),
       // Failed candidates remain retryable even without new activity in the
       // rolling window. They still need a successful attestation to enter Graph.
       ...Object.values(checkpoint?.retryableAttemptsByCandidateKey ?? {}),
-    ])
+    ]
+      .filter((entry) => !review || input.retainsReadyCandidates?.(entry.familyId) === true)
       .filter((entry) => input.isFamilyEnabled?.(entry.familyId) !== false)
       .sort((left, right) =>
         left.familyCandidateKey.localeCompare(right.familyCandidateKey)
@@ -727,6 +740,7 @@ export async function rebuildUniverse(
   // reconciles the SAME run's partition/receipts (time identity immutable).
   checkpoint = discoveryPlanChanged || definitionInputChanged || replacingReview
     ? await input.store.reconcileFixedRunPlan({
+        ...(input.selectorCensus === undefined ? {} : { selectorCensus: input.selectorCensus }),
         ...(replacingReview && { reviewReplacement: {
           previous: review!.replacesInputFingerprint!, next: review!.inputFingerprint,
         } }),
@@ -746,6 +760,7 @@ export async function rebuildUniverse(
         sourceReceipts,
       })
     : await input.store.beginOrResumeRun({
+        ...(input.selectorCensus === undefined ? {} : { selectorCensus: input.selectorCensus }),
         ...(input.currentInputFingerprint === undefined ? {} : { currentInputFingerprint: input.currentInputFingerprint }),
         ...(review && { reviewInputFingerprint: review.inputFingerprint }),
         ...(familyDefinitionHashes === undefined ? {} : { familyDefinitionHashes }),
@@ -1001,17 +1016,13 @@ export async function rebuildUniverse(
       if (
         completedOutcome?.status === "verified" &&
         completedOutcome.familyInstanceKey === reusableMemo.familyInstanceKey &&
-        completedOutcome.memoFingerprint === reusableMemo.memoFingerprint
+        completedOutcome.memoFingerprint === reusableMemo.memoFingerprint &&
+        completedOutcome.executionVerification === memoExecutionVerification(reusableMemo)
       ) {
         revalidation.confirmVerified(candidate, reusableMemo);
         return "verified";
       }
-      writer.record(Object.freeze({
-        status: "verified",
-        familyCandidateKey: candidateKey,
-        familyInstanceKey: reusableMemo.familyInstanceKey,
-        memoFingerprint: reusableMemo.memoFingerprint,
-      }));
+      writer.record(verifiedRunOutcomeForMemo(reusableMemo));
       revalidation.confirmVerified(candidate, reusableMemo);
       return "verified";
     }
@@ -1064,12 +1075,7 @@ export async function rebuildUniverse(
           recordDuplicateInstance(candidateKey, memo, duplicateOf);
           return "terminal-rejected";
         }
-        writer.record(Object.freeze({
-          status: "verified",
-          familyCandidateKey: candidateKey,
-          familyInstanceKey: memo.familyInstanceKey,
-          memoFingerprint: memo.memoFingerprint,
-        }), memo);
+        writer.record(verifiedRunOutcomeForMemo(memo), memo);
         revalidation.confirmVerified(candidate, memo);
         return "verified";
       }
@@ -1335,6 +1341,8 @@ export async function rebuildUniverse(
   const ready = Object.freeze({
     ...(input.ruleCompatibility ? { ruleBindings: input.ruleCompatibility.nextBindings() } :
       checkpoint.readyGeneration?.ruleBindings ? { ruleBindings: checkpoint.readyGeneration.ruleBindings } : {}),
+    ...(input.buildSelectorCoverage === undefined ? {} : { selectorCoverage: input.buildSelectorCoverage({
+      candidatesByKey: currentRun.candidatesByKey, outcomesByCandidateKey: currentRun.outcomesByCandidateKey }) }),
     ...(currentRun.familyUpdateScope === undefined ? {} : { familyUpdateScope: currentRun.familyUpdateScope }),
     ...(discoveryInputBinding === undefined ? {} : { discoveryInputBinding }),
     generation: (checkpoint.readyGeneration?.generation ?? 0) + 1,
@@ -1773,7 +1781,7 @@ export function assertReadyFamilyActivation(
 function validateExplicitObservationRange(input: {
   readonly fromBlock: number;
   readonly toBlock: number;
-}): { readonly fromBlock: number; readonly toBlock: number } {
+}, suppliedSelectorInput = false): { readonly fromBlock: number; readonly toBlock: number } {
   if (
     !Number.isSafeInteger(input.fromBlock) ||
     !Number.isSafeInteger(input.toBlock) ||
@@ -1783,9 +1791,9 @@ function validateExplicitObservationRange(input: {
     throw new Error("universe rebuild: explicit range is invalid");
   }
   const span = input.toBlock - input.fromBlock + 1;
-  // Reuse the sole production bound; an explicit range changes the anchor,
-  // never the maximum amount of historical authority collected in one run.
-  strictEdgeCollectionFromBlock(input.toBlock, span);
+  // Supplied SQL rows are already collected and bind their actual interval.
+  // The rolling RPC discovery bound still applies to every fetched window.
+  if (!suppliedSelectorInput) strictEdgeCollectionFromBlock(input.toBlock, span);
   return Object.freeze({
     fromBlock: input.fromBlock,
     toBlock: input.toBlock,
@@ -2049,12 +2057,7 @@ export async function probeOneFailure(input: {
       familyCandidateKey: input.familyCandidateKey,
     });
     verifiedMemo = memo;
-    next = Object.freeze({
-      status: "verified",
-      familyCandidateKey: input.familyCandidateKey,
-      familyInstanceKey: memo.familyInstanceKey,
-      memoFingerprint: memo.memoFingerprint,
-    });
+    next = verifiedRunOutcomeForMemo(memo);
   } else if (result.status === "terminal-rejected") {
     next = Object.freeze({
       status: "terminal-rejected",

@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x91dd7346",
+  "signature": "function unlockCallback(bytes)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_91DD7346_ENABLED"
+  },
+  "unsupportedReason": "Callback endpoint of a retained complete execution program; it is not an independent transaction entry."
+}

@@ -3,6 +3,7 @@ import { RuntimeAmountProgram, runtimeDeferredPayment, runtimePayment, runtimePr
   type RuntimeSettlementRequest } from "../../adapters/runtime-amount-program.js";
 import { executionNativeSides } from "../execution-asset-boundary.js";
 import { encodeDeclarativeCall } from "./declarative-call-codec.js";
+import { encodeCallbackPayload, validateCallbackPayloadLayout, type CallbackPayloadLayout } from "./declarative-byte-layout.js";
 
 export type CallbackValue = bigint | number | string | boolean | { readonly runtime: string };
 export type CallbackCheck = { left: CallbackValue; operator: "eq" | "gte"; right: CallbackValue };
@@ -14,10 +15,12 @@ export interface DeclarativeDeferredExecution {
   readonly stepId: string;
   /** args omits this bytes argument; only the common compiler inserts it. */
   readonly dataArgument: number;
+  readonly dataLayout?: CallbackPayloadLayout;
   readonly call: CallbackCall;
   readonly callback: {
     readonly signature: string;
     readonly dataArgument: number;
+    readonly dataLayout?: CallbackPayloadLayout;
     readonly debtArgument: number;
     readonly outputArgument: number;
     readonly expectedDebt: CallbackValue;
@@ -93,10 +96,12 @@ export function validateDeclarativeDeferredDefinition(
   spec: DeclarativeDeferredExecution,
   steps?: readonly { id: string; call?: unknown; math?: unknown; static?: boolean; approval?: unknown; effects?: readonly unknown[] }[],
 ): void {
-  keys(spec, ["stepId", "dataArgument", "call", "callback"]);
+  keys(spec, ["stepId", "dataArgument", "call", "callback"], ["dataLayout"]);
+  validateCallbackPayloadLayout(spec.dataLayout);
   keys(spec.call, ["target", "signature", "args"], ["save", "checks"]);
   const cb = spec.callback;
-  keys(cb, ["signature", "dataArgument", "debtArgument", "outputArgument", "expectedDebt", "expectedOutput", "bindings", "payment"]);
+  keys(cb, ["signature", "dataArgument", "debtArgument", "outputArgument", "expectedDebt", "expectedOutput", "bindings", "payment"], ["dataLayout"]);
+  validateCallbackPayloadLayout(cb.dataLayout);
   keys(cb.payment, ["mode", "recipient"], ["requireBool", "verifyAllowance"]);
   if (!["transfer", "approve-pull"].includes(cb.payment.mode)) throw new Error("unknown deferred payment mode");
   if ([cb.payment.requireBool, cb.payment.verifyAllowance].some(value => value !== undefined && typeof value !== "boolean"))
@@ -172,7 +177,17 @@ export function emitDeclarativeDeferredExecution(
   seed(8, output); seed(9, debt); seed(10, beforeIn); seed(11, beforeOut);
   callback.calldata(2, 0).constant(3, 224n).math("shr", 2, 2, 3).constant(3, BigInt(incoming.fn.selector)).equal(2, 3);
   for (const binding of cb.bindings) {
-    seed(3, word(binding.equals)); callback.calldata(2, 4 + binding.argument * 32).equal(2, 3);
+    // Static ABI bindings belong in the child program. Holding an otherwise
+    // unused parent register for each address/hash can exhaust the register
+    // bank before a multiword return, even though these values never change.
+    if (typeof binding.equals === "object") seed(3, word(binding.equals));
+    else {
+      if (typeof binding.equals === "number" && !Number.isSafeInteger(binding.equals)) throw new Error("unsafe callback binding word");
+      const value = typeof binding.equals === "boolean" ? binding.equals ? 1n : 0n : BigInt(binding.equals);
+      if (value < 0n || value > MaxUint256) throw new Error("callback binding word bounds");
+      callback.constant(3, value);
+    }
+    callback.calldata(2, 4 + binding.argument * 32).equal(2, 3);
   }
   callback.calldata(1, 4 + cb.debtArgument * 32).equal(1, 9).math("sub", 2, 1, 12);
   runtimePayment(callback, 1, 2);
@@ -196,11 +211,12 @@ export function emitDeclarativeDeferredExecution(
     if (cb.payment.verifyAllowance) callback.call(tokenIn, TOKEN.encodeFunctionData("allowance", [actor, recipient]), { static: true }).load(3, 0).equal(3, 1);
   }
   const payload = runtimeProgramScript(callback.bytes());
-  const args = [...spec.call.args]; args.splice(spec.dataArgument, 0, hexlify(payload));
+  const outgoingPayload = encodeCallbackPayload(spec.dataLayout, payload), incomingPayload = encodeCallbackPayload(cb.dataLayout, payload);
+  const args = [...spec.call.args]; args.splice(spec.dataArgument, 0, outgoingPayload.data);
   const encoded = encodeDeclarativeCall(spec.call.signature, args);
-  const outgoingOffset = payloadOffset(spec.call.signature, spec.dataArgument, encoded.data);
-  const callbackArgs = incoming.fn.inputs.map((t, i) => i === cb.dataArgument ? hexlify(payload) : dummy(t));
-  const incomingOffset = payloadOffset(cb.signature, cb.dataArgument, incoming.abi.encodeFunctionData(incoming.fn, callbackArgs));
+  const outgoingOffset = payloadOffset(spec.call.signature, spec.dataArgument, encoded.data) + outgoingPayload.payloadOffset;
+  const callbackArgs = incoming.fn.inputs.map((t, i) => i === cb.dataArgument ? incomingPayload.data : dummy(t));
+  const incomingOffset = payloadOffset(cb.signature, cb.dataArgument, incoming.abi.encodeFunctionData(incoming.fn, callbackArgs)) + incomingPayload.payloadOffset;
   const clear = () => {
     if (cb.payment.mode !== "approve-pull") return;
     program.call(tokenIn, TOKEN.encodeFunctionData("approve", [recipient, 0n]));

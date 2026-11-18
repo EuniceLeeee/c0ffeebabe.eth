@@ -18,6 +18,7 @@ import type { RethTransportScheduler } from "./reth-transport-scheduler.js";
 import { createHash } from "node:crypto";
 import { recordAdapterRequestCompletion } from "./adapter-request-observation.js";
 import { ethers } from "ethers";
+import { RevmStrictError } from "./revm-sim-client.js";
 import { getEthersCallRpcError, isRpcThrottleError } from "./rpc-throttle-guard.js";
 import {
   createBoundedRequestExecutor,
@@ -57,6 +58,9 @@ export interface StrictSimulationTransport {
   /** Trusted transport configuration, never supplied by a Family. */
   readonly executorProgramCodeHash?: string;
   readonly counterfactualExecutorCode?: Readonly<{ address: string; keccak256: string }>;
+  /** Source-owner selection for a sealed caller role. The selected transport
+   * owns its own bytecode provenance; requests cannot supply a transport. */
+  forRequest?(input: Parameters<StrictSimulationTransport["simulate"]>[0]): Promise<StrictSimulationTransport>;
   /** Standalone execution, not an Exact quote or a profitable-plan verdict. */
   simulateStandalone?(input: {
     readonly source: CanonicalSource;
@@ -693,6 +697,25 @@ async function executeRequest(
 ): Promise<AdapterRequestResult> {
   assertTransportControl(control);
   try {
+    if (prefix === undefined && simulator?.forRequest &&
+        (request.kind === "effect-delta-simulation" || request.kind === "state-override-simulation")) {
+      try {
+        simulator = await simulator.forRequest({ request, source, callerAuthority,
+          ...(control === undefined ? {} : { control }) });
+        assertCurrent(); assertTransportControl(control);
+        if (simulator.forRequest) throw new RevmStrictError("validation", "recursive strict simulation selection");
+      } catch (error) {
+        assertCurrent();
+        if (!(error instanceof RevmStrictError)) throw error;
+        // Selection precedes execution. It cannot prove a protocol revert or
+        // a resource shortage; retain existing cancellation/deadline meanings.
+        // Only the finite error kind is logged, never provider error text.
+        console.warn(`[strict-runtime] strict simulation caller selection failed: ${error.kind}`);
+        const failure = transportControlFailure(control, error);
+        return Object.freeze({ id: request.id, ok: false as const, source: Object.freeze(source),
+          failure: failure === "rpc" ? "aborted" as const : failure });
+      }
+    }
     const executorProgram = (request.kind === "effect-delta-simulation" || request.kind === "state-override-simulation") &&
       request.call.executionMode === "executor-program";
     const executorProgramCodeHash = executorProgram ? simulator?.executorProgramCodeHash : undefined;
@@ -942,7 +965,9 @@ async function executeRequest(
           id: request.id,
           ok: false as const,
           source: Object.freeze(source),
-          failure: callerModeGap ? ("aborted" as const) : ("resource-limited" as const),
+          // An incomplete/invalid execution observation includes unproven
+          // reverts in trace-free mode. It must never unlock quote fallback.
+          failure: callerModeGap || error instanceof RevmStrictError ? ("aborted" as const) : ("resource-limited" as const),
         });
       }
     }

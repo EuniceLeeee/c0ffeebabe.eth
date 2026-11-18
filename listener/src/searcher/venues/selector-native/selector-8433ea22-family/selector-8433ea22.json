@@ -1,0 +1,17 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x8433ea22",
+  "signature": "function liquidate(uint256, uint256, address, bool)",
+  "domain": "protocol",
+  "meta": {
+    "label": "Observed liquidation entry",
+    "migratedFrom": "credit/fluid-family/fluid.json",
+    "legacyAction": "fluid-dex-liquidate",
+    "coverage": "The base registered this selector for action/trace recognition only; it supplied no executable route, Exact quote or execution program."
+  },
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_8433EA22_ENABLED"
+  },
+  "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

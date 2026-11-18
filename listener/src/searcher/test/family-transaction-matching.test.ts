@@ -4,6 +4,8 @@ import { Interface, toBeHex, ZeroAddress } from "ethers";
 import { resolveTransactionCaseBinding, matchFamilyTransactionInput, type ObservedReadyRoute } from "./family-transaction-matching.js";
 import type { ReadyTransactionEvidence } from "../ready-transaction-input.js";
 import type { FamilyTransactionLeg } from "./family-transaction-registry.js";
+import { canonicalExecutionCall } from "./family-transaction-selector.js";
+import { selectorFamilyIdentity } from "../venues/selector-execution-keys.js";
 
 const A = (n: number) => toBeHex(n, 20), H = (n: number) => toBeHex(n, 32);
 const TX = H(90), source = { number: 25000000, hash: H(91) }, pool = A(2), asset = A(3), holder = A(4);
@@ -159,6 +161,7 @@ test("known action keeps nested unmapped calls as evidence without rejecting its
     frame(pool, A(10), "0xad207501", [0, 1, 0])] };
   const binding = resolveTransactionCaseBinding(f);
   assert.equal(binding.resolved.routeKey, "deposit");
+  assert("nestedUnmappedCalls" in binding);
   assert.deepEqual(binding.nestedUnmappedCalls, [{ target: pool, selector: "0xad207501", traceAddress: [0, 1, 0] }]);
 });
 
@@ -187,9 +190,9 @@ test("known action cannot cover an unknown call at a different candidate target"
 
 test("an unknown sibling moving route assets remains an adaptation gap", () => {
   const f = fixture();
-  f.evidence.rawTrace = [...f.evidence.rawTrace as any[],
+  f.evidence = { ...f.evidence, rawTrace: [...f.evidence.rawTrace as any[],
     frame(pool, holder, "0x94bf804d", [1]),
-    frame(asset, pool, token.encodeFunctionData("transferFrom", [holder, pool, 9n]), [1, 0])];
+    frame(asset, pool, token.encodeFunctionData("transferFrom", [holder, pool, 9n]), [1, 0])] };
   assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector with asset flow/);
 });
 
@@ -221,4 +224,75 @@ test("unknown burn cannot donate receipt evidence to a sibling known redeem", ()
   (f.evidence.rawTrace as any).calls[0].input = "0x";
   assert.notEqual(matchFamilyTransactionInput(f).status, "matched");
   assert.throws(() => resolveTransactionCaseBinding(f), /unmapped target selector with asset flow/);
+});
+
+
+function selectorFixture() {
+  const f = fixture(), signature = "function deposit(uint256,address)";
+  const current = selectorFamilyIdentity(signature).familyId;
+  f.routes = [{ ...f.routes[0]!, familyId: current, instanceKey: "execution-instance:fixture", lineageId: "selector-lineage", routeKey: "execution-route:fixture",
+    execution: { domain: "protocol", selector: action.getFunction("deposit")!.selector, signature, target: pool },
+    matchCall: call => canonicalExecutionCall(signature, pool, call) }];
+  f.expected = { ...f.expected, familyId: "obsolete:arbitrary-label", lineageId: "obsolete:lineage" };
+  return { ...f, familyBinding: "selector" as const };
+}
+
+test("selector case binding replaces old family, lineage and logical instance only after actual ABI-call matching", () => {
+  const f = selectorFixture(), before = structuredClone(f.expected);
+  const binding = resolveTransactionCaseBinding(f);
+  assert(binding.selection === "selector-call");
+  assert.equal(binding.resolved.familyId, f.routes[0]!.familyId);
+  assert.equal(binding.resolved.instanceKey, "execution-instance:fixture");
+  assert.equal(binding.resolved.signature, "function deposit(uint256,address)");
+  assert.equal(matchFamilyTransactionInput(f).status, "matched");
+  assert.deepEqual(f.expected, before);
+  f.expected = { ...f.expected, amountIn: "14" };
+  const resized = resolveTransactionCaseBinding(f); assert(resized.selection === "selector-call");
+  assert.equal(resized.resolved.familyId, binding.resolved.familyId);
+  assert.equal(matchFamilyTransactionInput(f).status, "input-conflict", "changed test amount cannot be relabelled as landed input");
+});
+
+test("unknown and noncanonical selectors remain unverified instead of borrowing an admitted token pair", () => {
+  for (const data of ["0xdeadbeef" + "00".repeat(64), action.encodeFunctionData("deposit", [7n, holder]) + "00"] ) {
+    const f = selectorFixture(); (f.evidence.rawTrace as any[])[1].action.input = data;
+    assert.equal(matchFamilyTransactionInput(f).status, "unverified-selector");
+    assert.throws(() => resolveTransactionCaseBinding(f), /absent or unsupported/);
+  }
+});
+
+test("colliding selectors and same-resource alternative owners cannot be resolved by a legacy family label", () => {
+  const f = selectorFixture(); f.routes.push({ ...f.routes[0]!, familyId: "execution:collision:abi-other", instanceKey: "execution-instance:other" });
+  f.expected = { ...f.expected, familyId: f.routes[0]!.familyId };
+  assert.equal(matchFamilyTransactionInput(f).status, "ambiguous-selector");
+  assert.throws(() => resolveTransactionCaseBinding(f), /ambiguous/);
+});
+
+test("selector resource pins retain pool namespaces and token IDs; same address cannot erase those dimensions", () => {
+  const f = selectorFixture(), first = { ...f.routes[0]!, execution: { ...f.routes[0]!.execution!,
+    poolId: H(1), poolNamespace: "contract-pool-id", tokenInId: "7", tokenOutId: "9" } };
+  f.routes = [first, { ...first, instanceKey: "execution-instance:other-pool", routeKey: "other-route",
+    execution: { ...first.execution, poolId: H(2), tokenInId: "8" } }];
+  assert.throws(() => resolveTransactionCaseBinding(f), /ambiguous/);
+  f.expected = { ...f.expected, execution: { target: pool, poolId: H(1), poolNamespace: "contract-pool-id", tokenInId: "7", tokenOutId: "9" } };
+  const binding = resolveTransactionCaseBinding(f); assert(binding.selection === "selector-call");
+  const selected = binding.resolved;
+  assert.equal(selected.poolId, H(1)); assert.equal(selected.poolNamespace, "contract-pool-id");
+  assert.equal(selected.tokenInId, "7"); assert.equal(selected.tokenOutId, "9");
+  f.expected = { ...f.expected, execution: { ...f.expected.execution, tokenInId: "8" } };
+  assert.throws(() => resolveTransactionCaseBinding(f), /absent or unsupported/);
+});
+
+test("opaque pool identifiers and namespaces remain case sensitive in pins and reference fallback", () => {
+  const f = selectorFixture();
+  f.routes = [{ ...f.routes[0]!, execution: { ...f.routes[0]!.execution!, poolId: "PoolKey", poolNamespace: "ManagerNamespace" } }];
+  f.expected = { ...f.expected, instanceKey: "PoolKey" };
+  assert.equal(resolveTransactionCaseBinding(f).selection, "selector-call");
+  f.expected = { ...f.expected, instanceKey: "poolkey" };
+  assert.throws(() => resolveTransactionCaseBinding(f), /absent or unsupported/);
+  f.expected = { ...f.expected, execution: { target: pool, poolId: "PoolKey", poolNamespace: "ManagerNamespace" } };
+  assert.equal(resolveTransactionCaseBinding(f).selection, "selector-call");
+  f.expected = { ...f.expected, execution: { ...f.expected.execution, poolNamespace: "managernamespace" } };
+  assert.throws(() => resolveTransactionCaseBinding(f), /absent or unsupported/);
+  f.expected = { ...f.expected, execution: { ...f.expected.execution, poolId: "poolkey", poolNamespace: "ManagerNamespace" } };
+  assert.throws(() => resolveTransactionCaseBinding(f), /absent or unsupported/);
 });

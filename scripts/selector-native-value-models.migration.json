@@ -1,0 +1,943 @@
+[
+  {
+    "id": "balancer-v1:sum-weights",
+    "version": 1,
+    "program": [
+      {
+        "assert": {
+          "op": "lte",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$input"
+              ]
+            },
+            8
+          ]
+        },
+        "error": "weight vector bound"
+      },
+      {
+        "return": {
+          "op": "sumUint",
+          "args": [
+            "$input"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "univ4-fee-hook:sat1-hook-data",
+    "version": 1,
+    "program": [
+      {
+        "let": "buyer",
+        "value": {
+          "op": "address",
+          "args": [
+            "$input.executor"
+          ]
+        }
+      },
+      {
+        "let": "hook",
+        "value": {
+          "op": "address",
+          "args": [
+            "$input.hook"
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "or",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                "$input.direction",
+                "zero-for-one"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$input.direction",
+                "one-for-zero"
+              ]
+            }
+          ]
+        },
+        "error": "invalid execution direction"
+      },
+      {
+        "let": "seller",
+        "value": {
+          "op": "address",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                {
+                  "op": "packedHash",
+                  "args": [
+                    [
+                      "string",
+                      "address",
+                      "address"
+                    ],
+                    [
+                      "univ4-fee-hook:sat1:sell:v1",
+                      "$buyer",
+                      "$hook"
+                    ]
+                  ]
+                },
+                12,
+                20
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$seller",
+                    "$buyer"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$seller",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "derived actor collision"
+      },
+      {
+        "return": {
+          "hookData": {
+            "op": "abiEncode",
+            "args": [
+              [
+                "address"
+              ],
+              [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$input.direction",
+                        "zero-for-one"
+                      ]
+                    },
+                    "$buyer",
+                    "$seller"
+                  ]
+                }
+              ]
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "ekubo:core-swap-log",
+    "version": 1,
+    "program": [
+      {
+        "assert": {
+          "op": "matches",
+          "args": [
+            "$input.balanceUpdate",
+            "^0x[0-9a-fA-F]{64}$"
+          ]
+        },
+        "error": "packed balance update word"
+      },
+      {
+        "let": "packed",
+        "value": {
+          "op": "uint",
+          "args": [
+            "$input.balanceUpdate"
+          ]
+        }
+      },
+      {
+        "let": "delta0",
+        "value": {
+          "op": "signedWord",
+          "args": [
+            {
+              "op": "shrUint",
+              "args": [
+                "$packed",
+                {
+                  "op": "uint",
+                  "args": [
+                    "128"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "128"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "delta1",
+        "value": {
+          "op": "signedWord",
+          "args": [
+            {
+              "op": "andUint",
+              "args": [
+                "$packed",
+                {
+                  "op": "uint",
+                  "args": [
+                    "340282366920938463463374607431768211455"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "128"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "or",
+              "args": [
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$delta0",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "gt",
+                      "args": [
+                        "$delta1",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "lt",
+                      "args": [
+                        "$delta0",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "lt",
+                      "args": [
+                        "$delta1",
+                        {
+                          "op": "uint",
+                          "args": [
+                            "0"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "invalid signed swap deltas"
+      },
+      {
+        "let": "isToken1",
+        "value": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                "$delta1",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "lt",
+              "args": [
+                "$delta0",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "directed",
+        "value": {
+          "op": "or",
+          "args": [
+            "$isToken1",
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$delta0",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lt",
+                  "args": [
+                    "$delta1",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "delta0": "$delta0",
+          "delta1": "$delta1",
+          "isToken1": "$isToken1",
+          "directed": "$directed",
+          "amountIn": {
+            "op": "if",
+            "args": [
+              "$directed",
+              {
+                "op": "if",
+                "args": [
+                  "$isToken1",
+                  "$delta1",
+                  "$delta0"
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          },
+          "amountOut": {
+            "op": "if",
+            "args": [
+              "$directed",
+              {
+                "op": "if",
+                "args": [
+                  "$isToken1",
+                  {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      },
+                      "$delta0"
+                    ]
+                  },
+                  {
+                    "op": "sub",
+                    "args": [
+                      {
+                        "op": "uint",
+                        "args": [
+                          "0"
+                        ]
+                      },
+                      "$delta1"
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  "0"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "oneswap:proxy",
+    "version": 1,
+    "program": [
+      {
+        "let": "pool",
+        "value": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$input.pool"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "code",
+        "value": {
+          "op": "lower",
+          "args": [
+            "$input.code"
+          ]
+        }
+      },
+      {
+        "return": null,
+        "when": {
+          "op": "not",
+          "args": [
+            {
+              "op": "matches",
+              "args": [
+                "$code",
+                "^0x60806040523661000b57005b604080516343ee590760e11b815290517f[0-9a-f]{64}917f[0-9a-f]{64}917f[0-9a-f]{64}917f[0-9a-f]{64}917f[0-9a-f]{64}916000916001600160a01b038816916387dcb20e91600480830192602092919082900301818787803b1580156100f957600080fd5b505af115801561010d573d6000803e3d6000fd5b505050506040513d602081101561012357600080fd5b505160405190915036806000833781810188815260208101889052604081018790526060810186905260800184905260a0016000808284865af43d9150816000843e808015610170578284f35b8284fdfea264697066735822122099c472e7c795c5c12331e89d9d4e3a7734fdfa1b8329fb560b4ecbecbf7e7df764736f6c634300060c0033$"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    29,
+                    12
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "error": "noncanonical immutable address"
+      },
+      {
+        "let": "factory",
+        "value": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    41,
+                    20
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    63,
+                    12
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "error": "noncanonical immutable address"
+      },
+      {
+        "let": "money",
+        "value": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    75,
+                    20
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    97,
+                    12
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "error": "noncanonical immutable address"
+      },
+      {
+        "let": "stock",
+        "value": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    109,
+                    20
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    131,
+                    12
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "error": "noncanonical immutable address"
+      },
+      {
+        "let": "ones",
+        "value": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$code",
+                    143,
+                    20
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "packed",
+        "value": {
+          "op": "uint",
+          "args": [
+            {
+              "op": "bytes",
+              "args": [
+                "$code",
+                165,
+                32
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "flag",
+        "value": {
+          "op": "shrUint",
+          "args": [
+            "$packed",
+            {
+              "op": "uint",
+              "args": [
+                "192"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "stockUnit",
+        "value": {
+          "op": "andUint",
+          "args": [
+            {
+              "op": "shrUint",
+              "args": [
+                "$packed",
+                {
+                  "op": "uint",
+                  "args": [
+                    "128"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "18446744073709551615"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "priceMul",
+        "value": {
+          "op": "andUint",
+          "args": [
+            {
+              "op": "shrUint",
+              "args": [
+                "$packed",
+                {
+                  "op": "uint",
+                  "args": [
+                    "64"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "18446744073709551615"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "let": "priceDiv",
+        "value": {
+          "op": "andUint",
+          "args": [
+            "$packed",
+            {
+              "op": "uint",
+              "args": [
+                "18446744073709551615"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": null,
+        "when": {
+          "op": "or",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                "$flag",
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$stockUnit",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$priceMul",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$priceDiv",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$factory",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$ones",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$stock",
+                        "0x0000000000000000000000000000000000000000"
+                      ]
+                    },
+                    "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    "$stock"
+                  ]
+                },
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$money",
+                        "0x0000000000000000000000000000000000000000"
+                      ]
+                    },
+                    "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+                    "$money"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$pool",
+                "$stock"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$pool",
+                "$money"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$pool",
+                "$factory"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                "$pool",
+                "$ones"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "return": {
+          "factory": "$factory",
+          "money": "$money",
+          "stock": "$stock",
+          "ones": "$ones",
+          "isOnlySwap": {
+            "op": "eq",
+            "args": [
+              "$flag",
+              {
+                "op": "uint",
+                "args": [
+                  "1"
+                ]
+              }
+            ]
+          },
+          "stockUnit": "$stockUnit",
+          "priceMul": "$priceMul",
+          "priceDiv": "$priceDiv"
+        }
+      }
+    ]
+  }
+]

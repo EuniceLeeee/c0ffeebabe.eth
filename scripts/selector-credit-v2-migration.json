@@ -1,0 +1,31 @@
+{
+  "base": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "source": "credit/fluid-family/fluid.json",
+  "destination": "listener/src/searcher/venues/selector-native/selector-032d2276-family/selector-032d2276.json",
+  "enabled": true,
+  "domain": "credit",
+  "selector": "0x032d2276",
+  "execution": "operate(collateral,debt,new-position)",
+  "preserved": [
+    "current config/oracle/exchange-price reads",
+    "integer CF/tick/fee rounding model",
+    "three source-bound debt fractions",
+    "actual position/return/token-delta proof",
+    "exact-clear approval",
+    "standing-position/final repayment gate"
+  ],
+  "removedIdentityGates": [
+    "factory reverse lookup",
+    "vault/token code identity",
+    "fixed probe actor"
+  ],
+  "normalization": "same selector + full ABI owns candidate, instance and route; metadata is not semantic",
+  "baseNonEntry": {
+    "action": "fluid-dex-liquidate",
+    "selector": "0x8433ea22",
+    "signature": "liquidate(uint256,uint256,address,bool)",
+    "destination": "listener/src/searcher/venues/selector-native/selector-8433ea22-family/selector-8433ea22.json",
+    "status": "observed-only",
+    "reason": "Base action/trace registration only; no projected route, Exact quote or execution recipe existed."
+  }
+}

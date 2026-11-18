@@ -17,7 +17,7 @@ import type { TokenEdge } from "../planner/token-graph.js";
 import {
   q96DirectedReserves,
   q96PrecisionProbeAmount,
-} from "../venues/swaps/blockscan-state-shared.js";
+} from "../venues/blockscan-state-shared.js";
 
 function loadEnv(): void {
   try {

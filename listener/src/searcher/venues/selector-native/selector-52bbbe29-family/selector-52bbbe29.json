@@ -1,0 +1,1148 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x52bbbe29",
+  "signature": "function swap((bytes32, uint8, address, address, uint256, bytes), (address, bool, address, bool), uint256, uint256)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_52BBBE29_ENABLED"
+  },
+  "binding": {
+    "nomination": {
+      "poolIdPath": [
+        0,
+        0
+      ],
+      "poolNamespace": "contract-pool-id",
+      "parameterPaths": [
+        [
+          0,
+          2
+        ],
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    "flow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "vault",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "selectorBinding:vault:pool",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingvaultpool",
+                  "getPool(bytes32)",
+                  [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:vault:specialization",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingvaultspecialization",
+                  "getPool(bytes32)",
+                  [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:vault:tokens",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingvaulttokens",
+                  "getPoolTokens(bytes32)",
+                  [
+                    {
+                      "op": "at",
+                      "args": [
+                        {
+                          "op": "at",
+                          "args": [
+                            "$args",
+                            0
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "result": {
+            "pool": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingvaultpool",
+                        "getPool(bytes32)",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:vault:pool"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "specialization": {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "decode",
+                  "args": [
+                    "bindingvaultspecialization",
+                    "getPool(bytes32)",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "selectorBinding:vault:specialization"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    1
+                  ]
+                }
+              ]
+            },
+            "tokens": {
+              "op": "decode",
+              "args": [
+                "bindingvaulttokens",
+                "getPoolTokens(bytes32)",
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "returned",
+                      "args": [
+                        "selectorBinding:vault:tokens"
+                      ]
+                    },
+                    "data"
+                  ]
+                },
+                0
+              ]
+            }
+          }
+        },
+        {
+          "id": "decimals",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": {
+            "op": "flatMap",
+            "args": [
+              "$steps.vault.tokens",
+              "item",
+              [
+                {
+                  "id": {
+                    "op": "join",
+                    "args": [
+                      [
+                        "selectorBinding:decimals:decimals:",
+                        {
+                          "op": "string",
+                          "args": [
+                            "$item"
+                          ]
+                        }
+                      ],
+                      ""
+                    ]
+                  },
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$item"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingdecimalsdecimals",
+                      "decimals()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ]
+            ]
+          },
+          "result": {
+            "op": "map",
+            "args": [
+              "$steps.vault.tokens",
+              "item",
+              {
+                "item": "$item",
+                "decimals": {
+                  "op": "number",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingdecimalsdecimals",
+                        "decimals()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                {
+                                  "op": "join",
+                                  "args": [
+                                    [
+                                      "selectorBinding:decimals:decimals:",
+                                      {
+                                        "op": "string",
+                                        "args": [
+                                          "$item"
+                                        ]
+                                      }
+                                    ],
+                                    ""
+                                  ]
+                                }
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "result": {
+        "vault": {
+          "pool": "$steps.vault.pool",
+          "specialization": "$steps.vault.specialization",
+          "tokens": "$steps.vault.tokens"
+        },
+        "decimals": "$steps.decimals"
+      }
+    },
+    "descriptor": {
+      "op": "merge",
+      "args": [
+        {
+          "pool": "$binding.vault.pool",
+          "poolId": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "at",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$args",
+                      0
+                    ]
+                  },
+                  0
+                ]
+              }
+            ]
+          },
+          "binding": {
+            "vault": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$target"
+                  ]
+                }
+              ]
+            },
+            "specialization": "$binding.vault.specialization",
+            "tokens": "$binding.vault.tokens",
+            "decimals": {
+              "op": "map",
+              "args": [
+                "$binding.decimals",
+                "row",
+                "$row.decimals"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "routes": {
+    "target": "$descriptor.pool",
+    "directions": {
+      "op": "flatMap",
+      "args": [
+        {
+          "op": "map",
+          "args": [
+            "$descriptor.binding.tokens",
+            "token",
+            {
+              "token": "$token",
+              "position": "$index"
+            }
+          ]
+        },
+        "left",
+        {
+          "op": "flatMap",
+          "args": [
+            {
+              "op": "map",
+              "args": [
+                "$descriptor.binding.tokens",
+                "token",
+                {
+                  "token": "$token",
+                  "position": "$index"
+                }
+              ]
+            },
+            "right",
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$left.position",
+                    "$right.position"
+                  ]
+                },
+                [],
+                [
+                  {
+                    "id": {
+                      "op": "join",
+                      "args": [
+                        [
+                          "$left.position",
+                          "$right.position"
+                        ],
+                        ":"
+                      ]
+                    },
+                    "enabled": true,
+                    "tokenIn": "$left.token",
+                    "tokenOut": "$right.token",
+                    "adapterId": "execution:0x52bbbe29:abi-453a754190e99de9310167c070727b55b9c1e0097dc4950358bd8e5f72f35d5f:call",
+                    "taxonomy": {
+                      "slotKind": "swap"
+                    },
+                    "fields": {
+                      "i": "$left.position",
+                      "j": "$right.position"
+                    }
+                  }
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "venue": {
+      "kind": "vault-pool-id",
+      "vault": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+      "poolId": "$descriptor.poolId"
+    },
+    "checks": [
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$descriptor.binding.vault",
+            "$constants.vault"
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$descriptor.pool",
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$descriptor.poolId",
+                    0,
+                    20
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$descriptor.binding.specialization",
+            {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "bytes",
+                  "args": [
+                    "$descriptor.poolId",
+                    20,
+                    2
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "lte",
+          "args": [
+            "$descriptor.binding.specialization",
+            2
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "gte",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$descriptor.binding.tokens"
+              ]
+            },
+            2
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                "$descriptor.binding.decimals"
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$descriptor.binding.tokens"
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "not",
+          "args": [
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$descriptor.binding.specialization",
+                    2
+                  ]
+                },
+                {
+                  "op": "ne",
+                  "args": [
+                    {
+                      "op": "length",
+                      "args": [
+                        "$descriptor.binding.tokens"
+                      ]
+                    },
+                    2
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "every",
+          "args": [
+            "$descriptor.binding.decimals",
+            "d",
+            {
+              "op": "and",
+              "args": [
+                {
+                  "op": "gte",
+                  "args": [
+                    "$d",
+                    0
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    "$d",
+                    36
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "length",
+              "args": [
+                {
+                  "op": "unique",
+                  "args": [
+                    {
+                      "op": "map",
+                      "args": [
+                        "$descriptor.binding.tokens",
+                        "t",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$t"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "length",
+              "args": [
+                "$descriptor.binding.tokens"
+              ]
+            }
+          ]
+        },
+        "error": "balancer-v2 route does not match descriptor"
+      }
+    ],
+    "resource": {
+      "target": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+      "poolId": "$descriptor.poolId",
+      "poolNamespace": "contract-pool-id"
+    }
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": [
+      "$descriptor.pool",
+      "$constants.vault"
+    ],
+    "requireCanonicalSource": true,
+    "rejectRuntimeEvidence": true,
+    "steps": [
+      {
+        "id": "guard",
+        "math": {
+          "model": "swapAmountGuard",
+          "inputs": {
+            "amount": {
+              "runtime": "amountIn"
+            }
+          },
+          "outputs": {
+            "high": "balancerV2HighBit"
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "balancerV2HighBit"
+              },
+              "operator": "eq",
+              "right": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "swap",
+        "call": {
+          "target": "$constants.vault",
+          "signature": "function swap((bytes32,uint8,address,address,uint256,bytes),(address,bool,address,bool),uint256,uint256) payable returns(uint256)",
+          "args": [
+            [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "poolId"
+                ]
+              },
+              0,
+              "$route.tokenIn",
+              "$route.tokenOut",
+              {
+                "runtime": "amountIn"
+              },
+              "0x"
+            ],
+            [
+              "$executor",
+              false,
+              "$recipient",
+              false
+            ],
+            "$minAmountOut",
+            "$constants.maxUint"
+          ],
+          "save": {
+            "swapOut": 0
+          }
+        },
+        "approval": {
+          "token": "$route.tokenIn",
+          "spender": "$constants.vault",
+          "mode": "exact-clear",
+          "verifyAllowance": true
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient",
+        "equals": {
+          "runtime": "swapOut"
+        },
+        "minimum": "$minAmountOut"
+      },
+      {
+        "kind": "unchanged-native"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenIn",
+        "account": "$recipient",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "when": "$externalRecipient"
+      }
+    ]
+  },
+  "observations": {
+    "version": 1,
+    "events": [
+      {
+        "id": "balancer-v2-vault-swap",
+        "signature": "event Swap(bytes32 indexed poolId,address indexed tokenIn,address indexed tokenOut,uint256 amountIn,uint256 amountOut)",
+        "classification": "swap",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$args.poolId",
+                        0,
+                        20
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "payload": {
+          "poolId": {
+            "op": "lower",
+            "args": [
+              "$args.poolId"
+            ]
+          },
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      {
+                        "op": "bytes",
+                        "args": [
+                          "$args.poolId",
+                          0,
+                          20
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "tokenIn": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$args.tokenIn"
+                ]
+              }
+            ]
+          },
+          "tokenOut": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$args.tokenOut"
+                ]
+              }
+            ]
+          },
+          "amountIn": "$args.amountIn",
+          "amountOut": "$args.amountOut"
+        },
+        "valid": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$log.address",
+                "$constants.vault"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$args.tokenIn"
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$args.tokenOut"
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$args.tokenIn",
+                    "$args.tokenOut"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.amountIn",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "gt",
+              "args": [
+                "$args.amountOut",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "ne",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "bytes",
+                              "args": [
+                                "$args.poolId",
+                                0,
+                                20
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "$constants.zero"
+              ]
+            },
+            {
+              "op": "lte",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "bytes",
+                      "args": [
+                        "$args.poolId",
+                        20,
+                        2
+                      ]
+                    }
+                  ]
+                },
+                2
+              ]
+            }
+          ]
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                {
+                  "op": "coalesce",
+                  "args": [
+                    "$edge.observationTarget",
+                    "$edge.target"
+                  ]
+                },
+                "$pool"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$edge.tokenIn",
+                "$payload.tokenIn"
+              ]
+            },
+            {
+              "op": "sameAddress",
+              "args": [
+                "$edge.tokenOut",
+                "$payload.tokenOut"
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "lower",
+                  "args": [
+                    "$payload.poolId"
+                  ]
+                },
+                {
+                  "op": "lower",
+                  "args": [
+                    "$edge.instanceKey"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "impact": {
+          "pool": {
+            "op": "coalesce",
+            "args": [
+              "$edge.observationTarget",
+              "$edge.target"
+            ]
+          },
+          "poolId": "$payload.poolId",
+          "tokenIn": "$payload.tokenIn",
+          "tokenOut": "$payload.tokenOut",
+          "amountIn": "$payload.amountIn",
+          "amountOut": "$payload.amountOut",
+          "matchedAdapterId": "$edge.adapterId"
+        },
+        "requireReadyBinding": true
+      }
+    ],
+    "canonicalIntakeTargets": [
+      "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+    ],
+    "victimSupport": "detect-only"
+  },
+  "refreshPolicy": "on-touch",
+  "values": {
+    "abi": {
+      "bindingvaultpool": [
+        "function getPool(bytes32) view returns(address,uint8)"
+      ],
+      "bindingvaultspecialization": [
+        "function getPool(bytes32) view returns(address,uint8)"
+      ],
+      "bindingvaulttokens": [
+        "function getPoolTokens(bytes32) view returns(address[],uint256[],uint256)"
+      ],
+      "bindingdecimalsdecimals": [
+        "function decimals() view returns(uint8)"
+      ]
+    },
+    "constants": {
+      "vault": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+      "maxUint": "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+      "zero": "0x0000000000000000000000000000000000000000"
+    }
+  },
+  "resourceValues": {
+    "constants": {
+      "vault": "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+    }
+  },
+  "runtimeMath": {
+    "version": 1,
+    "entries": {
+      "swapAmountGuard": {
+        "model": "balancer-v2-swap-amount-guard",
+        "version": 1
+      }
+    },
+    "models": [
+      {
+        "id": "balancer-v2-swap-amount-guard",
+        "version": 1,
+        "inputs": [
+          "amount"
+        ],
+        "outputs": [
+          "high"
+        ],
+        "operations": [
+          {
+            "name": "high",
+            "op": "shr",
+            "left": {
+              "input": "amount"
+            },
+            "right": {
+              "constant": "255"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "meta": {
+    "label": "balancer-v2/vault-registered-pool"
+  }
+}

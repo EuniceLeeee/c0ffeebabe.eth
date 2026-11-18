@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x11da60b4",
+  "signature": "function settle()",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_11DA60B4_ENABLED"
+  },
+  "unsupportedReason": "Nested step of a retained complete execution program; it is not an independent route entry."
+}

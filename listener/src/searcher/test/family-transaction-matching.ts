@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { Interface, ZeroAddress } from "ethers";
+import { FunctionFragment, Interface, ZeroAddress } from "ethers";
 import type { ReadyTransactionEvidence } from "../ready-transaction-input.js";
 import { observationsFromSelectedTransaction, type RebuildCallObservation } from "../universe-rebuild-production.js";
 import type { FamilyTransactionLeg } from "./family-transaction-registry.js";
+import { sameExecutionResource, transactionSelectorCensus, type TransactionExecutionBinding } from "./family-transaction-selector.js";
+import type { ReadySelectorCensusTransaction } from "../ready-selector-census.js";
 
 // ERC20 is the shared asset transport, not a protocol/action classifier.
 const TOKEN = new Interface([
@@ -57,6 +59,11 @@ export interface ObservedReadyRoute {
   familyId: string; instanceKey: string; lineageId: string; routeKey: string;
   adapterId: string; target: string; tokenIn: string; tokenOut: string;
   direction?: string;
+  /** Issued selector/ABI and resource dimensions, independent of protocol labels. */
+  execution?: Omit<TransactionExecutionBinding, "familyId" | "instanceKey" | "lineageId" | "routeKey">;
+  referenceInstanceKeys?: readonly string[];
+  referenceRouteKeys?: readonly string[];
+  matchCall?(call: RebuildCallObservation, census: ReadySelectorCensusTransaction): boolean;
   executionAssets?: { input: "erc20" | "native"; output: "erc20" | "native" };
   /** The production Family-owned matcher; no selector table in this runner. */
   matchTrace(target: string, selector: string): boolean;
@@ -72,13 +79,62 @@ export interface MatchedTransactionInput {
   nativeOutputTraceAddresses: readonly (readonly number[])[];
 }
 
+const selectorBinding = (input: { familyBinding?: "selector" | "legacy"; routes: readonly ObservedReadyRoute[] }) =>
+  input.familyBinding === "selector" || input.familyBinding === undefined && input.routes.some(route => route.execution);
+
+function selectorTargetRoutes(routes: readonly ObservedReadyRoute[], expected: FamilyTransactionLeg): ObservedReadyRoute[] {
+  return routes.filter(route => {
+    const binding = route.execution, pin = expected.execution;
+    if (!binding || binding.domain !== expected.domain || !route.matchCall || !same(route.tokenIn, expected.tokenIn ?? "") || !same(route.tokenOut, expected.tokenOut ?? "")) return false;
+    const resources = [route.instanceKey, route.target, binding.poolId, ...(route.referenceInstanceKeys ?? [])].filter((key): key is string => typeof key === "string");
+    if (pin?.target ? !same(route.target, pin.target) : !resources.some(key => sameExecutionResource(key, expected.instanceKey ?? ""))) return false;
+    for (const key of ["selector", "poolId"] as const)
+      if (pin?.[key] !== undefined && !sameExecutionResource(String(binding[key] ?? ""), pin[key]!)) return false;
+    for (const key of ["poolNamespace", "tokenInId", "tokenOutId"] as const)
+      if (pin?.[key] !== undefined && String(binding[key] ?? "") !== pin[key]) return false;
+    if (pin?.signature && FunctionFragment.from(pin.signature).format("sighash") !== FunctionFragment.from(binding.signature).format("sighash")) return false;
+    if (expected.routeKey && expected.routeKey !== route.routeKey && !route.referenceRouteKeys?.includes(expected.routeKey)) return false;
+    return true;
+  });
+}
+
+function executionBinding(route: ObservedReadyRoute): TransactionExecutionBinding {
+  assert(route.execution);
+  return { familyId: route.familyId, instanceKey: route.instanceKey, lineageId: route.lineageId, routeKey: route.routeKey, ...route.execution };
+}
+
+function resolveSelectorTransactionCaseBinding(input: {
+  transactionHash: string; evidence: ReadyTransactionEvidence; routes: readonly ObservedReadyRoute[]; expected: FamilyTransactionLeg;
+  familyBinding?: "selector" | "legacy";
+}) {
+  const reference = matchFamilyTransactionInput({ ...input, familyBinding: "selector" });
+  const census = transactionSelectorCensus(input.evidence), { calls } = successfulTransactionCalls(input.evidence);
+  const candidates = selectorTargetRoutes(input.routes, input.expected);
+  const selected = candidates.filter(route => calls.some(call => route.matchCall!(call, census)));
+  // Selector collisions and resource ambiguity are coverage gaps. A legacy
+  // family/lineage or amount must never select an arbitrary first owner.
+  if (selected.length !== 1) throw Object.assign(new Error(selected.length ? "selector Ready binding ambiguous" : "selector Ready binding absent or unsupported"), {
+    evidence: { reference, candidates: candidates.map(({ matchTrace, matchCall, ...route }) => route),
+      targetCalls: reference.targetCalls, status: selected.length ? "ambiguous-selector" : "unverified-selector" },
+  });
+  const route = selected[0]!, resolved = executionBinding(route);
+  return { original: { familyId: input.expected.familyId, instanceKey: input.expected.instanceKey, domain: input.expected.domain,
+    ...(input.expected.lineageId ? { lineageId: input.expected.lineageId } : {}), ...(input.expected.routeKey ? { routeKey: input.expected.routeKey } : {}),
+    ...(input.expected.priorBinding ? { priorBinding: input.expected.priorBinding } : {}) },
+    resolved, action: { adapterId: route.adapterId, ...(route.direction ? { direction: route.direction } : {}) },
+    selection: "selector-call" as const, changed: input.expected.familyId !== route.familyId || input.expected.instanceKey !== route.instanceKey ||
+      input.expected.lineageId !== route.lineageId || input.expected.routeKey !== route.routeKey };
+}
+
 /** Resolve only mutable Ready binding fields. The TX/instance/tokens/amount are
  * immutable seeds. Explicit routes remain explicit simulation actions; legacy
  * unpinned routes must be identified by an actual successful internal call. */
 export function resolveTransactionCaseBinding(input: {
   transactionHash: string; evidence: ReadyTransactionEvidence;
   routes: readonly ObservedReadyRoute[]; expected: FamilyTransactionLeg;
+  familyBinding?: "selector" | "legacy";
 }) {
+  if (selectorBinding(input)) return resolveSelectorTransactionCaseBinding(input);
   const { expected, routes, evidence } = input;
   // Also validates the TX/source and keeps the original attribution untouched.
   const reference = matchFamilyTransactionInput(input);
@@ -169,8 +225,11 @@ export function successfulTransactionCalls(evidence: ReadyTransactionEvidence) {
  * Multi-call flows that cannot be unambiguously tied to a receipt stay unresolved. */
 export function matchFamilyTransactionInput(input: {
   transactionHash: string; evidence: ReadyTransactionEvidence; routes: readonly ObservedReadyRoute[]; expected: FamilyTransactionLeg;
+  familyBinding?: "selector" | "legacy";
 }) {
   const { evidence, routes, expected } = input;
+  const selectorMode = selectorBinding(input);
+  const census = selectorMode ? transactionSelectorCensus(evidence) : undefined;
   assert(same(evidence.receipt.transactionHash, input.transactionHash), "matching TX differs from registered sample");
   assert(expected.source && evidence.receipt.blockNumber === expected.source.number && same(evidence.receipt.blockHash, expected.source.hash),
     "matching source differs from registered sample");
@@ -202,7 +261,8 @@ export function matchFamilyTransactionInput(input: {
       hasAssetFlow({ traceAddress: f.path }, calls, frames, routes.flatMap(r => [r.tokenIn, r.tokenOut]))));
   const observed: MatchedTransactionInput[] = [], unresolved: Record<string, unknown>[] = [];
   for (const route of routes) {
-    const actionCalls = calls.filter(c => same(c.target, route.target) && route.matchTrace(c.target, c.data.slice(0, 10)));
+    const actionCalls = calls.filter(c => same(c.target, route.target) &&
+      (selectorMode ? Boolean(route.execution && route.matchCall?.(c, census!)) : route.matchTrace(c.target, c.data.slice(0, 10))));
     for (const call of actionCalls) {
       const context = { familyId: route.familyId, instanceKey: route.instanceKey, routeKey: route.routeKey,
         selector: call.data.slice(0, 10), traceAddress: call.traceAddress };
@@ -255,18 +315,20 @@ export function matchFamilyTransactionInput(input: {
     if (rivals.length !== 1) { unresolved.push({ ...row, reason: "logical-instance-or-route-ambiguous" }); return false; }
     return true;
   });
-  const targetRoutes = routes.filter(r => r.familyId === expected.familyId && same(r.instanceKey, expected.instanceKey ?? "") &&
+  const targetRoutes = selectorMode ? selectorTargetRoutes(routes, expected) : routes.filter(r => r.familyId === expected.familyId && same(r.instanceKey, expected.instanceKey ?? "") &&
     r.lineageId === expected.lineageId && same(r.tokenIn, expected.tokenIn ?? "") && same(r.tokenOut, expected.tokenOut ?? "") &&
     (expected.routeKey === undefined || r.routeKey === expected.routeKey));
   const matching = unique.filter(row => targetRoutes.some(r => r.familyId === row.familyId && same(r.instanceKey, row.instanceKey) && r.routeKey === row.routeKey) && row.amountIn === expected.amountIn);
-  const status = targetRoutes.length !== 1 ? "direction-not-admitted"
+  const observedTargetRoutes = selectorMode ? targetRoutes.filter(route => calls.some(call => route.matchCall!(call, census!))) : targetRoutes;
+  const status = observedTargetRoutes.length !== 1 ? selectorMode ? observedTargetRoutes.length ? "ambiguous-selector" : "unverified-selector" : "direction-not-admitted"
     : matching.length === 1 ? "matched"
     : unique.some(row => targetRoutes.some(r => r.familyId === row.familyId && same(r.instanceKey, row.instanceKey) && r.routeKey === row.routeKey)) ? "input-conflict"
     : unique.some(row => row.familyId === expected.familyId && same(row.instanceKey, expected.instanceKey ?? "")) ? "action-conflict"
-    : unresolved.some(row => row.routeKey === targetRoutes[0]!.routeKey) ? "evidence-incomplete" : "action-not-observed";
+    : unresolved.some(row => row.routeKey === observedTargetRoutes[0]!.routeKey) ? "evidence-incomplete" : "action-not-observed";
   return JSON.parse(JSON.stringify({ version: 1, transactionHash: evidence.receipt.transactionHash, source: expected.source, status, expected: { familyId: expected.familyId, instanceKey: expected.instanceKey,
     lineageId: expected.lineageId, tokenIn: expected.tokenIn, tokenOut: expected.tokenOut, amountIn: expected.amountIn, routeKey: expected.routeKey },
     observed: unique, unresolved,
-    targetCalls: calls.filter(c => same(c.target, expected.instanceKey ?? "")).map(c => ({ target: c.target, selector: c.data.slice(0, 10), traceAddress: c.traceAddress })), ...(status === "matched" ? { selected: matching[0]! } : {}),
+    targetCalls: calls.filter(c => same(c.target, expected.execution?.target ?? expected.instanceKey ?? "") ||
+      selectorMode && targetRoutes.some(route => same(c.target, route.target))).map(c => ({ target: c.target, selector: c.data.slice(0, 10), traceAddress: c.traceAddress })), ...(status === "matched" ? { selected: matching[0]! } : {}),
     claim: "TX action/input binding only; Ready and execution acceptance remain independent gates" }));
 }

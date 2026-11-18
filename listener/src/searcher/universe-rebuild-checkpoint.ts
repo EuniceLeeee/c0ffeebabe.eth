@@ -11,6 +11,9 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname } from "node:path";
+import { assertReadySelectorCoverage } from "./ready-selector-coverage.js";
+import type { ReadySelectorCoverage } from "./ready-selector-coverage.js";
+import type { ReadySelectorCensusTransaction } from "./ready-selector-census.js";
 import type { CanonicalSource } from
   "./venues/adapter-request-program.js";
 
@@ -122,6 +125,8 @@ export type RunOutcome =
     readonly familyCandidateKey: string;
     readonly familyInstanceKey: string;
     readonly memoFingerprint: string;
+    /** The memo proves binding; execution is deferred to the startup table. */
+    readonly executionVerification?: "startup-simulation";
   }
   | {
     readonly status: "terminal-rejected";
@@ -180,6 +185,7 @@ export interface DurableSourceReceipt {
 }
 
 export interface InProgressUniverseRun {
+  readonly selectorCensus?: readonly ReadySelectorCensusTransaction[];
   readonly reviewInputFingerprint?: string;
   readonly currentInputFingerprint?: string;
   /** Current complete Family definition input, sealed before any attempts.
@@ -238,6 +244,9 @@ export interface ReadyResultHistoryPartition {
 
 export interface ReadyUniverseGeneration {
   readonly ruleBindings?: ReadyRuleBindings;
+  /** Complete supplied call inventory, including selectors without a Family.
+   * This ledger never substitutes for verifiedMemos or Graph authority. */
+  readonly selectorCoverage?: ReadySelectorCoverage;
   readonly familyUpdateScope?: ReadyFamilyUpdateScope;
   /** Exact caller discovery input, independent of result refresh/force policy.
    * Absence on legacy Ready requires one ordinary discovery pass. */
@@ -1131,6 +1140,7 @@ function parseEnvelopeValue(parsed: unknown): StartupCheckpointEnvelope {
   const inProgressRun = legacyEnvelope.inProgressRun ?? null;
   assertReadyResultHistory(legacyEnvelope.readyGeneration);
   if (legacyEnvelope.readyGeneration?.ruleBindings) validateReadyRuleBindings(legacyEnvelope.readyGeneration.ruleBindings);
+  assertReadySelectorCoverage(legacyEnvelope.readyGeneration?.selectorCoverage);
   if (
     inProgressRun !== null &&
     !Array.isArray(inProgressRun.sourceReceipts)
@@ -1846,6 +1856,7 @@ export class UniverseRebuildCheckpointStore {
         }
         const next = mutate(current);
         if (next === current) return next;
+        assertReadySelectorCoverage(next.readyGeneration?.selectorCoverage);
         if (next.inProgressRun !== null) assertRunCandidateCoverage(next.inProgressRun, next.verifiedMemos);
         else if (next.readyGeneration !== null) {
           assertReadyCandidateCoverage(next.readyGeneration.familyPartitions, next.verifiedMemos, next.readyGeneration.cutoff);
@@ -2284,7 +2295,7 @@ export class UniverseRebuildCheckpointStore {
           ...(refreshedFamilies.has(id) ? unbound : partition),
           outcomesByCandidateKey: Object.freeze(Object.fromEntries(Object.entries(partition.outcomesByCandidateKey)
             .map(([key, outcome]) => [key, outcome.status === "verified" && verifiedMemos[key] !== undefined
-              ? Object.freeze({ ...outcome, memoFingerprint: verifiedMemos[key]!.memoFingerprint })
+              ? verifiedRunOutcomeForMemo(verifiedMemos[key]!)
               : replacements.get(key) ?? outcome]))),
         })]; })),
       );
@@ -2478,6 +2489,7 @@ export class UniverseRebuildCheckpointStore {
 
   /** Create the fixed-cutoff run or return the existing one for it. */
   async beginOrResumeRun(input: {
+    readonly selectorCensus?: readonly ReadySelectorCensusTransaction[];
     readonly reviewInputFingerprint?: string;
     readonly currentInputFingerprint?: string;
     readonly familyDefinitionHashes?: Readonly<Record<string, string>>;
@@ -2518,6 +2530,7 @@ export class UniverseRebuildCheckpointStore {
         if (
           existing.reviewInputFingerprint !== input.reviewInputFingerprint ||
           existing.currentInputFingerprint !== input.currentInputFingerprint ||
+          canonicalJson(existing.selectorCensus ?? null) !== canonicalJson(input.selectorCensus ?? null) ||
           (existing.familyDefinitionHashes !== undefined &&
             canonicalJson(existing.familyDefinitionHashes) !== canonicalJson(input.familyDefinitionHashes ?? null)) ||
           canonicalJson(existing.forcedOutcomeStatuses ?? null) !== canonicalJson(input.forcedOutcomeStatuses ?? null) ||
@@ -2567,6 +2580,7 @@ export class UniverseRebuildCheckpointStore {
         ...base,
         revision: base.revision + 1,
         inProgressRun: Object.freeze({
+          ...(input.selectorCensus === undefined ? {} : { selectorCensus: immutableReadyValue(input.selectorCensus) }),
           ...(input.reviewInputFingerprint && { reviewInputFingerprint: input.reviewInputFingerprint }),
           ...(input.currentInputFingerprint === undefined ? {} : { currentInputFingerprint: input.currentInputFingerprint }),
           ...(input.familyDefinitionHashes === undefined ? {} : { familyDefinitionHashes: immutableReadyValue(input.familyDefinitionHashes) }),
@@ -2599,6 +2613,7 @@ export class UniverseRebuildCheckpointStore {
    * carried and every candidate re-enters findReusableMemo.
    */
   async reconcileFixedRunPlan(input: {
+    readonly selectorCensus?: readonly ReadySelectorCensusTransaction[];
     readonly reviewReplacement?: { readonly previous: string; readonly next: string };
     readonly familyDefinitionHashes?: Readonly<Record<string, string>>;
     readonly candidateFamilyIds?: Readonly<Record<string, string>>;
@@ -2684,6 +2699,7 @@ export class UniverseRebuildCheckpointStore {
         inProgressRun: Object.freeze({
           ...run,
           ...(input.reviewReplacement && { reviewInputFingerprint: input.reviewReplacement.next }),
+          ...(input.selectorCensus === undefined ? {} : { selectorCensus: immutableReadyValue(input.selectorCensus) }),
           ...(input.familyDefinitionHashes === undefined ? {} : { familyDefinitionHashes: immutableReadyValue(input.familyDefinitionHashes) }),
           universeHash: input.universeHash,
           candidateSetHash: input.candidateSetHash,
@@ -2765,10 +2781,7 @@ export class UniverseRebuildCheckpointStore {
                 candidateKey,
             );
           }
-          outcomes![candidateKey] = Object.freeze({
-            ...outcome,
-            memoFingerprint: upgraded.memoFingerprint,
-          });
+          outcomes![candidateKey] = verifiedRunOutcomeForMemo(upgraded);
         }
       }
       return Object.freeze({
@@ -2928,6 +2941,34 @@ export class AttestationCheckpointWriter {
   }
 }
 
+/** Read the generic execution requirement from the sealed, JSON-safe projection. */
+export function memoExecutionVerification(
+  memo: Pick<DurableVerifiedMemo, "staticProjection">,
+): "startup-simulation" | undefined {
+  const projection = memo.staticProjection as { readonly pricingInstances?: readonly {
+    readonly executionVerification?: unknown;
+  }[] } | null;
+  if (!Array.isArray(projection?.pricingInstances)) return undefined;
+  for (const pricing of projection.pricingInstances) {
+    if (pricing.executionVerification !== undefined && pricing.executionVerification !== "startup-simulation") {
+      throw new Error("Ready memo has an invalid execution verification requirement");
+    }
+  }
+  return projection.pricingInstances.some(pricing => pricing.executionVerification === "startup-simulation")
+    ? "startup-simulation" : undefined;
+}
+
+export function verifiedRunOutcomeForMemo(memo: DurableVerifiedMemo): Extract<RunOutcome, { status: "verified" }> {
+  const executionVerification = memoExecutionVerification(memo);
+  return Object.freeze({
+    status: "verified",
+    familyCandidateKey: memo.familyCandidateKey,
+    familyInstanceKey: memo.familyInstanceKey,
+    memoFingerprint: memo.memoFingerprint,
+    ...(executionVerification === undefined ? {} : { executionVerification }),
+  });
+}
+
 function assertMemoMatchesVerifiedOutcome(
   memo: DurableVerifiedMemo,
   outcome: RunOutcome,
@@ -2936,7 +2977,8 @@ function assertMemoMatchesVerifiedOutcome(
     outcome.status !== "verified" ||
     memo.familyCandidateKey !== outcome.familyCandidateKey ||
     memo.familyInstanceKey !== outcome.familyInstanceKey ||
-    memo.memoFingerprint !== outcome.memoFingerprint
+    memo.memoFingerprint !== outcome.memoFingerprint ||
+    memoExecutionVerification(memo) !== outcome.executionVerification
   ) {
     throw new Error(
       "universe rebuild checkpoint: memo/outcome atomic pair mismatch",
@@ -2951,6 +2993,9 @@ function assertReadyPromotion(
 ): void {
   assertRunCandidateCoverage(run, envelope.verifiedMemos);
   assertReadyResultHistory(ready);
+  assertReadySelectorCoverage(ready.selectorCoverage, run);
+  if (canonicalJson(run.selectorCensus ?? null) !== canonicalJson(ready.selectorCoverage?.transactions ?? null))
+    throw new Error("Ready promotion lost its complete selector inventory");
   if (canonicalJson(run.familyUpdateScope ?? null) !== canonicalJson(ready.familyUpdateScope ?? null) ||
     (run.familyUpdateScope !== undefined && canonicalJson([...run.familyUpdateScope.familyIds].sort()) !==
       canonicalJson(Object.keys(ready.familyPartitions ?? {}).sort()))) {

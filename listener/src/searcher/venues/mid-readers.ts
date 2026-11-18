@@ -10,7 +10,7 @@ import type {
 } from "../solver/pool-state-cache.js";
 import { curveNgGetDy, curvePlainGetDy } from "../solver/curve-math.js";
 import { BLOCKSCAN_MIN_VENUE_RESERVE_IN } from "../detector/blockscan-sizing-constants.js";
-import { bigintRatio } from "./swaps/blockscan-state-shared.js";
+import { bigintRatio } from "./blockscan-state-shared.js";
 
 export interface ExternalMidQuote {
   mid: number;

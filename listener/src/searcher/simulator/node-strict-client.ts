@@ -7,7 +7,7 @@ import { RethTransportScheduler, type RethTransportLoad, type RethTransportAttem
   type RethTransportRetryState } from "../reth-transport-scheduler.js";
 import { isRpcThrottleError, isRpcQuotaExhaustedError } from "../rpc-throttle-guard.js";
 import { assertCallTrace, successfulTraceLogs, traceNodeTopLevel, nodeNestedHalt } from "./node-trace-simulation.js";
-import { NodeInputFunding, createNodeFundingCache, type NodeFundingCache, type NodeFundingProof } from "./node-input-funding.js";
+import { NodeInputFunding, createNodeFundingCache, type NodeFundingCache, type NodeFundingProof, type NodeTracePolicy } from "./node-input-funding.js";
 import { createNodeSimulateV1Rpc, nodeSimulateV1Environment, simulateNodeProgramV1, simulateNodeTopLevelV1 } from "./node-simulate-v1.js";
 
 const hex = (n: bigint | number) => `0x${n.toString(16)}`;
@@ -38,6 +38,7 @@ export class NodeStrictClient {
   private readonly scheduler: Pick<RethTransportScheduler, "run">;
   private readonly code = new Map<string, string>();
   private readonly fundingProofs = new Map<string, NodeFundingProof>();
+  private readonly tracePolicy: NodeTracePolicy;
   private verifiedExecutorCode?: ExecutorRuntimeCode;
   constructor(private readonly options: {
     timeoutMs: number;
@@ -50,10 +51,15 @@ export class NodeStrictClient {
     executorRuntimeCode?: ExecutorRuntimeCode;
     allowExecutorCodeOverride?: boolean;
     simulationMethod?: "debug_traceCall" | "eth_simulateV1";
+    /** Forbid physical trace RPCs, including funding and failure fallbacks.
+     * Unsupported observations remain incomplete; they are never reverts. */
+    tracePolicy?: NodeTracePolicy;
   }) {
     if (!Number.isSafeInteger(options.timeoutMs) || options.timeoutMs < 1) throw new Error("invalid node simulation timeout");
     if (options.simulationMethod !== undefined && !["debug_traceCall", "eth_simulateV1"].includes(options.simulationMethod))
       throw new Error("invalid node simulation method");
+    this.tracePolicy = options.tracePolicy ?? "allow";
+    if (this.tracePolicy !== "allow" && this.tracePolicy !== "forbid") throw new Error("invalid node trace policy");
     this.scheduler = options.scheduler ?? new RethTransportScheduler({ capacity: 1, producerReserved: 1 });
     this.fundingCache = options.fundingCache ?? createNodeFundingCache();
   }
@@ -103,7 +109,7 @@ export class NodeStrictClient {
       const sourceAttestation = { kind: "node-attested" as const, blockNumber: req.blockNumber,
         chainId: pin.chainId, blockHash: h.hash.toLowerCase(), parentHash: h.parentHash.toLowerCase(), stateRoot: h.stateRoot.toLowerCase() };
       const v1 = this.options.simulationMethod === "eth_simulateV1";
-      const rpc = v1 ? createNodeSimulateV1Rpc(rawRpc, h) : rawRpc;
+      const rpc = v1 ? createNodeSimulateV1Rpc(rawRpc, h, this.tracePolicy) : rawRpc;
       const executionObservation = v1 ? { executionObservation: nodeSimulateV1Environment(h) } : {};
       const codeAt = async (a: string, reuse = true): Promise<string> => {
         const cached = reuse ? this.code.get(a) : undefined;
@@ -144,14 +150,21 @@ export class NodeStrictClient {
       }
       const empty = { tokenDeltas: [], nativeDeltas: [], totalSupplyDeltas: [], logs: [] };
       const deals = req.trialPrefix ? [{ token: req.trialPrefix.inputToken, to: req.trialPrefix.executor, amount: req.trialPrefix.inputAmount }] : req.tokenDeals ?? [];
+      if (!v1 && this.tracePolicy === "forbid" && !req.inputStateOnly &&
+          (req.observeLogs || req.callerMode !== "impersonated-call-frame" ||
+           addr(req.from) !== addr(req.to) || !isCanonicalNodeRuntimeCall(req.data)))
+        throw new RevmStrictError("observation", "node trace-free eth_call requires a canonical executor program without logs");
       const funder = new NodeInputFunding(rpc, block, this.fundingCache, this.fundingProofs,
         (key, prove) => this.sourceRead(`funding:${key}`, signal, async readSignal => {
           const raw = (method: string, params: readonly unknown[]) => this.rpc(req.rpcUrl!, method, params, readSignal);
-          const result = await prove(v1 ? createNodeSimulateV1Rpc(raw, h) : raw);
+          // N access-list/storage observations only nominate slots. All proof
+          // reads and isolated writes run through the same V1 N+1 environment
+          // as the execution; its mapper never relabels N access data as proof.
+          const result = await prove(v1 ? createNodeSimulateV1Rpc(raw, h, this.tracePolicy) : raw, raw);
           readSignal.throwIfAborted();
           this.fundingProofs.set(key, result);
           return result;
-        }));
+        }), this.tracePolicy, rawRpc);
       const prepared = await funder.prepare(deals);
       signal.throwIfAborted();
       if (req.inputStateOnly) return { ok: true, latencyMs: performance.now() - started, sourceAttestation, ...executionObservation,
@@ -181,7 +194,7 @@ export class NodeStrictClient {
               (await codeAt(from)) === "0x" && !codeOverrides[from]) throw new RevmStrictError("validation", "node frame requires configured deployed executor and distinct origin");
         } else if (req.trialPrefix) throw new RevmStrictError("validation", "node prefix requires executor frame");
         const input = { rpc: rawRpc, header: h, from, origin, calls: plan, observations, overrides, gas,
-          baselineAfterPrefix: !!req.trialPrefix, codeAt };
+          baselineAfterPrefix: !!req.trialPrefix, codeAt, tracePolicy: this.tracePolicy };
         receipt = await (req.callerMode === "impersonated-call-frame" ? simulateNodeProgramV1(input) : simulateNodeTopLevelV1(input));
       } else if (req.callerMode !== "impersonated-call-frame") {
         if (req.trialPrefix) throw new RevmStrictError("validation", "node prefix requires executor frame");
@@ -189,7 +202,8 @@ export class NodeStrictClient {
       } else {
         if (!this.options.executor || !executorCode || from !== addr(this.options.executor) || origin === from ||
             (await codeAt(from)) === "0x" && !codeOverrides[from]) throw new RevmStrictError("validation", "node frame requires configured deployed executor and distinct origin");
-        const fast = !req.trialPrefix && !calls.length && !req.observeLogs && from === to && isCanonicalNodeRuntimeCall(req.data);
+        const fast = !req.observeLogs && from === to && isCanonicalNodeRuntimeCall(req.data) &&
+          (this.tracePolicy === "forbid" || !req.trialPrefix && !calls.length);
         const quote = buildNodeProgramQuote({ executor: from, calls: plan, observations, baselineAfterPrefix: !!req.trialPrefix, terminalRevert: fast });
         const used = new Set([from, origin, ...plan.map(c => c.to), ...observations.flatMap(o => o.kind === "supply" ? [o.token] : o.kind === "native" ? [o.account] : [o.token, o.account])]);
         if (used.has(quote.recorder) || await codeAt(quote.recorder, false) !== "0x") throw new RevmStrictError("validation", "node recorder address already occupied");
@@ -203,6 +217,8 @@ export class NodeStrictClient {
           if (!bytes) throw new RevmStrictError("observation", "node quote missing terminal receipt");
           try { receipt = { ...quote.decode(bytes), output: "0x", gasUsed: 0n, logs: [] }; }
           catch (error) {
+            if (this.tracePolicy === "forbid") throw new RevmStrictError("observation",
+              "node trace-free execution lacks an authenticated success receipt; completed revert is unproven");
             // A real protocol revert is different from a transport/observation
             // failure. Only a completed traced main revert may become evidence.
             const trace = await rpc("debug_traceCall", [tx, block, { tracer: "callTracer", stateOverrides: overrides }]);
@@ -310,6 +326,8 @@ export class NodeStrictClient {
     });
   }
   private async rpc(url: string, method: string, params: readonly unknown[], signal: AbortSignal): Promise<any> {
+    if (this.tracePolicy === "forbid" && (method.startsWith("debug_") || method.startsWith("trace_")))
+      throw new RevmStrictError("observation", "node trace policy forbids " + method);
     const retry: RethTransportRetryState = {};
     for (;;) {
       signal.throwIfAborted();
@@ -342,4 +360,4 @@ export class NodeStrictClient {
   }
 }
 
-class NodeCallRevert extends Error { constructor(readonly data: string) { super("node call reverted"); } }
+class NodeCallRevert extends Error { readonly code = 3; constructor(readonly data: string) { super("node call reverted"); } }

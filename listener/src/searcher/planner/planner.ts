@@ -5,6 +5,9 @@ import { passesConstraints } from "../templates/constraints.js";
 import { buildTokenPaths, type TokenEdge, type TokenPath } from "./token-graph.js";
 import type { FlashLiquidityView } from "../solver/flash-liquidity.js";
 import type { ProfitTokenValuation } from "../profit-token-valuation.js";
+import { edgeExecutionVariantKey, edgeInstanceKey, explicitStateResourceOverlap, explicitStateResourceKeys } from
+  "../venues/route-instance-identity.js";
+import { edgeObservationTarget, edgeObservationPoolIdEquals, edgeObservationIdentity } from "../venues/route-observation-identity.js";
 import {
   edgeMatchesVictimSelector,
   type OracleVictimEffect,
@@ -378,7 +381,7 @@ export class TemplatePlanner implements Planner {
           cycleFingerprint: opp.cycleFingerprint,
         },
       },
-      affectedPools: opp.affectedPools ?? uniqueAddresses(opp.seedEdges.map((edge) => edge.target)),
+      affectedPools: opp.affectedPools ?? [...new Set(opp.seedEdges.map(edgeObservationIdentity))],
       affectedTokens: opp.affectedTokens ?? cycleTokens,
     };
     const seenPathKeys = new Set<string>();
@@ -627,8 +630,8 @@ interface ImpactFocus {
 // so when the impact carries a poolId we require the edge's poolId to match —
 // otherwise different v4 pools on the same pair would be conflated.
 function sameVenue(edge: TokenEdge, impact: OpportunityImpact): boolean {
-  if (!sameAddress(edge.target, impact.pool)) return false;
-  if (impact.poolId) return (edge.poolId ?? "").toLowerCase() === impact.poolId.toLowerCase();
+  if (!sameAddress(edgeObservationTarget(edge), impact.pool)) return false;
+  if (impact.poolId) return edgeObservationPoolIdEquals(edge, impact.poolId);
   return true;
 }
 
@@ -719,7 +722,7 @@ function buildNoCandidateDiagnostic(
   let samePoolReverseEdgeExists = false;
 
   for (const edge of graph) {
-    const target = edge.target.toLowerCase();
+    const target = edgeObservationTarget(edge);
     const edgeIn = edge.tokenIn.toLowerCase();
     const edgeOut = edge.tokenOut.toLowerCase();
     if (target === impactPool) impactPoolEdgeInRoutingGraph = true;
@@ -865,10 +868,9 @@ function hasImmediateSamePoolReverse(path: TokenPath): boolean {
     const a = path.edges[i];
     const b = path.edges[i + 1];
     if (
-      sameAddress(a.target, b.target) &&
-      // v4 pools share the PoolManager target — same address is NOT the same pool
-      // unless the poolId also matches (else a legit v4->v4 arb is mispruned).
-      (a.poolId ?? "").toLowerCase() === (b.poolId ?? "").toLowerCase() &&
+      (explicitStateResourceOverlap(a, b) ??
+        (sameAddress(a.target, b.target) &&
+         (a.poolId ?? "").toLowerCase() === (b.poolId ?? "").toLowerCase())) &&
       sameAddress(a.tokenIn, b.tokenOut) &&
       sameAddress(a.tokenOut, b.tokenIn)
     ) {
@@ -880,14 +882,18 @@ function hasImmediateSamePoolReverse(path: TokenPath): boolean {
 
 function tokenPathKey(path: TokenPath): string {
   return path.edges
-    .map((edge) =>
-      [
+    .map((edge) => explicitStateResourceKeys(edge) === undefined
+      ? [
         edge.adapterId,
         edge.target.toLowerCase(),
         edge.poolId ?? "", // v4: distinct pools share the PoolManager target
         edge.tokenIn.toLowerCase(),
         edge.tokenOut.toLowerCase(),
-      ].join(":"),
+      ].join(":")
+      : JSON.stringify([
+        edge.adapterId, edge.target.toLowerCase(), edge.tokenIn.toLowerCase(), edge.tokenOut.toLowerCase(),
+        explicitStateResourceKeys(edge), edgeInstanceKey(edge), edgeExecutionVariantKey(edge),
+      ]),
     )
     .join("|");
 }

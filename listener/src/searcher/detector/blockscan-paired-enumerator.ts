@@ -1,5 +1,5 @@
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
-import { enumeratePairedDfs, enumeratePairedLayered, type PairedEnumerationInput, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
+import { enumeratePairedDfs, enumeratePairedLayered, quoteResourceKeys, DEFAULT_ALLOW_REPEATED_POOLS, type PairedEnumerationInput, type PairedEnumerationMethod } from "./blockscan-paired-dfs.js";
 import { enumerateRustPaired } from "./blockscan-paired-rust.js";
 import { enumerateJointDfs } from "./blockscan-joint-dfs.js";
 import { selectTopHopQuotes } from "./blockscan-hop-quotes.js";
@@ -38,7 +38,20 @@ export function enumeratePaired(input: PairedEnumerationInput, method: PairedEnu
   // Anchor buy/sell legs obey the same per-hop pool cap as both frontiers.
   // Other signal policy (including its own top-K) remains unchanged.
   const signals = input.signals.filter(signal => kept.has(signal.buy) && kept.has(signal.sell));
-  const selected = { ...input, quotes, signals };
+  const selected: PairedEnumerationInput = { ...input, quotes, signals, onCycle(path, spread) {
+    // All backends retain the original quote rows. A composite path can share
+    // only part of its physical state with another entry, which a scalar pool
+    // index cannot represent. Reject the overlap before ranking/candidate caps.
+    if (!(input.allowRepeatedPools ?? DEFAULT_ALLOW_REPEATED_POOLS)) {
+      const used = new Set<string>();
+      for (const quote of path) {
+        const resources = quoteResourceKeys(quote);
+        if (resources.some(resource => used.has(resource))) return;
+        resources.forEach(resource => used.add(resource));
+      }
+    }
+    input.onCycle(path, spread);
+  } };
   const selectedAt = performance.now();
   const stats = backend === "rust" ? enumerateRustPaired(selected, method)
     : method === "joint-dfs" ? enumerateJointDfs(selected)

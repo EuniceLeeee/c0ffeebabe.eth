@@ -29,7 +29,7 @@ export function buildMempoolIntakePlan(input: {
 }): MempoolIntakePlan {
   const canonical = uniqueAddresses([
     ...(input.swaps ?? []).flatMap(
-      (adapter) => adapter.observation.canonicalIntakeTargets,
+      (adapter) => adapter.observation?.canonicalIntakeTargets ?? [],
     ),
     ...(input.canonicalTargets ?? []),
     ...(input.additionalCanonicalTargets ?? []),

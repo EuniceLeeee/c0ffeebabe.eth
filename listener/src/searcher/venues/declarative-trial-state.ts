@@ -7,7 +7,7 @@ import type { AdapterRequestResult, CanonicalSource } from "./adapter-request-pr
 import type { DeclarativeMathFunctions } from "./declarative-math.js";
 import { assertModuleData } from "./declarative-modules.js";
 import { validateDeclarativeValue } from "./declarative-values.js";
-import { assertSource } from "./protocols/standard-family/common.js";
+import { assertSource } from "./selector-execution-evidence.js";
 
 type Value = any;
 export interface DeclarativeTrialState {

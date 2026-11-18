@@ -1,0 +1,1615 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xa6220b66",
+  "signature": "function swapExactIn(address, uint256, uint256, address)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_A6220B66_ENABLED"
+  },
+  "binding": {
+    "nomination": {
+      "parameterPaths": [
+        [
+          0
+        ]
+      ]
+    },
+    "flow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "pool",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "selectorBinding:pool:token0",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingpooltoken0",
+                  "token0()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:pool:token1",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingpooltoken1",
+                  "token1()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:pool:hook",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingpoolhook",
+                  "hook()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            },
+            {
+              "id": "selectorBinding:pool:creatorFeeBps",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingpoolcreatorFeeBps",
+                  "creatorFeeBps()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "result": {
+            "token0": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingpooltoken0",
+                        "token0()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:pool:token0"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "token1": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingpooltoken1",
+                        "token1()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:pool:token1"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "hook": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingpoolhook",
+                        "hook()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:pool:hook"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "creatorFeeBps": {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "decode",
+                  "args": [
+                    "bindingpoolcreatorFeeBps",
+                    "creatorFeeBps()",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "selectorBinding:pool:creatorFeeBps"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "pool": {
+          "pool": "$steps.pool.pool",
+          "token0": "$steps.pool.token0",
+          "token1": "$steps.pool.token1",
+          "hook": "$steps.pool.hook",
+          "creatorFeeBps": "$steps.pool.creatorFeeBps"
+        }
+      }
+    },
+    "descriptor": {
+      "op": "merge",
+      "args": [
+        {
+          "op": "merge",
+          "args": [
+            {
+              "pool": "$binding.pool.pool",
+              "token0": "$binding.pool.token0",
+              "token1": "$binding.pool.token1",
+              "hook": "$binding.pool.hook",
+              "creatorFeeBps": "$binding.pool.creatorFeeBps"
+            },
+            {
+              "pool": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "routes": {
+    "target": {
+      "op": "get",
+      "args": [
+        "$descriptor",
+        "pool"
+      ]
+    },
+    "directions": [
+      {
+        "id": "0-1",
+        "enabled": true,
+        "tokenIn": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "token0"
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                },
+                "$constants.weth",
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "tokenOut": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "token1"
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                },
+                "$constants.weth",
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "executionAssets": {
+          "input": {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "token0"
+                    ]
+                  },
+                  "$constants.zero"
+                ]
+              },
+              "native",
+              "erc20"
+            ]
+          },
+          "output": {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "token1"
+                    ]
+                  },
+                  "$constants.zero"
+                ]
+              },
+              "native",
+              "erc20"
+            ]
+          }
+        },
+        "fields": {
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "pool"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "zeroForOne": true,
+          "rawIn": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token0"
+                ]
+              }
+            ]
+          },
+          "rawOut": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token1"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "1-0",
+        "enabled": true,
+        "tokenIn": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "token1"
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                },
+                "$constants.weth",
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token1"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "tokenOut": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "token0"
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                },
+                "$constants.weth",
+                {
+                  "op": "get",
+                  "args": [
+                    "$descriptor",
+                    "token0"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "taxonomy": {
+          "slotKind": "swap"
+        },
+        "executionAssets": {
+          "input": {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "token1"
+                    ]
+                  },
+                  "$constants.zero"
+                ]
+              },
+              "native",
+              "erc20"
+            ]
+          },
+          "output": {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "token0"
+                    ]
+                  },
+                  "$constants.zero"
+                ]
+              },
+              "native",
+              "erc20"
+            ]
+          }
+        },
+        "fields": {
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "get",
+                    "args": [
+                      "$descriptor",
+                      "pool"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "zeroForOne": false,
+          "rawIn": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token1"
+                ]
+              }
+            ]
+          },
+          "rawOut": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token0"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "venue": {
+      "kind": "address-pool",
+      "pool": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "pool"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "checks": [
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "hook"
+              ]
+            },
+            "$constants.zero"
+          ]
+        },
+        "error": "precision-pool descriptor hook"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "creatorFeeBps"
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                "0"
+              ]
+            }
+          ]
+        },
+        "error": "precision-pool descriptor creator fee"
+      }
+    ]
+  },
+  "execution": {
+    "version": 2,
+    "settlement": {
+      "directOutput": true
+    },
+    "requireCanonicalSource": false,
+    "protectedAddresses": [
+      {
+        "op": "get",
+        "args": [
+          "$descriptor",
+          "pool"
+        ]
+      },
+      {
+        "op": "if",
+        "args": [
+          {
+            "op": "sameAddress",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token0"
+                ]
+              },
+              "$constants.zero"
+            ]
+          },
+          "$constants.weth",
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token0"
+            ]
+          }
+        ]
+      },
+      {
+        "op": "if",
+        "args": [
+          {
+            "op": "sameAddress",
+            "args": [
+              {
+                "op": "get",
+                "args": [
+                  "$descriptor",
+                  "token1"
+                ]
+              },
+              "$constants.zero"
+            ]
+          },
+          "$constants.weth",
+          {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "token1"
+            ]
+          }
+        ]
+      }
+    ],
+    "contextChecks": [
+      {
+        "condition": {
+          "op": "and",
+          "args": [
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$executor",
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$recipient",
+                    "$constants.zero"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$executor",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$recipient",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$descriptor",
+                        "pool"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$executor",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "tokenIn"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$executor",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "tokenOut"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$recipient",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "tokenIn"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$recipient",
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "tokenOut"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "rawOut"
+                      ]
+                    },
+                    "$constants.zero"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$recipient",
+                    "$executor"
+                  ]
+                },
+                true
+              ]
+            }
+          ]
+        },
+        "error": "precision-pool invalid execution binding"
+      }
+    ],
+    "preflight": [
+      {
+        "target": {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "pool"
+          ]
+        },
+        "signature": "function hook() view returns(address)",
+        "args": [],
+        "save": {
+          "hookBefore": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "hookBefore"
+            },
+            "operator": "eq",
+            "right": 0
+          }
+        ]
+      },
+      {
+        "target": {
+          "op": "get",
+          "args": [
+            "$descriptor",
+            "pool"
+          ]
+        },
+        "signature": "function creatorFeeBps() view returns(uint256)",
+        "args": [],
+        "save": {
+          "creatorFeeBefore": 0
+        },
+        "checks": [
+          {
+            "left": {
+              "runtime": "creatorFeeBefore"
+            },
+            "operator": "eq",
+            "right": 0
+          }
+        ]
+      },
+      {
+        "when": "$externalRecipient",
+        "target": "$constants.multicall",
+        "signature": "function getEthBalance(address) view returns(uint256)",
+        "args": [
+          "$recipient"
+        ],
+        "save": {
+          "recipientNativeBefore": 0
+        }
+      }
+    ],
+    "steps": [
+      {
+        "id": "swapErc20Default",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "executionAssets"
+                      ]
+                    },
+                    "input"
+                  ]
+                },
+                "erc20"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                "$directSettlement"
+              ]
+            }
+          ]
+        },
+        "approval": {
+          "token": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenIn"
+            ]
+          },
+          "spender": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "mode": "ensure"
+        },
+        "call": {
+          "target": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "signature": "function swapExactIn(address,uint256,uint256,address) payable returns(uint256)",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "rawIn"
+              ]
+            },
+            {
+              "runtime": "amountIn"
+            },
+            "$minAmountOut",
+            "$recipient"
+          ],
+          "save": {
+            "reportedOut": 0
+          }
+        }
+      },
+      {
+        "id": "swapErc20Direct",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "executionAssets"
+                      ]
+                    },
+                    "input"
+                  ]
+                },
+                "erc20"
+              ]
+            },
+            "$directSettlement"
+          ]
+        },
+        "approval": {
+          "token": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenIn"
+            ]
+          },
+          "spender": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "mode": "exact-clear",
+          "verifyAllowance": true
+        },
+        "call": {
+          "target": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "signature": "function swapExactIn(address,uint256,uint256,address) payable returns(uint256)",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "rawIn"
+              ]
+            },
+            {
+              "runtime": "amountIn"
+            },
+            "$minAmountOut",
+            "$recipient"
+          ],
+          "save": {
+            "reportedOut": 0
+          }
+        }
+      },
+      {
+        "id": "swapNative",
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "executionAssets"
+                  ]
+                },
+                "input"
+              ]
+            },
+            "native"
+          ]
+        },
+        "call": {
+          "target": {
+            "op": "get",
+            "args": [
+              "$descriptor",
+              "pool"
+            ]
+          },
+          "signature": "function swapExactIn(address,uint256,uint256,address) payable returns(uint256)",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                "$route",
+                "rawIn"
+              ]
+            },
+            {
+              "runtime": "amountIn"
+            },
+            "$minAmountOut",
+            "$recipient"
+          ],
+          "save": {
+            "reportedOut": 0
+          },
+          "value": {
+            "runtime": "amountIn"
+          }
+        }
+      },
+      {
+        "id": "clearCheck",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "executionAssets"
+                      ]
+                    },
+                    "input"
+                  ]
+                },
+                "erc20"
+              ]
+            },
+            "$directSettlement"
+          ]
+        },
+        "static": true,
+        "call": {
+          "target": {
+            "op": "get",
+            "args": [
+              "$route",
+              "tokenIn"
+            ]
+          },
+          "signature": "function allowance(address,address) view returns(uint256)",
+          "args": [
+            "$executor",
+            {
+              "op": "get",
+              "args": [
+                "$descriptor",
+                "pool"
+              ]
+            }
+          ],
+          "save": {
+            "allowanceAfter": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "allowanceAfter"
+              },
+              "operator": "eq",
+              "right": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "recipientNativeCheck",
+        "when": "$externalRecipient",
+        "static": true,
+        "call": {
+          "target": "$constants.multicall",
+          "signature": "function getEthBalance(address) view returns(uint256)",
+          "args": [
+            "$recipient"
+          ],
+          "save": {
+            "recipientNativeAfter": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "recipientNativeAfter"
+              },
+              "operator": "eq",
+              "right": {
+                "runtime": "recipientNativeBefore"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "effects": [
+      {
+        "kind": "debit",
+        "asset": "native",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        },
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "executionAssets"
+                  ]
+                },
+                "input"
+              ]
+            },
+            "native"
+          ]
+        }
+      },
+      {
+        "kind": "debit",
+        "asset": "erc20",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenIn"
+          ]
+        },
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        },
+        "when": {
+          "op": "eq",
+          "args": [
+            {
+              "op": "get",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    "$route",
+                    "executionAssets"
+                  ]
+                },
+                "input"
+              ]
+            },
+            "erc20"
+          ]
+        }
+      },
+      {
+        "kind": "credit",
+        "asset": "native",
+        "account": "$recipient",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "executionAssets"
+                      ]
+                    },
+                    "output"
+                  ]
+                },
+                "native"
+              ]
+            },
+            "$directSettlement"
+          ]
+        },
+        "equals": {
+          "runtime": "reportedOut"
+        }
+      },
+      {
+        "kind": "credit",
+        "asset": "native",
+        "account": "$recipient",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "executionAssets"
+                      ]
+                    },
+                    "output"
+                  ]
+                },
+                "native"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                "$directSettlement"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "kind": "credit",
+        "asset": "erc20",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "$recipient",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "executionAssets"
+                      ]
+                    },
+                    "output"
+                  ]
+                },
+                "erc20"
+              ]
+            },
+            "$directSettlement"
+          ]
+        },
+        "equals": {
+          "runtime": "reportedOut"
+        }
+      },
+      {
+        "kind": "credit",
+        "asset": "erc20",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "$recipient",
+        "when": {
+          "op": "and",
+          "args": [
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "get",
+                  "args": [
+                    {
+                      "op": "get",
+                      "args": [
+                        "$route",
+                        "executionAssets"
+                      ]
+                    },
+                    "output"
+                  ]
+                },
+                "erc20"
+              ]
+            },
+            {
+              "op": "not",
+              "args": [
+                "$directSettlement"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "kind": "unchanged-token",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenOut"
+          ]
+        },
+        "account": "$executor",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": {
+          "op": "get",
+          "args": [
+            "$route",
+            "tokenIn"
+          ]
+        },
+        "account": "$recipient",
+        "when": "$externalRecipient"
+      }
+    ]
+  },
+  "observations": {
+    "version": 1,
+    "canonicalIntakeTargets": [],
+    "victimSupport": "detect-only",
+    "events": [
+      {
+        "id": "precision-pool-Swap",
+        "classification": "mutation",
+        "signature": "event Swap(address indexed tokenIn,uint256 amountIn,uint256 amountOut,address indexed to)",
+        "pool": {
+          "op": "get",
+          "args": [
+            "$log",
+            "address"
+          ]
+        },
+        "match": true,
+        "payload": {
+          "tokenIn": {
+            "op": "lower",
+            "args": [
+              "$args.tokenIn"
+            ]
+          },
+          "amountIn": "$args.amountIn",
+          "amountOut": "$args.amountOut",
+          "recipient": {
+            "op": "lower",
+            "args": [
+              "$args.to"
+            ]
+          }
+        },
+        "impact": {
+          "op": "get",
+          "args": [
+            "$missing",
+            "impact"
+          ]
+        }
+      },
+      {
+        "id": "precision-pool-AddLiquidity",
+        "classification": "mutation",
+        "signature": "event AddLiquidity(address indexed recipient,uint256 amount0,uint256 amount1,uint256 lp)",
+        "pool": {
+          "op": "get",
+          "args": [
+            "$log",
+            "address"
+          ]
+        },
+        "match": true,
+        "payload": {
+          "recipient": "$args.recipient",
+          "amount0": "$args.amount0",
+          "amount1": "$args.amount1",
+          "lp": "$args.lp"
+        },
+        "impact": {
+          "op": "get",
+          "args": [
+            "$missing",
+            "impact"
+          ]
+        }
+      },
+      {
+        "id": "precision-pool-RemoveLiquidity",
+        "classification": "mutation",
+        "signature": "event RemoveLiquidity(address indexed provider,uint256 lp,uint256 amount0,uint256 amount1)",
+        "pool": {
+          "op": "get",
+          "args": [
+            "$log",
+            "address"
+          ]
+        },
+        "match": true,
+        "payload": {
+          "provider": "$args.provider",
+          "lp": "$args.lp",
+          "amount0": "$args.amount0",
+          "amount1": "$args.amount1"
+        },
+        "impact": {
+          "op": "get",
+          "args": [
+            "$missing",
+            "impact"
+          ]
+        }
+      }
+    ]
+  },
+  "refreshPolicy": "on-touch",
+  "values": {
+    "abi": {
+      "bindingpooltoken0": [
+        "function token0() view returns(address)"
+      ],
+      "bindingpooltoken1": [
+        "function token1() view returns(address)"
+      ],
+      "bindingpoolhook": [
+        "function hook() view returns(address)"
+      ],
+      "bindingpoolcreatorFeeBps": [
+        "function creatorFeeBps() view returns(uint256)"
+      ]
+    },
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+      "multicall": "0xca11bde05977b3631167028862be2a173976ca11"
+    }
+  },
+  "resourceValues": {
+    "constants": {
+      "zero": "0x0000000000000000000000000000000000000000",
+      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    }
+  },
+  "meta": {
+    "label": "custom-swap:precision-pool/precision-pool-direct-zero-hook-v1"
+  }
+}

@@ -63,7 +63,7 @@ function scenario(options: { debitDelta?: bigint; creditDelta?: bigint; release?
     assert.equal(c.static, false);
     if (c.target === prefix) {
       prefixCalls++;
-      const [recipient, amount] = abi.decodeFunctionData("swap", c.data);
+      const [recipient, amount] = abi.decodeFunctionData("swap", c.data) as unknown as [string, bigint];
       add(a, executor, -(amount + (options.debitDelta ?? 0n)));
       add(b, options.wrongReceiver ? executor : recipient, amount * 2n + (options.creditDelta ?? 0n));
       add(b, executor, -(options.stealIntermediate ?? 0n));

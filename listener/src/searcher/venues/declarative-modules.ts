@@ -20,15 +20,30 @@ export interface ModuleCoverage {
 }
 const forbidden = new Set(["__proto__", "constructor", "prototype"]);
 export function assertModuleData(value: unknown): void {
-  if (value === null || typeof value === "string" || typeof value === "boolean") return;
-  if (typeof value === "number" && Number.isSafeInteger(value)) return;
-  if (Array.isArray(value)) { value.forEach(assertModuleData); return; }
-  if (!value || typeof value !== "object" || Object.getPrototypeOf(value) !== Object.prototype)
-    throw new Error("module definitions must be lossless JSON data");
-  for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
-    if (forbidden.has(key) || !("value" in descriptor)) throw new Error("invalid module data property");
-    assertModuleData(descriptor.value);
+  const active = new WeakSet<object>();
+  function visit(current: unknown): void {
+    if (current === null || typeof current === "string" || typeof current === "boolean") return;
+    if (typeof current === "number" && Number.isSafeInteger(current)) return;
+    if (!current || typeof current !== "object" || active.has(current))
+      throw new Error("module definitions must be lossless JSON data");
+    const array = Array.isArray(current);
+    if (Object.getPrototypeOf(current) !== (array ? Array.prototype : Object.prototype))
+      throw new Error("module definitions must be lossless JSON data");
+    const descriptors = Object.getOwnPropertyDescriptors(current);
+    const keys = Reflect.ownKeys(current);
+    if (keys.some(key => typeof key !== "string") || array && keys.length !== current.length + 1)
+      throw new Error("invalid module data property");
+    active.add(current);
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+      if (array && key === "length") continue;
+      if (forbidden.has(key) || !("value" in descriptor) || descriptor.enumerable !== true ||
+          array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= current.length))
+        throw new Error("invalid module data property");
+      visit(descriptor.value);
+    }
+    active.delete(current);
   }
+  visit(value);
 }
 function record(value: unknown): asserts value is Record<string, unknown> {
   if (!value || Array.isArray(value) || typeof value !== "object") throw new Error("module block must be an object");

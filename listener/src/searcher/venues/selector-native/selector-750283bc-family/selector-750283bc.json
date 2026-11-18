@@ -1,0 +1,730 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x750283bc",
+  "signature": "function swapSingleTokenExactIn(address pool, address tokenIn, address tokenOut, uint256 exactAmountIn, uint256 minAmountOut, uint256 deadline, bool wethIsEth, bytes userData) payable returns (uint256 amountOut)",
+  "domain": "swap",
+  "activation": {
+    "enabled": false,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_750283BC_ENABLED"
+  },
+  "programs": [
+    {
+      "parameters": [
+        {
+          "path": [
+            0
+          ],
+          "role": "poolId"
+        },
+        {
+          "path": [
+            1
+          ],
+          "role": "tokenIn"
+        },
+        {
+          "path": [
+            2
+          ],
+          "role": "tokenOut"
+        },
+        {
+          "path": [
+            3
+          ],
+          "role": "amountIn"
+        },
+        {
+          "path": [
+            4
+          ],
+          "role": "minimumOut"
+        }
+      ],
+      "values": {
+        "abi": {
+          "permit": [
+            "function getPermit2() view returns(address)"
+          ],
+          "vault": [
+            "function getVault() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "nomination": {
+          "poolNamespace": "address-pool"
+        },
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "parameters",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "permit",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "permit",
+                      "getPermit2",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                },
+                {
+                  "id": "vault",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "at",
+                    "args": [
+                      "$args",
+                      0
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "vault",
+                      "getVault",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                }
+              ],
+              "result": {
+                "permit2": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "permit",
+                            "getPermit2",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "permit"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "vault": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "vault",
+                            "getVault",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "vault"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "result": "$steps.parameters"
+        },
+        "descriptor": {
+          "target": {
+            "op": "at",
+            "args": [
+              "$args",
+              0
+            ]
+          },
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$args",
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "permit2": "$binding.permit2",
+          "vault": "$binding.vault"
+        }
+      },
+      "routes": {
+        "resource": {
+          "target": "$descriptor.vault",
+          "poolId": "$descriptor.pool",
+          "poolNamespace": "address-pool"
+        }
+      },
+      "dependencies": [
+        "$candidate.target",
+        "$descriptor.permit2",
+        "$descriptor.vault",
+        "$descriptor.pool"
+      ],
+      "runtimeMath": {
+        "version": 1,
+        "entries": {
+          "uint160Bound": {
+            "model": "uint160Bound",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "uint160Bound",
+            "version": 1,
+            "inputs": [
+              "amount"
+            ],
+            "outputs": [
+              "high"
+            ],
+            "operations": [
+              {
+                "name": "high",
+                "op": "shr",
+                "left": {
+                  "input": "amount"
+                },
+                "right": {
+                  "constant": "160"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": [
+          "$candidate.target",
+          "$descriptor.pool",
+          "$descriptor.permit2",
+          "$descriptor.vault",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "amountWidth",
+            "math": {
+              "model": "uint160Bound",
+              "inputs": {
+                "amount": {
+                  "runtime": "amountIn"
+                }
+              },
+              "outputs": {
+                "high": "high"
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "high"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "clearBefore",
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function approve(address,uint256) returns(bool)",
+              "args": [
+                "$descriptor.permit2",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ],
+              "save": {
+                "clearBeforeOk": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "clearBeforeOk"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "setAllowance",
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function approve(address,uint256) returns(bool)",
+              "args": [
+                "$descriptor.permit2",
+                {
+                  "runtime": "amountIn"
+                }
+              ],
+              "save": {
+                "setAllowanceOk": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "setAllowanceOk"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "inputAllowance",
+            "static": true,
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function allowance(address,address) view returns(uint256)",
+              "args": [
+                "$executor",
+                "$descriptor.permit2"
+              ],
+              "save": {
+                "inputAllowance": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "inputAllowance"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "permit",
+            "call": {
+              "target": "$descriptor.permit2",
+              "signature": "function approve(address,address,uint160,uint48)",
+              "args": [
+                "$route.tokenIn",
+                "$candidate.target",
+                {
+                  "runtime": "amountIn"
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "281474976710655"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": "execute",
+            "call": {
+              "target": "$candidate.target",
+              "signature": "function swapSingleTokenExactIn(address pool,address tokenIn,address tokenOut,uint256 exactAmountIn,uint256 minAmountOut,uint256 deadline,bool wethIsEth,bytes userData) payable returns(uint256 amountOut)",
+              "args": [
+                "$descriptor.pool",
+                "$route.tokenIn",
+                "$route.tokenOut",
+                {
+                  "runtime": "amountIn"
+                },
+                "$minAmountOut",
+                {
+                  "op": "uint",
+                  "args": [
+                    "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                  ]
+                },
+                false,
+                "0x"
+              ],
+              "save": {
+                "output": 0
+              }
+            }
+          },
+          {
+            "id": "clearPermit",
+            "call": {
+              "target": "$descriptor.permit2",
+              "signature": "function approve(address,address,uint160,uint48)",
+              "args": [
+                "$route.tokenIn",
+                "$candidate.target",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "id": "clearAfter",
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function approve(address,uint256) returns(bool)",
+              "args": [
+                "$descriptor.permit2",
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ],
+              "save": {
+                "clearAfterOk": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "clearAfterOk"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "remainingAllowance",
+            "static": true,
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function allowance(address,address) view returns(uint256)",
+              "args": [
+                "$executor",
+                "$descriptor.permit2"
+              ],
+              "save": {
+                "remainingAllowance": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "remainingAllowance"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "0"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "minimum": "$minAmountOut",
+            "equals": {
+              "runtime": "output"
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "observations": {
+        "version": 1,
+        "canonicalIntakeTargets": [],
+        "victimSupport": "detect-only",
+        "events": [
+          {
+            "id": "swap",
+            "signature": "event Swap(address indexed pool,address indexed tokenIn,address indexed tokenOut,uint256 amountIn,uint256 amountOut,uint256 swapFeePercentage,uint256 swapFeeAmount)",
+            "classification": "swap",
+            "pool": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    "$args.pool"
+                  ]
+                }
+              ]
+            },
+            "payload": {
+              "pool": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$args.pool"
+                    ]
+                  }
+                ]
+              },
+              "tokenIn": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$args.tokenIn"
+                    ]
+                  }
+                ]
+              },
+              "tokenOut": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$args.tokenOut"
+                    ]
+                  }
+                ]
+              },
+              "amountIn": "$args.amountIn",
+              "amountOut": "$args.amountOut"
+            },
+            "valid": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$args.amountIn",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "gt",
+                  "args": [
+                    "$args.amountOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lt",
+                  "args": [
+                    "$args.swapFeePercentage",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1000000000000000000"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "lte",
+                  "args": [
+                    "$args.swapFeeAmount",
+                    "$args.amountIn"
+                  ]
+                }
+              ]
+            },
+            "requireReadyBinding": true,
+            "match": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$log.address",
+                    "$descriptor.vault"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$pool",
+                    "$descriptor.pool"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$args.tokenIn",
+                    "$edge.tokenIn"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$args.tokenOut",
+                    "$edge.tokenOut"
+                  ]
+                }
+              ]
+            },
+            "impact": {
+              "pool": "$pool",
+              "poolId": {
+                "op": "coalesce",
+                "args": [
+                  "$edge.observationPoolId",
+                  "$edge.poolId"
+                ]
+              },
+              "tokenIn": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$args.tokenIn"
+                    ]
+                  }
+                ]
+              },
+              "tokenOut": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$args.tokenOut"
+                    ]
+                  }
+                ]
+              },
+              "amountIn": "$args.amountIn",
+              "amountOut": "$args.amountOut",
+              "matchedAdapterId": "$edge.adapterId"
+            }
+          }
+        ]
+      },
+      "meta": {
+        "sourceFamily": "balancer-v3",
+        "migrationKey": "balancer-v3:router-exact-input",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    }
+  ]
+}

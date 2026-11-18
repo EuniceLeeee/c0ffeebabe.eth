@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import type { OrderflowEvent } from "../orderflow/manual-source.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
+import { edgeObservationTarget, edgeObservationPoolIdEquals, edgeMatchesObservationIdentity } from "../venues/route-observation-identity.js";
 import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
   "../strict-production-family-declarations.js";
 import type {
@@ -1028,17 +1029,17 @@ function ownerFamilyId(
   return group.familyIds.length === 1 ? group.familyIds[0] : null;
 }
 
-function impactMatchesAdmittedEdge(
+/** Shared admission check for receipt impacts against the issued Graph surface. */
+export function impactMatchesAdmittedEdge(
   impact: PoolImpact,
   graph: readonly TokenEdge[],
 ): boolean {
   return graph.some((edge) =>
     edge.adapterId === impact.matchedAdapterId &&
-    sameAddress(edge.target, impact.pool) &&
+    sameAddress(edgeObservationTarget(edge), impact.pool) &&
     sameAddress(edge.tokenIn, impact.tokenIn) &&
     sameAddress(edge.tokenOut, impact.tokenOut) &&
-    (edge.poolId?.toLowerCase() ?? null) ===
-      (impact.poolId?.toLowerCase() ?? null)
+    edgeObservationPoolIdEquals(edge, impact.poolId)
   );
 }
 
@@ -1047,13 +1048,9 @@ function identityMatchesOwnedGraph(
   graph: readonly TokenEdge[],
   ownedEdgeIds: ReadonlySet<string>,
 ): boolean {
-  const normalized = identity.toLowerCase();
   return graph.some((edge) =>
     ownedEdgeIds.has(edge.adapterId) &&
-    (
-      edge.target.toLowerCase() === normalized ||
-      edge.poolId?.toLowerCase() === normalized
-    )
+    edgeMatchesObservationIdentity(edge, identity)
   );
 }
 
@@ -1094,7 +1091,7 @@ function transferOnlyCandidates(
   // already-admitted graph target blocks hash-only replay; broad-map/unknown
   // addresses remain non-actionable diagnostics and cannot poison the receipt.
   const candidates = new Set<string>(
-    graph.map((edge) => edge.target.toLowerCase()),
+    graph.map(edgeObservationTarget),
   );
   const touches = new Map<
     string,
@@ -1199,7 +1196,7 @@ function groupEdgesByTarget(
 ): Map<string, readonly TokenEdge[]> {
   const mutable = new Map<string, TokenEdge[]>();
   for (const edge of graph) {
-    const key = edge.target.toLowerCase();
+    const key = edgeObservationTarget(edge);
     const edges = mutable.get(key) ?? [];
     edges.push(edge);
     mutable.set(key, edges);

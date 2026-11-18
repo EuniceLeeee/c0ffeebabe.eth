@@ -8,10 +8,12 @@ import { parseProtocolJsonAcceptanceCase, type ProtocolJsonAcceptanceCase } from
 import type { TokenEdge } from "../planner/token-graph.js";
 import type { StartupCheckpointEnvelope } from "../universe-rebuild-checkpoint.js";
 import { ReadyActivityArchive } from "../ready-activity-archive.js";
-import { cachedFamilyReady, familyFactCacheDirectory, familyFactCacheKey, withFamilyFactCacheLock } from "./family-transaction-cache.js";
+import { cachedFamilyReady, familyFactCacheDirectory, familyFactCacheKey } from "./family-transaction-cache.js";
 import type { UniverseRebuildDependencies } from "../universe-rebuild-runner.js";
 
 import { validateTransactionStateSelection, type TransactionStateSelection } from "./family-transaction-source.js";
+import { canonicalExecutionCall, sameExecutionResource, transactionSelectorCensus } from "./family-transaction-selector.js";
+import type { ReadySelectorCensusTransaction } from "../ready-selector-census.js";
 
 const sameKey = (a: string, b: string) => isAddress(a) && isAddress(b) ? a.toLowerCase() === b.toLowerCase() : a === b;
 
@@ -58,67 +60,44 @@ export async function readFamilyTransactionEvidence(input: {
   } finally { provider.destroy(); }
 }
 
-/** TX receipt/trace transport is the existing Ready reader. Decode with the
- * production Catalog, then submit its candidates to normal Ready attestation.
- * No address, descriptor, graph edge or successful identity is synthesized. */
+/** Decode every observed call with the active production selector catalog.
+ * Fixture protocol labels never restrict discovery; unsupported selectors stay
+ * in the census. Historical trace transport belongs only to this diagnostic. */
 export async function discoverTransactionReadyInput(input: {
   wiring: UniverseRebuildDependencies;
-  activityArchive: ReadyActivityArchive;
   directory: string;
   rpcUrl: string;
-  familyId: string;
+  familyIds: readonly string[];
   target: TransactionReadyTarget;
   source: { number: number; hash: string; generation: number };
 }) {
-  const { wiring, source, target, familyId, activityArchive, directory } = input;
+  const { wiring, source, target, familyIds, directory } = input;
   const selection = target.stateSelection && validateTransactionStateSelection(target.stateSelection.evidenceSource, target.stateSelection);
   if (selection) { assert.equal(source.number, selection.executionSource.number); assert.equal(source.hash.toLowerCase(), selection.executionSource.hash.toLowerCase()); }
   const observationSource = selection ? { ...selection.evidenceSource, generation: selection.evidenceSource.number } : source;
-  const discovery = await import("../universe-rebuild-production.js");
-  // One canonical block archive shared by every tested Family. This is also
-  // the source used by the normal Ready scanner, not another trace RPC path.
-  await withFamilyFactCacheLock(resolve(directory, "activity", familyFactCacheKey(observationSource)), async () => {
-    await wiring.scanSwapWindow({ fromBlock: observationSource.number, cutoff: observationSource });
-  });
-  const observations: unknown[] = [];
   const evidence = await readFamilyTransactionEvidence({ rpcUrl: input.rpcUrl, directory,
-    transactionHash: target.transactionHash, source: observationSource, withFrameLogs: false,
-    traceSend: async (method, params) => {
-      assert.equal(params[0], target.transactionHash);
-      if (method === "trace_transaction") {
-        const raw = await activityArchive.readTrace({ blockNumber: observationSource.number, method: "trace_block" });
-        if (raw !== null) return raw.filter(row => (row as any)?.transactionHash?.toLowerCase() === target.transactionHash);
-        throw Object.assign(new Error("method not found in shared block archive"), { code: -32601 });
-      }
-      assert.equal(method, "debug_traceTransaction");
-      const raw = await activityArchive.readTrace({ blockNumber: observationSource.number, method: "debug_traceBlockByNumber" });
-      const matches = raw?.filter(row => String((row as any)?.txHash ?? (row as any)?.transactionHash).toLowerCase() === target.transactionHash);
-      assert(matches?.length === 1, "TX not found uniquely in shared block trace");
-      return (matches[0] as any).result;
-    },
-  });
+    transactionHash: target.transactionHash, source: observationSource });
   assert.equal(evidence.receipt.status, 1, "registered sample TX reverted on chain");
-  const decoded = discovery.observationsFromSelectedTransaction(evidence,
-    discovery.strictCatalogLogTopics(), new Set(discovery.strictCatalogCallPatterns().map(pattern => pattern.selector.toLowerCase())));
-  observations.push(...decoded.logs, ...decoded.calls);
-  // Other installed Families may recognize other pools in this TX. Their
-  // absence/rejection is not a failure of the Family under acceptance.
-  const all = observations.flatMap(raw => (raw as any).kind === "call"
-    ? discovery.candidatesFromCall(raw as import("../universe-rebuild-production.js").RebuildCallObservation)
-    : discovery.candidatesFromLog(raw as import("../universe-rebuild-production.js").RebuildScanObservation));
-  const known = all.filter(candidate => candidate.familyId === familyId);
-  const reverse = await wiring.reverseBindOpaqueCandidates?.({ observations, cutoff: source, knownCandidates: known }) ?? [];
-  const candidates = wiring.dedupeFamilyCandidates([...known, ...reverse].map(candidate => ({ kind: "startup-candidate", candidate })));
-  if (!candidates.length) throw Object.assign(new Error("TX discovery produced no candidate for the target Family"), {
-    evidence: { familyId, target, source, recognizedFamilies: [...new Set(all.map(row => row.familyId))].sort(), identityAttempted: false },
-  });
+  const census = transactionSelectorCensus(evidence);
+  const { candidatesFromCall, candidatesFromLog } = await import("../universe-rebuild-production.js");
+  const observations = census.calls.flatMap(call => call.executionStatus === "success" && call.target && call.calldata && call.selector && call.traceAddress
+    ? [{ kind: "call" as const, target: call.target, data: call.calldata, ...(call.sender ? { sender: call.sender } : {}),
+      transactionHash: census.transactionHash!, blockNumber: census.blockNumber!, blockHash: census.blockHash!, traceAddress: call.traceAddress,
+      opaque: { selectorCensus: census, callId: call.id } as unknown as import("../venues/canonical-value.js").CanonicalValue }] : []);
+  const all = observations.flatMap(call => candidatesFromCall(call, familyIds));
+  // Funding and other non-selector domains retain their owning log decoders.
+  for (const raw of evidence.receipt.logs as any[]) all.push(...candidatesFromLog({ address: raw.address,
+    topics: raw.topics, data: raw.data, transactionHash: census.transactionHash!, blockNumber: census.blockNumber!,
+    blockHash: census.blockHash!, logIndex: Number(raw.logIndex) }, familyIds));
+  const candidates = wiring.dedupeFamilyCandidates(all.map(candidate => ({ kind: "startup-candidate", candidate })));
   const keys = [...new Set(candidates.map(candidate => wiring.familyCandidateKey(candidate)))].sort();
-  const binding = { familyId, target, source, candidateKeys: keys };
-  return { candidates: candidates as readonly Readonly<Record<string, unknown>>[],
+  const binding = { familyIds, target: { transactionHash: target.transactionHash,
+    ...(target.stateSelection ? { stateSelection: target.stateSelection } : {}) }, source, candidateKeys: keys, censusFingerprint: familyFactCacheKey(census) };
+  return { census, candidates: candidates as readonly Readonly<Record<string, unknown>>[],
     currentCandidateKeys: new Set(keys), currentInputFingerprint: familyFactCacheKey(binding),
-    evidence: { ...binding, scope: "registered-transaction", observationCount: observations.length,
+    evidence: { ...binding, scope: "registered-transaction-full-active-catalog", observationCount: census.calls.length,
       recognizedCandidateCount: all.length, recognizedFamilies: [...new Set(all.map(row => row.familyId))].sort(),
-      nominationOnly: true, identityBypass: false },
+      nominationOnly: true, identityBypass: false, censusCoverage: census.coverage },
   };
 }
 
@@ -194,15 +173,34 @@ export async function assertAcceptanceReadyTarget(envelope: StartupCheckpointEnv
     source: ready.cutoff, memoFingerprint: memo.memoFingerprint, graphHash: ready.graphHash, edges };
 }
 
+/** Index the existing graph for diagnostics; never construct another graph or
+ * skip full field equality. This keeps large sealed Ready inspection linear. */
+function acceptanceGraphLookup(graph: readonly TokenEdge[]) {
+  const byId = new Map<string, number[]>(), byBinding = new Map<string, number[]>();
+  const key = (edge: TokenEdge) => JSON.stringify([isAddress(edge.instanceKey ?? "") ? edge.instanceKey!.toLowerCase() : edge.instanceKey,
+    edge.executionVariantKey, edge.tokenIn.toLowerCase(), edge.tokenOut.toLowerCase()]);
+  graph.forEach((edge, index) => {
+    const add = (map: Map<string, number[]>, key: string) => { const entries = map.get(key); if (entries) entries.push(index); else map.set(key, [index]); };
+    if (edge.canonicalEdgeId) add(byId, edge.canonicalEdgeId);
+    add(byBinding, key(edge));
+  });
+  return (expected: TokenEdge) => {
+    const candidates = [...new Set([...(byId.get(expected.canonicalEdgeId ?? "") ?? []), ...(byBinding.get(key(expected)) ?? [])])];
+    return assertUniqueAcceptanceGraphEdge(candidates.map(index => graph[index]!), expected);
+  };
+}
+
 /** Enumerate proven production routes, never classify a TX in the test layer. */
 export async function transactionReadyRoutes(envelope: StartupCheckpointEnvelope, input: {
   source: { number: number; hash: string }; executor: string; owner: string;
 }): Promise<import("./family-transaction-matching.js").ObservedReadyRoute[]> {
   const [{ activeReadyMemos }, { resolveStrictReadyRuntime }, { createRebuildWiring },
-    { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog }, { projectFamilyRouteGraph }] = await Promise.all([
+    { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog }, { projectFamilyRouteGraph },
+    { prepareCreditFamilyRoutes, projectCreditRouteGraph }] = await Promise.all([
     import("../universe-rebuild-checkpoint.js"), import("../strict-ready-runtime.js"),
     import("../universe-rebuild-production.js"), import("../venues/production-family-composition.js"),
     import("../adapter-family-graph-runtime.js"),
+    import("../adapter-credit-runtime.js"),
   ]);
   assert.equal(envelope.inProgressRun, null, "matching requires a committed checkpoint");
   const { ready, graph } = resolveStrictReadyRuntime(envelope.readyGeneration);
@@ -212,20 +210,59 @@ export async function transactionReadyRoutes(envelope: StartupCheckpointEnvelope
   const wiring = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1", familyIds: [...new Set(memos.map(m => m.familyId))],
     executionIdentity: { executor: input.executor, transactionOrigin: input.owner } });
   const result: import("./family-transaction-matching.js").ObservedReadyRoute[] = [];
+  const assertGraphEdge = acceptanceGraphLookup(graph);
   for (const memo of memos) {
     assert(wiring.isReadyMemoDefinitionCurrent?.(memo), "matching Ready definition is stale");
     const family = catalog.forStrictFamily(memo.familyId as never);
-    if (family.plugin.manifest.domain !== "protocol" && family.plugin.manifest.domain !== "swap") continue;
+    if (family.plugin.manifest.domain !== "protocol" && family.plugin.manifest.domain !== "swap" && family.plugin.manifest.domain !== "credit") continue;
     const instance = wiring.rehydrateVerifiedInstance({ memo, cutoff: ready.cutoff }) as import("../venues/adapter-family-runtime.js").PreparedFamilyInstance;
+    const credit = family.plugin.manifest.domain === "credit"
+      ? prepareCreditFamilyRoutes({ family, instance, source: ready.cutoff, generation: ready.cutoff.generation }) : undefined;
     for (const route of instance.routes) {
       const handle = instance.routeHandles.find(h => h.routeKey === route.routeKey); assert(handle);
-      const edge = projectFamilyRouteGraph({ family: family as import("../venues/family-capability-catalog.js").LoadedFamilyPlugin,
-        descriptor: instance.descriptor, route, handle }).edge;
-      assertUniqueAcceptanceGraphEdge(graph, edge);
+      const creditHandle = credit?.routes.find(h => h.routeKey === route.routeKey);
+      if (credit) assert(creditHandle, "Credit route handle missing");
+      const projection = creditHandle ? projectCreditRouteGraph({ family, route: creditHandle })
+        : projectFamilyRouteGraph({ family: family as import("../venues/family-capability-catalog.js").LoadedFamilyPlugin,
+          descriptor: instance.descriptor, route, handle });
+      const edge = projection.edge;
+      assertGraphEdge(edge);
       const action = family.plugin.actionAdapters.find(a => a.id === edge.adapterId); assert(action, "route action missing");
+      const venue = projection.graph.venueIdentity as any, scope = venue?.scope;
+      const execution = typeof venue?.signature === "string" && typeof venue?.selector === "string" && scope ? {
+        domain: family.plugin.manifest.domain as "swap" | "protocol" | "credit", target: edge.target, selector: venue.selector, signature: venue.signature,
+        ...Object.fromEntries(["poolId", "poolNamespace", "tokenInId", "tokenOutId"].flatMap(key => scope[key] === undefined ? [] : [[key, String(scope[key])]])),
+      } : undefined;
+      const sourceDescriptor = (instance.descriptor as any).bound?.descriptor;
       result.push({ familyId: memo.familyId, instanceKey: instance.instanceKey, lineageId: instance.descriptor.lineageId,
         routeKey: route.routeKey, adapterId: edge.adapterId!, target: edge.target!, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut,
-        direction: action.descriptor.action, executionAssets: route.executionAssets, matchTrace: (target, selector) => action.matchTrace(target, selector) });
+        direction: action.descriptor.action, executionAssets: route.executionAssets,
+        ...(execution ? { execution,
+          referenceInstanceKeys: [sourceDescriptor?.instanceKey].filter((key): key is string => typeof key === "string"),
+          referenceRouteKeys: [(route as any).innerRouteKey].filter((key): key is string => typeof key === "string"),
+          matchCall(call: import("../universe-rebuild-production.js").RebuildCallObservation, census: ReadySelectorCensusTransaction) {
+            if (!canonicalExecutionCall(execution.signature, edge.target, call)) return false;
+            const matches = census.calls.filter(observed => observed.target?.toLowerCase() === call.target.toLowerCase() &&
+              observed.calldata?.toLowerCase() === call.data.toLowerCase() && JSON.stringify(observed.traceAddress) === JSON.stringify(call.traceAddress));
+            if (matches.length !== 1) return false;
+            const pattern = family.plugin.discovery.callPatterns?.find(pattern => pattern.selector.toLowerCase() === execution.selector.toLowerCase());
+            if (!pattern) return false;
+            const observed = matches[0]!;
+            const candidate: any = family.plugin.discovery.decodeCandidate({ matchedPatternId: pattern.id, observation: {
+              kind: "call", target: call.target, data: call.data, ...(call.sender ? { sender: call.sender } : {}),
+              transactionHash: census.transactionHash!, source: { number: census.blockNumber!, hash: census.blockHash!, generation: census.blockNumber! },
+              opaque: { selectorCensus: census, callId: observed.id },
+            } as never });
+            if (!candidate?.scope) return false;
+            for (const key of ["target", "poolId", "parameterKey"])
+              if (!sameExecutionResource(String(candidate.scope[key] ?? ""), String(scope[key] ?? ""))) return false;
+            if (candidate.scope.poolNamespace !== scope.poolNamespace) return false;
+            for (const key of ["tokenInId", "tokenOutId"])
+              if (scope[key] !== undefined && String(candidate.scope[key] ?? "") !== String(scope[key])) return false;
+            return true;
+          },
+        } : {}),
+        matchTrace: (target, selector) => action.matchTrace(target, selector) });
     }
   }
   return result;
@@ -243,7 +280,7 @@ export interface FamilyReadyInput {
 /** Test inputs select a TX/instance; admission always uses the production lifecycle. */
 export async function prepareFamilyReady(input: FamilyReadyInput) {
   const { familyId, domain, source, executor, owner, rpcFile, out } = input;
-  const mode = input.executorCodeMode ?? "deployed", method = input.simulationMethod ?? "debug_traceCall";
+  const mode = input.executorCodeMode ?? "counterfactual", method = input.simulationMethod ?? "eth_simulateV1";
   assert(["deployed", "counterfactual"].includes(mode)); assert(["debug_traceCall", "eth_simulateV1"].includes(method));
   let testExecutorProvisioning: { owner: string; runtimeCode: import("../revm-sim-client.js").ExecutorRuntimeCode } | undefined;
   let artifactSha256: string | undefined;
@@ -257,12 +294,20 @@ export async function prepareFamilyReady(input: FamilyReadyInput) {
     testExecutorProvisioning = { owner, runtimeCode: loadBotVmRuntimeCode(owner) };
     artifactSha256 = createHash("sha256").update(bytes).digest("hex");
   }
-  const request = { version: 2, familyId, domain, source, executor, owner,
+  const [{ selectorReadyFamilyIds }, { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: activeCatalog }] = await Promise.all([
+    import("../universe-rebuild-production.js"), import("../venues/production-family-composition.js"),
+  ]);
+  const selectorMode = input.target !== undefined;
+  const familyIds = selectorMode ? selectorReadyFamilyIds() : activeCatalog.listAll().map(family => String(family.plugin.manifest.familyId)).sort();
+  const request = { version: 3, referenceFamilyId: familyId, domain, familyIds, bindingMode: selectorMode ? "selector" : "legacy", source, executor, owner,
     ...(input.target ? { target: input.target } : {}),
     executorCodeMode: mode, simulationMethod: method,
     ...(testExecutorProvisioning ? { executorCodeHash: testExecutorProvisioning.runtimeCode.keccak256, artifactSha256 } : {}),
     range: { fromBlock: source.number, toBlock: source.number } };
-  const runId = `family-facts-${createHash("sha256").update(JSON.stringify(request)).digest("hex").slice(0, 20)}`;
+  const preparationRequest = selectorMode ? { ...request, referenceFamilyId: undefined, domain: undefined,
+    target: input.target && { transactionHash: input.target.transactionHash,
+      ...(input.target.stateSelection ? { stateSelection: input.target.stateSelection } : {}) } } : request;
+  const runId = `family-facts-${createHash("sha256").update(JSON.stringify(preparationRequest)).digest("hex").slice(0, 20)}`;
   const manifestPath = `${out}.request.json`;
   if (existsSync(manifestPath)) assert.deepEqual(JSON.parse(readFileSync(manifestPath, "utf8")), request, "Ready preparation request changed");
   else { assert(!existsSync(out), "refusing an unrelated existing checkpoint"); writeFileSync(manifestPath, JSON.stringify(request, null, 2) + "\n", { flag: "wx", mode: 0o600 }); }
@@ -279,7 +324,7 @@ export async function prepareFamilyReady(input: FamilyReadyInput) {
     import("../universe-rebuild-production.js"), import("../universe-rebuild-runner.js"),
     import("../universe-rebuild-checkpoint.js"), import("../venues/production-family-composition.js"),
   ]);
-  assert.equal(catalog.forStrictFamily(familyId as never).plugin.manifest.domain, domain);
+  if (!selectorMode && (domain === "credit" || domain === "funding")) assert.equal(catalog.forStrictFamily(familyId as never).plugin.manifest.domain, domain);
   const directory = familyFactCacheDirectory();
   // Raw logs/trace are shared across Families. A producer change (including
   // tracer configuration) changes this key; Family classifiers stay separate.
@@ -296,9 +341,9 @@ export async function prepareFamilyReady(input: FamilyReadyInput) {
     assert.equal(source.number, stateSelection.executionSource.number);
     assert.equal(source.hash.toLowerCase(), stateSelection.executionSource.hash.toLowerCase());
   }
-  const observationArchive = stateSelection?.mode === "parent" ? makeArchive(stateSelection.evidenceSource) : activityArchive;
-  const makeWiring = (startupCandidates?: readonly Readonly<Record<string, unknown>>[], archive = activityArchive) => createRebuildWiring({
-    rpcUrl: rpc.MAINNET_RPC_URL, familyIds: [familyId], activityArchive: archive, startupCandidates,
+  const makeWiring = (startupCandidates?: readonly Readonly<Record<string, unknown>>[], census?: readonly ReadySelectorCensusTransaction[]) => createRebuildWiring({
+    rpcUrl: rpc.MAINNET_RPC_URL, familyIds, ...(selectorMode ? { selectorCensus: census ?? [], tracePolicy: "forbid" as const }
+      : { activityArchive }), startupCandidates,
     executionIdentity: { executor, transactionOrigin: owner },
     ...(stateSelection?.mode === "parent" ? { testTransactionObservation: {
       transactionHash: input.target!.transactionHash,
@@ -311,20 +356,25 @@ export async function prepareFamilyReady(input: FamilyReadyInput) {
     assert.equal(actual.hash.toLowerCase(), source.hash.toLowerCase()); return actual;
   };
   await freeze(); // A cached number never bypasses canonical source verification.
-  const binding = { request, preparationSha256: createHash("sha256").update(readFileSync(fileURLToPath(import.meta.url))).digest("hex"),
+  const binding = { request: preparationRequest, preparationSha256: createHash("sha256").update(readFileSync(fileURLToPath(import.meta.url))).digest("hex"),
     reviewInput: wiring.readyReviewInputFingerprint!(),
-    familyDefinition: wiring.familyDefinitionHash!(familyId), discoveryDefinition: wiring.familyDiscoveryDefinitionHash(familyId),
-    familyEnabled: wiring.isFamilyEnabled!(familyId),
+    families: familyIds.map(id => ({ familyId: id, definition: wiring.familyDefinitionHash!(id),
+      discoveryDefinition: wiring.familyDiscoveryDefinitionHash(id), enabled: wiring.isFamilyEnabled!(id) })),
     readyPreparation: createHash("sha256").update(readFileSync(fileURLToPath(import.meta.url))).digest("hex"),
     lifecycle: ["universe-rebuild-production.ts", "strict-identity-attestation.ts", "universe-rebuild-runner.ts", "universe-rebuild-checkpoint.ts", "strict-ready-runtime.ts", "ready-transaction-input.ts"].map(name =>
       [name, createHash("sha256").update(readFileSync(new URL(`../${name}`, import.meta.url))).digest("hex")]) };
   const cache = await cachedFamilyReady({ directory, binding, out, build: async path => {
     const store = new UniverseRebuildCheckpointStore({ path });
-    const selection = input.target ? await discoverTransactionReadyInput({ wiring: observationArchive === activityArchive ? wiring : makeWiring(undefined, observationArchive), familyId, activityArchive: observationArchive,
+    const selection = input.target ? await discoverTransactionReadyInput({ wiring, familyIds,
       directory, rpcUrl: rpc.MAINNET_RPC_URL, target: input.target, source: await freeze() }) : undefined;
     if (selection) writeFileSync(`${out}.discovery.json`, JSON.stringify(selection.evidence, null, 2) + "\n", { mode: 0o600 });
-    await rebuildUniverse({ ...(selection ? makeWiring(selection.candidates) : wiring),
-      ...(selection ? { currentCandidateKeys: selection.currentCandidateKeys, currentInputFingerprint: selection.currentInputFingerprint } : {}),
+    // The supplied-census production path includes unknown selectors in its
+    // durable coverage ledger. Parent-state diagnostics keep later observations
+    // as explicit nominations, never claim them as parent-block activity.
+    const selectedWiring = selection ? !selectorMode ? makeWiring(selection.candidates) : stateSelection?.mode === "parent"
+      ? makeWiring(selection.candidates, []) : makeWiring(undefined, [selection.census]) : wiring;
+    await rebuildUniverse({ ...selectedWiring,
+      ...(selection && (!selectorMode || stateSelection?.mode === "parent") ? { currentCandidateKeys: selection.currentCandidateKeys, currentInputFingerprint: selection.currentInputFingerprint } : {}),
       store, runId, observationRange: request.range, attestationConcurrency: 1,
       freezeCanonicalHead: freeze, log: message => console.log(message.replaceAll(rpc.MAINNET_RPC_URL, "[REDACTED]")) });
     const built = await store.load();
@@ -339,8 +389,8 @@ export async function prepareFamilyReady(input: FamilyReadyInput) {
   return envelope;
 }
 
-/** Thin preparation CLI. The sample selects a source block and one installed
- * Family; no pool, expected route, output or admission enters production scan. */
+/** Thin preparation CLI. Samples select an observation/state anchor; the active
+ * catalog and production lifecycle own admission and route construction. */
 export async function familyJsonReadyMain(argv = process.argv.slice(2)) {
   const args = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {

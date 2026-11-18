@@ -51,7 +51,7 @@ test("calldata, funding, observer, actor, gas, state, method and executor change
       x => { x.request.data = "0xabcd"; }, x => { x.request.tokenDeals![0]!.amount = "18"; },
       x => { x.request.transactionOrigin = address(9); }, x => { x.request.executionGasLimit = 99999; },
       x => { x.request.observeTokens = [address(8)]; }, x => { x.request.preCalls = [{ from: address(3), to: address(7), calldata: "0x" }]; },
-      x => { x.request.sourcePin!.blockHash = hash(9); x.response.sourceAttestation!.blockHash = hash(9); },
+      x => { x.request.sourcePin!.blockHash = hash(9); x.response.sourceAttestation = { ...x.response.sourceAttestation!, blockHash: hash(9) }; },
       x => { x.context.executorCodeHash = hash(9); }, x => { x.context.executorArtifactSha256 = "new-artifact"; },
       x => { x.context.sourceTreeSha256 = "new-code"; }, x => { x.context.executionEnvironment.method = "eth_simulateV1"; },
       x => { x.context.executorProvisioning.mode = "deployed"; },
@@ -74,7 +74,7 @@ test("timeouts, quotas, failed preparation and malformed source evidence are nev
     const halted = structuredClone(f.response);
     halted.strict!.outcome = { kind: "Revert", phase: "main", output: "0x", nestedHalt: "out of gas" };
     for (let i = 0; i < 2; i++) assert.equal((await cachedFamilySimulation({ ...f, execute: async () => halted })).cache.status, "executed");
-    const bad = structuredClone(f.response); bad.sourceAttestation!.stateRoot = hash(99);
+    const bad = { ...structuredClone(f.response), sourceAttestation: { ...f.response.sourceAttestation!, stateRoot: hash(99) } };
     await assert.rejects(cachedFamilySimulation({ ...f, execute: async () => bad }), /source mismatch/);
     assert.equal((await cachedFamilySimulation(f)).cache.status, "executed");
     assert.equal((await cachedFamilySimulation(f)).cache.status, "reused");

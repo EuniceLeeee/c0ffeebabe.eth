@@ -5,6 +5,7 @@ import {
   mutationOnlyTransitionDiagnostic,
 } from "./pool-impact.js";
 import type { TokenEdge, TokenQueryBackend } from "../planner/token-graph.js";
+import { edgeMatchesObservationIdentity, edgeObservationIdentity } from "../venues/route-observation-identity.js";
 import type { SwapObservationBindingResolver } from "../venues/swap-observation.js";
 import {
   matchOracleVictimEffect,
@@ -154,10 +155,7 @@ export class BackrunDetector implements Detector {
       }
       return transition.mutations.some((mutation) =>
         familyId === mutation.familyId &&
-        (
-          edge.poolId?.toLowerCase() === mutation.poolIdentity.toLowerCase() ||
-          edge.target.toLowerCase() === mutation.poolIdentity.toLowerCase()
-        )
+        edgeMatchesObservationIdentity(edge, mutation.poolIdentity)
       );
     });
     const transitionPools = uniqueAddresses([
@@ -210,7 +208,7 @@ export class BackrunDetector implements Detector {
         affectedEdges.flatMap((edge) => [edge.tokenIn, edge.tokenOut]),
       );
       const affectedPools = uniqueAddresses(
-        affectedEdges.map((edge) => edge.poolId ?? edge.target),
+        affectedEdges.map(edgeObservationIdentity),
       );
       for (const startToken of connectedComponentSeeds(affectedEdges)) {
         opportunities.push({

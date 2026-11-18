@@ -255,7 +255,7 @@ test("merged ETH columns retain forward-input lineage and next-block quote reuse
 test("native effective deltas co-update ETH without rescanning unchanged rows; exact order and old outputs survive", async () => {
   const rawEdges = [edge(weth, a, 201), edge(a, b, 202), edge(b, weth, 203),
     edge(weth, b, 204), edge(b, a, 205), edge(a, weth, 206)];
-  let edges = Object.freeze(rawEdges.map(e => Object.freeze({ ...e, canonicalEdgeId: blockScanEdgeKey(e) })));
+  let edges = Object.freeze(rawEdges.map(e => Object.freeze({ ...e, canonicalEdgeId: blockScanEdgeKey(e) as NonNullable<TokenEdge["canonicalEdgeId"]> })));
   const keys = edges.map(blockScanEdgeKey);
   for (const mode of ["dependencies", "direct"] as const) {
     let previous: ReturnType<typeof organizeEffectivePricing> | undefined;
@@ -322,7 +322,7 @@ test("production Ready graph and effective builder share deltas; unpublished dra
   const readyEdges = Object.freeze([edge(weth, a, 301), edge(a, weth, 302)].map(e =>
     Object.freeze({ ...e, canonicalEdgeId: canonicalEdgeId(family, e) })));
   const ready = { generation: 9, graphHash: "graph", catalogHash: "catalog",
-    sourceCoverage: [{ familyId: family, sourceId: "fixture" }] } as ReadyUniverseGeneration;
+    sourceCoverage: [{ familyId: family, sourceId: "fixture" }] } as unknown as ReadyUniverseGeneration;
   const graphs = new StrictReadyGraphViewCoordinator({ ready, edges: readyEdges,
     catalog: { ownerOfAction: () => family } as never });
   const makeInput = (n: number) => {
@@ -368,7 +368,7 @@ test("production Ready graph and effective builder share deltas; unpublished dra
 
 test("serialized mixed-status baseline restores immutable carry and native deltas without repricing", async () => {
   const edges = Object.freeze([edge(weth, a, 401), edge(a, weth, 402), edge(c, b, 403),
-    edge(weth, b, 404), edge(weth, c, 405)].map(e => Object.freeze({ ...e, canonicalEdgeId: blockScanEdgeKey(e) })));
+    edge(weth, b, 404), edge(weth, c, 405)].map(e => Object.freeze({ ...e, canonicalEdgeId: blockScanEdgeKey(e) as NonNullable<TokenEdge["canonicalEdgeId"]> })));
   const input = { ...pricing(edges, new Map(), 6000), graph: { edges }, mids: new Map(),
     coverage: { resolvedEdgeKeys: edges.map(blockScanEdgeKey) },
     pricingStateKeyByEdgeKey: new Map(edges.map(e => [blockScanEdgeKey(e), edgeInstanceKey(e)])) };
@@ -388,7 +388,7 @@ test("serialized mixed-status baseline restores immutable carry and native delta
   assert([...restored.snapshot.rows.values()].every(row => Object.isFrozen(row)));
   assert([...restored.snapshot.rows.values()].every(row => !row.quotedAt || Object.isFrozen(row.quotedAt)));
   assert.deepEqual(restored.snapshot, values, "restoration changes descriptors, not price data");
-  let previous = { ...input, effectiveMids: restored.snapshot };
+  let previous: ReturnType<typeof organizeEffectivePricing> = { ...input, effectiveMids: restored.snapshot };
   let quotes = 0;
   for (let step = 1; step <= 2; step++) {
     const currentInput = { ...input, sourceBlock: 6000 + step, sourceBlockHash: address(6000 + step), generation: 6000 + step };

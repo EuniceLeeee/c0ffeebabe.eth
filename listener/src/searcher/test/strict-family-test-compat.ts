@@ -6,9 +6,9 @@ import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG } from
 import { createStrictRegistryProjection } from
   "../venues/strict-catalog-registry-projection.js";
 import type {
-  LoadedProductionFamilyModule,
   ProductionFamilyLoadIssue,
 } from "../venues/production-families/loader.js";
+import { FamilyCapabilityCatalog, capabilityManifestHash } from "../venues/family-capability-catalog.js";
 
 /**
  * Test-only compatibility projection for historical fixture suites. It is not
@@ -16,10 +16,19 @@ import type {
  * deliberately excluded from acceptance evidence. New contracts must target
  * the strict catalog/declarations/runtime directly.
  */
+const routeFamilies = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll()
+  .filter(family => family.plugin.manifest.domain === "swap" || family.plugin.manifest.domain === "protocol");
+const entries = routeFamilies.flatMap(family => Object.values(family.hashes));
+// Provider-bound Funding and risk-bound Credit have no legacy projection.
+// Historical route fixture suites exercise only the actual ordinary route set.
+const routeCatalog = new FamilyCapabilityCatalog({
+  modules: routeFamilies.map(({ sourceFile, definitionBoundaryHash, plugin }) => ({ sourceFile, definitionBoundaryHash, plugin })),
+  generatedManifest: { format: "adapter-family-capabilities-v1", entries, manifestHash: capabilityManifestHash(entries) },
+});
 export const STRICT_PROJECTED_FAMILY_TEST_REGISTRY =
   new AdapterFamilyRegistry(
     createStrictRegistryProjection(
-      PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
+      routeCatalog,
     ),
     {
       definitionBoundaryHashFor: (familyId) => {
@@ -41,7 +50,5 @@ export const STRICT_EMPTY_POOL_IDENTITY_TEST_REGISTRY =
 export const STRICT_EMPTY_PROTOCOL_IDENTITY_TEST_REGISTRY =
   new IdentityResolverRegistry(Object.freeze([]), () => false);
 
-export const STRICT_PROJECTED_FAMILY_TEST_MODULES:
-  readonly LoadedProductionFamilyModule[] = Object.freeze([]);
 export const STRICT_PROJECTED_FAMILY_TEST_LOAD_ISSUES:
   readonly ProductionFamilyLoadIssue[] = Object.freeze([]);

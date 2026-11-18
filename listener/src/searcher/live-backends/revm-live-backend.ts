@@ -218,13 +218,6 @@ export class RevmLiveBackend implements LiveStateBackend {
     if (input.impact) push(input.impact.pool);
     push(this.executor);
     push(this.owner);
-    if (this.strictCatalog !== undefined) {
-      for (const address of strictFundingPrewarmAddresses({
-        catalog: this.strictCatalog,
-      })) {
-        push(address);
-      }
-    }
     for (const hop of input.routeHops ?? []) {
       push(hop.target);
       if (this.strictCatalog !== undefined) {
@@ -342,13 +335,6 @@ export class RevmLiveBackend implements LiveStateBackend {
       WHALE,
       ...calls.map((call) => call.to),
     ]) pushPrewarm(address);
-    if (this.strictCatalog !== undefined) {
-      for (const address of strictFundingPrewarmAddresses({
-        catalog: this.strictCatalog,
-      })) {
-        pushPrewarm(address);
-      }
-    }
     for (const hop of hops) {
       pushPrewarm(hop.target);
       if (this.strictCatalog !== undefined) {
@@ -450,6 +436,14 @@ export class RevmLiveBackend implements LiveStateBackend {
     }
     const script = compilePlan(plan.root, this.executor);
     const calldata = buildExecuteCalldata(script);
+    if (this.strictCatalog !== undefined) {
+      const family = this.strictCatalog.forStrictFamily(this.strictCatalog.ownerOfAction(plan.root.adapterId));
+      if (family.plugin.manifest.domain === "funding") {
+        const prewarm = strictFundingPrewarmAddresses({ catalog: this.strictCatalog,
+          selectedRoots: [plan.root], executor: this.executor });
+        await this.client.warm({ blockNumber: this.preparedBlock, rpcUrl: this.rpcUrl, prewarm: [...prewarm], prewarmCalls: [] });
+      }
+    }
     const result = await this.client.simulatePrepared({
       owner: this.owner,
       executor: this.executor,

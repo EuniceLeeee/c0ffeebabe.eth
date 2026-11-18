@@ -87,7 +87,7 @@ test("missing old branch or malformed identity/parent chain never returns proof"
     if (mode === "wrong-old-parent") f.byHash.set(f.old[0]!.hash, block(11, 999));
     if (mode === "wrong-new-parent") f.canonical.set(11, block(11, 211, 999));
     if (mode === "wrong-height") f.canonical.set(11, block(12, 211, 10));
-    await assert.rejects(collectReorgActivity(f.input), undefined, mode);
+    await assert.rejects(collectReorgActivity(f.input), Error, mode);
     assert.deepEqual(f.touchedCalls, []);
   }
 });

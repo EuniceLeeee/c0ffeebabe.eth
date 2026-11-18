@@ -10,7 +10,7 @@ import type {
 } from "./identity.js";
 import type { SwapObservationCapability } from "./swap-observation.js";
 import type { BlockScanStateCapability } from "./blockscan-state-capability.js";
-import type { RegisteredFundingFamily } from "./funding/funding-capability.js";
+import type { RegisteredFundingFamily } from "./funding-capability.js";
 import type { RouteInstanceIdentityCapability } from "./route-instance-identity.js";
 import type { SwapLandedEventDeclaration } from "./landed-event-registry.js";
 import type { SwapVictimModelDeclaration } from "./victim-model-registry.js";
@@ -609,12 +609,12 @@ export interface SwapAdapter extends RouteLegAdapter<"swap"> {
    */
   readonly matureDexUniverseDiscovery?: true;
   /** Family-owned receipt/discovery/warm invalidation event contract. */
-  readonly landedEvents: SwapLandedEventDeclaration;
+  readonly landedEvents?: SwapLandedEventDeclaration;
   /** Optional family-owned landed-pool metadata/materialization contract. */
   readonly poolDiscovery?: LandedPoolMaterializationCapability;
-  readonly observation: SwapObservationCapability;
+  readonly observation?: SwapObservationCapability;
   /** Family-owned victim reproduction policy; detect-only remains fail closed. */
-  readonly victimModel: SwapVictimModelDeclaration;
+  readonly victimModel?: SwapVictimModelDeclaration;
   readonly pricingState: BlockScanStateCapability;
 }
 

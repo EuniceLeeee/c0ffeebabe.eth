@@ -21,7 +21,7 @@ import {
   edgeExecutionVariantKey,
   edgeInstanceKey,
 } from "../venues/route-instance-identity.js";
-export { v4HooksAffectSwap, v4PoolId } from "../venues/swaps/univ4-common.js";
+export { v4HooksAffectSwap, v4PoolId } from "../venues/v4-pool-key.js";
 
 /** Minimal interface for on-chain read queries. StateBackend and ethers Provider both satisfy this. */
 export interface TokenQueryBackend {
@@ -50,6 +50,15 @@ export interface TokenEdge {
   instanceKey?: string;
   /** Family-owned execution discriminator within one instance/direction. */
   executionVariantKey?: string;
+  /** Family-issued logical state resource; multiple call variants may share it. */
+  stateResourceKey?: string;
+  stateResourceKeys?: readonly string[];
+  /** Declaration-bound receipt/activity address; target remains the execution target. */
+  observationTarget?: string;
+  /** ABI-normalized observation resource ID. Opaque strings retain their case. */
+  observationPoolId?: string;
+  /** Requires a current funded startup-table simulation before enumeration. */
+  executionVerification?: "startup-simulation";
   adapterId: string;
   target: string;
   tokenIn: string;

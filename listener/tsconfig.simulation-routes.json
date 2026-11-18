@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.live.json",
+  "compilerOptions": {
+    "typeRoots": [
+      "./node_modules/@types"
+    ]
+  },
+  "include": [
+    "src/searcher/venues/selector-native*.ts",
+    "src/searcher/venues/selector-family-*.ts",
+    "src/searcher/venues/selector-execution-keys.ts",
+    "src/searcher/venues/selector-execution-evidence.ts",
+    "src/searcher/venues/selector-execution-observation.ts",
+    "src/searcher/ready-selector-*.ts",
+    "src/searcher/test/selector-native-*.test.ts",
+    "src/searcher/test/selector-family-v2-*.test.ts",
+    "src/searcher/test/selector-typed-*.test.ts",
+    "src/searcher/test/selector-v2-*.test.ts",
+    "src/searcher/test/selector-execution-keys.test.ts",
+    "src/searcher/test/selector-execution-observation.test.ts",
+    "src/searcher/test/ready-selector-*.test.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

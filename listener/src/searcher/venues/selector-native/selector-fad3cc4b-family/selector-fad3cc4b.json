@@ -1,0 +1,668 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xfad3cc4b",
+  "signature": "function deposit(uint256, uint256, uint256, address) returns (uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": false,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_FAD3CC4B_ENABLED"
+  },
+  "programs": [
+    {
+      "parameters": [
+        {
+          "path": [
+            0
+          ],
+          "role": "amountIn"
+        },
+        {
+          "path": [
+            2
+          ],
+          "role": "minimumOut"
+        },
+        {
+          "path": [
+            3
+          ],
+          "role": "recipient"
+        }
+      ],
+      "values": {
+        "abi": {
+          "events": [
+            "event Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)"
+          ],
+          "asset": [
+            "function ASSET_TOKEN() view returns(address)"
+          ],
+          "stable": [
+            "function STABLECOIN() view returns(address)"
+          ],
+          "cryptopool": [
+            "function CRYPTOPOOL() view returns(address)"
+          ],
+          "amm": [
+            "function amm() view returns(address)"
+          ],
+          "staker": [
+            "function staker() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "parameters",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "asset",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "asset",
+                      "ASSET_TOKEN",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                },
+                {
+                  "id": "stable",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "stable",
+                      "STABLECOIN",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                },
+                {
+                  "id": "cryptopool",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "cryptopool",
+                      "CRYPTOPOOL",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                },
+                {
+                  "id": "amm",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "amm",
+                      "amm",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                },
+                {
+                  "id": "staker",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "staker",
+                      "staker",
+                      []
+                    ]
+                  },
+                  "completion": "return-data",
+                  "required": true
+                }
+              ],
+              "result": {
+                "asset": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "asset",
+                            "ASSET_TOKEN",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "asset"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "stable": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "stable",
+                            "STABLECOIN",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "stable"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "cryptopool": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "cryptopool",
+                            "CRYPTOPOOL",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "cryptopool"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "amm": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "amm",
+                            "amm",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "amm"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "staker": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decodeCanonical",
+                          "args": [
+                            "staker",
+                            "staker",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "staker"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "result": "$steps.parameters"
+        },
+        "descriptor": {
+          "asset": "$binding.asset",
+          "stable": "$binding.stable",
+          "cryptopool": "$binding.cryptopool",
+          "amm": "$binding.amm",
+          "staker": "$binding.staker",
+          "tokenIn": "$binding.asset",
+          "tokenOut": "$target"
+        }
+      },
+      "routes": {
+        "resources": [
+          {
+            "target": "$target"
+          },
+          {
+            "target": "$descriptor.cryptopool"
+          },
+          {
+            "target": "$descriptor.amm"
+          }
+        ]
+      },
+      "dependencies": [
+        "$descriptor.asset",
+        "$descriptor.stable",
+        "$descriptor.cryptopool",
+        "$descriptor.amm",
+        "$descriptor.staker"
+      ],
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$target",
+          "$descriptor.asset",
+          "$descriptor.stable",
+          "$descriptor.cryptopool",
+          "$descriptor.amm",
+          "$descriptor.staker"
+        ],
+        "steps": [
+          {
+            "id": "stableReserve",
+            "static": true,
+            "call": {
+              "target": "$descriptor.cryptopool",
+              "signature": "function balances(uint256) view returns(uint256)",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "0"
+                  ]
+                }
+              ],
+              "save": {
+                "stableReserve": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "stableReserve"
+                  },
+                  "operator": "gte",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "assetReserve",
+            "static": true,
+            "call": {
+              "target": "$descriptor.cryptopool",
+              "signature": "function balances(uint256) view returns(uint256)",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    "1"
+                  ]
+                }
+              ],
+              "save": {
+                "assetReserve": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "assetReserve"
+                  },
+                  "operator": "gte",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "borrowPolicy",
+            "math": {
+              "model": "balancedDebt",
+              "inputs": {
+                "assets": {
+                  "runtime": "amountIn"
+                },
+                "stable": {
+                  "runtime": "stableReserve"
+                },
+                "asset": {
+                  "runtime": "assetReserve"
+                }
+              },
+              "outputs": {
+                "debt": "debt"
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "debt"
+                  },
+                  "operator": "gte",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "1"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "execute",
+            "call": {
+              "target": "$target",
+              "signature": "function deposit(uint256,uint256,uint256,address) returns(uint256)",
+              "args": [
+                {
+                  "runtime": "amountIn"
+                },
+                {
+                  "runtime": "debt"
+                },
+                "$minAmountOut",
+                "$recipient"
+              ],
+              "save": {
+                "output": 0
+              }
+            },
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": true,
+              "verifyAllowance": true
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "minimum": "$minAmountOut",
+            "equals": {
+              "runtime": "output"
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$descriptor.stable",
+            "account": "$executor"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$descriptor.stable",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          }
+        ]
+      },
+      "runtimeMath": {
+        "version": 1,
+        "entries": {
+          "balancedDebt": {
+            "model": "balancedDebt",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "balancedDebt",
+            "version": 1,
+            "inputs": [
+              "assets",
+              "stable",
+              "asset"
+            ],
+            "outputs": [
+              "debt"
+            ],
+            "operations": [
+              {
+                "name": "product",
+                "op": "mul",
+                "left": {
+                  "input": "assets"
+                },
+                "right": {
+                  "input": "stable"
+                }
+              },
+              {
+                "name": "debt",
+                "op": "div",
+                "left": {
+                  "local": "product"
+                },
+                "right": {
+                  "input": "asset"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "receiptChecks": {
+        "observe": [
+          "logs"
+        ],
+        "checks": [
+          {
+            "assert": {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    {
+                      "op": "filter",
+                      "args": [
+                        {
+                          "op": "coalesce",
+                          "args": [
+                            "$result.effects.logs",
+                            []
+                          ]
+                        },
+                        "eventLog",
+                        {
+                          "op": "and",
+                          "args": [
+                            {
+                              "op": "sameAddress",
+                              "args": [
+                                "$eventLog.address",
+                                "$target"
+                              ]
+                            },
+                            {
+                              "op": "eq",
+                              "args": [
+                                {
+                                  "op": "lower",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        "$eventLog.topics",
+                                        0
+                                      ]
+                                    }
+                                  ]
+                                },
+                                "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                1
+              ]
+            },
+            "error": "exactly one operation event required"
+          },
+          {
+            "assert": {
+              "op": "event",
+              "args": [
+                {
+                  "abi": "events",
+                  "name": "Deposit",
+                  "address": "$target",
+                  "result": "$result",
+                  "fields": {
+                    "sender": {
+                      "op": "address",
+                      "args": [
+                        "$executor"
+                      ]
+                    },
+                    "owner": {
+                      "op": "address",
+                      "args": [
+                        "$executor"
+                      ]
+                    },
+                    "assets": "$amountIn",
+                    "shares": "$amountOut"
+                  }
+                }
+              ]
+            },
+            "error": "operation event and actual balances disagree"
+          }
+        ],
+        "tokenBalances": [
+          {
+            "token": "$descriptor.stable",
+            "account": "$executor"
+          }
+        ]
+      },
+      "meta": {
+        "sourceFamily": "yieldbasis-lt",
+        "migrationKey": "yieldbasis-lt:deposit:receiver",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    }
+  ]
+}

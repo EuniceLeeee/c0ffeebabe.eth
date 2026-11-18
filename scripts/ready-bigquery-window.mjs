@@ -87,46 +87,66 @@ function canonicalHeaders(window) {
 
 const tableName = ref => '`' + [ref.projectId, ref.datasetId, ref.tableId].join('.') + '`';
 
-export function renderEthereumInputs(window) {
+/** Ordinary Ready discovery reads transactions and receipts. Existing stored
+ * call rows are an explicit SQL enrichment, never an implicit RPC trace job. */
+export function renderEthereumInputs(window, { withStoredCalls = false } = {}) {
+  assert(typeof withStoredCalls === 'boolean', 'withStoredCalls must be boolean');
   const time = alias => `${alias}.block_timestamp BETWEEN ${utc(window.firstTime)} AND ${utc(window.lastTime)}`;
-  return `WITH headers AS (${canonicalHeaders(window)}),
-  tx AS (
-    SELECT LOWER(t.\`hash\`) AS tx_hash, t.block_number, b.block_hash, t.transaction_index, t.receipt_status
-    FROM \`${ethereum}.transactions\` AS t
-    JOIN headers AS b ON t.block_number = b.number AND LOWER(t.block_hash) = b.block_hash
-    WHERE ${time('t')}
-  ), traces AS (
+  const traceCte = withStoredCalls ? `, traces AS (
     SELECT LOWER(t.transaction_hash) AS tx_hash, LOWER(t.block_hash) AS block_hash,
       ARRAY_AGG(STRUCT(t.trace_address, t.trace_type, t.call_type, LOWER(t.from_address) AS from_address,
         LOWER(t.to_address) AS to_address, t.input, t.status) ORDER BY t.trace_address) AS traces
     FROM \`${ethereum}.traces\` AS t
     JOIN headers AS b ON t.block_number = b.number AND LOWER(t.block_hash) = b.block_hash
     WHERE ${time('t')} GROUP BY 1, 2
-  ), logs AS (
+  )` : '';
+  const traceProjection = withStoredCalls ? 'traces.tx_hash IS NOT NULL AS trace_rows_present, IFNULL(traces.traces, []) AS traces'
+    : 'FALSE AS trace_rows_present, ARRAY<STRUCT<trace_address STRING, trace_type STRING, call_type STRING, from_address STRING, to_address STRING, input STRING, status INT64>>[] AS traces';
+  return `WITH headers AS (${canonicalHeaders(window)}),
+  tx AS (
+    SELECT LOWER(t.\`hash\`) AS tx_hash, t.block_number, b.block_hash, t.transaction_index, t.receipt_status,
+      LOWER(t.from_address) AS from_address, LOWER(t.to_address) AS to_address, t.input, CAST(t.value AS STRING) AS value
+    FROM \`${ethereum}.transactions\` AS t
+    JOIN headers AS b ON t.block_number = b.number AND LOWER(t.block_hash) = b.block_hash
+    WHERE ${time('t')}
+  )${traceCte}, logs AS (
     SELECT LOWER(l.transaction_hash) AS tx_hash, LOWER(l.block_hash) AS block_hash,
       ARRAY_AGG(STRUCT(l.log_index, LOWER(l.address) AS log_address, l.topics, l.data) ORDER BY l.log_index) AS logs
     FROM \`${ethereum}.logs\` AS l
     JOIN headers AS b ON l.block_number = b.number AND LOWER(l.block_hash) = b.block_hash
     WHERE ${time('l')} GROUP BY 1, 2
   )
-  SELECT tx.*, traces.tx_hash IS NOT NULL AS trace_rows_present, IFNULL(traces.traces, []) AS traces, IFNULL(logs.logs, []) AS logs
-  FROM tx LEFT JOIN traces USING(tx_hash, block_hash) LEFT JOIN logs USING(tx_hash, block_hash)`;
+  SELECT tx.*, ${traceProjection}, IFNULL(logs.logs, []) AS logs
+  FROM tx ${withStoredCalls ? 'LEFT JOIN traces USING(tx_hash, block_hash) ' : ''}LEFT JOIN logs USING(tx_hash, block_hash)`;
 }
 
 export function renderRawRefresh(ref, window, input) {
   const target = tableName(ref);
   const range = readyWindowPredicate(window, 'd.block_number');
   assert(/^\d+$/.test(window.transactions), 'Invalid source transaction count');
-  const fields = ['tx_hash', 'block_number', 'block_hash', 'transaction_index', 'receipt_status', 'trace_rows_present', 'traces', 'logs'];
-  return `BEGIN TRANSACTION;
+  const transactionFields = ['from_address', 'to_address', 'input', 'value'];
+  const fields = ['tx_hash', 'block_number', 'block_hash', 'transaction_index', 'receipt_status', ...transactionFields, 'trace_rows_present', 'traces', 'logs'];
+  const metadataFields = [...transactionFields, 'transaction_index'];
+  const comparison = (alias, field) => field === 'transaction_index' || field === 'value' ? `${alias}.${field}` : `LOWER(${alias}.${field})`;
+  const optionalFields = [...transactionFields.map(field => [field, 'STRING']), ['transaction_index', 'INT64'], ['trace_rows_present', 'BOOL'],
+    ['traces', 'ARRAY<STRUCT<trace_address STRING, trace_type STRING, call_type STRING, from_address STRING, to_address STRING, input STRING, status INT64>>']];
+  return `${optionalFields.map(([field, type]) => `ALTER TABLE ${target} ADD COLUMN IF NOT EXISTS ${field} ${type};`).join('\n')}
+BEGIN TRANSACTION;
 ASSERT NOT EXISTS (
   SELECT 1 FROM ${target} AS d
   LEFT JOIN (${canonicalHeaders(window)}) AS b ON d.block_number = b.number
   WHERE ${range} AND LOWER(d.block_hash) IS DISTINCT FROM b.block_hash
 ) AS 'Saved table conflicts with canonical block hashes';
+ASSERT NOT EXISTS (
+  SELECT 1 FROM ${target} AS d JOIN ${tableName(input)} AS s
+    ON ${range} AND d.block_number = s.block_number AND LOWER(d.tx_hash) = s.tx_hash
+  WHERE ${metadataFields.map(field => `(d.${field} IS NOT NULL AND s.${field} IS NOT NULL AND ${comparison('d', field)} IS DISTINCT FROM ${comparison('s', field)})`).join(' OR\n    ')}
+) AS 'Saved transaction metadata conflicts with canonical source';
 MERGE ${target} AS d
 USING ${tableName(input)} AS s
 ON ${range} AND d.block_number = s.block_number AND LOWER(d.tx_hash) = s.tx_hash
+WHEN MATCHED AND (${metadataFields.map(field => `(d.${field} IS NULL AND s.${field} IS NOT NULL)`).join(' OR ')}) THEN
+  UPDATE SET ${metadataFields.map(field => `${field} = COALESCE(d.${field}, s.${field})`).join(', ')}
 WHEN NOT MATCHED THEN
   INSERT (${fields.join(', ')}) VALUES (${fields.map(field => 's.' + field).join(', ')});
 ASSERT (
@@ -158,6 +178,14 @@ export async function refreshReadyRawTable(api, history, ref, location, maxBytes
 }
 
 export function renderRawWindow(ref, window) {
-  return `SELECT tx_hash, block_number, block_hash, transaction_index, receipt_status, trace_rows_present, traces, logs
-FROM ${tableName(ref)} WHERE ${readyWindowPredicate(window)}`;
+  // Saved pre-census tables may lack transaction calldata. Preserve the missing
+  // fields as NULL so the census reports the gap instead of inventing a call.
+  const fields = ['from_address', 'to_address', 'input', 'value'].map(field =>
+    `JSON_VALUE(TO_JSON_STRING(saved), '$.${field}') AS ${field}`).join(',\n  ');
+  return `SELECT tx_hash, block_number, block_hash,
+  SAFE_CAST(JSON_VALUE(TO_JSON_STRING(saved), '$.transaction_index') AS INT64) AS transaction_index, receipt_status,
+  ${fields},
+  SAFE_CAST(JSON_VALUE(TO_JSON_STRING(saved), '$.trace_rows_present') AS BOOL) AS trace_rows_present,
+  PARSE_JSON(JSON_QUERY(TO_JSON_STRING(saved), '$.traces')) AS traces, logs
+FROM ${tableName(ref)} AS saved WHERE ${readyWindowPredicate(window)}`;
 }

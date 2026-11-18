@@ -3,10 +3,10 @@ import { DirectedRateReferenceIndex, type RawTokenRate } from "./blockscan-amoun
 import { visitEffectiveEnumerationQuotes, withEffectiveRowColumns, effectiveNativeChangesSince, effectiveEnumerationQuote,
   type EffectiveEnumerationPricing, type EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
 import type { ResolvedBlockScanQuote } from "./detector/blockscan-scanner-core.js";
-import { aboveSpread, DEFAULT_ALLOW_REPEATED_POOLS, type DfsQuote, type DirectedPriceSignal } from "./detector/blockscan-paired-dfs.js";
+import { aboveSpread, DEFAULT_ALLOW_REPEATED_POOLS, quotesShareResource, type DfsQuote, type DirectedPriceSignal } from "./detector/blockscan-paired-dfs.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import { blockScanEdgeKey } from "./venues/blockscan-state-capability.js";
-import { edgeInstanceKey } from "./venues/route-instance-identity.js";
+import { edgeInstanceKey, explicitStateResourceKeys, stateResourceSetIdentity } from "./venues/route-instance-identity.js";
 import { isBlockScanConversionEdge } from "./strategy-taxonomy.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "./blockscan-enumeration-config.js";
 
@@ -55,7 +55,7 @@ export interface EffectiveEthColumns {
 }
 interface EthViewWork {
   edges: readonly TokenEdge[];
-  topology: readonly { edge: TokenEdge; id: string; instance: string; tokenIn: string; tokenOut: string; order: number;
+  topology: readonly { edge: TokenEdge; id: string; instance: string; resources?: readonly string[]; tokenIn: string; tokenOut: string; order: number;
     conversion: boolean; leavesStandingPosition: boolean; immutable: boolean }[];
   references: DirectedRateReferenceIndex;
   /** Alias of the published effective table; never a separately maintained row map. */
@@ -81,10 +81,15 @@ function sameTopology(work: EthViewWork, edges: readonly TokenEdge[]): boolean {
   return work.topology.length === edges.length && work.topology.every((old, i) => {
     const edge = edges[i]!;
     return old.immutable && edge === old.edge || (old.id === blockScanEdgeKey(edge) &&
-      old.instance === edgeInstanceKey(edge) && old.tokenIn === edge.tokenIn.toLowerCase() &&
+      old.instance === edgeResourceIdentity(edge) && old.tokenIn === edge.tokenIn.toLowerCase() &&
       old.tokenOut === edge.tokenOut.toLowerCase() && old.conversion === isBlockScanConversionEdge(edge) &&
       old.leavesStandingPosition === edge.leavesStandingPosition);
   });
+}
+
+function edgeResourceIdentity(edge: TokenEdge): string {
+  const resources = explicitStateResourceKeys(edge);
+  return resources === undefined ? edgeInstanceKey(edge) : stateResourceSetIdentity(resources);
 }
 
 /** One local ETH-reference view of published effective amounts, not another producer.
@@ -114,10 +119,12 @@ function buildEthView(
     throw new Error("ETH signal pairs per token must be a positive safe integer");
   const reusable = previous && (nativeChangedIds !== undefined && previous.edges === edges || sameTopology(previous, edges));
   const work: EthViewWork = reusable ? previous : {
-    edges, topology: edges.map((edge, order) => ({ edge, order, id: blockScanEdgeKey(edge), instance: edgeInstanceKey(edge),
+    edges, topology: edges.map((edge, order) => ({ edge, order, id: blockScanEdgeKey(edge), instance: edgeResourceIdentity(edge),
+      ...(explicitStateResourceKeys(edge) === undefined ? {} : { resources: explicitStateResourceKeys(edge) }),
       tokenIn: edge.tokenIn.toLowerCase(), tokenOut: edge.tokenOut.toLowerCase(),
       conversion: isBlockScanConversionEdge(edge), leavesStandingPosition: edge.leavesStandingPosition,
       immutable: Boolean(edge.canonicalEdgeId) && Object.isFrozen(edge) &&
+        (edge.stateResourceKeys === undefined || Object.isFrozen(edge.stateResourceKeys)) &&
         (edge.routeBinding === undefined || Object.isFrozen(edge.routeBinding)) })),
     references: new DirectedRateReferenceIndex(edges, key => {
       const mid = mids.get(key); return mid && quoteRate(mid);
@@ -164,7 +171,7 @@ function buildEthView(
   // Only affected quotes and token groups are rebuilt. Flattening the output
   // arrays below is still required by the existing enumeration contract.
   for (const id of affected) {
-    const { instance, tokenIn, tokenOut, conversion } = work.byId.get(id)!;
+    const { instance, resources, tokenIn, tokenOut, conversion } = work.byId.get(id)!;
     if (!conversion) continue;
     const mid = mids.get(id), old = priorRows?.get(id)?.eth;
     const rate = mid && quoteRate(mid);
@@ -181,7 +188,7 @@ function buildEthView(
     const reusable = old && old.quote.instance === instance && old.quote.tokenIn === tokenIn &&
       old.quote.tokenOut === tokenOut && sameRate(old.quote, rate) &&
       sameRate(old.markIn, mIn) && sameRate(old.markOut, mOut);
-    const q: DfsQuote = reusable ? old.quote : { id, instance, tokenIn, tokenOut, ...rate,
+    const q: DfsQuote = reusable ? old.quote : { id, instance, ...(resources === undefined ? {} : { resources }), tokenIn, tokenOut, ...rate,
       value: mIn && mOut ? { num: rate.num * mOut.num * mIn.den,
         den: rate.den * mOut.den * mIn.num } : null };
     const entry: EffectiveEthColumns = reusable ? old : Object.freeze({ quote: q, markIn: mIn, markOut: mOut,
@@ -235,7 +242,7 @@ function buildEthView(
     };
     const push = (bi: number, si: number) => {
       const b = buys[bi]!;
-      while (!allowRepeatedPools && si < sells.length && sells[si]!.quote.instance === b.quote.instance) si++;
+      while (!allowRepeatedPools && si < sells.length && quotesShareResource(sells[si]!.quote, b.quote)) si++;
       if (si === sells.length) return;
       const s = sells[si]!;
       const item: Pair = { buy: bi, sell: si, signal: { token, buy: b.quote.id, sell: s.quote.id,
@@ -262,14 +269,15 @@ function buildEthView(
       }
       return first;
     };
-    const firstOtherPool = allowRepeatedPools ? 0 : sells.findIndex(s => s.quote.instance !== sells[0]!.quote.instance);
+    const composite = buys.some(b => (b.quote.resources?.length ?? 1) > 1) || sells.some(s => (s.quote.resources?.length ?? 1) > 1);
+    const firstOtherPool = allowRepeatedPools || composite ? 0 : sells.findIndex(s => s.quote.instance !== sells[0]!.quote.instance);
     // With repeated pools allowed, every sorted buy row starts at sells[0].
     // Its seed dominates every later item in that row. The first K seeds
     // therefore dominate all omitted rows, including the existing index ties.
     // Pool exclusion changes each row's first sell: keep all seeds in that case.
     const seedLimit = allowRepeatedPools ? Math.min(signalPairsPerToken, buys.length) : buys.length;
     for (let bi = 0; bi < seedLimit; bi++) {
-      const si = !allowRepeatedPools && buys[bi]!.quote.instance === sells[0]!.quote.instance ? firstOtherPool : 0;
+      const si = !allowRepeatedPools && !composite && buys[bi]!.quote.instance === sells[0]!.quote.instance ? firstOtherPool : 0;
       if (si >= 0) push(bi, si);
     }
     const comparable = heap.length > 0;

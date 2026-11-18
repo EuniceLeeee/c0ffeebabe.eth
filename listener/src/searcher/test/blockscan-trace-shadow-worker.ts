@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createServer } from "node:http";
+import { createServer, type RequestListener } from "node:http";
 import { once } from "node:events";
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { createWorkerBlockScanShadowTraceReader, resolveShadowTraceProjection } from "../blockscan-trace-shadow-worker.js";
@@ -11,8 +11,8 @@ const hash = (n: number) => "0x" + n.toString(16).padStart(64, "0");
 const anchor = { hash: hash(2), parentHash: hash(1), transactionHashes: [hash(3)] };
 const frame = (target: string) => ({ type: "CALL", from: address(1), to: target, input: "0x12345678", gas: "0x100", gasUsed: "0x10", output: "0x" });
 const control = (signal = new AbortController().signal) => ({ signal, deadlineAtMs: Date.now() + 5000, blockNumber: 2, anchor });
-async function server(t: any, handler: Parameters<typeof createServer>[0]) {
-  const s = createServer(handler as any); s.listen(0, "127.0.0.1"); await once(s, "listening");
+async function server(t: any, handler: RequestListener) {
+  const s = createServer(handler); s.listen(0, "127.0.0.1"); await once(s, "listening");
   t.after(() => { s.closeAllConnections(); s.close(); });
   return `http://127.0.0.1:${(s.address() as any).port}`;
 }

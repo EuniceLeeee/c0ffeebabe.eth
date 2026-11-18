@@ -4,7 +4,7 @@ import type { AdapterRequest, AdapterRequestResult } from "./adapter-request-pro
 import { compileDeclarativeReadFlow, validateDeclarativeReadFlow, type DeclarativeReadFlow, type ReadFlowInput, type ReadFlowValues } from "./declarative-read-flow.js";
 import { validateDeclarativeStatements, validateDeclarativeValue } from "./declarative-values.js";
 import { assertDeclarativeExecutionSource } from "./declarative-execution.js";
-import { assertSource } from "./protocols/standard-family/common.js";
+import { assertSource } from "./selector-execution-evidence.js";
 import { hashCanonical, type CanonicalValue } from "./canonical-value.js";
 import { immutableDeclarativeData } from "./declarative-immutable.js";
 

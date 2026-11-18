@@ -243,7 +243,7 @@ for (const failure of ["expired", "malformed-json", "missing-token", "invalid-to
     if (failure === "directory") tokenFile = directory;
     if (failure === "wrong-owner") {
       const wrongUid = process.getuid!() + 1;
-      context.mock.method(process, "getuid", () => wrongUid);
+      context.mock.method(process as NodeJS.Process & { getuid(): number }, "getuid", () => wrongUid);
     }
     let requests = 0;
     context.mock.method(globalThis, "fetch", async () => { requests++; throw new Error("unexpected HTTP"); });

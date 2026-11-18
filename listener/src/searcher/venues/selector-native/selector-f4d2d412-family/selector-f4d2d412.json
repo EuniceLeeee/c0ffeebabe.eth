@@ -1,0 +1,768 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xf4d2d412",
+  "signature": "function swap((address maker, uint256 traits, bytes data) order, address tokenIn, address tokenOut, uint256 amount, bytes takerTraitsAndData) returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash)",
+  "domain": "swap",
+  "activation": {
+    "enabled": false,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_F4D2D412_ENABLED"
+  },
+  "programs": [
+    {
+      "values": {
+        "abi": {
+          "registry": [
+            "function AQUA() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "nomination": {
+          "tokenInPath": [
+            1
+          ],
+          "tokenOutPath": [
+            2
+          ],
+          "amountInPath": [
+            3
+          ],
+          "parameterPaths": [
+            [
+              0
+            ]
+          ]
+        },
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "registry",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "registry",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "registry",
+                      "AQUA",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "return": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          {
+                            "op": "decode",
+                            "args": [
+                              "registry",
+                              "AQUA",
+                              {
+                                "op": "get",
+                                "args": [
+                                  {
+                                    "op": "returned",
+                                    "args": [
+                                      "registry"
+                                    ]
+                                  },
+                                  "data"
+                                ]
+                              },
+                              0
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          "result": {
+            "registry": "$steps.registry"
+          }
+        },
+        "descriptor": {
+          "order": "$args.0",
+          "maker": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$args.0.0"
+                ]
+              }
+            ]
+          },
+          "registry": "$binding.registry",
+          "strategyHash": {
+            "op": "codeHash",
+            "args": [
+              {
+                "op": "abiEncode",
+                "args": [
+                  [
+                    "tuple(address maker,uint256 traits,bytes data)"
+                  ],
+                  [
+                    "$args.0"
+                  ]
+                ]
+              }
+            ]
+          },
+          "poolId": {
+            "op": "codeHash",
+            "args": [
+              {
+                "op": "abiEncode",
+                "args": [
+                  [
+                    "tuple(address maker,uint256 traits,bytes data)"
+                  ],
+                  [
+                    "$args.0"
+                  ]
+                ]
+              }
+            ]
+          },
+          "poolNamespace": {
+            "op": "lower",
+            "args": [
+              "$target"
+            ]
+          }
+        }
+      },
+      "routes": {
+        "venue": {
+          "kind": "registered-strategy",
+          "app": "$descriptor.target",
+          "maker": "$descriptor.maker",
+          "strategyHash": "$descriptor.strategyHash",
+          "poolId": "$descriptor.poolId",
+          "poolNamespace": "$descriptor.poolNamespace"
+        },
+        "resource": {
+          "target": "$descriptor.registry",
+          "poolId": "$descriptor.poolId",
+          "poolNamespace": "$descriptor.poolNamespace"
+        },
+        "resources": [
+          {
+            "target": "$descriptor.registry",
+            "poolId": "$descriptor.poolId",
+            "poolNamespace": "$descriptor.poolNamespace"
+          },
+          {
+            "target": "$route.tokenIn",
+            "poolId": "$descriptor.maker",
+            "poolNamespace": "erc20-balance"
+          },
+          {
+            "target": "$route.tokenOut",
+            "poolId": "$descriptor.maker",
+            "poolNamespace": "erc20-balance"
+          }
+        ],
+        "checks": [
+          {
+            "assert": {
+              "op": "ne",
+              "args": [
+                "$descriptor.registry",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            "error": "execution registry must be an address"
+          }
+        ]
+      },
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true
+        },
+        "requireCanonicalSource": true,
+        "protectedAddresses": [
+          "$target",
+          "$descriptor.registry",
+          "$descriptor.maker",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "swap",
+            "call": {
+              "target": "$target",
+              "signature": "function swap(tuple(address maker,uint256 traits,bytes data) order,address tokenIn,address tokenOut,uint256 amount,bytes takerTraitsAndData) returns(uint256 amountIn,uint256 amountOut,bytes32 orderHash)",
+              "args": [
+                "$descriptor.order",
+                "$route.tokenIn",
+                "$route.tokenOut",
+                {
+                  "runtime": "amountIn"
+                },
+                {
+                  "op": "packedSlices",
+                  "args": [
+                    16,
+                    16,
+                    97,
+                    [
+                      {
+                        "op": "abiEncode",
+                        "args": [
+                          [
+                            "uint256"
+                          ],
+                          [
+                            "$minAmountOut"
+                          ]
+                        ]
+                      },
+                      {
+                        "op": "if",
+                        "args": [
+                          "$externalRecipient",
+                          {
+                            "op": "bytes",
+                            "args": [
+                              {
+                                "op": "abiEncode",
+                                "args": [
+                                  [
+                                    "address"
+                                  ],
+                                  [
+                                    "$recipient"
+                                  ]
+                                ]
+                              },
+                              12,
+                              20
+                            ]
+                          },
+                          "0x"
+                        ]
+                      },
+                      "0x",
+                      "0x",
+                      "0x",
+                      "0x",
+                      "0x",
+                      "0x",
+                      "0x",
+                      "0x"
+                    ]
+                  ]
+                }
+              ],
+              "save": {
+                "returnedInput": 0,
+                "returnedOutput": 1,
+                "returnedHash": 2
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "returnedInput"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "runtime": "amountIn"
+                  }
+                },
+                {
+                  "left": {
+                    "runtime": "returnedHash"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "$descriptor.strategyHash"
+                    ]
+                  }
+                }
+              ]
+            },
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": false,
+              "verifyAllowance": true
+            }
+          }
+        ],
+        "deferred": {
+          "stepId": "swap",
+          "dataArgument": 4,
+          "dataLayout": {
+            "kind": "packed-slices",
+            "prefixBits": 16,
+            "offsetBits": 16,
+            "prefix": 69,
+            "slices": [
+              {
+                "op": "abiEncode",
+                "args": [
+                  [
+                    "uint256"
+                  ],
+                  [
+                    "$minAmountOut"
+                  ]
+                ]
+              },
+              "0x",
+              "0x",
+              "0x",
+              "0x",
+              "0x",
+              "0x",
+              {
+                "payload": "abi-bytes"
+              },
+              "0x",
+              "0x"
+            ]
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function swap(tuple(address maker,uint256 traits,bytes data) order,address tokenIn,address tokenOut,uint256 amount,bytes takerTraitsAndData) returns(uint256 amountIn,uint256 amountOut,bytes32 orderHash)",
+            "args": [
+              "$descriptor.order",
+              "$route.tokenIn",
+              "$route.tokenOut",
+              {
+                "runtime": "amountIn"
+              }
+            ],
+            "save": {
+              "returnedInput": 0,
+              "returnedOutput": 1,
+              "returnedHash": 2
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "returnedInput"
+                },
+                "operator": "eq",
+                "right": {
+                  "runtime": "amountIn"
+                }
+              },
+              {
+                "left": {
+                  "runtime": "returnedHash"
+                },
+                "operator": "eq",
+                "right": {
+                  "op": "uint",
+                  "args": [
+                    "$descriptor.strategyHash"
+                  ]
+                }
+              },
+              {
+                "left": {
+                  "runtime": "returnedOutput"
+                },
+                "operator": "eq",
+                "right": {
+                  "op": "if",
+                  "args": [
+                    "$deferredSettlement",
+                    {
+                      "quoteOutput": "output"
+                    },
+                    "0"
+                  ]
+                }
+              }
+            ]
+          },
+          "callback": {
+            "signature": "function preTransferInCallback(address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut,bytes32 orderHash,bytes data)",
+            "dataArgument": 7,
+            "dataLayout": {
+              "kind": "abi-bytes"
+            },
+            "debtArgument": 4,
+            "outputArgument": 5,
+            "expectedDebt": {
+              "runtime": "amountIn"
+            },
+            "expectedOutput": {
+              "op": "if",
+              "args": [
+                "$deferredSettlement",
+                {
+                  "quoteOutput": "output"
+                },
+                "0"
+              ]
+            },
+            "bindings": [
+              {
+                "argument": 0,
+                "equals": "$descriptor.maker"
+              },
+              {
+                "argument": 1,
+                "equals": "$executor"
+              },
+              {
+                "argument": 2,
+                "equals": "$route.tokenIn"
+              },
+              {
+                "argument": 3,
+                "equals": "$route.tokenOut"
+              },
+              {
+                "argument": 6,
+                "equals": {
+                  "op": "uint",
+                  "args": [
+                    "$descriptor.strategyHash"
+                  ]
+                }
+              }
+            ],
+            "payment": {
+              "mode": "approve-pull",
+              "recipient": "$target",
+              "requireBool": false,
+              "verifyAllowance": true
+            }
+          }
+        },
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "minimum": "$minAmountOut",
+            "equals": {
+              "runtime": "returnedOutput"
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "quoteOutput": {
+        "version": 1,
+        "steps": [
+          {
+            "id": "quote",
+            "static": true,
+            "call": {
+              "target": "$target",
+              "signature": "function quote(tuple(address maker,uint256 traits,bytes data) order,address tokenIn,address tokenOut,uint256 amount,bytes takerTraitsAndData) returns(uint256 amountIn,uint256 amountOut,bytes32 orderHash)",
+              "args": [
+                "$descriptor.order",
+                "$route.tokenIn",
+                "$route.tokenOut",
+                {
+                  "runtime": "amountIn"
+                },
+                {
+                  "op": "packedSlices",
+                  "args": [
+                    16,
+                    16,
+                    97,
+                    [
+                      {
+                        "op": "abiEncode",
+                        "args": [
+                          [
+                            "uint256"
+                          ],
+                          [
+                            "1"
+                          ]
+                        ]
+                      },
+                      {
+                        "op": "if",
+                        "args": [
+                          "$externalRecipient",
+                          {
+                            "op": "bytes",
+                            "args": [
+                              {
+                                "op": "abiEncode",
+                                "args": [
+                                  [
+                                    "address"
+                                  ],
+                                  [
+                                    "$recipient"
+                                  ]
+                                ]
+                              },
+                              12,
+                              20
+                            ]
+                          },
+                          "0x"
+                        ]
+                      },
+                      "0x",
+                      "0x",
+                      "0x",
+                      "0x",
+                      "0x",
+                      "0x",
+                      "0x",
+                      "0x"
+                    ]
+                  ]
+                }
+              ],
+              "save": {
+                "quotedInput": 0,
+                "quotedOutput": 1,
+                "quotedHash": 2
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "quotedInput"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "runtime": "amountIn"
+                  }
+                },
+                {
+                  "left": {
+                    "runtime": "quotedHash"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "$descriptor.strategyHash"
+                    ]
+                  }
+                },
+                {
+                  "left": {
+                    "runtime": "quotedOutput"
+                  },
+                  "operator": "gte",
+                  "right": "1"
+                }
+              ]
+            }
+          }
+        ],
+        "result": {
+          "runtime": "quotedOutput"
+        },
+        "exports": {
+          "output": {
+            "runtime": "quotedOutput"
+          }
+        }
+      },
+      "observations": {
+        "version": 1,
+        "canonicalIntakeTargets": [],
+        "victimSupport": "detect-only",
+        "events": [
+          {
+            "id": "strategy-swap",
+            "signature": "event Swapped(bytes32 orderHash,address maker,address taker,address tokenIn,address tokenOut,uint256 amountIn,uint256 amountOut)",
+            "classification": "swap",
+            "pool": "$args.orderHash",
+            "requireReadyBinding": true,
+            "valid": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "gt",
+                  "args": [
+                    "$args.amountIn",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "gt",
+                  "args": [
+                    "$args.amountOut",
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "not",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$args.tokenIn",
+                        "$args.tokenOut"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            "payload": {
+              "maker": "$args.maker",
+              "orderHash": "$args.orderHash",
+              "tokenIn": "$args.tokenIn",
+              "tokenOut": "$args.tokenOut",
+              "amountIn": "$args.amountIn",
+              "amountOut": "$args.amountOut"
+            },
+            "poolBinding": {
+              "emitter": "$descriptor.bound.descriptor.target",
+              "id": "$descriptor.bound.descriptor.strategyHash"
+            },
+            "match": {
+              "op": "and",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.observationTarget",
+                    "$log.address"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.bound.descriptor.maker",
+                    "$args.maker"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$descriptor.bound.descriptor.strategyHash"
+                      ]
+                    },
+                    {
+                      "op": "lower",
+                      "args": [
+                        "$args.orderHash"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenIn",
+                    "$args.tokenIn"
+                  ]
+                },
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$edge.tokenOut",
+                    "$args.tokenOut"
+                  ]
+                }
+              ]
+            },
+            "impact": {
+              "pool": "$edge.observationTarget",
+              "poolId": "$args.orderHash",
+              "tokenIn": "$args.tokenIn",
+              "tokenOut": "$args.tokenOut",
+              "amountIn": "$args.amountIn",
+              "amountOut": "$args.amountOut",
+              "matchedAdapterId": "$edge.adapterId"
+            }
+          }
+        ],
+        "calls": [
+          {
+            "id": "strategy-call",
+            "signature": "function swap(tuple(address maker,uint256 traits,bytes data) order,address tokenIn,address tokenOut,uint256 amount,bytes takerTraitsAndData) returns(uint256 amountIn,uint256 amountOut,bytes32 orderHash)",
+            "classification": "swap",
+            "payload": {
+              "pool": "$observation.target",
+              "tokenIn": "$args.tokenIn",
+              "tokenOut": "$args.tokenOut",
+              "amountIn": "$args.amount"
+            }
+          }
+        ]
+      },
+      "dependencies": [
+        "$descriptor.registry",
+        "$descriptor.maker"
+      ],
+      "refreshPolicy": "on-touch",
+      "meta": {
+        "sourceFamily": "aqua-swapvm",
+        "migrationKey": "typed-aqua-swapvm-registered-order",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    }
+  ]
+}

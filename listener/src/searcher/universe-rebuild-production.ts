@@ -6,6 +6,10 @@ import { resolve } from "node:path";
 import { ethers } from "ethers";
 import { RebuildReadProvider } from "./rebuild-read-provider.js";
 import { ReadyRpcThrottle } from "./ready-rpc-throttle.js";
+import type { ReadySelectorCensusTransaction } from "./ready-selector-census.js";
+import { readySelectorCandidatePattern } from "./ready-selector-candidate-pattern.js";
+import { buildReadySelectorCoverage, normalizeReadySelectorCensus, readySelectorCensusFingerprint } from "./ready-selector-coverage.js";
+import { PRODUCTION_SELECTOR_EXECUTION_FAMILY_IDS } from "./generated/selector-execution-families.generated.js";
 import { readyActivityPayloadBytes, type ReadyActivityArchive } from "./ready-activity-archive.js";
 import { createSourceCodeProviders } from "./source-code-cache.js";
 import {
@@ -37,12 +41,13 @@ import {
   prepareCreditFamilyRoutes,
   projectCreditRouteGraph,
 } from "./adapter-credit-runtime.js";
-import { attestPoolIdentitiesStrict } from "./strict-identity-attestation.js";
+import { attestPoolIdentitiesStrict, reanchorTransactionNomination } from "./strict-identity-attestation.js";
 import { createMinimalIdentityRuntime } from "./strict-identity-attestation.js";
 import { createStrictCentralAdapterRuntime } from
   "./strict-central-adapter-runtime.js";
 import { RevmFatalError, type ExecutorRuntimeCode, type RevmFatalReason } from "./revm-sim-client.js";
 import { createNodeStrictSourceSimulation } from "./node-strict-source-simulation.js";
+import { createReadyProofSimulation } from "./ready-proof-simulation.js";
 import { createNodeSimulateV1Rpc, NodeSimulateV1CallRevert } from "./simulator/node-simulate-v1.js";
 import { createNodeFundingCache } from "./simulator/node-input-funding.js";
 import { RethTransportScheduler } from "./reth-transport-scheduler.js";
@@ -98,6 +103,14 @@ function normalizeRebuildFamilyIds(familyIds?: readonly string[]): readonly stri
     seen.add(id);
   }
   return Object.freeze([...seen].sort());
+}
+
+/** Selector routing keeps the enabled Funding domain in the same Ready run. */
+export function selectorReadyFamilyIds(): readonly string[] {
+  const executions = new Set<string>(PRODUCTION_SELECTOR_EXECUTION_FAMILY_IDS);
+  return Object.freeze(PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.listAll()
+    .filter(family => executions.has(family.plugin.manifest.familyId) || family.plugin.manifest.domain === "funding")
+    .map(family => String(family.plugin.manifest.familyId)).sort());
 }
 
 /** Use the existing catalog and lifecycle, with only scoped declarations loaded. */
@@ -973,6 +986,7 @@ export function createProbeWiring(
     readonly testExecutorProvisioning?: RebuildTestExecutorProvisioning;
     readonly testTransactionObservation?: RebuildTestTransactionObservation;
     readonly simulationMethod?: RebuildSimulationMethod;
+    readonly tracePolicy?: "allow" | "forbid";
     readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
     readonly readyThrottle?: ReadyRpcThrottle;
   },
@@ -1083,13 +1097,13 @@ export function createProbeWiring(
     const allowExecutorCodeOverride = provision !== undefined && sourceCode === "0x";
     const executorRuntimeCode = allowExecutorCodeOverride ? provision.runtimeCode : sourceCode && sourceCode !== "0x"
       ? { code: sourceCode, keccak256: ethers.keccak256(sourceCode) } : undefined;
-    const simulation = networkChainId === undefined ? undefined : createNodeStrictSourceSimulation({
-      identity: { source, rpcUrl, chainId: networkChainId },
+    const createSimulation = (actor: string, code: ExecutorRuntimeCode | undefined, allowOverride: boolean) => createNodeStrictSourceSimulation({
+      identity: { source, rpcUrl, chainId: networkChainId! },
       control: { signal: probeController.signal },
       // Preserve the engine's existing DEFAULT_GAS_LIMIT; make it explicit at
       // the transport boundary rather than relying on an unbound wire default.
       executionGasLimit: 0x1000000,
-      timeoutMs, executor, executorRuntimeCode, allowExecutorCodeOverride, simulationMethod,
+      timeoutMs, executor: actor, executorRuntimeCode: code, allowExecutorCodeOverride: allowOverride, simulationMethod, tracePolicy: input?.tracePolicy,
       scheduler: simulationScheduler, lane: "discovery", fundingCache,
       onFatal(reason) {
         const ownedAttempt = failAttempt?.(reason);
@@ -1097,6 +1111,15 @@ export function createProbeWiring(
         if (!fatal) logRevmFault("rebuild-candidate", reason, { candidateKey: diagnosticCandidateKey, blockNumber: source.number });
         onFatal(reason);
       },
+    });
+    const simulation = networkChainId === undefined ? undefined : createReadyProofSimulation({
+      source, executor: executor!, transactionOrigin: transactionOrigin!,
+      verifiedActors: PRODUCTION_STRICT_VERIFIED_ACTORS,
+      primary: createSimulation(executor!, executorRuntimeCode, allowExecutorCodeOverride),
+      assertOpen, executorRuntimeCode,
+      readCode: (actor, at) => read(() => provider.sendControlled("eth_getCode",
+        [actor, { blockHash: at.hash, requireCanonical: true }], { signal: probeController.signal })),
+      createProof: createSimulation,
     });
     const runtime = simulation === undefined || executor === undefined
       ? createMinimalIdentityRuntime(strictProvider)
@@ -1184,70 +1207,40 @@ export function createProbeWiring(
         : familyIdForCandidate(candidate);
       const candidateFamily = catalog.forStrictFamily(candidateFamilyId as never);
       if (candidateFamily.plugin.manifest.domain === "funding") {
-        const asset = candidate.asset;
-        if (typeof asset !== "string" || !ethers.isAddress(asset)) {
-          return terminalRejected("invalid_funding_asset", {
-            familyDefinitionHash: familyDefinitionHash(candidateFamilyId),
-            requestFingerprint: "",
-            trustedResultsFingerprint: "",
-            authorityFingerprint: "",
-            candidateFingerprint: candidateFingerprint(candidate),
-            cutoff: Object.freeze({
-              number: attestInput.cutoff.number,
-              hash: attestInput.cutoff.hash,
-            }),
+        const resourceBindings = candidate.fundingBindings as readonly import("./venues/adapter-family-plugin.js").FundingExecutionBinding[] | undefined;
+        const assets = Array.isArray(resourceBindings) ? [...new Set(resourceBindings.map(binding => binding.asset))] : [];
+        if (!assets.length || assets.some(asset => typeof asset !== "string" || !ethers.isAddress(asset))) {
+          return terminalRejected("invalid_funding_resource_binding", {
+            familyDefinitionHash: familyDefinitionHash(candidateFamilyId), requestFingerprint: "", trustedResultsFingerprint: "", authorityFingerprint: "",
+            candidateFingerprint: candidateFingerprint(candidate), cutoff: Object.freeze({ number: attestInput.cutoff.number, hash: attestInput.cutoff.hash }),
           });
         }
         const runtimeHandle = await runtimeFor(attestInput.cutoff, candidate);
         try {
           const funding = await executeFundingFamilyLiquidity({
             family: candidateFamily,
-            assets: Object.freeze([ethers.getAddress(asset)]),
+            assets: Object.freeze(assets.map(asset => ethers.getAddress(asset))),
+            bindings: resourceBindings,
             source: attestInput.cutoff,
             generation: attestInput.cutoff.generation,
             runtime: runtimeHandle.runtime,
             publisher: Object.freeze({ publish() {} }),
           });
-          const outcome = funding.outcomes[0];
-          const positiveOffer = funding.offers.find((offer) =>
-            offer.asset.toLowerCase() ===
-              ethers.getAddress(asset).toLowerCase() &&
-            offer.maxBorrow > 0n
-          );
-          if (
-            outcome === undefined ||
-            outcome.status !== "verified" ||
-            positiveOffer === undefined
-          ) {
-            const reason = outcome === undefined
-              ? "funding attestation produced no outcome"
-              : outcome.status !== "verified"
-              ? outcome.reasonCode
-              : "funding attestation found no positive current liquidity";
-            return retryable({
-              candidate,
-              reasonCode: reason,
-              stage: "funding",
-              failureCode: classifyFailure(reason),
-              ...(attestInput.evidenceRef === undefined
-                ? {}
-                : { evidenceRef: attestInput.evidenceRef }),
-            });
+          const failedOutcome = funding.outcomes.find(outcome => outcome.status !== "verified");
+          const positiveOffer = funding.offers.find(offer => offer.maxBorrow > 0n);
+          if (failedOutcome || !positiveOffer || funding.offers.some(offer => !offer.binding)) {
+            const reason = failedOutcome?.reasonCode ?? "funding attestation found no positive current liquidity";
+            return retryable({ candidate, reasonCode: reason, stage: "funding", failureCode: classifyFailure(reason),
+              ...(attestInput.evidenceRef === undefined ? {} : { evidenceRef: attestInput.evidenceRef }) });
           }
+          const bindings = Object.freeze(funding.offers.map(offer => offer.binding!));
+          const evidenceRefs = Object.freeze([...new Set(funding.offers.flatMap(offer => offer.evidenceRefs))]);
           return verified(Object.freeze({
-            domain: "funding" as const,
-            familyId: candidateFamilyId,
-            asset: ethers.getAddress(asset),
-            fundingId: positiveOffer.fundingId,
-            evidenceRefs: positiveOffer.evidenceRefs,
-            authorityFingerprint: digest(
-              "funding-attestation-v1:" + canonicalJson({
-                familyId: candidateFamilyId,
-                asset: ethers.getAddress(asset).toLowerCase(),
-                source: attestInput.cutoff,
-                evidenceRefs: positiveOffer.evidenceRefs,
-              }),
-            ),
+            domain: "funding" as const, familyId: candidateFamilyId,
+            asset: positiveOffer.asset, bindings, fundingId: positiveOffer.fundingId,
+            instanceKey: funding.outcomes.find(outcome => outcome.fundingId === positiveOffer.fundingId)!.instanceKey,
+            evidenceRefs,
+            authorityFingerprint: digest("funding-attestation-v2:" + canonicalJson({ familyId: candidateFamilyId, bindings, source: attestInput.cutoff, evidenceRefs })),
             candidate: canonicalCandidateSnapshot(candidate),
           }));
         } catch (error) {
@@ -1369,6 +1362,16 @@ export function createProbeWiring(
           nominationSource = observation.source;
         }
         runtimeHandle = await runtimeFor(attestInput.cutoff, candidate, observedSender);
+        const supplied = candidate.readyObservation === undefined ? undefined : (() => {
+          const raw = candidate.readyObservation as UnifiedObservation;
+          if (raw.kind !== "call" || raw.target.toLowerCase() !== pool.address.toLowerCase() || !raw.transactionHash ||
+              raw.transactionHash !== candidate.transactionHash || raw.source.number !== candidate.blockNumber ||
+              raw.source.hash.toLowerCase() !== String(candidate.blockHash).toLowerCase())
+            throw new Error("Ready call nomination differs from candidate source");
+          const patternId = readySelectorCandidatePattern({ catalog, familyId: candidateFamilyId as FamilyId,
+            observation: raw, candidate });
+          return { patternId, observation: reanchorTransactionNomination(raw, raw.source, attestInput.cutoff, raw.transactionHash) };
+        })();
         result = await attestPoolIdentitiesStrict({
           catalog,
           provider: strictProvider,
@@ -1378,6 +1381,7 @@ export function createProbeWiring(
           pools: Object.freeze([pool]),
           channelOrder: "reverse-binding-first",
           onlyFamilyId: candidateFamilyId as FamilyId,
+          ...(supplied === undefined ? {} : { suppliedObservations: [supplied.observation], onlyPatternId: supplied.patternId }),
         });
       } catch (error) {
         if (input?.readyThrottle?.isThrottle(error)) throw error;
@@ -1494,15 +1498,17 @@ export function createProbeWiring(
         readonly familyId?: unknown;
         readonly asset?: unknown;
         readonly fundingId?: unknown;
+        readonly instanceKey?: unknown;
+        readonly bindings?: readonly import("./venues/adapter-family-plugin.js").FundingExecutionBinding[];
         readonly evidenceRefs?: readonly string[];
         readonly authorityFingerprint?: unknown;
       };
       if (domainResult.domain === "funding") {
         const familyId = String(domainResult.familyId ?? "");
         const asset = ethers.getAddress(String(domainResult.asset ?? ""));
-        const instanceKey = String(
-          domainResult.fundingId ?? familyId + "\u001f" + asset.toLowerCase(),
-        );
+        const instanceKey = String(domainResult.instanceKey ?? "");
+        const bindings = domainResult.bindings;
+        if (!instanceKey || !Array.isArray(bindings) || !bindings.length) throw new Error("funding memo missing selector/provider bindings");
         const familyInstanceKey = digest(
           "family-instance-v1:" + familyId + "|" + instanceKey,
         );
@@ -1517,17 +1523,17 @@ export function createProbeWiring(
           verifiedIdentity: Object.freeze({
             domain: "funding",
             familyId,
-            asset,
+            asset, bindings,
             source: Object.freeze(sealInput.proofSource),
           }),
           compiledDescriptor: Object.freeze({
             domain: "funding",
-            asset,
+            asset, bindings,
           }),
           staticProjection: Object.freeze({
-            format: "prepared-funding-token-v1",
+            format: "prepared-selector-funding-v1",
             domain: "funding",
-            asset,
+            asset, bindings,
             evidenceRefs,
           }),
           evidenceFingerprint: digest(
@@ -1643,6 +1649,7 @@ export interface RebuildCallObservation {
   readonly blockNumber: number;
   readonly blockHash: string;
   readonly traceAddress: readonly number[];
+  readonly opaque?: import("./venues/canonical-value.js").CanonicalValue;
 }
 
 /** Reclassify a complete raw slice using this run's current declarations. */
@@ -2137,6 +2144,8 @@ function candidateForFamilyCallObservation(
       data: call.data,
       ...(call.sender === undefined ? {} : { sender: call.sender }),
       transactionHash: call.transactionHash,
+      traceAddress: Object.freeze([...call.traceAddress]),
+      ...(call.opaque === undefined ? {} : { opaque: call.opaque }),
     }) as never,
     matchedPatternId: patternId,
   });
@@ -2151,6 +2160,10 @@ function candidateForFamilyCallObservation(
     familyId,
     adapter: adapterLabelForFamily(familyId),
     transactionHash: call.transactionHash.toLowerCase(),
+    ...(call.opaque === undefined ? {} : { readyObservation: Object.freeze({ kind: "call", source: {
+      number: call.blockNumber, hash: call.blockHash, generation: call.blockNumber }, target: call.target,
+      data: call.data, ...(call.sender === undefined ? {} : { sender: call.sender }),
+      transactionHash: call.transactionHash, traceAddress: Object.freeze([...call.traceAddress]), opaque: call.opaque }) }),
     blockNumber: call.blockNumber,
     blockHash: call.blockHash.toLowerCase(),
   });
@@ -2179,6 +2192,8 @@ function candidatesFromCallInCatalog(
       data: call.data,
       ...(call.sender === undefined ? {} : { sender: call.sender }),
       transactionHash: call.transactionHash,
+      traceAddress: Object.freeze([...call.traceAddress]),
+      ...(call.opaque === undefined ? {} : { opaque: call.opaque }),
     }) as never,
   );
   return Object.freeze(matches.flatMap((match) => {
@@ -3228,6 +3243,9 @@ export async function readyRuleCompatibilityFor(bindings: ReadyRuleBindings | un
 
 export function createRebuildWiring(input?: {
   readonly ruleCompatibility?: ReadyRuleCompatibility;
+  /** Complete supplied SQL/transaction census. Presence selects ordinary
+   * selector admission without historical RPC trace discovery. */
+  readonly selectorCensus?: readonly ReadySelectorCensusTransaction[];
   readonly readyThrottle?: ReadyRpcThrottle;
   readonly rpcUrl?: string;
   /** Scratch incremental rebuild only; the owner merges sealed Ready at the same cutoff. */
@@ -3238,6 +3256,7 @@ export function createRebuildWiring(input?: {
   readonly testExecutorProvisioning?: RebuildTestExecutorProvisioning;
   readonly testTransactionObservation?: RebuildTestTransactionObservation;
   readonly simulationMethod?: RebuildSimulationMethod;
+  readonly tracePolicy?: "allow" | "forbid";
   readonly onSimulationFatal?: (reason: RevmFatalReason) => void;
 }): UniverseRebuildDependencies & {
   readonly candidateFamilyId: (candidate: unknown) => string;
@@ -3252,8 +3271,16 @@ export function createRebuildWiring(input?: {
     maxDecompressedBytes: ARCHIVE_ACTIVITY_RESPONSE_BYTES,
     batchMaxCount: 1,
   };
-  const familyIds = normalizeRebuildFamilyIds(input?.familyIds);
+  const selectorCensus = input?.selectorCensus === undefined ? undefined : normalizeReadySelectorCensus(input.selectorCensus);
+  const tracePolicy = input?.tracePolicy ?? (selectorCensus === undefined ? "allow" : "forbid");
+  if (!["allow", "forbid"].includes(tracePolicy)) throw new Error("invalid Ready simulation trace policy");
+  const familyIds = normalizeRebuildFamilyIds(input?.familyIds ??
+    (selectorCensus === undefined ? undefined : selectorReadyFamilyIds()));
   const catalog = rebuildCatalog(familyIds);
+  const fundingFamilies = catalog.listAll().filter(family => family.plugin.manifest.domain === "funding");
+  const fundingFamilyIds = new Set<string>(fundingFamilies.map(family => family.plugin.manifest.familyId));
+  const fundingLogTopics = new Set(fundingFamilies.flatMap(family =>
+    family.plugin.discovery.logPatterns?.map(pattern => pattern.topic.toLowerCase()) ?? []));
   const selectedIds = familyIds === undefined ? undefined : new Set(familyIds);
   const inScope = (familyId: string): boolean => selectedIds === undefined || selectedIds.has(familyId);
   const candidateInScope = (candidate: Readonly<Record<string, unknown>>): boolean =>
@@ -3340,7 +3367,11 @@ export function createRebuildWiring(input?: {
   const callPatterns = activityPlan.callPatterns;
   const callSelectors = new Set(callPatterns.map((pattern) => pattern.selector));
   const sourceCoverageKeys = strictCatalogSourceCoverageKeys(familyIds);
-  const planFingerprints = expectedSourcePlanFingerprints(familyIds);
+  const basePlanFingerprints = expectedSourcePlanFingerprints(familyIds);
+  const planFingerprints = selectorCensus === undefined ? basePlanFingerprints : Object.freeze({
+    startup: digest("selector-supplied-input-startup-v1:" + basePlanFingerprints.startup),
+    activity: digest("selector-supplied-input-calls-and-funding-logs-v2:" + basePlanFingerprints.activity),
+  });
   const classifierKey = activityClassifierKey(planFingerprints.activity);
   // reth caps eth_getLogs at 20000 results; the strict-topic union is
   // high-volume, so start small and halve on the max-results error. The
@@ -3349,7 +3380,7 @@ export function createRebuildWiring(input?: {
   // and fails closed on resume. Call tracing is another physical transport
   // inside this same catalog activity plan, not a second discovery source.
   const probe = createProbeWiring({ rpcUrl, familyIds, executionIdentity: input?.executionIdentity,
-    testExecutorProvisioning: provision, simulationMethod,
+    testExecutorProvisioning: provision, simulationMethod, tracePolicy,
     testTransactionObservation: input?.testTransactionObservation,
     onSimulationFatal, readyThrottle });
 
@@ -3367,8 +3398,10 @@ export function createRebuildWiring(input?: {
       executionIdentity: input?.executionIdentity ?? null,
       ...(includeProofContext && provision ? { testExecutorProvisioning: { owner: provision.owner, codeHash: provision.runtimeCode.keccak256 } } : {}),
       ...(simulationMethod ? { simulationMethod } : {}),
+      ...(selectorCensus !== undefined || input?.tracePolicy ? { tracePolicy } : {}),
       ...(includeProofContext && input?.testTransactionObservation ? { testTransactionObservation: input.testTransactionObservation } : {}),
-      explicitPool: input?.startupCandidates !== undefined }));
+      explicitPool: input?.startupCandidates !== undefined,
+      ...(selectorCensus === undefined ? {} : { selectorCensus: readySelectorCensusFingerprint(selectorCensus) }) }));
     for (const candidate of input?.startupCandidates ?? []) hash.update(canonicalJson(encodeDurableValue(candidate))).update("\n");
     return hash.digest("hex");
   };
@@ -3378,12 +3411,20 @@ export function createRebuildWiring(input?: {
   } = {
     readyThrottle,
     ruleCompatibility: input?.ruleCompatibility,
+    ...(selectorCensus === undefined ? {} : { selectorCensus,
+      buildSelectorCoverage: (state: Pick<Parameters<typeof buildReadySelectorCoverage>[0], "candidatesByKey" | "outcomesByCandidateKey">) => buildReadySelectorCoverage({
+        ...state, transactions: selectorCensus,
+        registeredSelectors: Object.fromEntries([...new Set(callPatterns.map(pattern => pattern.selector))].map(selector =>
+          [selector, [...new Set(callPatterns.filter(pattern => pattern.selector === selector).map(pattern => pattern.familyId))].sort()])) }) }),
     candidateFamilyId,
     candidateCoverage: (candidate) => {
       const row = candidate as Readonly<Record<string, unknown>>;
       return candidateInScope(row) ? rebuildCandidateCoverage(row) : null;
     },
-    hasExplicitStartupCandidates: input?.startupCandidates !== undefined,
+    hasExplicitStartupCandidates: input?.startupCandidates !== undefined || selectorCensus !== undefined,
+    ...(selectorCensus === undefined ? {} : {
+      retainsReadyCandidates: (familyId: string) => fundingFamilyIds.has(familyId),
+    }),
     readyReviewInputFingerprint: readyInputFingerprint,
     readyDiscoveryInputFingerprint: () => readyInputFingerprint(false),
     familyDefinitionHash,
@@ -3422,6 +3463,53 @@ export function createRebuildWiring(input?: {
     },
     scanSwapWindow: async (scanInput) => {
       assertOpen();
+      if (selectorCensus !== undefined) {
+        const observations: unknown[] = (input?.startupCandidates ?? []).filter(candidateInScope)
+          .map(candidate => Object.freeze({ kind: "startup-candidate", candidate }));
+        for (const tx of selectorCensus) {
+          if (tx.chainId !== 1 || tx.blockNumber === null || !tx.blockHash || !tx.transactionHash) continue;
+          if (tx.blockNumber < scanInput.fromBlock || tx.blockNumber > scanInput.cutoff.number)
+            throw new Error("selector census transaction outside fixed Ready range");
+          if (tx.blockNumber === scanInput.cutoff.number && tx.blockHash !== scanInput.cutoff.hash)
+            throw new Error("selector census cutoff hash mismatch");
+          for (const call of tx.calls) {
+            if (call.executionStatus !== "success" || !call.target || !call.calldata || !call.selector || !call.traceAddress) continue;
+            observations.push(Object.freeze({ kind: "call", target: call.target, data: call.calldata,
+              ...(call.sender === null ? {} : { sender: call.sender }), transactionHash: tx.transactionHash,
+              blockNumber: tx.blockNumber, blockHash: tx.blockHash, traceAddress: call.traceAddress,
+              opaque: { selectorCensus: tx, callId: call.id } }));
+          }
+          // Funding owns its landed-log decoder. The census supplies the same
+          // receipt evidence without any historical RPC or selector inference.
+          if (tx.receiptStatus !== 1) continue;
+          for (const raw of tx.logs) {
+            if (raw === null || typeof raw !== "object" || Array.isArray(raw)) continue;
+            const log = raw as Readonly<Record<string, unknown>>;
+            if (!Array.isArray(log.topics) || !fundingLogTopics.has(String(log.topics[0]).toLowerCase())) continue;
+            const emitter = address(log.address ?? log.log_address), logIndex = rpcNumber(log.logIndex ?? log.log_index ?? log.index);
+            if (emitter === null || log.topics.some(topic => string32(topic) === null) ||
+                typeof log.data !== "string" || !ethers.isHexString(log.data) || log.removed === true) continue;
+            observations.push(Object.freeze({ address: emitter, topics: Object.freeze([...log.topics]), data: log.data,
+              transactionHash: tx.transactionHash, blockNumber: tx.blockNumber, blockHash: tx.blockHash,
+              ...(logIndex === null ? {} : { logIndex }) }));
+          }
+        }
+        const snapshotHash = readySelectorCensusFingerprint(selectorCensus);
+        const makeReceipt = (sourceKind: "startup-candidate-union" | "catalog-activity-union", coverageKeys: readonly string[], queryFingerprint: string): DurableSourceReceipt => ({
+          sourceKey: digest(canonicalJson({ sourceKind, queryFingerprint, snapshotHash, cutoff: scanInput.cutoff, fromBlock: scanInput.fromBlock })),
+          sourceKind, providerIdentity: "supplied-selector-census-v1", queryFingerprint,
+          fromBlock: scanInput.fromBlock, toBlock: scanInput.cutoff.number, cutoffNumber: scanInput.cutoff.number,
+          cutoffHash: scanInput.cutoff.hash, coverageKeys,
+          completedChunks: [{ fromBlock: scanInput.fromBlock, toBlock: scanInput.cutoff.number,
+            resultCount: observations.length, resultHash: digest(canonicalJson(observations)) }],
+          observationSetHash: snapshotHash, observedThrough: { number: scanInput.cutoff.number, hash: scanInput.cutoff.hash },
+          appliedThrough: { number: scanInput.cutoff.number, hash: scanInput.cutoff.hash }, retryableCount: 0, status: "complete",
+        });
+        return Object.freeze({ observations: Object.freeze(observations), sourceReceipts: Object.freeze([
+          ...(sourceCoverageKeys.startup.length ? [makeReceipt("startup-candidate-union", sourceCoverageKeys.startup, planFingerprints.startup)] : []),
+          ...(activityPlan.coverageKeys.length ? [makeReceipt("catalog-activity-union", activityPlan.coverageKeys, planFingerprints.activity)] : []),
+        ]) });
+      }
       if (sourceCoverageKeys.startup.length === 0 && activityPlan.coverageKeys.length === 0) {
         return Object.freeze({ observations: Object.freeze([]), sourceReceipts: Object.freeze([]) });
       }
@@ -4189,6 +4277,10 @@ export function createRebuildWiring(input?: {
       ) {
         return memo;
       }
+      // Funding capacity and fees are source-local. Retain the nomination,
+      // then issue fresh resource reads; a code/proxy fingerprint cannot prove
+      // that an old offer is still available at the new source.
+      if (catalog.forStrictFamily(familyId as never).plugin.manifest.domain === "funding") return null;
       // Phase 2 — chain authority revalidation (only reached when the local
       // binding passed): re-read code/implementation at the cutoff and accept
       // either the current memo-scoped authority or the legacy full-scope
@@ -4313,17 +4405,16 @@ export function createRebuildWiring(input?: {
       const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
         .forStrictFamily(rehydrateInput.memo.familyId as never);
       if (family.plugin.manifest.domain === "funding") {
-        const descriptor = decodeDurableValue(
-          rehydrateInput.memo.compiledDescriptor,
-        ) as { readonly asset?: unknown } | null;
-        const asset = ethers.getAddress(String(descriptor?.asset ?? ""));
-        return Object.freeze({
-          domain: "funding" as const,
-          familyId: rehydrateInput.memo.familyId,
-          instanceKey: rehydrateInput.memo.instanceKey,
-          asset,
-          evidenceRefs: Object.freeze(projection?.evidenceRefs ?? []),
-        });
+        const descriptor = decodeDurableValue(rehydrateInput.memo.compiledDescriptor) as {
+          readonly asset?: unknown; readonly bindings?: readonly import("./venues/adapter-family-plugin.js").FundingExecutionBinding[];
+        } | null;
+        const fundingProjection = projection as typeof projection & { readonly format?: string; readonly bindings?: readonly import("./venues/adapter-family-plugin.js").FundingExecutionBinding[] };
+        if (fundingProjection.format !== "prepared-selector-funding-v1" || !descriptor?.bindings?.length ||
+            canonicalJson(descriptor.bindings) !== canonicalJson(fundingProjection.bindings)) throw new Error("funding memo lacks native selector/provider binding");
+        const bindings = Object.freeze(descriptor.bindings);
+        return Object.freeze({ domain: "funding" as const, familyId: rehydrateInput.memo.familyId,
+          instanceKey: rehydrateInput.memo.instanceKey, asset: ethers.getAddress(String(descriptor.asset)), bindings,
+          evidenceRefs: Object.freeze(projection?.evidenceRefs ?? []) });
       }
       const routes = projection?.routes ?? [];
       const instance = Object.freeze({
@@ -4453,14 +4544,15 @@ export function createRebuildWiring(input?: {
         throw new Error("Ready restriction Graph differs from retained Family publications");
       }
       const readyInstances: PreparedFamilyInstance[] = [];
-      const readyFundingAssets: { familyId: FamilyId; asset: string }[] = [];
+      const readyFundingAssets: import("./strict-production-runtime-session.js").StrictReadyFundingAsset[] = [];
       for (const publication of publications) {
         const family = PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG.forStrictFamily(publication.familyId as never);
         for (const instance of publication.instances) {
-          const entry = instance as { readonly familyId?: string; readonly asset?: string };
+          const entry = instance as { readonly familyId?: string; readonly asset?: string; readonly bindings?: readonly import("./venues/adapter-family-plugin.js").FundingExecutionBinding[] };
           if (entry?.familyId !== publication.familyId) throw new Error("Ready publication Family mismatch");
           if (family.plugin.manifest.domain === "funding") {
-            readyFundingAssets.push({ familyId: publication.familyId as FamilyId, asset: ethers.getAddress(entry.asset!) });
+            if (!entry.bindings?.length) throw new Error("Ready Funding publication lacks provider bindings");
+            readyFundingAssets.push(...entry.bindings.map(binding => ({ familyId: publication.familyId as FamilyId, asset: ethers.getAddress(binding.asset), binding })));
           } else {
             readyInstances.push(instance as PreparedFamilyInstance);
           }

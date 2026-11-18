@@ -1,0 +1,315 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xfea53be1",
+  "signature": "function redeem(address, uint256, address, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_FEA53BE1_ENABLED"
+  },
+  "binding": {
+    "nomination": {
+      "parameterPaths": [
+        [
+          0
+        ]
+      ]
+    },
+    "flow": {
+      "version": 1,
+      "steps": [
+        {
+          "id": "vault",
+          "requirements": {
+            "transports": [
+              "eth-call"
+            ]
+          },
+          "requests": [
+            {
+              "id": "selectorBinding:vault:asset",
+              "kind": "eth-call",
+              "to": {
+                "op": "lower",
+                "args": [
+                  {
+                    "op": "address",
+                    "args": [
+                      "$target"
+                    ]
+                  }
+                ]
+              },
+              "data": {
+                "op": "encode",
+                "args": [
+                  "bindingvaultasset",
+                  "asset()",
+                  []
+                ]
+              },
+              "completion": "return-data"
+            }
+          ],
+          "result": {
+            "asset": {
+              "op": "lower",
+              "args": [
+                {
+                  "op": "address",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "bindingvaultasset",
+                        "asset()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "selectorBinding:vault:asset"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "result": {
+        "vault": {
+          "asset": "$steps.vault.asset"
+        }
+      }
+    },
+    "descriptor": {
+      "vault": {
+        "op": "address",
+        "args": [
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$target"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "payoutToken": {
+        "op": "address",
+        "args": [
+          {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  {
+                    "op": "at",
+                    "args": [
+                      "$args",
+                      0
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "underlyingAsset": {
+        "op": "address",
+        "args": [
+          "$binding.vault.asset"
+        ]
+      }
+    }
+  },
+  "routes": {
+    "target": "$descriptor.vault",
+    "directions": [
+      {
+        "id": "silo-redeem",
+        "enabled": true,
+        "tokenIn": "$descriptor.vault",
+        "tokenOut": "$descriptor.payoutToken",
+        "taxonomy": {
+          "slotKind": "protocol",
+          "protocolAction": "redeem"
+        }
+      }
+    ],
+    "venue": {
+      "kind": "address-subinstance",
+      "target": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.vault"
+            ]
+          }
+        ]
+      },
+      "payoutToken": {
+        "op": "lower",
+        "args": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.payoutToken"
+            ]
+          }
+        ]
+      }
+    },
+    "assertions": [
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.target",
+            "$descriptor.vault"
+          ]
+        },
+        "error": "ERC4626 Silo route target is incompatible with its descriptor"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenIn",
+            "$descriptor.vault"
+          ]
+        },
+        "error": "ERC4626 Silo route input is not the vault share"
+      },
+      {
+        "assert": {
+          "op": "sameAddress",
+          "args": [
+            "$route.tokenOut",
+            "$descriptor.payoutToken"
+          ]
+        },
+        "error": "ERC4626 Silo route output is not the payout token"
+      },
+      {
+        "assert": {
+          "op": "eq",
+          "args": [
+            "$route.direction",
+            "silo-redeem"
+          ]
+        },
+        "error": "ERC4626 Silo route direction is incompatible with its descriptor"
+      }
+    ]
+  },
+  "execution": {
+    "version": 1,
+    "settlement": {
+      "directOutput": true
+    },
+    "protectedAddresses": [
+      "$descriptor.vault",
+      "$descriptor.payoutToken",
+      "$descriptor.underlyingAsset"
+    ],
+    "call": {
+      "target": "$descriptor.vault",
+      "signature": "function redeem(address,uint256,address,address) returns(uint256)",
+      "args": [
+        "$route.tokenOut",
+        {
+          "runtime": "amountIn"
+        },
+        "$recipient",
+        "$executor"
+      ],
+      "save": {
+        "output": 0
+      }
+    },
+    "effects": [
+      {
+        "kind": "debit",
+        "token": "$route.tokenIn",
+        "account": "$executor",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "credit",
+        "token": "$route.tokenOut",
+        "account": "$recipient",
+        "equals": {
+          "runtime": "output"
+        },
+        "minimum": "$minAmountOut"
+      },
+      {
+        "kind": "supply",
+        "token": "$descriptor.vault",
+        "direction": "decrease",
+        "equals": {
+          "runtime": "amountIn"
+        }
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenOut",
+        "account": "$executor",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-token",
+        "token": "$route.tokenIn",
+        "account": "$recipient",
+        "when": "$externalRecipient"
+      },
+      {
+        "kind": "unchanged-native",
+        "when": "$directSettlement"
+      }
+    ],
+    "contextChecks": [
+      {
+        "condition": {
+          "op": "eq",
+          "args": [
+            "$direction",
+            "silo-redeem"
+          ]
+        },
+        "error": "ERC4626 Silo execution direction unsupported"
+      }
+    ]
+  },
+  "refreshPolicy": "each-block",
+  "values": {
+    "abi": {
+      "bindingvaultasset": [
+        "function asset() view returns(address)"
+      ]
+    }
+  },
+  "meta": {
+    "label": "protocol:erc4626-silo-redeem/observed-payout-active-proof"
+  }
+}

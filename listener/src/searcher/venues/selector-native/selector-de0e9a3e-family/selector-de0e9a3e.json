@@ -1,0 +1,342 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xde0e9a3e",
+  "signature": "function unwrap(uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_DE0E9A3E_ENABLED"
+  },
+  "programs": [
+    {
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "wrapper",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "selectorBinding:wrapper:asset",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingwrapperasset",
+                      "token()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "result": {
+                "asset": {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "bindingwrapperasset",
+                            "token()",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "selectorBinding:wrapper:asset"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "result": {
+            "wrapper": {
+              "asset": "$steps.wrapper.asset"
+            }
+          }
+        },
+        "descriptor": {
+          "asset": {
+            "op": "address",
+            "args": [
+              "$binding.wrapper.asset"
+            ]
+          }
+        }
+      },
+      "routes": {
+        "directions": [
+          {
+            "id": "unwrap",
+            "enabled": true,
+            "tokenIn": "$descriptor.target",
+            "tokenOut": "$descriptor.asset",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "unwrap"
+            }
+          }
+        ]
+      },
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": [
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.target"
+            ]
+          },
+          {
+            "op": "address",
+            "args": [
+              "$descriptor.asset"
+            ]
+          }
+        ],
+        "steps": [
+          {
+            "id": "convert",
+            "call": {
+              "target": {
+                "op": "address",
+                "args": [
+                  "$descriptor.target"
+                ]
+              },
+              "signature": "function unwrap(uint256) returns(uint256)",
+              "args": [
+                {
+                  "runtime": "amountIn"
+                }
+              ],
+              "save": {
+                "converted": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "converted"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "refreshPolicy": "each-block",
+      "values": {
+        "abi": {
+          "bindingwrapperasset": [
+            "function token() view returns(address)"
+          ]
+        }
+      },
+      "meta": {
+        "label": "protocol:few-wrapped/factory-wrapper-effects"
+      }
+    },
+    {
+      "parameters": [
+        {
+          "path": [
+            0
+          ],
+          "role": "amountIn"
+        }
+      ],
+      "payment": {
+        "kind": "none"
+      },
+      "values": {
+        "abi": {
+          "assettokenOut": [
+            "function stETH() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "assets",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": {
+                "op": "concat",
+                "args": [
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "not",
+                        "args": [
+                          {
+                            "op": "defined",
+                            "args": [
+                              "$scope.tokenOut"
+                            ]
+                          }
+                        ]
+                      },
+                      [
+                        {
+                          "id": "selector-assets:tokenOut",
+                          "kind": "eth-call",
+                          "to": "$target",
+                          "data": {
+                            "op": "encode",
+                            "args": [
+                              "assettokenOut",
+                              "stETH()",
+                              []
+                            ]
+                          },
+                          "completion": "return-data"
+                        }
+                      ],
+                      []
+                    ]
+                  }
+                ]
+              },
+              "result": {
+                "tokenIn": {
+                  "op": "coalesce",
+                  "args": [
+                    "$scope.tokenIn",
+                    "$target"
+                  ]
+                },
+                "tokenOut": {
+                  "op": "coalesce",
+                  "args": [
+                    "$scope.tokenOut",
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decode",
+                              "args": [
+                                "assettokenOut",
+                                "stETH()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "selector-assets:tokenOut"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "result": {
+            "tokenIn": "$steps.assets.tokenIn",
+            "tokenOut": "$steps.assets.tokenOut"
+          }
+        },
+        "descriptor": {
+          "tokenIn": "$binding.tokenIn",
+          "tokenOut": "$binding.tokenOut"
+        }
+      },
+      "meta": {
+        "label": "protocol:wsteth/steth-active-binding"
+      },
+      "routes": {
+        "directions": [
+          {
+            "id": "unwrap",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "unwrap"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

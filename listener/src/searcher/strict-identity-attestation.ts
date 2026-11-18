@@ -140,7 +140,8 @@ export function reanchorTransactionNomination(observation: UnifiedObservation,
       observation.source.generation !== evidence.generation) {
     throw new Error("nomination must be a raw call/log bound to the selected transaction source");
   }
-  return Object.freeze({ ...observation, source: execution });
+  return Object.freeze({ ...observation, source: execution,
+    ...(observation.kind === "call" ? { evidenceSource: observation.evidenceSource ?? evidence } : {}) });
 }
 
 export type StrictAttestedPool<Pool extends {
@@ -242,6 +243,12 @@ export async function attestPoolIdentitiesStrict<
   readonly channelOrder?: "reverse-binding-first" | "nominate-first";
   /** Explicit binding for callers that already own one Family candidate. */
   readonly onlyFamilyId?: FamilyId;
+  /** Catalog pattern selected by a complete candidate replay, including its
+   * parameter recipe. A family can own several patterns for the same ABI. */
+  readonly onlyPatternId?: string;
+  /** Caller-supplied nominations still run the complete current-source Family
+   * lifecycle. This path never fetches historical calls to rediscover them. */
+  readonly suppliedObservations?: readonly UnifiedObservation[];
 }): Promise<{
   readonly accepted: readonly StrictAttestedPool<Pool>[];
   readonly rejected: readonly StrictRejectedPool<Pool>[];
@@ -264,6 +271,8 @@ export async function attestPoolIdentitiesStrict<
    */
   readonly publications: readonly (AdapterFamilyPublication | null)[];
 }> {
+  if (input.onlyPatternId !== undefined && (input.onlyFamilyId === undefined || !input.onlyPatternId.trim() ||
+      input.suppliedObservations === undefined)) throw new Error("candidate pattern requires a supplied observation and explicit Family");
   const accepted: (StrictAttestedPool<Pool> | null)[] =
     new Array(input.pools.length).fill(null);
   const rejected: (StrictRejectedPool<Pool> | null)[] =
@@ -339,7 +348,11 @@ export async function attestPoolIdentitiesStrict<
       })]);
       let observations: readonly UnifiedObservation[];
       let captured = false;
-      if (input.channelOrder === "reverse-binding-first") {
+      if (input.suppliedObservations !== undefined) {
+        observations = input.suppliedObservations.filter(observation =>
+          observation.kind === "call" && observation.target.toLowerCase() === address.toLowerCase());
+        if (observations.length !== 1) throw new Error("supplied candidate requires exactly one bound call observation");
+      } else if (input.channelOrder === "reverse-binding-first") {
         // Retain channel first: reverse binding needs no recent activity and
         // is the cheap chain-truth path for retained rows. Fall through to
         // the fresh nomination channel only when it produced no admissible
@@ -870,6 +883,7 @@ function matchFor(
   input: {
     readonly catalog: FamilyCapabilityCatalog;
     readonly onlyFamilyId?: FamilyId;
+    readonly onlyPatternId?: string;
   },
   pool: { readonly address: string; readonly adapter?: string },
   matches: readonly { readonly familyId: FamilyId; readonly patternId: string }[],
@@ -878,7 +892,8 @@ function matchFor(
   // A known candidate may fail its own identity; it cannot become a different
   // Family merely because that Family returned the first observation.
   return familyId === undefined ? matches[0] ?? null
-    : matches.find(candidate => candidate.familyId === familyId) ?? null;
+    : matches.find(candidate => candidate.familyId === familyId &&
+      (input.onlyPatternId === undefined || candidate.patternId === input.onlyPatternId)) ?? null;
 }
 
 

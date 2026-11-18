@@ -22,7 +22,7 @@ import type {
   RegisteredBlockScanStateFamily,
 } from "./blockscan-state-capability.js";
 import { registerBlockScanStateFamily } from "./blockscan-state-capability.js";
-import type { RegisteredFundingFamily } from "./funding/funding-capability.js";
+import type { RegisteredFundingFamily } from "./funding-capability.js";
 import {
   isKnownVenueIdentitySource,
   isKnownVenueId,
@@ -224,13 +224,25 @@ export class AdapterFamilyRegistry {
     this.oracleVictimDescriptors = collectOracleVictimDescriptors(routes);
     // These projections are derived only after every swap declaration has
     // passed its family-local validation. No central per-family table exists.
-    this.landedEventRegistry = new LandedEventRegistry(this.swapFamilies);
+    for (const family of this.swapFamilies) {
+      if ((family.landedEvents === undefined) !== (family.observation === undefined) ||
+          (family.poolDiscovery !== undefined && family.landedEvents === undefined)) {
+        throw new Error(`adapter-family registry: ${family.id} has incomplete landed observation capabilities`);
+      }
+    }
+    const landedSwapFamilies = this.swapFamilies.filter(
+      (family): family is SwapAdapter & Required<Pick<SwapAdapter, "landedEvents" | "observation">> =>
+        family.landedEvents !== undefined && family.observation !== undefined,
+    );
+    this.landedEventRegistry = new LandedEventRegistry(landedSwapFamilies);
     this.victimModelRegistry = VictimModelRegistry.fromSwapFamilies(
-      this.swapFamilies,
+      this.swapFamilies.filter(
+        (family): family is SwapAdapter & Required<Pick<SwapAdapter, "victimModel">> => family.victimModel !== undefined,
+      ),
       oracleVictimModels(this.oracleVictimDescriptors),
     );
     this.landedPoolDiscoveryRegistry = new LandedPoolDiscoveryRegistry(
-      this.swapFamilies,
+      landedSwapFamilies,
       this.landedEventRegistry,
     );
     this.pendingEvidenceProjection = createPendingTransactionEvidenceProjection(
@@ -1246,10 +1258,11 @@ function assertDiscoverySources(adapter: RouteLegAdapter): void {
   }
   if (
     sources.has("observed-interaction") &&
-    discovery.eventTopics.length === 0
+    discovery.eventTopics.length === 0 &&
+    !(discovery.callSelectors.length > 0 && discovery.candidateFromObservedCall)
   ) {
     throw new Error(
-      `adapter-family registry: ${adapter.id} observed source has no enumerable event topic`,
+      `adapter-family registry: ${adapter.id} observed source has no enumerable event or call surface`,
     );
   }
   if (sources.has("canonical-registry")) {

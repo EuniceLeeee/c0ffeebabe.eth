@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { normalizeStateResourceKeys } from "./venues/route-state-resources.js";
 import { beginPricingPhaseDiagnostics, type PricingPhaseStatus } from "./state-latency-diagnostics.js";
 import { isVerifiedReorgActivity, revalidateReorgActivityTarget, type VerifiedReorgActivity } from "./blockscan-reorg-activity.js";
 import {
@@ -39,7 +40,7 @@ import type { RouteVenueMid } from "./venues/mid-readers.js";
 import type { StateBackend } from "../shared/state/state-backend.js";
 import type { PinnedRethQuoteBackend } from "./pinned-reth-quote-backend.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
-import { effectiveMidRowCarried, exportEffectiveMidReplayState, restoreEffectiveMidReplayState,
+import { effectiveMidRowCarried, effectiveRowExecutionVerified, exportEffectiveMidReplayState, restoreEffectiveMidReplayState,
   type EffectiveMidReplayState, type EffectiveMidSnapshot } from "./blockscan-effective-mid.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import type { StrictSimulationTransport } from "./strict-central-adapter-runtime.js";
@@ -917,7 +918,8 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
           row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() || row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase())) {
         throw new Error(`effective pricing row differs from ready Graph: ${key}`);
       }
-      if (row?.status === "quoted") {
+      if (row?.status === "quoted" && (edge.executionVerification !== "startup-simulation" ||
+          effectiveRowExecutionVerified(effectiveMids, row, edge))) {
         if (row.amountIn === null || row.amountIn <= 0n || row.amountOut === null || row.amountOut <= 0n ||
             row.effectiveMid === null || !Number.isFinite(row.effectiveMid) || row.effectiveMid <= 0) {
           throw new Error(`invalid effective pricing row: ${key}`);
@@ -935,7 +937,8 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
         unresolvedEdgeKeys.push(key);
         incompleteFamilyIds.add(familyId);
         pricingProvenanceByEdgeKey.set(key, "unresolved");
-        coverageByEdgeKey.set(key, failureCoverage("unresolved", `effective-${row?.status ?? "missing-row"}`));
+        coverageByEdgeKey.set(key, failureCoverage("unresolved", row?.status === "quoted"
+          ? "effective-execution-unverified" : `effective-${row?.status ?? "missing-row"}`));
       }
     }
     diagnostics?.enter("coverage-key-hashes");
@@ -1524,6 +1527,12 @@ function sameEdgeContract(
     (left.protocolAction ?? "") === (right.protocolAction ?? "") &&
     left.edgeKind === right.edgeKind &&
     left.leavesStandingPosition === right.leavesStandingPosition &&
+    left.executionVerification === right.executionVerification &&
+    left.stateResourceKey === right.stateResourceKey &&
+    JSON.stringify(left.stateResourceKeys === undefined ? null : normalizeStateResourceKeys(left.stateResourceKeys)) ===
+      JSON.stringify(right.stateResourceKeys === undefined ? null : normalizeStateResourceKeys(right.stateResourceKeys)) &&
+    left.observationTarget === right.observationTarget &&
+    left.observationPoolId === right.observationPoolId &&
     (left.instanceKey ?? "") === (right.instanceKey ?? "") &&
     (left.executionVariantKey ?? "") === (right.executionVariantKey ?? "");
 }

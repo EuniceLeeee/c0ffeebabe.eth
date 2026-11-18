@@ -93,7 +93,7 @@ test("quoted and runtime share the same program while input is supplied at execu
   const quoted = buildDeclarativeQuotedFragment(definition, input, values);
   assert.equal(runtime.program, quoted.nodes[0]!.params.runtimeAmountProgram);
   execute(runtime.program, 91n, false); // Deliberately differs from quoted input 77.
-  const action = createDeclarativeProgramAction({ adapterId: "unrelated-conversion", lineage: "synthetic",
+  const action = createDeclarativeProgramAction({ adapterId: "unrelated-conversion", lineage: "erc20-infra",
     edgeKind: "protocol", action: "convert", canSendValue: false, leavesStandingPositionDefault: false },
     [{ signature: "function convert(address,uint256) returns(uint256,uint256)" }]);
   const script = action.encode(quoted.nodes[0] as any, EXECUTOR, new Uint8Array());

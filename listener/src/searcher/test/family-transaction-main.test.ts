@@ -3,9 +3,9 @@ import test from "node:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { familyTestMain, parseFamilyTestArguments, summarizeFamilyTransactionResults } from "../../../scripts/test-family.mjs";
+import { familyTestMain, parseFamilyTestArguments, planFamilyTransactionTests, summarizeFamilyTransactionResults } from "../../../scripts/test-family.mjs";
 
-const family = { familyId: "fixture", domain: "swap", envKey: "FIXTURE_ENABLED", enabled: false, sourceFile: "fixture.ts", lineages: ["lineage"], ordinaryRuntimeLeg: true };
+const family = { familyId: "fixture", domain: "swap", envKey: "FIXTURE_ENABLED", enabled: true, sourceFile: "fixture.ts", lineages: ["lineage"], ordinaryRuntimeLeg: true };
 const row = () => ({ familyId: family.familyId, inputComplete: true, status: "pass", evidenceVerified: true });
 test("family acceptance requires a verified case and every complete case must pass", () => {
   assert.equal(summarizeFamilyTransactionResults(family, [], true).result, "incomplete");
@@ -136,13 +136,13 @@ test("a failed leg does not hide the next result; only verified child stages ent
   assert.equal(result.report.execution.simulationMethod, "eth_simulateV1");
 });
 
-test("disabled-family raw verification uses a fresh process with identical activation and cannot be skipped", async () => {
+test("raw verification uses a fresh process with identical production activation and cannot be skipped", async () => {
   for (const verificationExit of [0, 1]) {
     let caseEnv: unknown, verifierCalls = 0;
     const result = await round(["--rpc-file", "rpc.json"], { verify: undefined,
       execute: async (args: string[], _root: string, env: Record<string, string>) => {
         if (args[0] === "scripts/test-protocol-json.mjs") return { exitCode: 0 };
-        assert.equal(env[family.envKey], "1");
+        assert.equal(env[family.envKey], process.env[family.envKey]);
         if (args.includes("--verify-report")) {
           verifierCalls++; assert.deepEqual(env, caseEnv);
           assert(args.includes("--transaction") && args.includes("--leg"));
@@ -219,4 +219,120 @@ test("main acceptance retains historical reference conflicts and still requires 
       assert.equal(result.report.families[0].passedLegs, 1);
     } else assert.equal(leg.stages, undefined, "unverified child stages cannot become passing evidence");
   }
+});
+
+const selectorFamily = { ...family, familyId: "execution:0x6e553f65:abi-test", domain: "protocol", selectorExecution: true };
+const selectorSeed = (familyId = "old-protocol-label") => ({ path: "/registered-seed.json", sha256: "seed-pin", inputFingerprint: "input-pin", missing: [],
+  transaction: { transactionHash: "0xabc" }, leg: { id: "leg", familyId, domain: "protocol" } });
+
+test("selector test selection keeps all ordinary seeds until Ready establishes their actual owner", () => {
+  const other = { ...selectorFamily, familyId: "execution:0xba087652:abi-test" };
+  const legacy = { ...family, familyId: "old-protocol-label", domain: "protocol", enabled: false };
+  const input = [selectorSeed(), selectorSeed("uninstalled-identity-label")];
+  const plan = planFamilyTransactionTests([selectorFamily, other, legacy], input, selectorFamily.familyId);
+  assert.deepEqual(plan.inputs, input);
+  assert.deepEqual(plan.families, [selectorFamily]);
+  const oldCli = planFamilyTransactionTests([selectorFamily, other, legacy], input, legacy.familyId);
+  assert.equal(oldCli.referenceFamilyId, legacy.familyId);
+  assert.deepEqual(oldCli.inputs, [input[0]]);
+  assert.deepEqual(oldCli.families, [selectorFamily, other], "old protocol selection must not restrict Ready ownership");
+});
+
+test("batch execution groups verified selector bindings independently of legacy identity and domain", async () => {
+  const item = selectorSeed("not-installed-anymore");
+  const result = await round(["--rpc-file", "rpc.json"], {
+    getFamilies: async () => [selectorFamily], registry: () => ({ transactions: [item], legs: [item] }),
+    execute: async (args: string[], _root: string, env: Record<string, string>) => {
+      assert.equal(env[family.envKey], process.env[family.envKey], "case must inherit production activation");
+      if (args[0] === "scripts/test-protocol-json.mjs") return { exitCode: 0 };
+      const out = args[args.indexOf("--out") + 1]!; mkdirSync(out);
+      writeFileSync(resolve(out, "report.json"), JSON.stringify({
+        execution: { executorCodeMode: "counterfactual", simulationMethod: "eth_simulateV1" },
+        executionBinding: { familyId: selectorFamily.familyId, domain: selectorFamily.domain,
+          instanceKey: "actual-selector-instance", routeKey: "actual-route" }, stages: {},
+      }));
+      return { exitCode: 0 };
+    },
+  });
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.report.families[0].familyId, selectorFamily.familyId);
+  assert.equal(result.report.families[0].references, 1);
+  assert.equal(result.report.families[0].legs[0].referenceFamilyId, item.leg.familyId);
+  assert.equal(result.report.families[0].legs[0].executionBinding.instanceKey, "actual-selector-instance");
+  assert.deepEqual(result.report.unassignedLegs, []);
+});
+
+test("unknown selector remains visible as an unassigned incomplete case after binding verification", async () => {
+  const item = selectorSeed();
+  const result = await round(["--rpc-file", "rpc.json"], {
+    getFamilies: async () => [selectorFamily], registry: () => ({ transactions: [item], legs: [item] }), verify: undefined,
+    execute: async (args: string[]) => {
+      if (args[0] === "scripts/test-protocol-json.mjs" || args.includes("--verify-binding")) return { exitCode: 0 };
+      const out = args[args.indexOf("--out") + 1]!; mkdirSync(out);
+      writeFileSync(resolve(out, "report.json"), JSON.stringify({ result: "incomplete", failure: { stage: "transactionBinding" },
+        stages: { transactionBinding: { status: "selector-unadapted", selector: "0xdeadbeef" } } }));
+      return { exitCode: 1 };
+    },
+  });
+  assert.equal(result.exitCode, 1); assert.equal(result.report.result, "incomplete");
+  assert.equal(result.report.unassignedLegs.length, 1);
+  assert.equal(result.report.unassignedLegs[0].inputBindingVerified, true);
+  assert.equal(result.report.unassignedLegs[0].inputBinding.selector, "0xdeadbeef");
+  assert.equal(result.report.families[0].passedLegs, 0);
+});
+
+test("disabled production families stay disabled and never receive an implicit test activation", async () => {
+  let cases = 0;
+  const result = await round(["--rpc-file", "rpc.json"], {
+    getFamilies: async () => [{ ...family, enabled: false }],
+    execute: async (args: string[], _root: string, env: Record<string, string>) => {
+      assert.equal(env[family.envKey], process.env[family.envKey]);
+      if (args[0] !== "scripts/test-protocol-json.mjs") cases++;
+      return { exitCode: 0 };
+    },
+  });
+  assert.equal(cases, 0); assert.equal(result.exitCode, 1);
+  assert.equal(result.report.families[0].result, "disabled");
+  assert.match(result.report.families[0].legs[0].error, /disabled by production activation/);
+});
+
+test("child-only selector owner claims cannot turn an execution failure into covered family evidence", async () => {
+  const item = selectorSeed();
+  const result = await round(["--rpc-file", "rpc.json"], {
+    getFamilies: async () => [selectorFamily], registry: () => ({ transactions: [item], legs: [item] }), verify: undefined,
+    execute: async (args: string[]) => {
+      if (args[0] === "scripts/test-protocol-json.mjs") return { exitCode: 0 };
+      if (args.includes("--verify-binding")) return { exitCode: 1 };
+      const out = args[args.indexOf("--out") + 1]!; mkdirSync(out);
+      writeFileSync(resolve(out, "report.json"), JSON.stringify({ result: "failed", failure: { stage: "exact" },
+        executionBinding: { familyId: selectorFamily.familyId, domain: selectorFamily.domain },
+        stages: { transactionBinding: { status: "matched" } } }));
+      return { exitCode: 1 };
+    },
+  });
+  assert.equal(result.exitCode, 1); assert.equal(result.report.result, "failed");
+  assert.equal(result.report.unassignedLegs.length, 1);
+  assert.equal(result.report.families[0].references, 0);
+});
+
+test("disabled entries remain disclosed without blocking complete evidence for all active entries", async () => {
+  const disabled = { ...family, familyId: "disabled-funding", domain: "funding", enabled: false };
+  const entries = [family, disabled]; let cases = 0;
+  const result = await round(["--rpc-file", "rpc.json"], {
+    getFamilies: async () => entries,
+    registry: () => ({ transactions: [{}], legs: entries.map(entry => ({
+      ...selectorSeed(entry.familyId), leg: { id: entry.familyId, familyId: entry.familyId, domain: entry.domain },
+    })) }),
+    execute: async (args: string[]) => {
+      if (args[0] !== "scripts/test-protocol-json.mjs") cases++;
+      return { exitCode: 0 };
+    },
+  });
+  assert.equal(cases, 1);
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.report.families.find((entry: any) => entry.familyId === family.familyId).result, "pass");
+  const disabledReport = result.report.families.find((entry: any) => entry.familyId === disabled.familyId);
+  assert.equal(disabledReport.result, "disabled");
+  assert.equal(disabledReport.passedLegs, 0);
+  assert.equal(disabledReport.legs[0].status, "incomplete");
 });

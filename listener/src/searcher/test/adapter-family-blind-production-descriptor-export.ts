@@ -4,7 +4,7 @@ import {
   type VerifiedGraphView,
 } from "../venues/blockscan-state-capability.js";
 import type { RegisteredFundingFamily } from
-  "../venues/funding/funding-capability.js";
+  "../venues/funding-capability.js";
 import type {
   AdapterFamily,
 } from "../venues/route-leg-adapter.js";

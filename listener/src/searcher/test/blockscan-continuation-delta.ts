@@ -17,7 +17,7 @@ const hash = (n: number) => "0x" + n.toString(16).padStart(64, "0");
 const token = (n: number) => "0x" + n.toString(16).padStart(40, "0");
 const source = (n: number) => ({ number: n, hash: hash(n), generation: n });
 const edges: readonly TokenEdge[] = Object.freeze(Array.from({ length: 200 }, (_, n) => Object.freeze({
-  canonicalEdgeId: `edge-${n}`, instanceKey: `pool-${n}`, adapterId: "fixture", target: token(n + 10),
+  canonicalEdgeId: `edge-${n}` as NonNullable<TokenEdge["canonicalEdgeId"]>, instanceKey: `pool-${n}`, adapterId: "fixture", target: token(n + 10),
   tokenIn: ADDR.WETH, tokenOut: token(n + 1), slotKind: "swap" as const, edgeKind: "swap" as const,
   leavesStandingPosition: false,
 })));

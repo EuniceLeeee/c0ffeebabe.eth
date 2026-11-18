@@ -1,0 +1,30 @@
+{
+  "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "scope": "Built browser UDF resources; normal BigQuery runner regenerates its local path-bound provenance.",
+  "catalog": "listener/src/searcher/generated/family-capability-shadow.generated.json",
+  "catalogSha256": "8fe695942a2b1305242b469a424350ca05a7c68121d4c41ed0233e338286077c",
+  "builderSha256": "387f30ddd58300da784d043dc1cb08ad95359baa5352541bd1312b788dca22ec",
+  "familyCount": 128,
+  "files": [
+    {
+      "file": "kernel.js",
+      "bytes": 149660,
+      "sha256": "74c31bf99148c45e1dd3af3f0239d575f4851f80de3fdbb73e0a8677d5b1f554"
+    },
+    {
+      "file": "definitions-000.js",
+      "bytes": 871632,
+      "sha256": "8b05ddb4267dce064461d9918796c0e43c0db980fb3728a1694ed6d76ad9690c"
+    },
+    {
+      "file": "definitions-001.js",
+      "bytes": 899478,
+      "sha256": "e04f506e4316e9f674c4e8264f1e2f31d336a14c7f02521c91a5786e6144a046"
+    },
+    {
+      "file": "definitions-002.js",
+      "bytes": 826013,
+      "sha256": "021d65b39681c412c324c4e52ef76ae1de0c2ebb376bb0754a8054ae92b98444"
+    }
+  ]
+}

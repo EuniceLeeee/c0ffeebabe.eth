@@ -1,0 +1,64 @@
+{
+  "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "sources": [
+    {
+      "file": "listener/src/searcher/venues/swaps/aqua-swapvm-family/codec.ts",
+      "sha256": "f627cb827217c42cfe5380bc358ad07f36baef236a5d35cd191639a4316c01c1"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/aqua-swapvm-family/runtime.ts",
+      "sha256": "1c00b28582d54acea349e578b09580e57b3e131deffcb5a96e950042a10f613a"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/aqua-swapvm-family/execution.ts",
+      "sha256": "07674ff2020b90f2c5252b314467a07fbf8cfad43cddaa521e353f05db11dfe0"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/aqua-swapvm-family/routes.ts",
+      "sha256": "07475b35bb633d02b619c84ebc28c903179472b4478b510ac724f49f8f998c34"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/aqua-swapvm-family/swap.ts",
+      "sha256": "84e3b5017b0046143091496f9b6b9447865f77e34932e970bb1f1d6b73753828"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/aqua-swapvm-family/discovery.ts",
+      "sha256": "b488adb067075fbbfbcffdbaf346d874a6edee1f9a049a0ddd92e890afb704a6"
+    },
+    {
+      "file": "listener/src/searcher/venues/production-families/aqua-swapvm.production.ts",
+      "sha256": "50a8ffd1d55ed9fd887a6170ae2bdee38514d44c7fefe3f0ab3f6b2f69e9592a"
+    }
+  ],
+  "rows": [
+    {
+      "selector": "0xf4d2d412",
+      "signature": "function swap((address maker, uint256 traits, bytes data) order, address tokenIn, address tokenOut, uint256 amount, bytes takerTraitsAndData) returns (uint256 amountIn, uint256 amountOut, bytes32 orderHash)",
+      "sourceFamily": "aqua-swapvm",
+      "recipe": "typed-aqua-swapvm-registered-order",
+      "file": "listener/src/searcher/venues/selector-native/selector-f4d2d412-family/selector-f4d2d412.json",
+      "enabledByDefault": false
+    }
+  ],
+  "runtimeDependenciesOnTypedSources": [],
+  "preserved": [
+    "dynamic order tuple and observed token pair",
+    "order hash return commitment",
+    "runtime amount in swap/quote",
+    "0x61 ordinary packed slice layout",
+    "0x45 output-first callback layout with nested ABI bytes",
+    "same-transaction static quote-output",
+    "fresh direct receiver receipt",
+    "authenticated approve-pull deferred continuation",
+    "old input/output/native inventory and allowance clearance",
+    "strategy-specific receipt/touched binding"
+  ],
+  "changes": [
+    "Identity, code-hash and strategy opcode profile are not admission gates; exact parameter/order binding and funded source-bound execution prove Ready",
+    "The registry address is read as an execution resource binding; it is not a fixed protocol allowlist",
+    "Physical resources include registered order and maker token balances, so alternative entries cannot spend the same underlying state independently",
+    "ship is historical nomination, not a swap execution selector; its unknown census is retained without inventing a conversion edge"
+  ],
+  "default": "disabled, preserving the prior typed Family default",
+  "validation": "local byte-layout/VM and source-bound generic Ready tests; no mainnet claim"
+}

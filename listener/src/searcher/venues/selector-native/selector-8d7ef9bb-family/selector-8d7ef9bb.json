@@ -1,0 +1,1285 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x8d7ef9bb",
+  "signature": "function buyGem(address, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_8D7EF9BB_ENABLED"
+  },
+  "meta": {
+    "label": "protocol:psm/lite-active-pair"
+  },
+  "programs": [
+    {
+      "values": {
+        "abi": {
+          "bindingpsmgem": [
+            "function gem() view returns(address)"
+          ],
+          "bindingpsmdai": [
+            "function dai() view returns(address)"
+          ],
+          "bindingpsmscale": [
+            "function to18ConversionFactor() view returns(uint256)"
+          ]
+        },
+        "constants": {
+          "scale": "1000000000000"
+        }
+      },
+      "resourceValues": {
+        "constants": {
+          "scale": "1000000000000"
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "psm",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "selectorBinding:psm:gem",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingpsmgem",
+                      "gem()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "selectorBinding:psm:dai",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingpsmdai",
+                      "dai()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "selectorBinding:psm:scale",
+                  "kind": "eth-call",
+                  "to": {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$target"
+                        ]
+                      }
+                    ]
+                  },
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "bindingpsmscale",
+                      "to18ConversionFactor()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "readValues",
+                  "value": {
+                    "gem": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decode",
+                              "args": [
+                                "bindingpsmgem",
+                                "gem()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "selectorBinding:psm:gem"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "dai": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decode",
+                              "args": [
+                                "bindingpsmdai",
+                                "dai()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "selectorBinding:psm:dai"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "scale": {
+                      "op": "uint",
+                      "args": [
+                        {
+                          "op": "decode",
+                          "args": [
+                            "bindingpsmscale",
+                            "to18ConversionFactor()",
+                            {
+                              "op": "get",
+                              "args": [
+                                {
+                                  "op": "returned",
+                                  "args": [
+                                    "selectorBinding:psm:scale"
+                                  ]
+                                },
+                                "data"
+                              ]
+                            },
+                            0
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "assert": {
+                    "op": "eq",
+                    "args": [
+                      "$readValues.scale",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1000000000000"
+                        ]
+                      }
+                    ]
+                  },
+                  "error": "selector binding conversion factor differs from preserved PSM math scale"
+                },
+                {
+                  "return": "$readValues"
+                }
+              ]
+            }
+          ],
+          "result": {
+            "psm": {
+              "gem": "$steps.psm.gem",
+              "dai": "$steps.psm.dai"
+            }
+          }
+        },
+        "descriptor": {
+          "gem": {
+            "op": "address",
+            "args": [
+              "$binding.psm.gem"
+            ]
+          },
+          "dai": {
+            "op": "address",
+            "args": [
+              "$binding.psm.dai"
+            ]
+          },
+          "decimalScale": {
+            "op": "uint",
+            "args": [
+              "$constants.scale"
+            ]
+          }
+        }
+      },
+      "routes": {
+        "directions": [
+          {
+            "id": "buy-gem",
+            "enabled": true,
+            "tokenIn": "$descriptor.dai",
+            "tokenOut": "$descriptor.gem",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "convert"
+            }
+          }
+        ]
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "or",
+            "args": [
+              {
+                "op": "eq",
+                "args": [
+                  "$route.direction",
+                  "sell-gem"
+                ]
+              },
+              {
+                "op": "eq",
+                "args": [
+                  "$route.direction",
+                  "buy-gem"
+                ]
+              }
+            ]
+          },
+          "error": "PSM route is not a verified direction"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$route.tokenIn",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "sell-gem"
+                    ]
+                  },
+                  "$descriptor.gem",
+                  "$descriptor.dai"
+                ]
+              }
+            ]
+          },
+          "error": "PSM route is not a verified direction"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$route.tokenOut",
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "sell-gem"
+                    ]
+                  },
+                  "$descriptor.dai",
+                  "$descriptor.gem"
+                ]
+              }
+            ]
+          },
+          "error": "PSM route is not a verified direction"
+        }
+      ],
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$descriptor.target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "contextChecks": [
+          {
+            "condition": {
+              "op": "or",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "sell-gem"
+                  ]
+                },
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "buy-gem"
+                  ]
+                }
+              ]
+            },
+            "error": "PSM direction unsupported"
+          }
+        ],
+        "steps": [
+          {
+            "id": "fee",
+            "static": true,
+            "call": {
+              "target": "$descriptor.target",
+              "signature": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "sell-gem"
+                    ]
+                  },
+                  "function tin() view returns (uint256)",
+                  "function tout() view returns (uint256)"
+                ]
+              },
+              "args": [],
+              "save": {
+                "psmFee": 0
+              }
+            }
+          },
+          {
+            "id": "terms",
+            "math": {
+              "model": "psmTerms",
+              "inputs": {
+                "amountIn": {
+                  "runtime": "amountIn"
+                },
+                "fee": {
+                  "runtime": "psmFee"
+                },
+                "scale": "$descriptor.decimalScale",
+                "isBuy": {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "eq",
+                      "args": [
+                        "$route.direction",
+                        "buy-gem"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "1"
+                      ]
+                    },
+                    {
+                      "op": "uint",
+                      "args": [
+                        "0"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "outputs": {
+                "callAmount": "psmCallAmount",
+                "expectedOut": "psmExpectedOut",
+                "expectedSpend": "psmExpectedSpend",
+                "expectedReturn": "psmExpectedReturn"
+              },
+              "checks": [
+                {
+                  "left": "1000000000000000000",
+                  "operator": "gte",
+                  "right": {
+                    "runtime": "psmFee"
+                  }
+                },
+                {
+                  "left": {
+                    "runtime": "amountIn"
+                  },
+                  "operator": "gte",
+                  "right": {
+                    "runtime": "psmExpectedSpend"
+                  }
+                },
+                {
+                  "left": {
+                    "runtime": "psmCallAmount"
+                  },
+                  "operator": "gte",
+                  "right": 1
+                },
+                {
+                  "left": {
+                    "runtime": "psmExpectedOut"
+                  },
+                  "operator": "gte",
+                  "right": 1
+                }
+              ]
+            }
+          },
+          {
+            "id": "swap",
+            "call": {
+              "target": "$descriptor.target",
+              "signature": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "eq",
+                    "args": [
+                      "$route.direction",
+                      "sell-gem"
+                    ]
+                  },
+                  "function sellGem(address,uint256) returns (uint256)",
+                  "function buyGem(address,uint256) returns (uint256)"
+                ]
+              },
+              "args": [
+                "$recipient",
+                {
+                  "runtime": "psmCallAmount"
+                }
+              ],
+              "save": {
+                "psmReturned": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "psmReturned"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "runtime": "psmExpectedReturn"
+                  }
+                }
+              ]
+            },
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$descriptor.target",
+              "mode": "exact-clear",
+              "amount": {
+                "runtime": "psmExpectedSpend"
+              },
+              "requireBool": true
+            },
+            "effects": [
+              {
+                "kind": "debit",
+                "token": "$route.tokenIn",
+                "account": "$executor",
+                "equals": {
+                  "runtime": "psmExpectedSpend"
+                }
+              },
+              {
+                "kind": "credit",
+                "token": "$route.tokenOut",
+                "account": "$recipient",
+                "equals": {
+                  "runtime": "psmExpectedOut"
+                }
+              }
+            ]
+          },
+          {
+            "id": "allowance",
+            "static": true,
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function allowance(address,address) view returns (uint256)",
+              "args": [
+                "$executor",
+                "$descriptor.target"
+              ],
+              "save": {
+                "psmAllowance": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "psmAllowance"
+                  },
+                  "operator": "eq",
+                  "right": 0
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "sell-gem"
+                  ]
+                },
+                {
+                  "runtime": "amountIn"
+                },
+                "$missing"
+              ]
+            },
+            "maximum": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "eq",
+                  "args": [
+                    "$route.direction",
+                    "sell-gem"
+                  ]
+                },
+                "$missing",
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "minimum": 1
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "runtimeMath": {
+        "version": 1,
+        "entries": {
+          "psmTerms": {
+            "model": "psm:runtime-terms",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "psm:runtime-terms",
+            "version": 1,
+            "inputs": [
+              "amountIn",
+              "fee",
+              "scale",
+              "isBuy"
+            ],
+            "outputs": [
+              "callAmount",
+              "expectedOut",
+              "expectedSpend",
+              "expectedReturn"
+            ],
+            "operations": [
+              {
+                "name": "isSell",
+                "op": "sub",
+                "left": {
+                  "constant": "1"
+                },
+                "right": {
+                  "input": "isBuy"
+                }
+              },
+              {
+                "name": "sellAmount",
+                "op": "mul",
+                "left": {
+                  "input": "amountIn"
+                },
+                "right": {
+                  "local": "isSell"
+                }
+              },
+              {
+                "name": "sellScaled",
+                "op": "mul",
+                "left": {
+                  "local": "sellAmount"
+                },
+                "right": {
+                  "input": "scale"
+                }
+              },
+              {
+                "name": "sellFeeScaled",
+                "op": "mul",
+                "left": {
+                  "local": "sellScaled"
+                },
+                "right": {
+                  "input": "fee"
+                }
+              },
+              {
+                "name": "sellFee",
+                "op": "div",
+                "left": {
+                  "local": "sellFeeScaled"
+                },
+                "right": {
+                  "constant": "1000000000000000000"
+                }
+              },
+              {
+                "name": "sellOut",
+                "op": "sub",
+                "left": {
+                  "local": "sellScaled"
+                },
+                "right": {
+                  "local": "sellFee"
+                }
+              },
+              {
+                "name": "buyBudget",
+                "op": "mul",
+                "left": {
+                  "input": "amountIn"
+                },
+                "right": {
+                  "input": "isBuy"
+                }
+              },
+              {
+                "name": "buyNext",
+                "op": "add",
+                "left": {
+                  "local": "buyBudget"
+                },
+                "right": {
+                  "constant": "1"
+                }
+              },
+              {
+                "name": "buyWide",
+                "op": "mul",
+                "left": {
+                  "local": "buyNext"
+                },
+                "right": {
+                  "constant": "1000000000000000000"
+                }
+              },
+              {
+                "name": "buyNumerator",
+                "op": "sub",
+                "left": {
+                  "local": "buyWide"
+                },
+                "right": {
+                  "constant": "1"
+                }
+              },
+              {
+                "name": "buyDenominator",
+                "op": "add",
+                "left": {
+                  "constant": "1000000000000000000"
+                },
+                "right": {
+                  "input": "fee"
+                }
+              },
+              {
+                "name": "buyGemWide",
+                "op": "div",
+                "left": {
+                  "local": "buyNumerator"
+                },
+                "right": {
+                  "local": "buyDenominator"
+                }
+              },
+              {
+                "name": "buyGem",
+                "op": "div",
+                "left": {
+                  "local": "buyGemWide"
+                },
+                "right": {
+                  "input": "scale"
+                }
+              },
+              {
+                "name": "buyScaled",
+                "op": "mul",
+                "left": {
+                  "local": "buyGem"
+                },
+                "right": {
+                  "input": "scale"
+                }
+              },
+              {
+                "name": "buyFeeScaled",
+                "op": "mul",
+                "left": {
+                  "local": "buyScaled"
+                },
+                "right": {
+                  "input": "fee"
+                }
+              },
+              {
+                "name": "buyFee",
+                "op": "div",
+                "left": {
+                  "local": "buyFeeScaled"
+                },
+                "right": {
+                  "constant": "1000000000000000000"
+                }
+              },
+              {
+                "name": "buyCost",
+                "op": "add",
+                "left": {
+                  "local": "buyScaled"
+                },
+                "right": {
+                  "local": "buyFee"
+                }
+              },
+              {
+                "name": "callAmount",
+                "op": "add",
+                "left": {
+                  "local": "sellAmount"
+                },
+                "right": {
+                  "local": "buyGem"
+                }
+              },
+              {
+                "name": "expectedOut",
+                "op": "add",
+                "left": {
+                  "local": "sellOut"
+                },
+                "right": {
+                  "local": "buyGem"
+                }
+              },
+              {
+                "name": "expectedSpend",
+                "op": "add",
+                "left": {
+                  "local": "sellAmount"
+                },
+                "right": {
+                  "local": "buyCost"
+                }
+              },
+              {
+                "name": "expectedReturn",
+                "op": "add",
+                "left": {
+                  "local": "sellOut"
+                },
+                "right": {
+                  "local": "buyCost"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "refreshPolicy": "on-touch"
+    },
+    {
+      "parameters": [
+        {
+          "path": [
+            0
+          ],
+          "role": "recipient"
+        },
+        {
+          "path": [
+            1
+          ],
+          "role": "amountIn"
+        }
+      ],
+      "runtimeMath": {
+        "version": 1,
+        "entries": {
+          "recipientnetfee": {
+            "model": "recipient-net-fee",
+            "version": 1
+          },
+          "capacitywithunlimitedzero": {
+            "model": "capacity-with-unlimited-zero",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "recipient-net-fee",
+            "version": 1,
+            "inputs": [
+              "net",
+              "fee",
+              "treasury",
+              "recipient"
+            ],
+            "outputs": [
+              "gross",
+              "receipt"
+            ],
+            "operations": [
+              {
+                "name": "gross",
+                "op": "add",
+                "left": {
+                  "input": "net"
+                },
+                "right": {
+                  "input": "fee"
+                }
+              },
+              {
+                "name": "treasuryMatch",
+                "op": "eq",
+                "left": {
+                  "input": "treasury"
+                },
+                "right": {
+                  "input": "recipient"
+                }
+              },
+              {
+                "name": "feeReceipt",
+                "op": "mul",
+                "left": {
+                  "input": "fee"
+                },
+                "right": {
+                  "local": "treasuryMatch"
+                }
+              },
+              {
+                "name": "receipt",
+                "op": "add",
+                "left": {
+                  "input": "net"
+                },
+                "right": {
+                  "local": "feeReceipt"
+                }
+              }
+            ]
+          },
+          {
+            "id": "capacity-with-unlimited-zero",
+            "version": 1,
+            "inputs": [
+              "limit",
+              "amount",
+              "scale"
+            ],
+            "outputs": [
+              "limitValue",
+              "scaledAmount"
+            ],
+            "operations": [
+              {
+                "name": "unlimited",
+                "op": "eq",
+                "left": {
+                  "input": "limit"
+                },
+                "right": {
+                  "constant": "0"
+                }
+              },
+              {
+                "name": "unlimitedValue",
+                "op": "mul",
+                "left": {
+                  "local": "unlimited"
+                },
+                "right": {
+                  "constant": "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+                }
+              },
+              {
+                "name": "limitValue",
+                "op": "add",
+                "left": {
+                  "input": "limit"
+                },
+                "right": {
+                  "local": "unlimitedValue"
+                }
+              },
+              {
+                "name": "scaledAmount",
+                "op": "mul",
+                "left": {
+                  "input": "amount"
+                },
+                "right": {
+                  "input": "scale"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "convert",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": true,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function buyGem(address,uint256) returns(uint256)",
+              "args": [
+                "$recipient",
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ],
+        "quoteOutput": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "active",
+              "static": true,
+              "call": {
+                "target": "$target",
+                "signature": "function paused() view returns(bool)",
+                "args": [],
+                "save": {
+                  "paused": 0
+                },
+                "checks": [
+                  {
+                    "left": {
+                      "runtime": "paused"
+                    },
+                    "operator": "eq",
+                    "right": false
+                  }
+                ]
+              }
+            },
+            {
+              "id": "preview",
+              "static": true,
+              "call": {
+                "target": "$target",
+                "signature": "function previewBuyGem(uint256,address) view returns(uint256,uint256)",
+                "args": [
+                  {
+                    "runtime": "amountIn"
+                  },
+                  "$recipient"
+                ],
+                "save": {
+                  "net": 0,
+                  "fee": 1
+                },
+                "checks": [
+                  {
+                    "left": {
+                      "runtime": "net"
+                    },
+                    "operator": "gte",
+                    "right": 1
+                  }
+                ]
+              }
+            },
+            {
+              "id": "treasury",
+              "static": true,
+              "call": {
+                "target": "$target",
+                "signature": "function treasury() view returns(address)",
+                "args": [],
+                "save": {
+                  "treasury": 0
+                }
+              }
+            },
+            {
+              "id": "recipientTerms",
+              "math": {
+                "model": "recipientnetfee",
+                "inputs": {
+                  "net": {
+                    "runtime": "net"
+                  },
+                  "fee": {
+                    "runtime": "fee"
+                  },
+                  "treasury": {
+                    "runtime": "treasury"
+                  },
+                  "recipient": {
+                    "op": "uint",
+                    "args": [
+                      "$recipient"
+                    ]
+                  }
+                },
+                "outputs": {
+                  "gross": "gross",
+                  "receipt": "receipt"
+                }
+              }
+            },
+            {
+              "id": "reserves",
+              "static": true,
+              "call": {
+                "target": "$target",
+                "signature": "function getReserves() view returns(uint256,uint256)",
+                "args": [],
+                "save": {
+                  "reserves": 1
+                },
+                "checks": [
+                  {
+                    "left": {
+                      "runtime": "reserves"
+                    },
+                    "operator": "gte",
+                    "right": {
+                      "runtime": "gross"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "scale",
+              "static": true,
+              "call": {
+                "target": "$target",
+                "signature": "function stableToWad() view returns(uint256)",
+                "args": [],
+                "save": {
+                  "scale": 0
+                }
+              }
+            },
+            {
+              "id": "perTransaction",
+              "static": true,
+              "call": {
+                "target": "$target",
+                "signature": "function maxPerTransaction() view returns(uint256)",
+                "args": [],
+                "save": {
+                  "transactionLimit": 0
+                }
+              }
+            },
+            {
+              "id": "transactionCapacity",
+              "math": {
+                "model": "capacitywithunlimitedzero",
+                "inputs": {
+                  "limit": {
+                    "runtime": "transactionLimit"
+                  },
+                  "amount": {
+                    "runtime": "amountIn"
+                  },
+                  "scale": {
+                    "runtime": "scale"
+                  }
+                },
+                "outputs": {
+                  "limitValue": "limitValue",
+                  "scaledAmount": "scaledAmount"
+                },
+                "checks": [
+                  {
+                    "left": {
+                      "runtime": "limitValue"
+                    },
+                    "operator": "gte",
+                    "right": {
+                      "runtime": "scaledAmount"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "id": "remainingCapacity",
+              "static": true,
+              "call": {
+                "target": "$target",
+                "signature": "function getRemainingBlockCapacity() view returns(uint256)",
+                "args": [],
+                "save": {
+                  "remainingCapacity": 0
+                },
+                "checks": [
+                  {
+                    "left": {
+                      "runtime": "remainingCapacity"
+                    },
+                    "operator": "gte",
+                    "right": {
+                      "runtime": "scaledAmount"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "result": {
+            "runtime": "receipt"
+          }
+        }
+      },
+      "meta": {
+        "sourceFamily": "psv",
+        "migrationKey": "typed:psv:buyGem",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    }
+  ]
+}

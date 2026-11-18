@@ -1,11 +1,12 @@
 import { classifyDeclarativeBytecodeGetter } from "./declarative-bytecode.js";
+import { encodePackedByteSlices } from "./declarative-byte-layout.js";
 import { executorFromObservedSimulation, decodeDeclarativeExecutionSimulationReceipt } from "./declarative-simulation.js";
-import { AbiCoder, Interface, getAddress, getCreate2Address, keccak256, ZeroAddress } from "ethers";
+import { AbiCoder, Interface, getAddress, getCreate2Address, keccak256, solidityPackedKeccak256, ZeroAddress } from "ethers";
 import type { AdapterRequestResult } from "./adapter-request-program.js";
 import { RequiredAdapterRequestError } from "./adapter-request-failure.js";
 import { hashCanonical } from "./canonical-value.js";
 import { assertSameSource, assertSource, effectsProjection, returnedResult, requireRuntimeCode,
-  tokenDeltaAtLeast, totalSupplyDeltaAtLeast, sameAddress } from "./protocols/standard-family/common.js";
+  tokenDeltaAtLeast, totalSupplyDeltaAtLeast, sameAddress } from "./selector-execution-evidence.js";
 
 // Closed, bounded JSON operations shared by Family identity, pricing and execution
 // compilation. Definitions cannot import code or perform transport/IO.
@@ -20,9 +21,11 @@ export interface DeclarativeValuesDocument {
   readonly expressions: Record<string, Value>;
   readonly programs?: Record<string, readonly Value[]>;
 }
-const ops = new Set(["abiEncode", "create2Address", "decodeErrorCanonical", "bytecodeGetter", "simulationActor", "programReceipt", "mul", "max", "program", "number", "lower", "unique", "decodeAll", "decodeCanonical", "pow", "successful", "word", "bool", "objectEntries", "objectFromEntries", "uint", "address", "sameAddress", "hash", "codeHash", "get", "defined", "not", "and", "or", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "if", "merge", "omit", "concat", "map", "flatMap", "filter", "some", "every", "at", "length", "string", "join", "sortId", "result", "returned", "code", "decode", "encode", "shape", "wordSurface", "source", "assertSource", "effects", "tokenDelta", "supplyDelta", "event", "addressWord", "bytes", "maskHash", "matches", "expression", "math", "model", "requestFailure"]);
+const ops = new Set(["decodeEventCanonical", "chunks", "sumUint", "shrUint", "andUint", "signedWord", "packedHash", "abiEncode", "create2Address", "decodeErrorCanonical", "bytecodeGetter", "simulationActor", "programReceipt", "mul", "max", "program", "number", "lower", "unique", "decodeAll", "decodeCanonical", "pow", "successful", "word", "bool", "objectEntries", "objectFromEntries", "uint", "address", "sameAddress", "hash", "codeHash", "get", "defined", "not", "and", "or", "eq", "ne", "gt", "gte", "lt", "lte", "add", "sub", "div", "min", "coalesce", "if", "merge", "omit", "concat", "map", "flatMap", "filter", "some", "every", "at", "length", "string", "join", "sortId", "result", "returned", "code", "decode", "encode", "shape", "wordSurface", "source", "assertSource", "effects", "tokenDelta", "supplyDelta", "event", "addressWord", "bytes", "maskHash", "matches", "expression", "math", "model", "requestFailure"]);
 const arity: Record<string, [number, number]> = Object.fromEntries([
-  ["abiEncode", [2, 2]], ["create2Address", [3, 3]], ["decodeErrorCanonical", [3, 3]],
+  ["packedSlices", [4, 4]],
+  ["chunks", [2, 2]], ["sumUint", [1, 1]], ...["shrUint", "andUint", "signedWord", "packedHash"].map(k => [k, [2, 2]]),
+  ["abiEncode", [2, 2]], ["create2Address", [3, 3]], ["decodeErrorCanonical", [3, 3]], ["decodeEventCanonical", [3, 3]],
   ["simulationActor", [1, 1]], ["programReceipt", [1, 1]], ["mul", [2, 2]], ["max", [2, 2]],
   ...["number", "lower", "unique", "successful", "word", "bool", "objectEntries", "objectFromEntries"].map(k => [k, [1, 1]]), ["program", [2, 2]], ["pow", [2, 2]], ["bytecodeGetter", [2, 2]], ["decodeAll", [3, 3]], ["decodeCanonical", [3, 4]],
   ...["uint", "address", "hash", "codeHash", "defined", "not", "length", "string", "sortId", "result", "returned", "code", "shape", "wordSurface", "source", "effects", "tokenDelta", "supplyDelta", "event", "requestFailure"].map(k => [k, [1, 1]]),
@@ -31,6 +34,7 @@ const arity: Record<string, [number, number]> = Object.fromEntries([
   ["decode", [4, 4]], ["addressWord", [1, 2]],
   ...["and", "or", "merge", "concat"].map(k => [k, [1, 10000]]),
 ]) as Record<string, [number, number]>;
+ops.add("packedSlices");
 const reserved = new Set(["constants", "missing", "index"]);
 function binding(name: string): void {
   if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(name) || reserved.has(name) || forbidden.has(name)) throw new Error("invalid declarative binding");
@@ -141,6 +145,33 @@ export function compileDeclarativeValues(
         return x.op === "simulationActor" ? executorFromObservedSimulation(input) : decodeDeclarativeExecutionSimulationReceipt(input);
       }
       case "bytecodeGetter": return classifyDeclarativeBytecodeGetter(e(0), e(1));
+      case "sumUint": {
+        const items = e(0);
+        if (!Array.isArray(items) || items.length > 256) throw new Error("bounded uint sum requires an array");
+        let total = 0n;
+        for (const item of items) {
+          if (typeof item !== "bigint" || item < 0n || item >= 1n << 256n) throw new Error("uint sum input");
+          total += item;
+          if (total >= 1n << 256n) throw new Error("uint sum overflow");
+        }
+        return total;
+      }
+      case "shrUint": case "andUint": case "signedWord": {
+        const value = e(0), width = e(1);
+        if (typeof value !== "bigint" || value < 0n || value >= 1n << 256n ||
+            typeof width !== "bigint" || width < 0n || width >= 1n << 256n) throw new Error("unsigned bit operation");
+        if (x.op === "andUint") return value & width;
+        if (x.op === "shrUint") { if (width > 255n) throw new Error("bit shift bound"); return value >> width; }
+        if (width < 1n || width > 256n || value >= 1n << width) throw new Error("signed word width");
+        return BigInt.asIntN(Number(width), value);
+      }
+      case "packedHash": {
+        const types = e(0), items = e(1);
+        if (!Array.isArray(types) || !Array.isArray(items) || types.length !== items.length || types.length > 64 ||
+            types.some(type => typeof type !== "string" || type.length > 256)) throw new Error("packed hash ABI shape");
+        return solidityPackedKeccak256(types, items);
+      }
+      case "packedSlices": return encodePackedByteSlices({ prefixBits: e(0), offsetBits: e(1), prefix: e(2), slices: e(3) });
       case "uint": return BigInt(e(0));
       case "number": { const v = Number(e(0)); if (!Number.isSafeInteger(v)) throw new Error("unsafe declaration number"); return v; }
       case "lower": return String(e(0)).toLowerCase();
@@ -156,6 +187,21 @@ export function compileDeclarativeValues(
         const decoded = iface.decodeFunctionResult(fn, data);
         if (iface.encodeFunctionResult(fn, decoded).toLowerCase() !== data.toLowerCase()) throw new Error("noncanonical ABI return data");
         return args.length === 4 ? decoded[e(3)] : Array.from(decoded);
+      }
+      case "decodeEventCanonical": {
+        const iface = abi[e(0)], event = iface.getEvent(e(1)), log = e(2);
+        if (!event || !log || !Array.isArray(log.topics) || typeof log.data !== "string")
+          throw new Error("invalid event declaration input");
+        const decoded = iface.decodeEventLog(event, log.data, log.topics), encoded = iface.encodeEventLog(event, decoded);
+        if (encoded.data.toLowerCase() !== log.data.toLowerCase() || encoded.topics.length !== log.topics.length ||
+            encoded.topics.some((topic: string, index: number) => topic.toLowerCase() !== log.topics[index].toLowerCase()))
+          throw new Error("noncanonical ABI event data");
+        const out: Record<string, Value> = {};
+        event.inputs.forEach((parameter: {name:string}, index: number) => {
+          out[index] = decoded[index];
+          if (parameter.name && !forbidden.has(parameter.name)) out[parameter.name] = decoded[index];
+        });
+        return out;
       }
       case "decodeAll": return abi[e(0)].decodeFunctionResult(e(1), e(2));
       case "program": { const name = e(0); if (!Object.prototype.hasOwnProperty.call(doc.programs ?? {}, name)) throw new Error("unknown declaration program"); return runInternal(doc.programs![name], { ...env, ...e(1) }); }
@@ -199,6 +245,12 @@ export function compileDeclarativeValues(
       case "merge": return Object.assign({}, ...args.map((v: Value) => evaluateInternal(v, env)));
       case "omit": { const value = { ...e(0) }; for (const key of e(1)) delete value[key]; return value; }
       case "concat": return args.flatMap((v: Value) => evaluateInternal(v, env));
+      case "chunks": {
+        const rows = e(0), size = Number(e(1));
+        if (!Array.isArray(rows) || rows.length > 256 || !Number.isSafeInteger(size) || size < 1 || size > 8)
+          throw new Error("bounded collection chunk shape");
+        return Array.from({ length: Math.ceil(rows.length / size) }, (_, index) => rows.slice(index * size, (index + 1) * size));
+      }
       case "map": case "flatMap": case "filter": case "some": case "every": {
         const rows = e(0); if (!Array.isArray(rows)) throw new Error("collection expression requires array");
         if (rows.length > 10000) throw new Error("collection budget exceeded");

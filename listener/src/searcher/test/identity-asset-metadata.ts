@@ -7,7 +7,8 @@ import type { AdapterRequestResult } from "../venues/adapter-request-program.js"
 
 const source = { number: 7, hash: `0x${"12".repeat(32)}`, generation: 7 };
 const token = "0x0000000000000000000000000000000000000023";
-const ok = (id: string, data: string): AdapterRequestResult => ({ id, ok: true, completion: "returned", source, data });
+const ok = (id: string, data: string): AdapterRequestResult => ({ id, ok: true, completion: "returned", source, data,
+  provenance: { kind: "fixture", fingerprint: "metadata-unit-fixture" } });
 const declarations = [{ key: "in", kind: "native" }, { key: "out", kind: "erc20", address: token }] as const;
 const ercResults = () => [ok(identityAssetRequestId("out", "code"), "0x6000"),
   ok(identityAssetRequestId("out", "decimals"), ethers.toBeHex(6, 32))];

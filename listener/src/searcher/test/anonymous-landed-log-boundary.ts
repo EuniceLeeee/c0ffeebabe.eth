@@ -94,7 +94,7 @@ const family = {
       };
     },
   },
-} as unknown as SwapAdapter;
+} as unknown as SwapAdapter & Required<Pick<SwapAdapter, "landedEvents" | "observation">>;
 const eventRegistry = new LandedEventRegistry([family]);
 const discoveryRegistry = new LandedPoolDiscoveryRegistry(
   [family],

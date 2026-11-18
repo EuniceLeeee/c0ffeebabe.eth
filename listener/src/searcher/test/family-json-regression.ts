@@ -42,14 +42,17 @@ export interface RegressionPlan {
 
 export async function buildFamilyRegressionPlan(root = defaultRoot, scope: "json" | "installed" = "json"): Promise<RegressionPlan> {
   const entries = await syncDeclarativeProductionEntries({ rootDirectory: root, mode: "check" });
+  const installed = await getInstalledTransactionFamilies(), installedById = new Map(installed.map(family => [family.familyId, family]));
   const libraries = ["protocol", "swap"].map(domain => loadFamilyJsonSamples(
     resolve(root, `src/searcher/test/fixtures/${domain}-json/index.json`), domain as "protocol" | "swap"));
   const source = files(resolve(root, "src"));
   const tests = source.filter(path => relative(root, path).split("/").some(part => part === "test" || part === "tests"));
-  let families = [...entries.values()].filter(entry => entry.format !== "bindings-v1")
+  let families = [...entries.values()]
     .sort((a, b) => a.familyId.localeCompare(b.familyId)).map(entry => {
       const doc = json(entry.definitionFile);
-      const variants = [doc.standard, ...entry.childFiles.map(json)].map(({ id, lineageId }) => ({ id, lineageId }));
+      const family = installedById.get(entry.familyId);
+      assert(family, "selector definition is absent from the installed catalog");
+      const variants = family.lineages.map(lineageId => ({ id: lineageId, lineageId }));
       const summary = libraries.flatMap(library => library.summary).find(row => row.familyId === entry.familyId);
       const cases = libraries.flatMap(library => library.cases).filter(row => row.familyId === entry.familyId)
         .map(row => ({ id: relative(root, row.path), familyId: entry.familyId, file: relative(root, row.path), sha256: digest(readFileSync(row.path)) }));
@@ -60,7 +63,7 @@ export async function buildFamilyRegressionPlan(root = defaultRoot, scope: "json
     });
   if (scope === "installed") {
     const byId = new Map(families.map(family => [family.familyId, family]));
-    families = (await getInstalledTransactionFamilies()).map(family => {
+    families = installed.map(family => {
       const known = byId.get(family.familyId);
       if (known) return known;
       const entry = `src/searcher/venues/production-families/${family.sourceFile}`;

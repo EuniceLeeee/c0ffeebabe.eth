@@ -640,7 +640,7 @@ export class LandedPoolDiscoveryRegistry {
 
     for (const family of families) {
       const declaredEventIds = new Set(
-        family.landedEvents.swaps.map((event) => event.id),
+        family.landedEvents?.swaps.map((event) => event.id) ?? [],
       );
       const materializedEventIds = family.poolDiscovery?.eventIds ?? [];
       if (

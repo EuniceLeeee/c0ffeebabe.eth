@@ -449,7 +449,8 @@ class ContinuationReplay {
       }
       for (const key of edit.tokenRemovals) this.byToken.delete(key);
       for (const [key, ref] of edit.tokenUpdates) this.byToken.set(key, ref);
-      this.effective = { source: edit.source, reference: edit.reference, referenceWethInput: edit.referenceWethInput,
+      this.effective = { source: edit.source, maxInputPathHops: edit.maxInputPathHops,
+        reference: edit.reference, referenceWethInput: edit.referenceWethInput,
         wallMs: edit.wallMs, complete: true, rows: this.rows };
     } else assert(sameSource(delta.source, delta.previous), "missing effective delta");
     for (const id of delta.disabled) this.disabled.add(id);
@@ -476,7 +477,7 @@ class ContinuationReplay {
       pricing: { ...previous, sourceBlock: at.number, sourceBlockHash: at.hash, generation: at.generation,
         graph: { ...previous.graph, sourceBlock: at.number, sourceBlockHash: at.hash, generation: at.generation },
         effectiveMids: this.effective },
-      lineage: { version: 1, weth: this.base.pricing.lineage.weth, references,
+      lineage: { version: 1, source: at, weth: this.base.pricing.lineage.weth, maxInputPathHops: this.effective.maxInputPathHops, references,
         byToken: [...this.byToken].map(([key, ref]) => [key, id(ref)]),
         byRow: [...this.byRow].map(([key, ref]) => [key, id(ref)]) }, disabledInstances: [...this.disabled] },
       startup: { version: 1, rows: [...this.startup] },

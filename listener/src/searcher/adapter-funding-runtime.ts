@@ -1,6 +1,8 @@
 import { ethers } from "ethers";
 import {
   executeAdapterWork,
+  assertAdapterWorkControl,
+  type AdapterWorkOutcome,
   type AdapterWorkControl,
   type AdapterWorkReceipt,
   type CentralAdapterRuntime,
@@ -11,11 +13,13 @@ import {
 } from "./venues/adapter-family-identifiers.js";
 import {
   assertDefinedFamilyPlugin,
+  collectRequestProgramResults,
+  type FundingExecutionBinding,
   type FundingFamilyPlugin,
   type FundingOfferDescriptor,
   type FundingSourceDescriptor,
 } from "./venues/adapter-family-plugin.js";
-import type { CanonicalSource } from
+import type { AdapterRequest, AdapterRequestResult, RequestProgram, CanonicalSource } from
   "./venues/adapter-request-program.js";
 import {
   assertIssuedLoadedFamilyBox,
@@ -37,6 +41,11 @@ export interface PreparedFundingOffer {
   readonly asset: string;
   readonly maxBorrow: bigint;
   readonly fee: bigint;
+  readonly feeRate?: bigint;
+  readonly feeScale?: bigint;
+  readonly binding?: FundingExecutionBinding;
+  readonly liquidityHolder?: string;
+  readonly liquidityResourceKey?: string;
   readonly actionAdapterId: string;
   readonly planningPriority: number;
   readonly liquidityPriority: number;
@@ -105,6 +114,7 @@ export interface FundingFamilyRuntimeResult {
 export async function executeFundingFamilyLiquidity(input: {
   readonly family: LoadedFamilyBox;
   readonly assets: readonly string[];
+  readonly bindings?: readonly FundingExecutionBinding[];
   readonly source: CanonicalSource;
   readonly generation: number;
   readonly runtime: CentralAdapterRuntime;
@@ -120,7 +130,7 @@ export async function executeFundingFamilyLiquidity(input: {
   const assets = canonicalAssets(input.assets);
   let sources: readonly FundingSourceDescriptor[];
   try {
-    const declaredSources = plugin.funding.liquidity.sources(assets);
+    const declaredSources = plugin.funding.liquidity.sources(assets, input.bindings === undefined ? undefined : snapshotAndFreeze(input.bindings, "Funding bindings"));
     if (!Array.isArray(declaredSources)) {
       throw new Error("Funding sources() must return an array");
     }
@@ -263,42 +273,63 @@ async function executeFundingSource(input: {
     sources: Object.freeze([input.fundingSource]),
     source: Object.freeze({ ...input.source }),
   });
-  const work = await executeAdapterWork({
-    intent: {
-      stage: "pricing-current",
-      familyId,
-      // A provider can expose one independently failing balance source per
-      // asset. Bind central fairness/cancellation to that source state key,
-      // not to the provider-wide instance key shared by every asset.
-      instanceKey: instanceKey(input.fundingSource.stateKey),
-      source: input.source,
-      generation: input.generation,
-      program: input.plugin.funding.liquidity.program,
-      programInput,
-    },
-    runtime: input.runtime,
-    ...(input.control === undefined ? {} : { control: input.control }),
+  const program = input.plugin.funding.liquidity.program;
+  const terminal = (reasonCode: string, receipt: AdapterWorkReceipt | null = null) => Object.freeze({
+    offers: Object.freeze([]) as readonly PreparedFundingOffer[],
+    outcome: freezeOutcome({ ...sourceOutcomeBase(familyId, input.fundingSource, input.source),
+      status: "unresolved", reasonCode, workReceipt: receipt, trustedResultsFingerprint: null, evidenceRefs: Object.freeze([]) }),
   });
-  if (work.status === "unresolved") {
-    return Object.freeze({
-      offers: Object.freeze([]),
-      outcome: freezeOutcome({
-        ...sourceOutcomeBase(familyId, input.fundingSource, input.source),
-        status: "unresolved",
-        reasonCode: `adapter-work:${work.failure.stage}:${work.failure.code}`,
-        workReceipt: work.receipt,
-        trustedResultsFingerprint: null,
-        evidenceRefs: Object.freeze([]),
-      }),
-    });
-  }
+  const seenIds = new Set<string>();
+  const uniqueRequests = (requests: readonly AdapterRequest[]) => {
+    for (const request of requests) {
+      if (seenIds.has(request.id)) throw new Error(`Funding duplicate request id: ${request.id}`);
+      seenIds.add(request.id);
+    }
+    return requests;
+  };
+  const assertCurrent = () => { assertAdapterWorkControl(input.control); input.runtime.generationFence.assertCurrent(input.generation, input.source); };
+  const run = <T>(roundProgram: RequestProgram<typeof programInput, T>) => executeAdapterWork({
+    intent: { stage: "pricing-current", familyId, instanceKey: instanceKey(input.fundingSource.stateKey),
+      source: input.source, generation: input.generation, program: roundProgram, programInput },
+    runtime: input.runtime, ...(input.control === undefined ? {} : { control: input.control }),
+  });
+  let work: AdapterWorkOutcome<readonly AdapterRequestResult[]>;
+  try {
+    work = await run({ requirements: current => program.requirements(current),
+      buildRequests: current => uniqueRequests(program.buildRequests(current)), decode: ({ results }) => Object.freeze([...results]) });
+  } catch (error) { return terminal(`adapter-work:${errorMessage(error)}`); }
+  if (work.status === "unresolved") return terminal(`adapter-work:${work.failure.stage}:${work.failure.code}`, work.receipt);
+  const initialResults = work.executed.evidence;
+  const priorEvidence: unknown[] = [];
+  const evidenceRefs = [`funding-transport:${work.executed.trustedResultsFingerprint}`];
+  let decodedEvidence: unknown;
+  try {
+    for (let completedRound = 0; ; completedRound++) {
+      assertCurrent();
+      const bound = program.buildDependentProgram?.({ programInput, completedRound, initialResults, priorEvidence: Object.freeze([...priorEvidence]) }) ?? null;
+      assertCurrent();
+      if (bound === null) break;
+      if (completedRound >= 4) return terminal("adapter-work:dependent-read-round-budget-exhausted", work.receipt);
+      const round = await run({ requirements: () => bound.requirements, buildRequests: () => uniqueRequests(bound.requests), decode: ({ results }) => bound.decode(results) });
+      if (round.status === "unresolved") return terminal(`adapter-work:${round.failure.stage}:${round.failure.code}`, round.receipt);
+      const results = collectRequestProgramResults([], [round.executed.evidence]);
+      if (results.length !== round.executed.trustedResults.length || results.some((result, index) => result !== round.executed.trustedResults[index])) {
+        throw new Error("Funding dependent evidence must preserve issued request results");
+      }
+      priorEvidence.push(round.executed.evidence);
+      evidenceRefs.push(`funding-transport:${round.executed.trustedResultsFingerprint}`);
+    }
+    assertCurrent();
+    decodedEvidence = program.decode({ programInput, results: collectRequestProgramResults(initialResults, priorEvidence) });
+    assertCurrent();
+  } catch (error) { return terminal(`adapter-work:funding-read:${errorMessage(error)}`, work.receipt); }
+  const trustedResultsFingerprint = ethers.keccak256(ethers.toUtf8Bytes(evidenceRefs.join("\n")));
 
-  const evidenceRef = `funding-transport:${work.executed.trustedResultsFingerprint}`;
   let declared: readonly FundingOfferDescriptor[];
   let deriveEvidence: unknown;
   try {
     deriveEvidence = snapshotAndFreeze(
-      work.executed.evidence,
+      decodedEvidence,
       "Funding derive evidence",
     );
     const derived = input.plugin.funding.liquidity.deriveOffers({
@@ -322,8 +353,8 @@ async function executeFundingSource(input: {
         status: "failed",
         reasonCode: `funding-derive:${errorMessage(error)}`,
         workReceipt: work.receipt,
-        trustedResultsFingerprint: work.executed.trustedResultsFingerprint,
-        evidenceRefs: Object.freeze([evidenceRef]),
+        trustedResultsFingerprint,
+        evidenceRefs: Object.freeze(evidenceRefs),
       }),
     });
   }
@@ -334,7 +365,7 @@ async function executeFundingSource(input: {
       deriveEvidence,
       source: input.source,
       generation: input.generation,
-      evidenceRefs: [evidenceRef],
+      evidenceRefs,
     })
   ));
   return Object.freeze({
@@ -346,8 +377,8 @@ async function executeFundingSource(input: {
         ? "funding-no-offer"
         : "funding-offer-derived",
       workReceipt: work.receipt,
-      trustedResultsFingerprint: work.executed.trustedResultsFingerprint,
-      evidenceRefs: Object.freeze([evidenceRef]),
+      trustedResultsFingerprint,
+      evidenceRefs: Object.freeze(evidenceRefs),
     }),
   });
 }
@@ -381,6 +412,14 @@ function assertFundingSources(
     ] as const) canonicalString(value, `Funding source ${label}`);
     ethers.getAddress(source.provider);
     const asset = ethers.getAddress(source.asset);
+    if (source.binding !== undefined) {
+      if (ethers.getAddress(source.binding.provider) !== ethers.getAddress(source.provider) ||
+          ethers.getAddress(source.binding.asset) !== asset || source.liquidityHolder === undefined || source.liquidityResourceKey === undefined) {
+        throw new Error("Funding source resource binding differs");
+      }
+      ethers.getAddress(source.liquidityHolder);
+      canonicalString(source.liquidityResourceKey, "Funding liquidity resource key");
+    }
     if (!assetSet.has(asset.toLowerCase())) {
       throw new Error(`Funding source ${source.fundingId} invented asset ${asset}`);
     }
@@ -423,6 +462,12 @@ function assertDerivedOffers(
     !ownedActionIds.includes(offer.actionAdapterId) ||
     typeof offer.maxBorrow !== "bigint" || offer.maxBorrow < 0n ||
     typeof offer.fee !== "bigint" || offer.fee < 0n ||
+    offer.feeRate !== undefined && (typeof offer.feeRate !== "bigint" || offer.feeRate < 0n) ||
+    offer.feeScale !== undefined && (typeof offer.feeScale !== "bigint" || offer.feeScale <= 0n) ||
+    (offer.feeRate === undefined) !== (offer.feeScale === undefined) ||
+    offer.feeRate !== undefined && offer.feeScale !== undefined && offer.feeRate > offer.feeScale ||
+    JSON.stringify(offer.binding) !== JSON.stringify(source.binding) ||
+    offer.liquidityHolder !== source.liquidityHolder || offer.liquidityResourceKey !== source.liquidityResourceKey ||
     !Number.isFinite(offer.planningPriority) ||
     !Number.isFinite(offer.liquidityPriority)
   ) {
@@ -451,6 +496,11 @@ function issuePreparedFundingOffer(input: {
     asset: input.offer.asset,
     maxBorrow: input.offer.maxBorrow,
     fee: input.offer.fee,
+    ...(input.offer.binding === undefined ? {} : { binding: input.offer.binding }),
+    ...(input.offer.liquidityHolder === undefined ? {} : { liquidityHolder: input.offer.liquidityHolder }),
+    ...(input.offer.liquidityResourceKey === undefined ? {} : { liquidityResourceKey: input.offer.liquidityResourceKey }),
+    ...(input.offer.feeRate === undefined ? {} : { feeRate: input.offer.feeRate }),
+    ...(input.offer.feeScale === undefined ? {} : { feeScale: input.offer.feeScale }),
     actionAdapterId: input.offer.actionAdapterId,
     planningPriority: input.offer.planningPriority,
     liquidityPriority: input.offer.liquidityPriority,
@@ -522,7 +572,8 @@ function assertPreparedFundingOfferMetadata(
     handle.fundingId !== raw.fundingId ||
     handle.asset !== raw.asset ||
     handle.maxBorrow !== raw.maxBorrow ||
-    handle.fee !== raw.fee ||
+    handle.fee !== raw.fee || handle.feeRate !== raw.feeRate || handle.feeScale !== raw.feeScale ||
+    handle.binding !== raw.binding || handle.liquidityHolder !== raw.liquidityHolder || handle.liquidityResourceKey !== raw.liquidityResourceKey ||
     handle.actionAdapterId !== raw.actionAdapterId ||
     handle.planningPriority !== raw.planningPriority ||
     handle.liquidityPriority !== raw.liquidityPriority ||
@@ -552,6 +603,11 @@ function snapshotFundingOffers(
     asset: ethers.getAddress(offer.asset),
     maxBorrow: offer.maxBorrow,
     fee: offer.fee,
+    ...(offer.binding === undefined ? {} : { binding: snapshotAndFreeze(offer.binding, "Funding offer binding") }),
+    ...(offer.liquidityHolder === undefined ? {} : { liquidityHolder: offer.liquidityHolder }),
+    ...(offer.liquidityResourceKey === undefined ? {} : { liquidityResourceKey: offer.liquidityResourceKey }),
+    ...(offer.feeRate === undefined ? {} : { feeRate: offer.feeRate }),
+    ...(offer.feeScale === undefined ? {} : { feeScale: offer.feeScale }),
     actionAdapterId: canonicalString(
       offer.actionAdapterId,
       "Funding offer actionAdapterId",

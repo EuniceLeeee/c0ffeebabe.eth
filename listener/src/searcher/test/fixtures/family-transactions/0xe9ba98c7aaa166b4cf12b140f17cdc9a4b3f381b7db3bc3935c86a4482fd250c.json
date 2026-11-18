@@ -29,9 +29,10 @@
           "jsonPointer": "/observed"
         },
         {
-          "file": "listener/src/searcher/venues/swaps/ammalgam-family/manifest.ts",
+          "file": "listener/src/searcher/test/fixtures/family-source-snapshots/91d3e54db0e1b4c038f1cd06f48f6290c7e76fa45af79a76ab71b706682329b0.txt",
           "sha256": "91d3e54db0e1b4c038f1cd06f48f6290c7e76fa45af79a76ab71b706682329b0",
-          "jsonPointer": ""
+          "jsonPointer": "",
+          "originalFile": "listener/src/searcher/venues/swaps/ammalgam-family/manifest.ts"
         }
       ]
     }

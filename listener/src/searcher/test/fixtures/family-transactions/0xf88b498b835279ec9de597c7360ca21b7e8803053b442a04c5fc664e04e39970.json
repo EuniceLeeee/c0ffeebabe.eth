@@ -33,9 +33,10 @@
           "jsonPointer": ""
         },
         {
-          "file": "listener/src/searcher/venues/credit/fluid-family/fluid.json",
-          "sha256": "76235fe5778479cdbb500b773a1ef5f70f909ac19884ccda140a4f6cbf126dac",
-          "jsonPointer": ""
+          "file": "listener/src/searcher/test/fixtures/family-source-snapshots/5c9ad2e91978078d38a1a2de3fd0ecab44dad825a05c6d1ae71655c99a76928b.txt",
+          "sha256": "5c9ad2e91978078d38a1a2de3fd0ecab44dad825a05c6d1ae71655c99a76928b",
+          "jsonPointer": "",
+          "originalFile": "listener/src/searcher/venues/credit/fluid-family/fluid.json"
         }
       ],
       "credit": {

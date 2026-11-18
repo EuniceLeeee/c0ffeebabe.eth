@@ -7,11 +7,10 @@ export type AcceptanceFamilyDomain = "protocol" | "swap" | "credit";
  * installed manifest. Omission preserves existing Protocol case documents. */
 export function acceptanceFamilyDomain(familyId: unknown, domain: unknown = "protocol"): AcceptanceFamilyDomain {
   if ((domain !== "protocol" && domain !== "swap" && domain !== "credit") ||
-      typeof familyId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(familyId) ||
-      (domain === "credit" ? !/^credit:[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(familyId)
-        : domain === "protocol" ? !/^protocol:[a-zA-Z0-9][a-zA-Z0-9:._-]*$/.test(familyId)
-        : /^(protocol|credit|funding):/.test(familyId)))
-    throw new Error("acceptance case must select the declared Swap, Protocol or Credit Family domain");
+      typeof familyId !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9._-]*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)*$/.test(familyId))
+    throw new Error("acceptance case must select a valid opaque Family key and Swap, Protocol or Credit domain");
+  // Only the installed manifest owns domain semantics. Execution selector IDs
+  // intentionally do not encode a protocol name or its historical prefix.
   return domain as AcceptanceFamilyDomain;
 }
 

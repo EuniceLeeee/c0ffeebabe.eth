@@ -64,7 +64,7 @@ import { BlockScanPoolRevertAttributor, poolRevertFilterEnabled } from "./blocks
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
 import {
   buildEffectiveMids, createEffectiveQuoteSessions, effectiveMidPairStatistics, effectiveMidRowCarried,
-  MAX_EFFECTIVE_INPUT_PATH_HOPS, resolveEffectiveAmountCascade, type EffectiveMidSnapshot,
+  resolveEffectiveInputPathHops, resolveEffectiveAmountCascade, type EffectiveMidSnapshot,
 } from "./blockscan-effective-mid.js";
 import { effectiveEthPricing, organizeEffectivePricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
 import { parseBlockScanObservedHeader, readBlockScanObservedHeader } from "./blockscan-observed-header.js";
@@ -904,11 +904,12 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
         throw new Error("single funding selection lacks a verified token source");
       if (funding !== undefined) input.record?.({ source, workerIndex, event: {
         type: "funding_selected", searchId, token: fundingToken,
-        fundingActionId: funding.adapterId, maxBorrow: funding.amount, policy: "max-borrow-per-token",
+        fundingActionId: funding.adapterId, fundingId: funding.fundingId, maxBorrow: funding.amount, policy: "max-borrow-per-token",
       } });
       const selector = createBlockScanSimAmountSelector({
         source, executor: input.executor, runTrial,
         fundingActionId: funding?.adapterId,
+        fundingId: funding?.fundingId,
         async simulate(candidate, control) {
           const sim = await simulate(candidate, control);
           if (p > 0n && candidate.flashAmount === p) pTrials.push({ plan: candidate, sim });
@@ -1138,6 +1139,7 @@ export function createLiveRuntimeStop({ runtimeAbort, emitFatal, exit }: {
 
 /** Production dependency factory, separate from the prepared live backend. */
 export function createLiveSourceSimulationFactory(input: {
+  readonly tracePolicy?: "allow" | "forbid";
   readonly rpcUrl: string;
   readonly chainId: number;
   readonly allowExecutorCodeOverride?: boolean;
@@ -1151,6 +1153,9 @@ export function createLiveSourceSimulationFactory(input: {
   readonly executorRuntimeCode?: Parameters<typeof createRevmStrictSourceSimulation>[0]["executorRuntimeCode"];
 }): SourceSimulationFactory {
   const { rpcUrl, chainId, timeoutMs, runtimeAbort, onFatal, createClient } = input;
+  const configuredTracePolicy = input.tracePolicy ?? process.env.SEARCHER_SIMULATION_TRACE_POLICY;
+  if (configuredTracePolicy !== undefined && configuredTracePolicy !== "allow" && configuredTracePolicy !== "forbid")
+    throw new Error("SEARCHER_SIMULATION_TRACE_POLICY must be allow or forbid");
   const fundingCache = createNodeFundingCache();
   if (!Number.isSafeInteger(chainId) || chainId <= 0 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error("invalid strict simulation chain or timeout");
@@ -1166,7 +1171,8 @@ export function createLiveSourceSimulationFactory(input: {
       // the unrelated profit-cost estimate or a construction-time caller.
       executionGasLimit: 0x1000000,
       createClient: createClient ?? (() => new NodeStrictClient({ timeoutMs, scheduler: input.scheduler,
-        executor: input.executor, executorRuntimeCode: input.executorRuntimeCode, allowExecutorCodeOverride: input.allowExecutorCodeOverride, fundingCache })),
+        executor: input.executor, executorRuntimeCode: input.executorRuntimeCode, allowExecutorCodeOverride: input.allowExecutorCodeOverride,
+        tracePolicy: configuredTracePolicy ?? "forbid", fundingCache })),
       onFatal(reason) {
         if (reason.kind === "rpc-throttle" && onRpcThrottle !== undefined) {
           // The strict source slot is already fenced and owns its drain.
@@ -1195,7 +1201,7 @@ export function createBlockScanPriceRuntime(input: {
   blockScanCfg: BlockScanCoreConfig | undefined;
   /** The same run-local, attributed-pool predicate used by enumeration. */
   isPoolSimRejected: (edge: TokenEdge) => boolean;
-  startupExecutionPreflight?: Pick<StartupExecutionPreflight, "run" | "reset">;
+  startupExecutionPreflight?: Pick<StartupExecutionPreflight, "run" | "reset"> & Partial<Pick<StartupExecutionPreflight, "quoteEffective">>;
   recordPricing: (publication: import("./strict-current-runtime-coordinator.js").StrictPricingPublication) => void;
 }) {
   const { provider, strictRuntimeRoot, blockScanRuntimeAbort,
@@ -1421,9 +1427,10 @@ export function createBlockScanPriceRuntime(input: {
           strictSessionFor({ purpose: "exact-execution", source, simulationTransport,
             control: effectiveControl, fundingAssets: [], requiredEdgeIds,
             exactCallBackend: pricingBackend ?? ownedBackend! }));
-        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} samplingSource=effective-forward maxInputPathHops=${MAX_EFFECTIVE_INPUT_PATH_HOPS} cascadeAmountChanges=${cascadeAmountChanges}`);
+        const maxInputPathHops = resolveEffectiveInputPathHops();
+        console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} samplingSource=effective-forward maxInputPathHops=${maxInputPathHops} cascadeAmountChanges=${cascadeAmountChanges}`);
         const build = (previous: EffectiveMidSnapshot | undefined, touchedStateKeys: ReadonlySet<string> | undefined) =>
-          buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH,
+          buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH, maxInputPathHops,
           fixedWethInput: input.fixedEffectiveWethInput,
           cascadeAmountChanges,
           previous, touchedStateKeys, disabledEdgeIds: disabledEdgeIds(),
@@ -1440,11 +1447,24 @@ export function createBlockScanPriceRuntime(input: {
             const startedAtMs = Date.now();
             let status = "failed";
             try {
+              // Startup already executes the funded prefix and target. Its
+              // authenticated target receipt is both the execution check and
+              // this price sample; do not quote and then execute it again.
+              const simulated = await input.startupExecutionPreflight?.quoteEffective?.({
+                edge: request.edge, amountIn: request.amountIn, source,
+                reference: request.reference, maxInputPathHops,
+                edges: quoteEdges, control: effectiveControl,
+                prepareQuote: sessions.prepareQuote, sessionFor: sessions.sessionFor,
+              });
+              if (simulated !== undefined) { status = "simulated"; return simulated; }
+              if (request.edge.executionVerification === "startup-simulation") {
+                throw Object.assign(new Error("effective execution simulation unavailable"), { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" });
+              }
               const quote = await session.issueExact({ ...request,
                 executor: config.botvmAddress, runtimeEvidence: [] });
               if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
               status = "returned";
-              return quote;
+              return { ...quote, pricingMethod: "exact" as const };
             } finally {
               try {
                 if (process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1" && reuse?.previous !== undefined) {
@@ -1473,7 +1493,7 @@ export function createBlockScanPriceRuntime(input: {
         }
         console.log(`[searcher/effective-mid] ${JSON.stringify({
           sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
-          samplingSource: "effective-forward", maxInputPathHops: MAX_EFFECTIVE_INPUT_PATH_HOPS, reference: effective.reference,
+          samplingSource: "effective-forward", maxInputPathHops: effective.maxInputPathHops, reference: effective.reference,
           referenceWethInput: effective.referenceWethInput.toString(),
           complete: effective.complete, wallMs: effectiveBuildWallMs,
           startupExecutionAndInvalidationMs: Date.now() - preflightStarted,
@@ -1582,10 +1602,11 @@ export async function initializeReadyProducer({
     path: universeRebuildCheckpointPath,
   });
   let rebuildEnvelope = await rebuildStore.load();
+  const selectorCensus = rebuildEnvelope?.inProgressRun?.selectorCensus ?? rebuildEnvelope?.readyGeneration?.selectorCoverage?.transactions;
   const rebuildWiring = createRebuildWiring({
     ruleCompatibility: await readyRuleCompatibilityFor(rebuildEnvelope?.readyGeneration?.ruleBindings),
     rpcUrl,
-    startupCandidates,
+    ...(selectorCensus === undefined ? { startupCandidates } : { selectorCensus }),
     executionIdentity,
     onSimulationFatal,
   });
@@ -1605,7 +1626,7 @@ export async function initializeReadyProducer({
   } else {
     let options: Pick<RebuildUniverseInput, "runId" | "observationRange" | "observationWindowBlocks" |
       "resumeCompletedOutcomes"> & Partial<Pick<RebuildUniverseInput, "freezeCanonicalHead">>;
-    if (useReadyGeneration) {
+    if (useReadyGeneration || selectorCensus !== undefined) {
       const { cutoff, ...reviewPlan } = readyStartupReviewPlan(rebuildEnvelope,
         process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID);
       options = { ...reviewPlan, freezeCanonicalHead: async (requestedBlock) => {
@@ -1668,7 +1689,7 @@ export async function initializeReadyProducer({
   }
   const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
   const liveFamilyIds = liveSubset
-    ? PRODUCTION_FAMILY_ACTIVATIONS.filter(row => row.enabled).map(row => String(row.familyId)).sort()
+    ? PRODUCTION_FAMILY_ACTIVATIONS.filter(row => row.enabled && rebuildWiring.isFamilyEnabled?.(String(row.familyId)) !== false).map(row => String(row.familyId)).sort()
     : undefined;
   const liveIds = liveFamilyIds && new Set(liveFamilyIds);
   if (liveFamilyIds) {
@@ -1711,6 +1732,7 @@ export async function initializeReadyProducer({
       readonly familyId: string;
       readonly instanceKey: string;
       readonly asset: string;
+      readonly bindings: readonly import("./venues/adapter-family-plugin.js").FundingExecutionBinding[];
     }
   );
   if (
@@ -1726,8 +1748,8 @@ export async function initializeReadyProducer({
     rebuildWiring.assertReadyGraphSnapshot!({ publications, graphSnapshot: readyUniverse.graphSnapshot,
       cutoff: readyUniverse.cutoff });
   }
-  const flashTokens = Object.freeze([...new Set(fundingReadyEntries.map(
-    (entry) => ethers.getAddress(entry.asset).toLowerCase(),
+  const flashTokens = Object.freeze([...new Set(fundingReadyEntries.flatMap(
+    entry => entry.bindings.map(binding => ethers.getAddress(binding.asset).toLowerCase()),
   ))].sort());
   if (flashTokens.length === 0) {
     throw new Error(
@@ -1755,10 +1777,9 @@ export async function initializeReadyProducer({
     readySource: readyUniverse.cutoff,
     readyGraph: graph,
     readyInstances,
-    readyFundingAssets: fundingReadyEntries.map((entry) => Object.freeze({
-      familyId: entry.familyId as never,
-      asset: entry.asset,
-    })),
+    readyFundingAssets: fundingReadyEntries.flatMap(entry => entry.bindings.map(binding => Object.freeze({
+      familyId: entry.familyId as never, asset: binding.asset, binding,
+    }))),
   });
   const graphViewCoordinator = new StrictReadyGraphViewCoordinator({
     catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
@@ -1768,6 +1789,7 @@ export async function initializeReadyProducer({
   const baseline = resolveProducerBaseline({ ready: readyUniverse, currentHead });
   return {
     runtimeRoot: strictRuntimeRoot,
+    selectorMode: readyUniverse.selectorCoverage !== undefined,
     liveFamilyIds,
     readyFingerprint: rebuildEnvelope.checkpointFingerprint,
     parentFamilyIds: liveFamilyIds ? Object.keys(readyUniverse.familyPartitions!).filter(id => readyUniverse.familyPartitions![id]!.enabled).sort() : undefined,
@@ -2545,7 +2567,7 @@ async function main(): Promise<void> {
   const {
     runtimeRoot: strictRuntimeRoot, graph: initialReadyGraph, liveFamilyIds, parentFamilyIds, readyFingerprint,
     graphViewCoordinator: strictReadyGraphViews, flashTokens,
-    instanceCount: readyInstanceCount, lineage: readyUniverse, baselineSummary,
+    instanceCount: readyInstanceCount, lineage: readyUniverse, baselineSummary, selectorMode,
   } = await initializeReadyProducer({
     universeRebuildCheckpointPath, rpcUrl: config.rpcUrl, startupCandidates,
     executionIdentity, onSimulationFatal, blindUseIncumbentReady,
@@ -3045,6 +3067,7 @@ async function main(): Promise<void> {
       ...executionIdentity, executorCode: ethers.keccak256(finalSimulationExecutorRuntimeCode?.code ??
         await provider.getCode(executionIdentity.executor)), rawExecutionEntry,
       fixedWethInput: blockScanStageSettings.fixedEffectiveWethInput?.toString() ?? null,
+      maxInputPathHops: resolveEffectiveInputPathHops(),
       spreadBps: blockScanCfg.minSpreadBps,
       cascade: resolveEffectiveAmountCascade(process.env.SEARCHER_BLOCKSCAN_EFFECTIVE_AMOUNT_CASCADE_ENABLED),
       ...(liveFamilyIds && { liveFamilyIds, readyFingerprint }),
@@ -3121,9 +3144,16 @@ async function main(): Promise<void> {
           },
           rebuild:(raw, old, touched, disabled) => buildEffectiveMids({ pricing:raw, quoteGraph:view(previous),
             previous:old,touchedStateKeys:touched,disabledEdgeIds:disabled,weth:ADDR.WETH,control,concurrency:1024,
+            maxInputPathHops:continuationContext.maxInputPathHops,
             fixedWethInput:blockScanStageSettings.fixedEffectiveWethInput,gasCostWei:blockScanAmountReference.estimateGasCost(source),
             enumerationSpreadBps:blockScanCfg.minSpreadBps,cascadeAmountChanges:continuationContext.cascade,
             prepareQuote:sessions.prepareQuote,quote:async request=>{
+              const simulated = await startupExecutionPreflight.quoteEffective({ ...request, edges: view(previous).edges, control,
+                prepareQuote: sessions.prepareQuote, sessionFor: sessions.sessionFor });
+              if (simulated !== undefined) return simulated;
+              if (request.edge.executionVerification === "startup-simulation") {
+                throw Object.assign(new Error("effective execution simulation unavailable"), { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" });
+              }
               const quote=await sessions.sessionFor(request.edge).issueExact({...request,executor:executionIdentity.executor,runtimeEvidence:[]});
               if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
               return quote;

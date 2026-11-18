@@ -8,7 +8,6 @@ import "../../adapters/index.js";
 import { listAll } from "../../adapters/registry.js";
 import {
   STRICT_PROJECTED_FAMILY_TEST_REGISTRY,
-  STRICT_PROJECTED_FAMILY_TEST_MODULES,
 } from "./strict-family-test-compat.js";
 
 export interface FamilyOwnedActionBinding {
@@ -276,18 +275,6 @@ function productionFamilyRoots(
       path: imported.path,
     };
   });
-  for (const module of STRICT_PROJECTED_FAMILY_TEST_MODULES) {
-    roots.push({
-      binding: "productionFamilyModule",
-      imported: "productionFamilyModule.family",
-      id: module.family.id,
-      path: resolve(
-        LISTENER_ROOT,
-        "src/searcher/venues/production-families",
-        module.sourceFile,
-      ),
-    });
-  }
   if (canonicalJson(roots.map((root) => root.id)) !== canonicalJson(runtimeIds)) {
     throw new Error("family ownership registry AST/runtime order mismatch");
   }
@@ -372,20 +359,6 @@ function activeActionSources(
     throw new Error(
       `family ownership cannot resolve action catalog entry ${element.getText(index)}`,
     );
-  }
-  for (const module of STRICT_PROJECTED_FAMILY_TEST_MODULES) {
-    const entryPath = resolve(
-      LISTENER_ROOT,
-      "src/searcher/venues/production-families",
-      module.sourceFile,
-    );
-    for (const adapter of module.actionAdapters) {
-      bind(adapter.id, {
-        paths: [entryPath],
-        binding:
-          `${repoRelative(entryPath)}#productionFamilyModule.actionAdapters[${adapter.id}]`,
-      });
-    }
   }
   return sources;
 }

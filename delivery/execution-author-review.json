@@ -1,0 +1,909 @@
+{
+  "format": "selector-family-v2-execution-author-review/v1",
+  "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "reviewer": "selector_native_execution",
+  "status": "complete",
+  "schema": {
+    "format": "selector-family/v2",
+    "defaultFormat": "selector-family/v2",
+    "defaultDomain": "swap",
+    "singleProgramShorthand": true,
+    "legacyV1Rejected": true,
+    "metadataExcludedFromRuntimeHashes": true,
+    "bindingAndRoutesOptional": true,
+    "parameterResourceRoles": [
+      "poolId",
+      "tokenInId",
+      "tokenOutId"
+    ],
+    "simulationIsExecutionAndPriceAuthority": true,
+    "noObservationSwapSupported": true
+  },
+  "implementation": [
+    "Ordinary selector definitions and common execution runtime have no protocol-identity admission dependency.",
+    "SQL ABI arguments and uniquely attributed transfer hints nominate candidates; incomplete or conflicting token/resource data never becomes a verified edge.",
+    "Zero-read Ready binds executable parameters. Startup current-state funded simulation is still required to populate effective verified prices.",
+    "Optional receipt observation capability is absent for minimal swaps, rather than fabricated. Strict consumers accept that absence.",
+    "Simple execution derives payment, protected inventories, route direction, parameter binding keys and physical resources from declared roles and actual inputs.",
+    "Declared total-supply/account scopes are source-checked, exact and duplicate-free; actor funding remains restricted to the route input.",
+    "Execution rounding is central 0/1 raw-unit policy sealed in the descriptor/proof. Author JSON cannot override it."
+  ],
+  "typedMigration": {
+    "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+    "format": "selector-family/v2",
+    "executionRecipes": 68,
+    "executionSelectors": 22,
+    "sourceMappings": [
+      {
+        "sourceFiles": [
+          "listener/src/searcher/venues/protocols/yieldbasis-lt-family/execution.ts",
+          "listener/src/searcher/venues/protocols/yieldbasis-lt-family/deposit.ts"
+        ],
+        "functions": [
+          "withdraw(uint256,uint256)",
+          "withdraw(uint256,uint256,address)",
+          "deposit(uint256,uint256,uint256)",
+          "deposit(uint256,uint256,uint256,address)"
+        ],
+        "recipes": [
+          "yieldbasis-lt:withdraw:executor",
+          "yieldbasis-lt:withdraw:receiver",
+          "yieldbasis-lt:deposit:executor",
+          "yieldbasis-lt:deposit:receiver"
+        ],
+        "preserved": [
+          "four actual entry selectors and executor/explicit receiver settlement",
+          "exact caller asset debit and returned output/actual receipt equality",
+          "current cryptopool reserve-derived checked uint256 deposit debt",
+          "exact bool-checked approval and cleanup",
+          "stable/native/external inventory conservation",
+          "unique Deposit receipt matching actual assets and minted shares"
+        ],
+        "decisions": [
+          "no false totalSupply=userMint equality: the old LT can rebase staker shares",
+          "emergency_withdraw was already excluded: signed stable debt/output and a second caller asset are not silently converted to a one-input route"
+        ]
+      },
+      {
+        "sourceFiles": [
+          "listener/src/searcher/venues/swaps/balancer-v3-family/execution.ts",
+          "listener/src/searcher/venues/swaps/balancer-v3-family/action.ts",
+          "listener/src/searcher/venues/swaps/balancer-v3-family/discovery.ts"
+        ],
+        "functions": [
+          "swapSingleTokenExactIn(address,address,address,uint256,uint256,uint256,bool,bytes)"
+        ],
+        "recipes": [
+          "balancer-v3:router-exact-input"
+        ],
+        "preserved": [
+          "uint160 input width",
+          "token-to-Permit2 allowance and Permit2-to-router allowance cleared after execution",
+          "deadline and ERC20-mode/userData execution policy",
+          "pool/vault physical resource and Ready-bound Swap observation",
+          "actual output returned by router and fresh executor receipt"
+        ],
+        "decisions": [
+          "Vault.swap tuple ABI was discovery-only in fdb; Router owns unlock, Permit2 transfer, settle and sendTo. Retained as explicit non-entry, not counted as a lost Exact."
+        ]
+      },
+      {
+        "sourceFiles": [
+          "listener/src/searcher/venues/protocols/curve-lp-family/execution.ts"
+        ],
+        "functions": [
+          "lpProgram: two-coin base mint/redeem"
+        ],
+        "recipes": [
+          "curve-lp:stable-base:mint:0",
+          "curve-lp:stable-base:mint:1",
+          "curve-lp:stable-base:redeem"
+        ],
+        "preserved": [
+          "single nonzero fixed-array input",
+          "base return word equals fresh LP/coin receipt",
+          "bool-checked mint approval and cleanup",
+          "exact input debit and minimum output"
+        ]
+      },
+      {
+        "sourceFiles": [
+          "listener/src/searcher/venues/protocols/curve-lp-family/generic.ts",
+          "listener/src/searcher/venues/protocols/curve-lp-family/tricrypto-ng.ts"
+        ],
+        "functions": [
+          "genericRawProgram: fixed2/3/4 add",
+          "genericRawProgram: signed/unsigned one-coin remove",
+          "none/address/bool-address receivers"
+        ],
+        "recipes": [
+          "curve-lp:fixed2:none:mint:0",
+          "curve-lp:fixed2:none:mint:1",
+          "curve-lp:fixed2:receiver:mint:0",
+          "curve-lp:fixed2:receiver:mint:1",
+          "curve-lp:fixed2:booleanReceiver:mint:0",
+          "curve-lp:fixed2:booleanReceiver:mint:1",
+          "curve-lp:fixed3:none:mint:0",
+          "curve-lp:fixed3:none:mint:1",
+          "curve-lp:fixed3:none:mint:2",
+          "curve-lp:fixed3:receiver:mint:0",
+          "curve-lp:fixed3:receiver:mint:1",
+          "curve-lp:fixed3:receiver:mint:2",
+          "curve-lp:fixed3:booleanReceiver:mint:0",
+          "curve-lp:fixed3:booleanReceiver:mint:1",
+          "curve-lp:fixed3:booleanReceiver:mint:2",
+          "curve-lp:fixed4:none:mint:0",
+          "curve-lp:fixed4:none:mint:1",
+          "curve-lp:fixed4:none:mint:2",
+          "curve-lp:fixed4:none:mint:3",
+          "curve-lp:fixed4:receiver:mint:0",
+          "curve-lp:fixed4:receiver:mint:1",
+          "curve-lp:fixed4:receiver:mint:2",
+          "curve-lp:fixed4:receiver:mint:3",
+          "curve-lp:fixed4:booleanReceiver:mint:0",
+          "curve-lp:fixed4:booleanReceiver:mint:1",
+          "curve-lp:fixed4:booleanReceiver:mint:2",
+          "curve-lp:fixed4:booleanReceiver:mint:3",
+          "curve-lp:int128:none:redeem",
+          "curve-lp:int128:receiver:redeem",
+          "curve-lp:int128:booleanReceiver:redeem",
+          "curve-lp:uint256:none:redeem",
+          "curve-lp:uint256:receiver:redeem",
+          "curve-lp:uint256:booleanReceiver:redeem"
+        ],
+        "preserved": [
+          "all fixed ABI array lengths and one-input index directions",
+          "ordinary no-return variants",
+          "exact approval/allowance cleanup",
+          "native coin-WETH boundary and no external settlement on native sides",
+          "current actual SIM replaces analytical prices; Tricrypto admin-fee LP mint does not imply userMint=supplyDelta"
+        ]
+      },
+      {
+        "sourceFiles": [
+          "listener/src/searcher/venues/protocols/curve-lp-family/ng.ts"
+        ],
+        "functions": [
+          "ngProgram: dynamic 2..8-coin add",
+          "ngProgram: fixed2 meta add",
+          "ngProgram: signed one-coin remove"
+        ],
+        "recipes": [
+          "curve-lp:ng-fixed2:mint:0",
+          "curve-lp:ng-fixed2:mint:1",
+          "curve-lp:ng-dynamic:executor:mint:0",
+          "curve-lp:ng-dynamic:executor:mint:1",
+          "curve-lp:ng-dynamic:executor:mint:2",
+          "curve-lp:ng-dynamic:executor:mint:3",
+          "curve-lp:ng-dynamic:executor:mint:4",
+          "curve-lp:ng-dynamic:executor:mint:5",
+          "curve-lp:ng-dynamic:executor:mint:6",
+          "curve-lp:ng-dynamic:executor:mint:7",
+          "curve-lp:ng-dynamic:receiver:mint:0",
+          "curve-lp:ng-dynamic:receiver:mint:1",
+          "curve-lp:ng-dynamic:receiver:mint:2",
+          "curve-lp:ng-dynamic:receiver:mint:3",
+          "curve-lp:ng-dynamic:receiver:mint:4",
+          "curve-lp:ng-dynamic:receiver:mint:5",
+          "curve-lp:ng-dynamic:receiver:mint:6",
+          "curve-lp:ng-dynamic:receiver:mint:7",
+          "curve-lp:ng:redeem"
+        ],
+        "preserved": [
+          "positive spent<=requested, no old inventory, central 0/1 raw-unit remainder bound",
+          "positive actual output and bounded return/receipt rounding",
+          "receiver-side inventory guards",
+          "zero/set/clear allowance verification"
+        ],
+        "decisions": [
+          "index-specific parameter recipes prevent ABI dynamic-array directions from deduplicating before token metadata exists",
+          "central rounding is a sealed binding policy; JSON cannot enlarge it"
+        ]
+      },
+      {
+        "sourceFiles": [
+          "listener/src/searcher/venues/protocols/curve-lp-family/zap.ts"
+        ],
+        "functions": [
+          "zapProgram: four mint indices",
+          "zapProgram: one-coin redeem"
+        ],
+        "recipes": [
+          "curve-lp:zap:mint:0",
+          "curve-lp:zap:mint:1",
+          "curve-lp:zap:mint:2",
+          "curve-lp:zap:mint:3",
+          "curve-lp:zap:redeem"
+        ],
+        "preserved": [
+          "meta/base physical resources",
+          "real zap baseLP/output inventories must be zero before and after execution",
+          "caller baseLP and zap input inventory unchanged",
+          "LP total supply change equals actual mint/burn",
+          "baseLP supply direction/zero condition follows selected underlying index",
+          "actual output equals return and input is exact"
+        ]
+      },
+      {
+        "sourceFiles": [
+          "listener/src/searcher/venues/protocols/curve-lp-family/generic-effects.ts"
+        ],
+        "functions": [
+          "cryptoClaimProgram",
+          "decodeCryptoClaim"
+        ],
+        "recipes": [
+          "curve-lp:fee-claim:none:redeem",
+          "curve-lp:fee-claim:receiver:redeem",
+          "curve-lp:fee-claim:booleanReceiver:redeem"
+        ],
+        "preserved": [
+          "current fee receiver stable across execution and distinct from actors/pool/coins",
+          "per-coin pool debit equals actual fee receipt plus actual user output",
+          "exact LP supply burn and unchanged pool/fee LP inventories",
+          "canonical unique optional ClaimAdminFee and complete burn/fee/output Transfer sums",
+          "complete requested token/account/supply receipt scopes",
+          "external receiver inventory via nested independent register scopes"
+        ]
+      }
+    ],
+    "observedInterfaces": [
+      {
+        "selector": "0x2bfb780c",
+        "signature": "function swap((uint8 kind, address pool, address tokenIn, address tokenOut, uint256 amountGivenRaw, uint256 limitRaw, bytes userData) params) returns (uint256 amountCalculatedRaw, uint256 amountInRaw, uint256 amountOutRaw)",
+        "file": "listener/src/searcher/venues/selector-native/selector-2bfb780c-family/selector-2bfb780c.json",
+        "reason": "Observed Vault interface requires its caller's unlock/settle/sendTo transaction context. The fdb Exact encoder executes swapSingleTokenExactIn; no independent Vault-swap execution proof is claimed."
+      }
+    ],
+    "activationPolicy": "All three original typed families were disabled. New selector families remain disabled; appending to an existing selector preserves its prior activation.",
+    "entries": [
+      {
+        "selector": "0x441a3e70",
+        "signature": "function withdraw(uint256, uint256) returns (uint256)",
+        "sourceFamily": "yieldbasis-lt",
+        "recipe": "yieldbasis-lt:withdraw:executor",
+        "file": "listener/src/searcher/venues/selector-native/selector-441a3e70-family/selector-441a3e70.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0ad58d2f",
+        "signature": "function withdraw(uint256, uint256, address) returns (uint256)",
+        "sourceFamily": "yieldbasis-lt",
+        "recipe": "yieldbasis-lt:withdraw:receiver",
+        "file": "listener/src/searcher/venues/selector-native/selector-0ad58d2f-family/selector-0ad58d2f.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x00aeef8a",
+        "signature": "function deposit(uint256, uint256, uint256) returns (uint256)",
+        "sourceFamily": "yieldbasis-lt",
+        "recipe": "yieldbasis-lt:deposit:executor",
+        "file": "listener/src/searcher/venues/selector-native/selector-00aeef8a-family/selector-00aeef8a.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xfad3cc4b",
+        "signature": "function deposit(uint256, uint256, uint256, address) returns (uint256)",
+        "sourceFamily": "yieldbasis-lt",
+        "recipe": "yieldbasis-lt:deposit:receiver",
+        "file": "listener/src/searcher/venues/selector-native/selector-fad3cc4b-family/selector-fad3cc4b.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x750283bc",
+        "signature": "function swapSingleTokenExactIn(address pool, address tokenIn, address tokenOut, uint256 exactAmountIn, uint256 minAmountOut, uint256 deadline, bool wethIsEth, bytes userData) payable returns (uint256 amountOut)",
+        "sourceFamily": "balancer-v3",
+        "recipe": "balancer-v3:router-exact-input",
+        "file": "listener/src/searcher/venues/selector-native/selector-750283bc-family/selector-750283bc.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0b4c7e4d",
+        "signature": "function add_liquidity(uint256[2], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed2:none:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-0b4c7e4d-family/selector-0b4c7e4d.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0b4c7e4d",
+        "signature": "function add_liquidity(uint256[2], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed2:none:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-0b4c7e4d-family/selector-0b4c7e4d.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0b4c7e4d",
+        "signature": "function add_liquidity(uint256[2], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:stable-base:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-0b4c7e4d-family/selector-0b4c7e4d.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0b4c7e4d",
+        "signature": "function add_liquidity(uint256[2], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:stable-base:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-0b4c7e4d-family/selector-0b4c7e4d.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0c3e4b54",
+        "signature": "function add_liquidity(uint256[2], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed2:receiver:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-0c3e4b54-family/selector-0c3e4b54.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0c3e4b54",
+        "signature": "function add_liquidity(uint256[2], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed2:receiver:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-0c3e4b54-family/selector-0c3e4b54.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0c3e4b54",
+        "signature": "function add_liquidity(uint256[2], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-fixed2:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-0c3e4b54-family/selector-0c3e4b54.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0c3e4b54",
+        "signature": "function add_liquidity(uint256[2], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-fixed2:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-0c3e4b54-family/selector-0c3e4b54.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x7328333b",
+        "signature": "function add_liquidity(uint256[2], uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed2:booleanReceiver:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-7328333b-family/selector-7328333b.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x7328333b",
+        "signature": "function add_liquidity(uint256[2], uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed2:booleanReceiver:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-7328333b-family/selector-7328333b.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x4515cef3",
+        "signature": "function add_liquidity(uint256[3], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed3:none:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-4515cef3-family/selector-4515cef3.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x4515cef3",
+        "signature": "function add_liquidity(uint256[3], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed3:none:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-4515cef3-family/selector-4515cef3.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x4515cef3",
+        "signature": "function add_liquidity(uint256[3], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed3:none:mint:2",
+        "file": "listener/src/searcher/venues/selector-native/selector-4515cef3-family/selector-4515cef3.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x75b96abc",
+        "signature": "function add_liquidity(uint256[3], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed3:receiver:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-75b96abc-family/selector-75b96abc.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x75b96abc",
+        "signature": "function add_liquidity(uint256[3], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed3:receiver:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-75b96abc-family/selector-75b96abc.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x75b96abc",
+        "signature": "function add_liquidity(uint256[3], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed3:receiver:mint:2",
+        "file": "listener/src/searcher/venues/selector-native/selector-75b96abc-family/selector-75b96abc.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x5cecb5f7",
+        "signature": "function add_liquidity(uint256[3], uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed3:booleanReceiver:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-5cecb5f7-family/selector-5cecb5f7.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x5cecb5f7",
+        "signature": "function add_liquidity(uint256[3], uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed3:booleanReceiver:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-5cecb5f7-family/selector-5cecb5f7.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x5cecb5f7",
+        "signature": "function add_liquidity(uint256[3], uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed3:booleanReceiver:mint:2",
+        "file": "listener/src/searcher/venues/selector-native/selector-5cecb5f7-family/selector-5cecb5f7.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x029b2f34",
+        "signature": "function add_liquidity(uint256[4], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:none:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x029b2f34",
+        "signature": "function add_liquidity(uint256[4], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:none:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x029b2f34",
+        "signature": "function add_liquidity(uint256[4], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:none:mint:2",
+        "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x029b2f34",
+        "signature": "function add_liquidity(uint256[4], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:none:mint:3",
+        "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x029b2f34",
+        "signature": "function add_liquidity(uint256[4], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:zap:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x029b2f34",
+        "signature": "function add_liquidity(uint256[4], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:zap:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x029b2f34",
+        "signature": "function add_liquidity(uint256[4], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:zap:mint:2",
+        "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x029b2f34",
+        "signature": "function add_liquidity(uint256[4], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:zap:mint:3",
+        "file": "listener/src/searcher/venues/selector-native/selector-029b2f34-family/selector-029b2f34.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xcb495064",
+        "signature": "function add_liquidity(uint256[4], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:receiver:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-cb495064-family/selector-cb495064.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xcb495064",
+        "signature": "function add_liquidity(uint256[4], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:receiver:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-cb495064-family/selector-cb495064.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xcb495064",
+        "signature": "function add_liquidity(uint256[4], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:receiver:mint:2",
+        "file": "listener/src/searcher/venues/selector-native/selector-cb495064-family/selector-cb495064.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xcb495064",
+        "signature": "function add_liquidity(uint256[4], uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:receiver:mint:3",
+        "file": "listener/src/searcher/venues/selector-native/selector-cb495064-family/selector-cb495064.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x978d5f79",
+        "signature": "function add_liquidity(uint256[4], uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:booleanReceiver:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-978d5f79-family/selector-978d5f79.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x978d5f79",
+        "signature": "function add_liquidity(uint256[4], uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:booleanReceiver:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-978d5f79-family/selector-978d5f79.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x978d5f79",
+        "signature": "function add_liquidity(uint256[4], uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:booleanReceiver:mint:2",
+        "file": "listener/src/searcher/venues/selector-native/selector-978d5f79-family/selector-978d5f79.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x978d5f79",
+        "signature": "function add_liquidity(uint256[4], uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fixed4:booleanReceiver:mint:3",
+        "file": "listener/src/searcher/venues/selector-native/selector-978d5f79-family/selector-978d5f79.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xb72df5de",
+        "signature": "function add_liquidity(uint256[], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:executor:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0xb72df5de",
+        "signature": "function add_liquidity(uint256[], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:executor:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0xb72df5de",
+        "signature": "function add_liquidity(uint256[], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:executor:mint:2",
+        "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0xb72df5de",
+        "signature": "function add_liquidity(uint256[], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:executor:mint:3",
+        "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0xb72df5de",
+        "signature": "function add_liquidity(uint256[], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:executor:mint:4",
+        "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0xb72df5de",
+        "signature": "function add_liquidity(uint256[], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:executor:mint:5",
+        "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0xb72df5de",
+        "signature": "function add_liquidity(uint256[], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:executor:mint:6",
+        "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0xb72df5de",
+        "signature": "function add_liquidity(uint256[], uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:executor:mint:7",
+        "file": "listener/src/searcher/venues/selector-native/selector-b72df5de-family/selector-b72df5de.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0xa7256d09",
+        "signature": "function add_liquidity(uint256[], uint256, address) returns (uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:receiver:mint:0",
+        "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xa7256d09",
+        "signature": "function add_liquidity(uint256[], uint256, address) returns (uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:receiver:mint:1",
+        "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xa7256d09",
+        "signature": "function add_liquidity(uint256[], uint256, address) returns (uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:receiver:mint:2",
+        "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xa7256d09",
+        "signature": "function add_liquidity(uint256[], uint256, address) returns (uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:receiver:mint:3",
+        "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xa7256d09",
+        "signature": "function add_liquidity(uint256[], uint256, address) returns (uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:receiver:mint:4",
+        "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xa7256d09",
+        "signature": "function add_liquidity(uint256[], uint256, address) returns (uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:receiver:mint:5",
+        "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xa7256d09",
+        "signature": "function add_liquidity(uint256[], uint256, address) returns (uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:receiver:mint:6",
+        "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xa7256d09",
+        "signature": "function add_liquidity(uint256[], uint256, address) returns (uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng-dynamic:receiver:mint:7",
+        "file": "listener/src/searcher/venues/selector-native/selector-a7256d09-family/selector-a7256d09.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x1a4d01d2",
+        "signature": "function remove_liquidity_one_coin(uint256, int128, uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:int128:none:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-1a4d01d2-family/selector-1a4d01d2.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0x1a4d01d2",
+        "signature": "function remove_liquidity_one_coin(uint256, int128, uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:zap:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-1a4d01d2-family/selector-1a4d01d2.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0x1a4d01d2",
+        "signature": "function remove_liquidity_one_coin(uint256, int128, uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:stable-base:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-1a4d01d2-family/selector-1a4d01d2.json",
+        "enabledByDefault": true
+      },
+      {
+        "selector": "0x081579a5",
+        "signature": "function remove_liquidity_one_coin(uint256, int128, uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:int128:receiver:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-081579a5-family/selector-081579a5.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x081579a5",
+        "signature": "function remove_liquidity_one_coin(uint256, int128, uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:ng:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-081579a5-family/selector-081579a5.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0e08bda6",
+        "signature": "function remove_liquidity_one_coin(uint256, int128, uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:int128:booleanReceiver:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-0e08bda6-family/selector-0e08bda6.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xf1dc3cc9",
+        "signature": "function remove_liquidity_one_coin(uint256, uint256, uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:uint256:none:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-f1dc3cc9-family/selector-f1dc3cc9.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0xf1dc3cc9",
+        "signature": "function remove_liquidity_one_coin(uint256, uint256, uint256)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fee-claim:none:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-f1dc3cc9-family/selector-f1dc3cc9.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0fbcee6e",
+        "signature": "function remove_liquidity_one_coin(uint256, uint256, uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:uint256:receiver:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-0fbcee6e-family/selector-0fbcee6e.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x0fbcee6e",
+        "signature": "function remove_liquidity_one_coin(uint256, uint256, uint256, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fee-claim:receiver:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-0fbcee6e-family/selector-0fbcee6e.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x07329bcd",
+        "signature": "function remove_liquidity_one_coin(uint256, uint256, uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:uint256:booleanReceiver:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-07329bcd-family/selector-07329bcd.json",
+        "enabledByDefault": false
+      },
+      {
+        "selector": "0x07329bcd",
+        "signature": "function remove_liquidity_one_coin(uint256, uint256, uint256, bool, address)",
+        "sourceFamily": "curve-lp",
+        "recipe": "curve-lp:fee-claim:booleanReceiver:redeem",
+        "file": "listener/src/searcher/venues/selector-native/selector-07329bcd-family/selector-07329bcd.json",
+        "enabledByDefault": false
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "selector-family-v2-execution.test.ts",
+      "passed": 11,
+      "failed": 0,
+      "scope": "real Ready and Exact framework lifecycle, minimal swap, semantic metadata, resource/token conflicts, payment equivalence, unsupported ethCall substitution"
+    },
+    {
+      "name": "selector-typed-a-migration.test.ts",
+      "passed": 6,
+      "failed": 0,
+      "scope": "all 68 recipes bind/seal/compile/SIM request, external/native settlement, central rounding, canonical event and receipt scope negative cases"
+    },
+    {
+      "name": "selector-typed-a-evm.test.ts",
+      "passed": 1,
+      "failed": 0,
+      "durationSecondsApprox": 31.9,
+      "environment": "loopback Anvil; actual BotVM; no trace/debug/mainnet calls",
+      "scope": [
+        "YieldBasis four entry APIs and changed current reserves",
+        "Balancer V3 Permit2 nested approvals and cleanup",
+        "NG central rounding accepted/rejected cases",
+        "TwoCrypto fee claim normal/external receipt",
+        "Zap baseLP conservation positive and real revert"
+      ]
+    },
+    {
+      "name": "selector-native-execution.test.ts",
+      "passed": 11,
+      "failed": 0,
+      "scope": "updated v2 fixtures and actual all-directory compile/old 99 reference migration coverage"
+    },
+    {
+      "name": "declarative-swap-observation.test.ts",
+      "passed": 14,
+      "failed": 0
+    },
+    {
+      "name": "declarative-family-boundary.test.ts",
+      "passed": 5,
+      "failed": 0,
+      "scope": "retired runtime imports absent, archive only, exact generated inventory selector directory set and v2 schema"
+    },
+    {
+      "name": "victim-model-registry.ts",
+      "passedAssertions": 10,
+      "failedAssertions": 0,
+      "scope": "direct strict catalog/declarations and generic synthetic registry; no legacy production projection"
+    },
+    {
+      "name": "declarative-execution-assets.test.ts conservation subset",
+      "passed": 4,
+      "failed": 0,
+      "scope": "independent verification of guard capture/reference fix"
+    },
+    {
+      "name": "selector-native-aqua.test.ts + declarative-callback-frames.ts packed subset",
+      "passed": 2,
+      "failed": 0,
+      "scope": "independent wire-format parity, byte bounds, outgoing/incoming authenticated script offsets"
+    },
+    {
+      "name": "scoped Node16 TypeScript transitive closure",
+      "exitCode": 0,
+      "config": "validation-run/tsconfig-selector-typed-a.json",
+      "note": "Seven focused test entries plus transitive ordinary runtime; parent owns final whole-listener gate"
+    }
+  ],
+  "independentCompilerReview": {
+    "reviewed": [
+      "declarative-execution.ts conservation envelopes",
+      "declarative-execution.ts single dynamic scalar array captures",
+      "declarative-execution.ts maximum budget/quoteOutput",
+      "declarative-call-codec.ts public capture names",
+      "declarative-byte-layout.ts",
+      "declarative-callback.ts",
+      "declarative-callback-frames.ts"
+    ],
+    "blockingFindings": [
+      {
+        "id": "private-conservation-capture-alias",
+        "initialStatus": "confirmed by emitted VM repro",
+        "impact": "An author capture/reference named guard0Delta could alias the compiler snapshot delta and turn a receipt equality into a tautology.",
+        "resolution": "Parent reserves guard-prefixed public names and runtime references, validates envelope capture uniqueness; independent 4-case regression now passes.",
+        "currentStatus": "fixed-verified"
+      }
+    ],
+    "remainingBlockers": [],
+    "notes": [
+      "Nested execSubscript self-call amount patch is ABI-derived at byte 69, with isolated runtime registers and same executor balances.",
+      "Public callback constants still undergo full word equality checks in the child VM; runtime bindings use authenticated seed patches.",
+      "Packed header/slice/payload lengths are bounded and compiler-owned. Incoming/outgoing nested bytes offsets match canonical ABI layout.",
+      "Dynamic array captures require declared count and offset; this review does not claim full arbitrary returndata trailing-byte canonicality."
+    ]
+  },
+  "limits": [
+    "Local fixture EVM tests prove generic encoder/settlement/guard execution; they are not historical-mainnet protocol acceptance.",
+    "No mainnet RPC, transaction broadcast, deployment, push or markdown edits were performed.",
+    "Balancer V3 nested Vault.swap was a pre-existing observation interface, not an independent Exact entry. It remains explicit observation-only.",
+    "YieldBasis emergency_withdraw was not an implemented supported single-input Exact path at the base commit and is not fabricated here.",
+    "Historical fixture consumers of strict-family-test-compat are not v2 runtime acceptance evidence; current victim-model tests now use the strict catalog directly."
+  ]
+}

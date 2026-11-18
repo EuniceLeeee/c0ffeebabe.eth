@@ -1,0 +1,86 @@
+{
+  "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "sources": [
+    {
+      "file": "listener/src/searcher/venues/swaps/algebra-integral-family/abi.ts",
+      "sha256": "0ba10df5fbb9591d21439bb53725d4d90f77c83806198e189856c93e6c43b594"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/algebra-integral-family/execution.ts",
+      "sha256": "b7e0a7fb30a97ff51a5773211f424a6cf7393eeb86a9d1f81003edab721c9ea8"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/algebra-integral-family/direct.ts",
+      "sha256": "ce0c619a4ac7e6c233e9e069795c1277982c2cd9e401b9862ec72ddc36d090d7"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/algebra-integral-family/routes.ts",
+      "sha256": "8f7b0f1aad0be6cca967e10961696b47e28ad3214656d3859e9abfab38bb1bac"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/algebra-integral-family/swap.ts",
+      "sha256": "ecf57a6120706289ca87ad30901f2ae3f075dc2a957d35c23809340c93fd3299"
+    },
+    {
+      "file": "listener/src/searcher/venues/production-families/algebra-integral.production.ts",
+      "sha256": "f586b739ca057b748adf536d8d05a8c7362a330489ebff171ad9b63bb1f3798d"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/abi.ts",
+      "sha256": "8011b7143f185a048a429a9787e8e5a81ea0ff2c6efce664629aad422cff9786"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/execution.ts",
+      "sha256": "ec8ed5308ef1812d40eaf22b5329cb13e3526e265e326aee93971e35498386cc"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/direct.ts",
+      "sha256": "b850f95daee1d245308c0f1ae6d163d2954c64630b966318d3e22fe651be5b12"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/routes.ts",
+      "sha256": "9bdde676f7d4cb043a43168ba5be50f6995119d2291e3148e2eb1908d61684cd"
+    },
+    {
+      "file": "listener/src/searcher/venues/swaps/kyberswap-elastic-family/swap.ts",
+      "sha256": "8cd55cbf22cff971ba5b679926af3a16d07b422737492a57d8bd620d03250fa9"
+    },
+    {
+      "file": "listener/src/searcher/venues/production-families/kyberswap-elastic.production.ts",
+      "sha256": "639a6f162a015ece80415beafaceb3faea47f3d7cedb5c76eb5d05aeb764bb90"
+    }
+  ],
+  "rows": [
+    {
+      "selector": "0x128acb08",
+      "signature": "function swap(address, bool, int256, uint160, bytes)",
+      "sourceFamily": "algebra-integral",
+      "recipe": "typed-algebra-integral-exact-input",
+      "file": "listener/src/searcher/venues/selector-native/selector-128acb08-family/selector-128acb08.json",
+      "enabledByDefault": true
+    },
+    {
+      "selector": "0x24b31a0c",
+      "signature": "function swap(address recipient, int256 amountSpecified, bool zeroForOne, uint160 sqrtPriceLimitX96, bytes data) returns (int256 amount0, int256 amount1)",
+      "sourceFamily": "kyberswap-elastic",
+      "recipe": "typed-kyberswap-elastic-exact-input",
+      "file": "listener/src/searcher/venues/selector-native/selector-24b31a0c-family/selector-24b31a0c.json",
+      "enabledByDefault": false
+    }
+  ],
+  "preserved": [
+    "selector and argument order",
+    "signed exact-input amount guard",
+    "authenticated callback debt cap and negative credit",
+    "both token directions",
+    "actual debit/receipt and signed return checks",
+    "direct receiver balance isolation",
+    "deferred payment continuation and output floor",
+    "physical pool touched association",
+    "swap and mutation receipt events",
+    "source-bound funded startup simulation pricing"
+  ],
+  "defaults": "Algebra shares the already-enabled 128acb08 selector family; the independent Kyber selector remains disabled by default.",
+  "changes": "Historical protocol identity/factory gates, unused fee/tick-spacing getters and protocol quoter RPCs are absent. Token0/token1 bind the execution direction; current execution validity and prices use funded simulation. Full input and external-recipient isolation are enforced on ordinary execution as well as direct settlement.",
+  "runtimeDependenciesOnTypedSources": []
+}

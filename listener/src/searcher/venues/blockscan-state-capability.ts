@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { normalizeStateResourceKeys } from "./route-state-resources.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import type { LandedEventEmitter } from "./landed-event-registry.js";
 import type {
@@ -1586,6 +1587,11 @@ function canonicalEdgeRecord(edge: TokenEdge): Record<string, unknown> {
     identity: blockScanEdgeKey(edge),
     instanceKey: edgeInstanceKey(edge),
     executionVariantKey: edgeExecutionVariantKey(edge),
+    ...(edge.stateResourceKey === undefined ? {} : { stateResourceKey: edge.stateResourceKey }),
+    ...(edge.stateResourceKeys === undefined ? {} : { stateResourceKeys: normalizeStateResourceKeys(edge.stateResourceKeys) }),
+    ...(edge.observationTarget === undefined ? {} : { observationTarget: edge.observationTarget.toLowerCase() }),
+    ...(edge.observationPoolId === undefined ? {} : { observationPoolId: edge.observationPoolId }),
+    ...(edge.executionVerification === undefined ? {} : { executionVerification: edge.executionVerification }),
     adapterId: edge.adapterId,
     target: normalizeAddressLike(edge.target),
     tokenIn: normalizeAddressLike(edge.tokenIn),

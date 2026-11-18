@@ -4,11 +4,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ethers } from "ethers";
-import { ReadyActivityArchive } from "../ready-activity-archive.js";
-import { createRebuildWiring, observationsFromSelectedTransaction } from "../universe-rebuild-production.js";
+import { createRebuildWiring, observationsFromSelectedTransaction, selectorReadyFamilyIds } from "../universe-rebuild-production.js";
 import { discoverTransactionReadyInput } from "./family-json-ready.js";
 import { ADDR } from "../../shared/constants/addresses.js";
-import { PSM_INTERFACE } from "../venues/protocols/psm-family/codec.js";
+const PSM_INTERFACE = new ethers.Interface(["function sellGem(address,uint256)"]);
 import type { ReadyTransactionEvidence } from "../ready-transaction-input.js";
 
 const A = (n: number) => ethers.toBeHex(n, 20), H = (n: number) => ethers.toBeHex(n, 32);
@@ -46,64 +45,57 @@ test("selected TX decoder reuses production call semantics and rejects escaped/i
   assert.throws(() => observationsFromSelectedTransaction({ ...debug, rawTrace: { result: {} } }, [], new Set([selector])), /schema/);
 });
 
-test("facts discovery reads the whole TX through the Ready reader, selects target Family, and shares raw block trace", async () => {
+test("facts discovery shares all selector nominations and TX evidence across labels and execution states", async () => {
   const directory = await mkdtemp(join(tmpdir(), "family-tx-ready-"));
-  const archive = new ReadyActivityArchive({ directory: join(directory, "raw"), chainId: 1,
-    fromBlock: source.number, toBlock: source.number, cutoffHash: source.hash });
   const original = ethers.JsonRpcProvider.prototype.send, calls: string[] = [];
-  const value = evidence();
+  const value = evidence(), frames = value.rawTrace as any[];
+  const debug = { type: "CALL", ...frames[0].action, output: "0x", logs: [], calls: frames.slice(1).map(row => ({
+    type: "CALL", ...row.action, output: "0x", logs: [],
+  })) };
   ethers.JsonRpcProvider.prototype.send = async (method: string) => {
     calls.push(method);
     if (method === "eth_chainId") return "0x1";
     if (method === "eth_getBlockByNumber") return { number: ethers.toQuantity(source.number), hash: source.hash };
     if (method === "eth_getTransactionReceipt") return { ...value.receipt, status: "0x1", transactionIndex: "0x0",
       blockNumber: ethers.toQuantity(source.number) };
+    if (method === "debug_traceTransaction") return debug;
     throw new Error("unexpected extra RPC: " + method);
   };
   try {
-    await archive.writeTrace({ blockNumber: source.number, method: "trace_block", trace: value.rawTrace as unknown[] });
-    const production = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1", familyIds: [familyId],
+    const familyIds = selectorReadyFamilyIds();
+    const production = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1", familyIds, selectorCensus: [],
       executionIdentity: { executor: A(2), transactionOrigin: A(1) } });
-    const withObservation = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1", familyIds: [familyId],
+    const withObservation = createRebuildWiring({ rpcUrl: "http://127.0.0.1:1", familyIds, selectorCensus: [],
       executionIdentity: { executor: A(2), transactionOrigin: A(1) },
       testTransactionObservation: { transactionHash: tx, source } });
-    assert.notEqual(withObservation.readyReviewInputFingerprint!(), production.readyReviewInputFingerprint!(),
-      "separate TX observation is part of the proof context, never reusable as an ordinary Ready proof");
-    assert.equal(withObservation.readyReviewInputFingerprint!(false), production.readyReviewInputFingerprint!(false),
-      "nomination context does not change the Family verification definition");
-    let scans = 0;
-    const wiring = { ...production, scanSwapWindow: async () => { scans++; return { observations: [], sourceReceipts: [] }; } };
-    const input = { wiring, activityArchive: archive, directory, rpcUrl: "http://127.0.0.1:1", familyId,
+    assert.notEqual(withObservation.readyReviewInputFingerprint!(), production.readyReviewInputFingerprint!());
+    assert.equal(withObservation.readyDiscoveryInputFingerprint!(), production.readyDiscoveryInputFingerprint!());
+    const wiring = { ...production, scanSwapWindow: async () => assert.fail("supplied TX must not scan a whole block"),
+      reverseBindOpaqueCandidates: async () => assert.fail("selector discovery must not infer old identity") };
+    const input = { wiring, directory, rpcUrl: "http://127.0.0.1:1", familyIds,
       target: { transactionHash: tx, instanceKey: target }, source };
     const first = await discoverTransactionReadyInput(input);
-    assert(first.evidence.recognizedFamilies.includes("univ2-standard"), "other TX pools are discovered");
-    assert(first.evidence.recognizedFamilies.includes(familyId));
-    assert.equal(first.candidates.length, 1, "other Family/unknown pools do not become target acceptance requirements");
-    assert.equal(first.candidates[0]!.address, target);
-    assert.equal(first.candidates[0]!.familyId, familyId);
-    assert.deepEqual([...first.currentCandidateKeys], first.candidates.map(c => production.familyCandidateKey(c)));
+    assert.equal(new Set(first.candidates.map(candidate => candidate.familyId)).size, 2, "the selected TX nominates both execution selectors and every binding recipe");
+    assert(first.candidates.length >= 2);
+    assert.equal(new Set(first.candidates.map(candidate => production.familyCandidateKey(candidate))).size, first.candidates.length);
+    assert(first.candidates.some(candidate => candidate.address === target && String(candidate.familyId).startsWith("execution:0x95991276:")));
+    assert(first.candidates.some(candidate => candidate.address === A(11) && String(candidate.familyId).startsWith("execution:0x022c0d9f:")));
+    assert(first.census.calls.some(call => call.selector === "0xdeadbeef" && call.status === "unverified"));
+    assert.deepEqual([...first.currentCandidateKeys].sort(), first.candidates.map(c => production.familyCandidateKey(c)).sort());
     assert.equal(first.evidence.identityBypass, false);
-    const second = await discoverTransactionReadyInput(input);
-    assert.equal(second.currentInputFingerprint, first.currentInputFingerprint);
-    assert.equal(calls.filter(method => method === "eth_getTransactionReceipt").length, 1, "receipt is shared");
-    assert(calls.every(method => !/trace/i.test(method)), "trace comes from the shared block archive, never another RPC");
-    assert.equal(scans, 2);
+    const second = await discoverTransactionReadyInput({ ...input, target: { ...input.target, instanceKey: A(99) } });
+    assert.equal(second.currentInputFingerprint, first.currentInputFingerprint, "reference instance cannot change a full-selector nomination set");
+    assert.equal(calls.filter(method => method === "eth_getTransactionReceipt").length, 1);
+    assert.equal(calls.filter(method => method === "debug_traceTransaction").length, 1);
     const parentSource = { number: source.number - 1, hash: H(89), generation: source.generation };
-    let scanned: any, reverseAt: any;
     const selected = await discoverTransactionReadyInput({ ...input, source: parentSource,
       target: { ...input.target, stateSelection: { mode: "parent", evidenceSource: { number: source.number, hash: source.hash },
         executionSource: { number: parentSource.number, hash: parentSource.hash },
-        evidenceHeader: { number: ethers.toQuantity(source.number), hash: source.hash, parentHash: parentSource.hash } } },
-      wiring: { ...wiring, scanSwapWindow: async (request: any) => { scanned = request; return { observations: [], sourceReceipts: [] }; },
-        reverseBindOpaqueCandidates: async (request: any) => { reverseAt = request.cutoff; return []; } } });
-    assert.equal(scanned.cutoff.number, source.number, "discovery still observes the TX block");
-    assert.deepEqual(reverseAt, parentSource, "reverse identity uses execution state");
-    assert.notEqual(selected.currentInputFingerprint, first.currentInputFingerprint, "different execution source cannot reuse Ready binding");
-    assert.equal(calls.filter(method => method === "eth_getTransactionReceipt").length, 1, "raw evidence remains reusable across execution states");
-    assert.equal(selected.candidates[0]!.address, target);
-
-    await assert.rejects(discoverTransactionReadyInput({ ...input, familyId: "protocol:rocksolid",
-      wiring: { ...wiring, dedupeFamilyCandidates: production.dedupeFamilyCandidates } }), /no candidate/);
+        evidenceHeader: { number: ethers.toQuantity(source.number), hash: source.hash, parentHash: parentSource.hash } } } });
+    assert.equal(selected.census.blockNumber, source.number, "historical observation never becomes parent activity");
+    assert.notEqual(selected.currentInputFingerprint, first.currentInputFingerprint, "different execution state cannot reuse Ready");
+    assert.equal(calls.filter(method => method === "eth_getTransactionReceipt").length, 1);
+    assert.equal(selected.candidates.length, first.candidates.length);
   } finally {
     ethers.JsonRpcProvider.prototype.send = original;
     await rm(directory, { recursive: true, force: true });

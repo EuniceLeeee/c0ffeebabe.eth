@@ -9,7 +9,7 @@ import { assertDeclarativeExecutionSource, buildDeclarativeRuntimeLeg,
 import { assertModuleData } from "./declarative-modules.js";
 import { verifyDeclarativeQuoteProof } from "./declarative-quote-proof.js";
 import { runtimeExecutor } from "./runtime-execution.js";
-import { assertSource } from "./protocols/standard-family/common.js";
+import { assertSource } from "./selector-execution-evidence.js";
 
 type Data = Record<string, any>;
 type SimulationRequest = Extract<AdapterRequest, { kind: "effect-delta-simulation" | "state-override-simulation" }>;
@@ -19,11 +19,14 @@ export interface DeclarativeExecutionSimulation {
   readonly amountIn: unknown;
   /** Extra executor token inventories which the receipt must prove unchanged. */
   readonly protectedTokens?: unknown;
+  /** Additional source-bound observations for declared per-account checks. */
+  readonly tokenBalances?: unknown;
+  readonly totalSupplies?: unknown;
   readonly observe?: readonly EffectObservationKind[];
   readonly required?: boolean;
 }
 const BASE_EFFECTS = ["return-data", "revert-data", "token-delta", "native-delta"] as const;
-const EFFECTS = new Set<EffectObservationKind>([...BASE_EFFECTS, "logs"]);
+const EFFECTS = new Set<EffectObservationKind>([...BASE_EFFECTS, "logs", "total-supply-delta"]);
 function positive(value: unknown): asserts value is bigint {
   if (typeof value !== "bigint" || value <= 0n || value > MaxUint256) throw new Error("execution simulation requires positive uint256 input");
 }
@@ -31,7 +34,7 @@ export function validateDeclarativeExecutionSimulation(value: unknown): asserts 
   assertModuleData(value);
   const d = value as DeclarativeExecutionSimulation;
   if (!d || Array.isArray(d) || typeof d !== "object" ||
-    Object.keys(d).some(key => !["kind", "id", "amountIn", "protectedTokens", "observe", "required"].includes(key)) ||
+    Object.keys(d).some(key => !["kind", "id", "amountIn", "protectedTokens", "tokenBalances", "totalSupplies", "observe", "required"].includes(key)) ||
     d.kind !== "declarative-execution-simulation" || typeof d.id !== "string" || !d.id || d.id.trim() !== d.id ||
     !Object.hasOwn(d, "amountIn") || d.required !== undefined && typeof d.required !== "boolean" ||
     d.observe !== undefined && (!Array.isArray(d.observe) || d.observe.some(kind => !EFFECTS.has(kind)) || new Set(d.observe).size !== d.observe.length))
@@ -40,7 +43,8 @@ export function validateDeclarativeExecutionSimulation(value: unknown): asserts 
 export function declarativeExecutionSimulationRequirements(declaration: DeclarativeExecutionSimulation): RequestRequirements {
   validateDeclarativeExecutionSimulation(declaration);
   return Object.freeze({ transports: Object.freeze(["effect-delta-simulation" as const]), caller: "executor" as const,
-    effects: Object.freeze([...new Set<EffectObservationKind>([...BASE_EFFECTS, ...(declaration.observe ?? [])])]) });
+    effects: Object.freeze([...new Set<EffectObservationKind>([...BASE_EFFECTS, ...(declaration.observe ?? []),
+      ...(declaration.totalSupplies === undefined ? [] : ["total-supply-delta" as const])])]) });
 }
 
 /** The caller binds the invocation and its execution declaration. JSON cannot
@@ -67,14 +71,27 @@ export function buildDeclarativeExecutionSimulation(
   const leg = buildDeclarativeRuntimeLeg(execution, input, values, options);
   if (!leg) throw new Error("execution simulation has no runtime program");
   const caller = Object.freeze({ kind: "executor" as const });
+  const extra = declaration.tokenBalances === undefined ? [] : values.evaluate(declaration.tokenBalances,input);
+  const supplies = declaration.totalSupplies === undefined ? [] : values.evaluate(declaration.totalSupplies,input);
+  if (!Array.isArray(extra) || extra.length > 256 || !Array.isArray(supplies) || supplies.length > 256)
+    throw new Error("execution simulation additional observation bounds");
+  const observations = new Map(tokens.map(token => [`${token}:${actor}`,{token,account:caller as string | typeof caller}]));
+  for (const row of extra) {
+    if (!row || Object.keys(row).some(key => !["token","account"].includes(key))) throw new Error("invalid execution token observation");
+    const token=getAddress(row.token),account=typeof row.account==="string"?getAddress(row.account):row.account?.kind==="executor"?actor:undefined;
+    if (!account) throw new Error("execution token observation account");
+    observations.set(`${token}:${account}`,{token,account:account===actor?caller:account});
+  }
+  const supplyTokens=[...new Set<string>(supplies.map((token:unknown)=>getAddress(String(token))))];
   const native = executionNativeSides(input.route);
   return Object.freeze({ id: declaration.id, kind: "effect-delta-simulation",
     ...(declaration.required === undefined ? {} : { required: declaration.required }),
     call: Object.freeze({ caller, executionMode: "executor-program", to: actor,
       data: buildSubscriptCalldata(runtimeProgramScript(getBytes(leg.program), amountIn)) }),
     overrideIntent: Object.freeze({ caller, tokenBalances: Object.freeze([Object.freeze({ token: tokenIn, amount: amountIn })]) }),
-    observeTokenBalances: Object.freeze(tokens.map(token => Object.freeze({ token, account: caller }))),
-    observe: requirements.effects!,
+    observeTokenBalances: Object.freeze([...observations.values()].map(row=>Object.freeze(row))),
+    ...(supplyTokens.length?{observeTotalSupplies:Object.freeze(supplyTokens)}:{}),
+    observe: Object.freeze([...new Set<EffectObservationKind>([...requirements.effects!,...(supplyTokens.length?["total-supply-delta" as const]:[])])]),
     ...(native ? { executionAssetBoundary: Object.freeze({ tokenIn, tokenOut, amountIn, minimum: 1n,
       executionAssets: Object.freeze({ ...input.route.executionAssets }) }) } : {}),
   });
@@ -114,6 +131,8 @@ export function executorFromObservedSimulation(input: {
 export function decodeDeclarativeExecutionSimulationReceipt(input: {
   readonly request: AdapterRequest; readonly result: AdapterRequestResult; readonly source: CanonicalSource;
   readonly executor: string; readonly tokenIn: string; readonly tokenOut: string; readonly amountIn: bigint;
+  /** Declared by the same compiled VM leg; it is not inferred from a receipt. */
+  readonly inputMode?: "maximum";
 }): bigint {
   observed(input); positive(input.amountIn);
   const { request, result } = input;
@@ -128,20 +147,32 @@ export function decodeDeclarativeExecutionSimulationReceipt(input: {
     getAddress(funding[0]!.token) !== tokenIn || funding[0]!.amount !== input.amountIn)
     throw new Error("executor-program simulation funding mismatch");
   const observations = request.observeTokenBalances;
-  if (!observations || observations.some(row => typeof row.account === "string" || row.account.kind !== "executor"))
-    throw new Error("executor-program receipt requires symbolic observations");
-  const tokens = observations.map(row => getAddress(row.token));
-  if (new Set(tokens).size !== tokens.length || !tokens.includes(tokenIn) || !tokens.includes(tokenOut))
+  if (!observations || observations.some(row => typeof row.account !== "string" && row.account.kind !== "executor"))
+    throw new Error("executor-program receipt has unsupported observation accounts");
+  const observationKey=(token:string,account:string)=>`${getAddress(token)}:${getAddress(account)}`;
+  const observationKeys=observations.map(row=>observationKey(row.token,typeof row.account==="string"?row.account:actor));
+  const tokens=observations.filter(row=>typeof row.account!=="string"&&row.account.kind==="executor").map(row=>getAddress(row.token));
+  if (new Set(observationKeys).size !== observationKeys.length || !tokens.includes(tokenIn) || !tokens.includes(tokenOut))
     throw new Error("executor-program receipt observation scope mismatch");
   const deltas = result.effects?.tokenDeltas;
-  if (!deltas || deltas.length !== tokens.length || deltas.some(row => !tokens.includes(getAddress(row.token)) || getAddress(row.account) !== actor) ||
-    new Set(deltas.map(row => getAddress(row.token))).size !== deltas.length)
+  if (!deltas || deltas.length !== observationKeys.length || deltas.some(row => !observationKeys.includes(observationKey(row.token,row.account))) ||
+    new Set(deltas.map(row => observationKey(row.token,row.account))).size !== deltas.length)
     throw new Error("executor-program receipt token scope mismatch");
-  const amountOut = deltas.find(row => getAddress(row.token) === tokenOut)!.delta; positive(amountOut);
-  verifyDeclarativeQuoteProof({ ...input, amountOut, sourceKind: "effect-simulation",
+  const actorDeltas=deltas.filter(row=>getAddress(row.account)===actor);
+  const amountOut = actorDeltas.find(row => getAddress(row.token) === tokenOut)!.delta; positive(amountOut);
+  if (input.inputMode === "maximum") {
+    const spent = -actorDeltas.find(row => getAddress(row.token) === tokenIn)!.delta;
+    if (spent <= 0n || spent > input.amountIn) throw new Error("executor-program receipt exceeded declared input budget");
+  } else verifyDeclarativeQuoteProof({ ...input, amountOut, sourceKind: "effect-simulation",
     proof: { step: "execution", requestId: request.id } });
-  for (const row of deltas) if (![tokenIn, tokenOut].includes(getAddress(row.token)) && row.delta !== 0n)
+  for (const row of actorDeltas) if (![tokenIn, tokenOut].includes(getAddress(row.token)) && row.delta !== 0n)
     throw new Error("executor-program receipt changed protected inventory");
+  if (request.observeTotalSupplies?.length) {
+    const expected=request.observeTotalSupplies.map(getAddress),observed=result.effects?.totalSupplyDeltas;
+    if (!request.observe.includes("total-supply-delta") || !observed || observed.length!==expected.length || new Set(expected).size!==expected.length ||
+      new Set(observed.map(row=>getAddress(row.token))).size!==expected.length || observed.some(row=>!expected.includes(getAddress(row.token))))
+      throw new Error("executor-program receipt supply scope mismatch");
+  }
   const native = result.effects?.nativeDeltas;
   if (!native || native.length !== 1 || getAddress(native[0]!.account) !== actor || native[0]!.delta !== 0n)
     throw new Error("executor-program receipt changed native inventory");

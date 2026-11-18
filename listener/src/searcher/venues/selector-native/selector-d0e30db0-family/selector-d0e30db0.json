@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xd0e30db0",
+  "signature": "function deposit()",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_D0E30DB0_ENABLED"
+  },
+  "unsupportedReason": "Nested step of a retained complete execution program; it is not an independent route entry."
+}

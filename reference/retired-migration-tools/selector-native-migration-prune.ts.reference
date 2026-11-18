@@ -1,0 +1,146 @@
+/** Offline dependency reduction. This module is not a production interpreter. */
+type Data = Record<string, any>;
+const object = (v:any):v is Data => !!v && typeof v === 'object' && !Array.isArray(v);
+const record = (v:any):v is Data => object(v) && !v.op;
+const walk = (v:any,f:(v:any)=>void):void => { f(v); if(v&&typeof v==='object')Object.values(v).forEach(x=>walk(x,f)); };
+export function pathOf(v:any):string[]|undefined {
+ if(typeof v==='string'&&/^\$[A-Za-z]/.test(v))return v.slice(1).split('.');
+ if(v?.op==='get'&&typeof v.args?.[1]==='string'){const p=pathOf(v.args[0]);return p&&[...p,...v.args[1].split('.')];}
+ return undefined;
+}
+function at(v:any,path:readonly string[]):any {
+ if(!path.length)return v;
+ if(typeof v==='string'&&v.startsWith('$'))return `${v}.${path.join('.')}`;
+ if(record(v))return Object.hasOwn(v,path[0]!)?at(v[path[0]!],path.slice(1)):'$missing';
+ if(v?.op==='merge'){
+  const possible=v.args.filter((x:any)=>!record(x)||Object.hasOwn(x,path[0]!));
+  if(possible.length===1)return at(possible[0],path);
+  if(possible.length&&record(possible.at(-1)))return at(possible.at(-1),path);
+ }
+ if(v?.op==='if')return {op:'if',args:[v.args[0],at(v.args[1],path),at(v.args[2],path)]};
+ return path.reduce((base,key)=>({op:'get',args:[base,key]}),v);
+}
+export function substitute(v:any,name:string,value:any):any {
+ const path=pathOf(v);
+ if(path?.[0]===name)return at(value,path.slice(1));
+ if(Array.isArray(v))return v.map(x=>substitute(x,name,value));
+ return object(v)?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,substitute(x,name,value)])):v;
+}
+type Demand=Map<string,string[][]>;
+function collect(v:any,result:Demand=new Map()):Demand {
+ if(v?.op==='defined'){const p=pathOf(v.args?.[0]);if(p?.length===1&&['descriptor','binding','facts'].includes(p[0]!))return result;}
+ const p=pathOf(v);
+ if(p){const [name,...rest]=p;const rows=result.get(name!)??[];if(!rows.some(r=>r.join('.')===rest.join('.')))rows.push(rest);result.set(name!,rows);return result;}
+ if(v&&typeof v==='object')Object.values(v).forEach(x=>collect(x,result));return result;
+}
+function project(v:any,paths:readonly string[][]):any {
+ if(paths.some(p=>!p.length))return v;
+ if(!paths.length)return {};
+ if(record(v))return Object.fromEntries(Object.entries(v).flatMap(([key,value])=>{
+  const child=paths.filter(p=>p[0]===key).map(p=>p.slice(1));return child.length?[[key,project(value,child)]]:[];
+ }));
+ if(v?.op==='merge')return {...v,args:v.args.map((a:any)=>project(a,paths)).filter((a:any)=>!record(a)||Object.keys(a).length)};
+ if(v?.op==='if')return {...v,args:[v.args[0],project(v.args[1],paths),project(v.args[2],paths)]};
+ // Project a spread/reference explicitly, so unused provenance fields do not
+ // keep the entire source record and its identity RPCs alive.
+ const keys=[...new Set(paths.map(p=>p[0]!))];
+ return Object.fromEntries(keys.map(k=>[k,project(at(v,[k]),paths.filter(p=>p[0]===k).map(p=>p.slice(1)))]));
+}
+const OWNED=new Set(['familyId','lineageId','instanceKey','provenance','runtimeRequirements']);
+const IDENTITY=/^(?:.*[Cc]odeHash|.*[Cc]odeHashes|factoryBinding|swapAccess|proofSource|reverseBinding|implementationCodeHash)$/;
+function identityCondition(v:any):boolean {
+ let yes=false;walk(v,x=>{const p=pathOf(x);if(p?.[0]==='descriptor'&&p.slice(1).some(k=>OWNED.has(k)||IDENTITY.test(k)))yes=true;});return yes;
+}
+function simplifyCondition(v:any):any {
+ if(v?.op==='and'||v?.op==='or'){
+  const args=v.args.map(simplifyCondition).filter((x:any)=>x!==true);
+  return !args.length?true:args.length===1?args[0]:{...v,args};
+ }
+ return identityCondition(v)?true:v;
+}
+function checks(rows:any):any[] {return (rows??[]).map((row:any)=>({...row,assert:simplifyCondition(row.assert??row.condition)})).filter((r:any)=>r.assert!==true).map(({condition:_c,...r}:any)=>r);}
+function ownedFields(v:any):any {
+ if(Array.isArray(v))return v.map(ownedFields);
+ if(record(v))return Object.fromEntries(Object.entries(v).filter(([k])=>!OWNED.has(k)).map(([k,x])=>[k,ownedFields(x)]));
+ if(v?.op==='merge')return {...v,args:v.args.map(ownedFields)};
+ return v;
+}
+function expandValues(v:any,values:Data,seen=new Set<string>()):any {
+ const path=pathOf(v);
+ if(path&&['constants','expressions'].includes(path[0]!)&&path.length>=2){
+  const key=path.slice(0,2).join('.');if(seen.has(key))return v;const value=values[path[0]!]?.[path[1]!];
+  if(value!==undefined)return expandValues(at(value,path.slice(2)),values,new Set([...seen,key]));
+ }
+ if(v?.op==='expression'&&typeof v.args[0]==='string'){
+  const expr=values.expressions?.[v.args[0]];if(expr!==undefined){let out=expr;const inputs=v.args[1]??{};for(const[k,x]of Object.entries(inputs))out=substitute(out,k,x);return expandValues(out,values,new Set([...seen,`expressions.${v.args[0]}`]));}
+ }
+ if(Array.isArray(v))return v.map(x=>expandValues(x,values,seen));
+ return object(v)?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,expandValues(x,values,seen)])):v;
+}
+function readFlow(flow:Data,demands:readonly string[][],values:Data):Data|undefined {
+ const result=project(flow.result,demands),need=collect(expandValues(result,values));
+ const steps:any[]=[];
+ for(const step of [...flow.steps].reverse()){
+  const paths=(need.get('steps')??[]).filter(p=>p[0]===step.id).map(p=>p.slice(1));
+  if(!paths.length)continue;
+  // Statement programs may contain dependent arithmetic and safety checks.
+  // Keep their full internal control flow; ordinary getter results are pruned.
+  const output=step.result===undefined?step.decode:project(step.result,paths);
+  const ids=new Set<string>();let all=false;
+  walk(expandValues(output,values),x=>{if(x==='$results')all=true;if(['returned','code','shape','wordSurface','tryReturned','result','resultOk','resultData','decodedResult','tryDecodedResult'].includes(x?.op)&&typeof x.args?.[0]==='string')ids.add(x.args[0]);});
+  const requests=Array.isArray(step.requests)&&!all?step.requests.filter((r:any)=>typeof r.id!=='string'||ids.has(r.id)):step.requests;
+  const used={output,requests,when:step.when};collect(expandValues(used,values),need);
+  const requirements=Array.isArray(requests)?{...step.requirements,transports:[...new Set(requests.map((r:any)=>r.kind))]}:step.requirements;
+  steps.unshift({...step,requests,requirements,...(step.result===undefined?{decode:output}:{result:output})});
+ }
+ return steps.length?{version:1,steps,result}:undefined;
+}
+/** Remove old pricing/identity reachability while retaining call construction,
+ * guards, callback settlement and the parameter data they actually consume. */
+export function reduceSelectorNativeProgram(program:Data,values:Data,resources:Data):Data {
+ const p=program;
+ // Old local victim-price replay is replaced by the existing source-pinned EVM
+ // prefix executor. Receipt decoding and touched discovery remain data-driven.
+ if(p.observations){delete p.observations.localApply;delete p.observations.overlay;delete p.observations.replay;delete p.observations.poolMaterialization;p.observations.victimSupport='detect-only';
+  // Legacy V2 enrichment existed solely to manufacture a local reserve quote.
+  // The actual event amounts still identify the trigger; EVM prefix owns state.
+  if(JSON.stringify(p.observations.receiptReads??{}).includes('"postState"')){delete p.observations.receiptReads;for(const e of p.observations.events??[])if(e.impact)delete e.impact.v2PostState;}
+ }
+ p.routes.checks=checks(p.routes.checks);p.routes.assertions=checks(p.routes.assertions);p.checks=checks(p.checks);
+ // A selector recipe owns its parameter construction; protocol lineage is no
+ // longer an admission discriminator. Independent recipes are simulated.
+ delete p.binding.match;
+ if(Array.isArray(p.routes.directions)&&p.routes.allowedDirections)p.routes.directions=p.routes.directions.filter((r:any)=>p.routes.allowedDirections.includes(r.id));
+ delete p.dependencies; // native dependencies include all actual bound read targets.
+ delete p.runtimeProjection; // old prewarming was a legacy quote optimization.
+ // Protection concerns call targets and transacted assets. Factory provenance
+ // alone must not become an otherwise unnecessary reverse-identity read.
+ function stripProtected(v:any):any {if(Array.isArray(v))return v.filter(x=>!identityCondition(x)&&!pathOf(x)?.some(k=>['factory','poolCode','implementation'].includes(k))).map(stripProtected);return object(v)?Object.fromEntries(Object.entries(v).map(([k,x])=>[k,stripProtected(x)])):v;}
+ if(p.execution.protectedAddresses)p.execution.protectedAddresses=stripProtected(p.execution.protectedAddresses);
+ const rawFacts=p.binding.facts;
+ const facts={...record(rawFacts)?rawFacts:{},facts:rawFacts,subject:p.binding.subject??'$target',familyId:'$familyId',lineageId:'$programLineage',provenance:[],runtimeRequirements:[]};
+ // Legacy draft can address either identity.foo or identity.facts.foo.
+ let descriptor=ownedFields(substitute(p.binding.descriptor,'facts',facts));
+ const basis={execution:p.execution,quoteOutput:p.quoteOutput,runtimeProjection:p.runtimeProjection,runtimeEvidence:p.runtimeEvidence,
+  receiptChecks:p.receiptChecks,routes:p.routes,checks:p.checks,match:p.binding.match,observations:p.observations};
+ let uses=collect(expandValues(basis,values));
+ const context=record(p.context)?p.context:{};let selected:Data={};
+ for(let pass=0;pass<=Object.keys(context).length;pass++)for(const[key,val]of Object.entries(context)){
+  if(uses.has(key)&&!Object.hasOwn(selected,key)){selected[key]=project(val,uses.get(key)!);collect(expandValues(selected[key],values),uses);}
+ }
+ p.context=selected;
+ const state=project(p.state??{},uses.get('binding')??[]);p.state=state;collect(expandValues(state,values),uses);
+  if(p.binding.descriptorReads){
+   const added=p.binding.descriptorReads.finalize?.op==='merge'?p.binding.descriptorReads.finalize.args.filter(record).flatMap((v:any)=>Object.keys(v)):[];
+   if(added.length&&!added.some((field:string)=>(uses.get('descriptor')??[]).some(path=>!path.length||path[0]===field)))delete p.binding.descriptorReads;
+  }
+ descriptor=project(descriptor,uses.get('descriptor')??[]);
+ p.binding.descriptor=descriptor;p.binding.facts={};
+ const bindingUses=collect(expandValues({descriptor,context:selected,state,match:p.binding.match}, {...values,...resources}));
+ if(p.binding.flow){const reduced=readFlow(p.binding.flow,bindingUses.get('binding')??[],values);if(reduced)p.binding.flow=reduced;else delete p.binding.flow;}
+ delete p.binding.subject;
+ for(const field of ['checks','assertions'])if(!p.routes[field]?.length)delete p.routes[field];
+ if(!p.checks.length)delete p.checks;
+ if(p.binding.match===true)delete p.binding.match;
+ return p;
+}

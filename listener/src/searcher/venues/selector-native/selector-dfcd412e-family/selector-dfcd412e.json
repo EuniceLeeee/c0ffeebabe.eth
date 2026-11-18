@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xdfcd412e",
+  "signature": "function withdraw(address, uint256, address, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_DFCD412E_ENABLED"
+  },
+  "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

@@ -289,7 +289,9 @@ test("effective leaves original Exact method selection unset and preserves its r
   };
   for (const requireChainAmountQuote of [undefined, false]) {
     const result = await build(prices, { control, quote: call => {
-      assert.deepEqual(Object.keys(call).sort(), ["amountIn", "control", "edge"]);
+      assert.deepEqual(Object.keys(call).sort(), ["amountIn", "control", "edge", "maxInputPathHops", "reference", "source"]);
+      assert.deepEqual(call.reference, { amountIn: DEFAULT_RAW, path: [] });
+      assert.deepEqual(call.source, SOURCE);
       return session.issueExact({ ...call, executor: "fixture-executor", runtimeEvidence,
         ...(requireChainAmountQuote === undefined ? {} : { requireChainAmountQuote }) });
     } });

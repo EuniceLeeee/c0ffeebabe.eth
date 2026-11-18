@@ -1,0 +1,298 @@
+{
+  "format": "selector-family-v2-c-lane-review/v1",
+  "baseCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+  "author": "/root/selector_native_keys",
+  "status": "implemented-and-locally-verified",
+  "scope": {
+    "publicModule": "New branded selector-family/v2 data-only entry; legacy plugin/productionFamilyModule exports rejected",
+    "metadata": "Domain normalization removes only authored root/program meta; semantic capability and Ready hashes remain stable; raw authored byte integrity remains independently required",
+    "sql": "Before admission, emit candidate + per-transaction census + selector-edge records. Complete resource/direction/program keys omit mutable amount/source. Unknown and observed-only ABI calls retain calldata/source and stay incomplete",
+    "ready": "Re-decode and match the entire owned candidate to select one program pattern; a later recipe is not replaced by the first ABI match",
+    "typedMigration": [
+      "Algebra Integral appended within existing 128acb08 ABI Family",
+      "Kyber Elastic 24b31a0c",
+      "Aqua packed swap f4d2d412 with optional in-transaction quoteOutput"
+    ],
+    "genericExtension": "Bounded cumulative packed-slice data and nested ABI-bytes callback payload layout; compiler derives all offsets and owns the sole payload slot"
+  },
+  "inventory": {
+    "selectorDeclarations": 128,
+    "ordinaryPrograms": 180,
+    "ordinaryAutoParameterPrograms": 10,
+    "creditDeclarations": 1,
+    "fundingDeclarations": 2,
+    "observationOnlyDeclarations": 36,
+    "source": "Full inventory belongs to root independent base-to-v2 coverage report; these are current generated-directory counts"
+  },
+  "generated": {
+    "manifest": "listener/src/searcher/generated/family-capability-shadow.generated.json",
+    "manifestSha256": "8fe695942a2b1305242b469a424350ca05a7c68121d4c41ed0233e338286077c",
+    "write": {
+      "exitCode": 0,
+      "log": "validation-run/selector-c-manifest-delivery-write.log"
+    },
+    "check": {
+      "exitCode": 0,
+      "log": "validation-run/selector-c-manifest-delivery-check.log"
+    },
+    "udfProvenanceSha256": "e737ab33499b18a98a47740cbfe517eb1b4c101bb6f2e3925b7aa21720d0d51f",
+    "udfFamilyCount": 128,
+    "udfKernelBytes": 149660,
+    "udfKernelSha256": "74c31bf99148c45e1dd3af3f0239d575f4851f80de3fdbb73e0a8677d5b1f554",
+    "udfResources": [
+      {
+        "file": "definitions-000.js",
+        "sha256": "8b05ddb4267dce064461d9918796c0e43c0db980fb3728a1694ed6d76ad9690c",
+        "bytes": 871632
+      },
+      {
+        "file": "definitions-001.js",
+        "sha256": "e04f506e4316e9f674c4e8264f1e2f31d336a14c7f02521c91a5786e6144a046",
+        "bytes": 899478
+      },
+      {
+        "file": "definitions-002.js",
+        "sha256": "021d65b39681c412c324c4e52ef76ae1de0c2ebb376bb0754a8054ae92b98444",
+        "bytes": 826013
+      },
+      {
+        "file": "kernel.js",
+        "sha256": "74c31bf99148c45e1dd3af3f0239d575f4851f80de3fdbb73e0a8677d5b1f554",
+        "bytes": 149660
+      }
+    ],
+    "udfCatalogBytesMatchCurrent": true,
+    "udfResourcesMatchProvenance": true,
+    "udfPurePortableValidation": "128 Family rules executed by builder in an empty browser realm",
+    "udfForbiddenRuntimeImportCount": 0
+  },
+  "executedChecks": [
+    {
+      "name": "Final full BigQuery/SQL/activation/UDF suite (6 files)",
+      "log": "validation-run/selector-c-sql-frozen.log",
+      "sha256": "7527b2c519feed56ef08be095e897b1e3b41006761e40be3138016a38e8f6b6e",
+      "pass": 52,
+      "fail": 0,
+      "skipped": 0,
+      "phase": "Before final single-declaration unused-math cleanup; still applicable to unchanged code"
+    },
+    {
+      "name": "Final metadata, module, discovery and edge cohort",
+      "log": "validation-run/selector-c-v2-core-final.log",
+      "sha256": "0abb492c24c5b3781be8b34eefd3d91fff8c8499115719cf1ff8ff9d42caa079",
+      "pass": 16,
+      "fail": 0,
+      "skipped": 0,
+      "phase": "Before final single-declaration unused-math cleanup; still applicable to unchanged code"
+    },
+    {
+      "name": "Public production generator v2 contracts",
+      "log": "validation-run/selector-production-v2-final.log",
+      "sha256": "54323ecd038383098acc5807f140ade10f1ebc74bbfee1ff030ef3167ffa495f",
+      "pass": 5,
+      "fail": 0,
+      "skipped": 0,
+      "phase": "Before final single-declaration unused-math cleanup; still applicable to unchanged code"
+    },
+    {
+      "name": "Actual typed callback JSON and two-getter binding paths",
+      "log": "validation-run/selector-c-typed-binding-final.log",
+      "sha256": "0ddf6c391fc07454ab5acd1fd7b0a322abe87474efcd7ea5dc46e650a7e049a1",
+      "pass": 20,
+      "fail": 0,
+      "skipped": 0,
+      "phase": "Before final single-declaration unused-math cleanup; still applicable to unchanged code"
+    },
+    {
+      "name": "Complete-candidate pattern selection and real Ready coordinator regression",
+      "log": "validation-run/selector-ready-program-fix.log",
+      "sha256": "f392efb02565cbe8b0517f0f51e7c8e1decf15227f6b22ebc8fac5ccc5f5a107",
+      "pass": 5,
+      "fail": 0,
+      "skipped": 0,
+      "phase": "Before final single-declaration unused-math cleanup; still applicable to unchanged code"
+    },
+    {
+      "name": "Local EVM Ready/startup/encoded execution v2 regression",
+      "log": "validation-run/selector-execution-v2-evm.log",
+      "sha256": "c7cd05e98f08fef8d7fcb60b57ed440782a93fb238fd7e42e4ee2b320f0c76da",
+      "pass": 1,
+      "fail": 0,
+      "skipped": 0,
+      "phase": "Before final single-declaration unused-math cleanup; still applicable to unchanged code"
+    },
+    {
+      "name": "Delivery raw authored byte-integrity smoke",
+      "log": "validation-run/selector-c-delivery-raw-integrity.log",
+      "sha256": "67ec9ad32fa848613481b2d43628ad61b285a06992c663111409aeedd296f59e",
+      "pass": 1,
+      "fail": 0,
+      "skipped": 0,
+      "phase": "After final data cleanup"
+    }
+  ],
+  "earlierExecutedChecks": [
+    {
+      "name": "Aqua + typed callback + shared callback regressions",
+      "log": "validation-run/selector-native-callback-final.log",
+      "pass": 182,
+      "fail": 0,
+      "skipped": 0,
+      "note": "Before adding two binding tests and one additional packed frame test; final root full suite is the whole-tree final verification"
+    }
+  ],
+  "independentReview": {
+    "reviewer": "/root/selector_native_execution",
+    "result": "No blocking packed layout/callback findings",
+    "executedCases": 2,
+    "reviewed": [
+      "Bounded header/offset/total length",
+      "Exactly one compiler-owned callback payload",
+      "Canonical outer ABI +64 nested bytes offset",
+      "Static equality constants and dynamic seed patch authentication"
+    ]
+  },
+  "limits": [
+    "No mainnet RPC, signing or broadcast performed",
+    "Local EVM uses isolated receipt adapter; native remote eth_simulateV1 compatibility is not certified by this local fixture",
+    "SQL edge outputs are observations, not verified Graph edges or an independent reconciliation gate",
+    "36 observed-only declarations do not claim executable support",
+    "Final whole-tree typecheck and full offline/EVM suite are owned by root"
+  ],
+  "sourceHashes": [
+    {
+      "file": "listener/src/searcher/venues/selector-family-definition.ts",
+      "sha256": "932c4756e0f13b0ace28d7e11e549e73ce5fdf21b22ed4c4470c63aa52e12b3d"
+    },
+    {
+      "file": "listener/src/searcher/venues/selector-family-module.ts",
+      "sha256": "9f8c0f48bcd01987eab21eb5a632cac3fc3ca2c7e21d2dc9bef0ba6b446bef4d"
+    },
+    {
+      "file": "listener/src/searcher/venues/production-families/loader.ts",
+      "sha256": "dfdd72edf8f859f5aecc97524707fec74b4e413f6443af8f282a78ebf4304456"
+    },
+    {
+      "file": "listener/src/searcher/build-declarative-production.ts",
+      "sha256": "31dcf3f4fd0e6f4e2858089dd09e9ff56580bf73c277bbc9a2ecf86a9f00c36c"
+    },
+    {
+      "file": "listener/src/searcher/build-family-capability-manifest.ts",
+      "sha256": "f4e3f0a3a303fc8dabbe9303f12ad3fc0f426ced57227ebde26c919b7f82c4e1"
+    },
+    {
+      "file": "listener/src/searcher/venues/capability-content-hash.ts",
+      "sha256": "fca18499c62c4a22c22fbc2bf80125c44423cfabec4553c059582d4fe09aded0"
+    },
+    {
+      "file": "listener/src/searcher/venues/family-capability-shadow.ts",
+      "sha256": "5437964746251721b443687948cc6cd9ef7243ce18d1d925a85b941f1a9af6a0"
+    },
+    {
+      "file": "listener/src/searcher/venues/selector-native-discovery.ts",
+      "sha256": "67d6c12b8191a0bd97f6213650f851b7da741c62dc7e630988d004a12e4484da"
+    },
+    {
+      "file": "listener/src/searcher/ready-selector-edges.ts",
+      "sha256": "ad8313ebe1f876372dc26ee78ef38732e052b08f8db8c2536549a4bbe7e43991"
+    },
+    {
+      "file": "listener/src/searcher/ready-selector-candidate-pattern.ts",
+      "sha256": "c722fb89bcb9863255e9e665f72e155605b8a713b10d073e368ee14c8b961515"
+    },
+    {
+      "file": "listener/src/searcher/strict-identity-attestation.ts",
+      "sha256": "4d631353edfa4d0ae1e32bee9fccb18ed0d37a20e16724ae42cf1ce2bf638cc8"
+    },
+    {
+      "file": "listener/src/searcher/universe-rebuild-production.ts",
+      "sha256": "4fe86aaa9383b4d02202a28525d8fc32a101b7aeaa0b8597e4234fc51bad79ca"
+    },
+    {
+      "file": "listener/src/searcher/venues/declarative-byte-layout.ts",
+      "sha256": "2a2449c9da6fbb64326fb32a4c1ab2fe8c5186eeebf7b3835974cbe062ab5c84"
+    },
+    {
+      "file": "listener/src/searcher/venues/declarative-callback.ts",
+      "sha256": "1954bd5801997b8401dfce73ba2c1a445cbe8319a1faaa68d232a6034d3813ed"
+    },
+    {
+      "file": "listener/src/searcher/venues/declarative-callback-frames.ts",
+      "sha256": "8f5d09c9a82d7ff0cd33a91a2d81cb776c65c4a5623ef583fb3b20c7c675aa16"
+    },
+    {
+      "file": "listener/src/searcher/venues/declarative-values.ts",
+      "sha256": "8a40cd2b554b054faf3fdfbc4a283001051f6761dd98e32e2437055c12a11918"
+    },
+    {
+      "file": "scripts/ready-family-activation.mjs",
+      "sha256": "bfb42172bf10c7a11a418b234be52065c17b83de1dd3468b573e8816ef0bc96a"
+    },
+    {
+      "file": "scripts/ready-discovery-udf-build.mjs",
+      "sha256": "387f30ddd58300da784d043dc1cb08ad95359baa5352541bd1312b788dca22ec"
+    },
+    {
+      "file": "scripts/ready-discovery-udf.sql",
+      "sha256": "f5744faec3e5357680de190c4da21a3cdb208644ca902a2b5b39cba700092ec5"
+    },
+    {
+      "file": "scripts/bigquery-table.mjs",
+      "sha256": "e42a49f7bc9412b74099821da3e90501b7c256f159d80fce8a8b8ec2a8c71f35"
+    },
+    {
+      "file": "scripts/ready-bigquery-sql.mjs",
+      "sha256": "d3274d3c3ee046259ce1da989090b4d0a176cc936dd16e2392835958de76ea39"
+    },
+    {
+      "file": "scripts/ready-bigquery.mjs",
+      "sha256": "253cd493c46318e3b45acc46398f722077375a8bdd639a5434e530ca957c7c4f"
+    },
+    {
+      "file": "scripts/migrate-selector-typed-c.ts",
+      "sha256": "3a559d6ef837a6e58872b925f4dbeee1b6151f3fa82f43622ba72ec17c640d91"
+    },
+    {
+      "file": "scripts/selector-typed-c-migration.json",
+      "sha256": "7f4857c85fff8d7b3a7c9153353335c3f8f320cb91f0c92974f6b137a2bbd41a"
+    },
+    {
+      "file": "scripts/migrate-selector-typed-aqua.ts",
+      "sha256": "2ce371731c54d0178ae79135eaa12843bcc03363562d64114e04467a818ebf8e"
+    },
+    {
+      "file": "scripts/selector-typed-aqua-migration.json",
+      "sha256": "4113033e7757bca0be0b8f9a7dea6d8160d238a76eedf7d659ca1042bfb08766"
+    },
+    {
+      "file": "listener/src/searcher/venues/selector-native/selector-128acb08-family/selector-128acb08.json",
+      "sha256": "cc9c4c7fb5a45424909f07b98c018db6984590b32e5edccc34fa4d627e6cccfe"
+    },
+    {
+      "file": "listener/src/searcher/venues/selector-native/selector-24b31a0c-family/selector-24b31a0c.json",
+      "sha256": "b3d2801d4d79870e2efa0f2262d2363ed41a1fb65ea910ca5e281c7afc8a7c7d"
+    },
+    {
+      "file": "listener/src/searcher/venues/selector-native/selector-f4d2d412-family/selector-f4d2d412.json",
+      "sha256": "36daefdaf06e495af773be02a01656fd8cfe30c3a2d38e4eb8c97e3fc1b0b865"
+    },
+    {
+      "file": "listener/src/searcher/venues/selector-native/selector-a6e81533-family/selector-a6e81533.json",
+      "sha256": "9156882bfaa0b6c0e26c7b4e7dc2a6dc9a544047d04dfc2f59326ce38d0a18c2"
+    }
+  ],
+  "previousGenerated": {
+    "manifestSha256": "81414929d4fe072303dcda69cf3d1ac39bde64f4e4544665fbba319d1d1f7a31",
+    "note": "Preceded the final removal of one unused math block from selector-a6e81533; retained only as earlier evidence."
+  },
+  "deliveryAdjustment": {
+    "file": "listener/src/searcher/venues/selector-native/selector-a6e81533-family/selector-a6e81533.json",
+    "change": "Removed an unused math block after the old proxy-binding read was already removed. No execution or central runtime source changed in this final regeneration.",
+    "remainingBindingRequests": [
+      "selectorBinding:factory:stock",
+      "selectorBinding:factory:money"
+    ],
+    "fullSqlSuiteRerun": false,
+    "reason": "The full 52-test SQL suite previously passed. Parent requested only raw-integrity smoke and the actual portable UDF generation for this final data-only cleanup."
+  }
+}

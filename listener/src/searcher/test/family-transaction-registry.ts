@@ -18,6 +18,9 @@ export interface FamilyTransactionLeg {
   readonly tokenOut?: string;
   readonly amountIn?: string;
   readonly routeKey?: string;
+  /** Optional immutable selector/resource pin; legacy protocol labels remain provenance. */
+  readonly execution?: { readonly target?: string; readonly selector?: string; readonly signature?: string;
+    readonly poolId?: string; readonly poolNamespace?: string; readonly tokenInId?: string; readonly tokenOutId?: string };
   readonly priorBinding?: { readonly id: string; readonly amountScope: string; readonly lineageId?: string; readonly routeKey?: string };
   readonly amountScope: string;
   readonly actors?: { readonly executor: string; readonly owner: string };
@@ -56,6 +59,13 @@ export function parseFamilyTransaction(value: unknown): FamilyTransaction {
     for (const key of ["instanceKey", "lineageId", "routeKey"]) assert(leg[key] === undefined || nonempty(leg[key]), `invalid ${key}`);
     for (const key of ["tokenIn", "tokenOut"]) assert(leg[key] === undefined || address(leg[key]), `invalid ${key}`);
     for (const key of ["amountIn", "historicalAmountOut"]) assert(leg[key] === undefined || uint(leg[key]), `invalid ${key}`);
+    if (leg.execution !== undefined) {
+      assert(object(leg.execution), "invalid execution binding");
+      assert(leg.execution.target === undefined || address(leg.execution.target), "invalid execution target");
+      assert(leg.execution.selector === undefined || /^0x[0-9a-fA-F]{8}$/.test(leg.execution.selector), "invalid execution selector");
+      for (const key of ["signature", "poolId", "poolNamespace"]) assert(leg.execution[key] === undefined || nonempty(leg.execution[key]), `invalid execution ${key}`);
+      for (const key of ["tokenInId", "tokenOutId"]) assert(leg.execution[key] === undefined || uint(leg.execution[key]), `invalid execution ${key}`);
+    }
     if (leg.priorBinding !== undefined) {
       assert(object(leg.priorBinding) && nonempty(leg.priorBinding.id) && nonempty(leg.priorBinding.amountScope), "invalid prior binding");
       for (const key of ["lineageId", "routeKey"]) assert(leg.priorBinding[key] === undefined || nonempty(leg.priorBinding[key]), `invalid prior ${key}`);
@@ -72,7 +82,7 @@ export function parseFamilyTransaction(value: unknown): FamilyTransaction {
 }
 
 export function familyTransactionLegMissing(leg: FamilyTransactionLeg): string[] {
-  const missing = ["source", "instanceKey", ...(["credit", "funding"].includes(leg.domain) ? ["lineageId"] : []), "tokenIn", "tokenOut", "amountIn"]
+  const missing = ["source", "instanceKey", ...(leg.domain === "funding" ? ["lineageId"] : []), "tokenIn", "tokenOut", "amountIn"]
     .filter(key => (leg as any)[key] === undefined);
   if (leg.amountIn !== undefined && BigInt(leg.amountIn) === 0n) missing.push("positive amountIn");
   if (leg.domain === "credit" && leg.credit === undefined) missing.push("credit.debtBps");
@@ -108,9 +118,12 @@ export function loadFamilyTransactionRegistry(root = familyTransactionRoot) {
 /** Uses the same validated production composition, retaining disabled entries. */
 export async function getInstalledTransactionFamilies() {
   const { PRODUCTION_STRICT_SHADOW_FAMILY_LOAD: load } = await import("../venues/production-family-composition.js");
+  const { PRODUCTION_SELECTOR_EXECUTION_FAMILY_IDS } = await import("../generated/selector-execution-families.generated.js");
+  const selectors = new Set<string>(PRODUCTION_SELECTOR_EXECUTION_FAMILY_IDS);
   assert.equal(load.issues.length, 0, "production catalog has unresolved entries");
   const families = [...load.plugins, ...load.disabledPlugins].map(({ familyId, plugin, sourceFile, activation }) => ({
     familyId: String(familyId), domain: plugin.manifest.domain as FamilyTransactionDomain,
+    selectorExecution: selectors.has(String(familyId)),
     enabled: activation.enabled, envKey: activation.envKey, sourceFile,
     lineages: [...plugin.manifest.supportedLineages],
     // Owned execution actions, not every token-pair direction in the Graph.

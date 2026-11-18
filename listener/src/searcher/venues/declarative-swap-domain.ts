@@ -1,5 +1,8 @@
 import { compileDeclarativeEventCodec, type DeclarativeEventLog } from "./declarative-event-codec.js";
 import { Interface, getAddress } from "ethers";
+import { isDeepStrictEqual } from "node:util";
+import { explicitStateResourceEquality } from "./route-state-resources.js";
+import { edgeObservationTarget, edgeObservationPoolId, edgeObservationPoolIdEquals } from "./route-observation-identity.js";
 import { createStrictSwapObservation, type PoolImpact, type SwapEventLog } from "./swap-observation.js";
 import type { SwapDomainSemantics, CompiledInstanceDescriptor, FamilyRouteDescriptor, UnifiedObservation } from "./adapter-family-plugin.js";
 import { validateDeclarativeValue, type compileDeclarativeValues } from "./declarative-values.js";
@@ -226,10 +229,10 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
           const candidates = ctx.edgesByTarget.get(found.pool) ?? ctx.graph;
           const edges = candidates.filter(edge => {
             if (!manifest.edgeAdapterIds.includes(edge.adapterId) || (candidates !== ctx.graph && !ctx.graph.includes(edge))) return false;
-            if (found.pool.length === 66 && edge.poolId !== undefined && edge.poolId.toLowerCase() !== found.pool) return false;
+            if (found.pool.length === 66 && edgeObservationPoolId(edge) !== undefined && !edgeObservationPoolIdEquals(edge, found.pool)) return false;
             const binding = ctx.resolveBinding?.(edge);
             if (found.spec.requireReadyBinding) {
-              const id = found.pool.length === 66 ? edge.poolId ?? edge.instanceKey : edge.target;
+              const id = found.pool.length === 66 ? edgeObservationPoolId(edge) ?? edge.instanceKey : edgeObservationTarget(edge);
               if (id?.toLowerCase() !== found.pool.toLowerCase()) return false;
               if (!binding || binding.familyId !== manifest.familyId || binding.descriptor.familyId !== manifest.familyId ||
                   binding.descriptor.instanceKey !== edge.instanceKey)
@@ -239,8 +242,12 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
               descriptor: binding?.descriptor }) === true;
           });
           if (!edges.length) return { logIndex: trigger.logIndex, mutationOnlyReason: "direction absent from admitted graph" };
-          if (edges.length !== 1) throw new Error("ambiguous Swap event route binding");
-          const edge = edges[0];
+          // Several execution entries may observe one physical pool. Only an
+          // explicit shared state resource permits this; every binding must
+          // independently produce the same complete impact before deduping.
+          if (edges.length !== 1 && edges.some(edge => explicitStateResourceEquality(edge, edges[0]!) !== true))
+            throw new Error("ambiguous Swap event route binding");
+          const impacts = await Promise.all(edges.map(async edge => {
           const environment = { ...found.env, payload: found.payload, pool: found.pool, edge,
             sourceGeneration: ctx.sourceGeneration, descriptor: ctx.resolveBinding?.(edge)?.descriptor, ...related(found, trigger.logIndex) };
           let singletonEmitter: string | undefined;
@@ -259,12 +266,16 @@ export function compileDeclarativeSwap(raw: Data, values: Values, manifest: Data
           }
           const impact = values.evaluate(found.spec.impact, { ...environment, ...await enrich(environment, trigger.logIndex) }) as PoolImpact;
           if (!impact || !same(impact.tokenIn, edge.tokenIn) || !same(impact.tokenOut, edge.tokenOut) ||
-              impact.matchedAdapterId !== edge.adapterId || !same(impact.pool, singletonEmitter ?? edge.target) ||
-              (found.pool.length === 66 ? impact.poolId?.toLowerCase() !== found.pool || (!singletonEmitter && (edge.poolId ?? edge.instanceKey)?.toLowerCase() !== found.pool) : !same(impact.pool, found.pool)) ||
+              impact.matchedAdapterId !== edge.adapterId || !same(impact.pool, singletonEmitter ?? edgeObservationTarget(edge)) ||
+              (found.pool.length === 66 ? impact.poolId?.toLowerCase() !== found.pool || (!singletonEmitter && (edgeObservationPoolId(edge) ?? edge.instanceKey)?.toLowerCase() !== found.pool) : !same(impact.pool, found.pool)) ||
               typeof impact.amountIn !== "bigint" || impact.amountIn <= 0n ||
               (impact.amountOut !== undefined && (typeof impact.amountOut !== "bigint" || impact.amountOut <= 0n)))
             throw new Error("Swap impact violates admitted route binding");
-          return { logIndex: trigger.logIndex, impact };
+          return impact;
+          }));
+          if (impacts.some(impact => !isDeepStrictEqual(impact, impacts[0])))
+            throw new Error("ambiguous Swap event route binding");
+          return { logIndex: trigger.logIndex, impact: impacts[0]! };
         }));
       },
     }),

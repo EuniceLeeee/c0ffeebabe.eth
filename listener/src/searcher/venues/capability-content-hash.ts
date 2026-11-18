@@ -20,6 +20,7 @@ import type {
   FamilyCapabilityName,
   GeneratedCapabilityIdentity,
 } from "./family-capability-catalog.js";
+import { normalizeSelectorFamilyDefinition } from "./selector-family-definition.js";
 
 /**
  * Framework-owned contract versions. Family source cannot supply or override
@@ -75,6 +76,10 @@ export interface CapabilityClosureInput {
   readonly provenanceCommit: string | null;
 }
 
+export interface CapabilityClosuresInput extends Omit<CapabilityClosureInput, "capability"> {
+  readonly capabilities: readonly FamilyCapabilityName[];
+}
+
 /**
  * Generate a capability identity from emitted runtime JavaScript. Type-only
  * imports/declarations, comments, formatting and the provenance commit are
@@ -84,13 +89,41 @@ export async function generateCapabilityClosure(
   input: CapabilityClosureInput,
 ): Promise<GeneratedCapabilityClosure> {
   assertProvenanceCommit(input.provenanceCommit);
-  const contractVersion = FAMILY_CAPABILITY_CONTRACT_VERSIONS[input.capability];
   const runtime = await generateRuntimeSourceClosure({
     rootDirectory: input.rootDirectory,
     entryFile: input.entryFile,
     additionalEntryFiles: input.additionalEntryFiles,
     inactiveRuntimeModules: input.inactiveRuntimeModules,
   });
+  return capabilityClosureFromRuntime(input, runtime);
+}
+
+/**
+ * Derive capabilities that own the same runtime roots from one fresh traversal.
+ * Reuse is limited to this call: later Families/builds reread their source,
+ * JSON, compiler options and package lock, including inactive-module policy.
+ */
+export async function generateCapabilityClosures(
+  input: CapabilityClosuresInput,
+): Promise<readonly GeneratedCapabilityClosure[]> {
+  assertProvenanceCommit(input.provenanceCommit);
+  if (input.capabilities.length === 0) return Object.freeze([]);
+  const runtime = await generateRuntimeSourceClosure({
+    rootDirectory: input.rootDirectory,
+    entryFile: input.entryFile,
+    additionalEntryFiles: input.additionalEntryFiles,
+    inactiveRuntimeModules: input.inactiveRuntimeModules,
+  });
+  return Object.freeze(input.capabilities.map((capability) =>
+    capabilityClosureFromRuntime({ ...input, capability }, runtime)
+  ));
+}
+
+function capabilityClosureFromRuntime(
+  input: Pick<CapabilityClosureInput, "familyId" | "capability" | "provenanceCommit">,
+  runtime: RuntimeSourceClosure,
+): GeneratedCapabilityClosure {
+  const contractVersion = FAMILY_CAPABILITY_CONTRACT_VERSIONS[input.capability];
   const dependencies = new Map(
     runtime.dependencyArtifacts.map((artifact) => [
       artifact.logicalId,
@@ -198,15 +231,22 @@ export async function generateRuntimeSourceClosure(input: {
     try {
       const source = await readFile(canonicalFile, "utf8");
       const logicalId = sourceLogicalId(rootDirectory, canonicalFile);
-      const normalized = dormantDeclarativeModuleSource({ rootDirectory, file: canonicalFile, source,
+      const dormant = dormantDeclarativeModuleSource({ rootDirectory, file: canonicalFile, source,
         inactive: input.inactiveRuntimeModules ?? [],
-      }) ?? normalizeRuntimeSource(canonicalFile, source);
+      });
+      // Hash and import collection consume the same emitted JavaScript. Even
+      // dormant modules still emit/traverse their actual imports as before.
+      const emitted = isTypeScriptSource(canonicalFile)
+        ? emitRuntimeJavaScript(canonicalFile, source)
+        : undefined;
+      const normalized = dormant ?? (emitted === undefined
+        ? normalizeRuntimeSource(canonicalFile, source)
+        : canonicalJavaScriptTokens(emitted));
       sourceArtifacts.set(logicalId, Object.freeze({
         logicalId,
         contentHash: sha256(normalized),
       }));
-      if (isTypeScriptSource(canonicalFile)) {
-        const emitted = emitRuntimeJavaScript(canonicalFile, source);
+      if (emitted !== undefined) {
         for (const specifier of importedRuntimeSpecifiers(
           canonicalFile,
           emitted,
@@ -305,7 +345,11 @@ function normalizeRuntimeSource(file: string, source: string): string {
     return canonicalJavaScriptTokens(emitRuntimeJavaScript(file, source));
   }
   if (extname(file).toLowerCase() === ".json") {
-    return JSON.stringify(sortJson(JSON.parse(source)));
+    const raw = JSON.parse(source);
+    // Only authored Family documents use the semantic schema. Arbitrary JSON
+    // dependencies retain every field, including keys named meta or label.
+    const isFamily = /[\\/]venues[\\/]selector-native[\\/]/.test(file);
+    return JSON.stringify(sortJson(isFamily ? normalizeSelectorFamilyDefinition(raw) : raw));
   }
   return source.replace(/\r\n?/g, "\n");
 }

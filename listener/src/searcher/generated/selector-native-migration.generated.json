@@ -1,0 +1,1156 @@
+{
+  "format": "selector-native-migration/v1",
+  "executableReferences": 99,
+  "pending": [],
+  "ordinaryMathModels": [
+    {
+      "id": "univ4-fee-hook:sat1-hook-data",
+      "sources": [
+        "../../swaps/univ4-fee-hook-family/univ4-fee-hook.json"
+      ]
+    },
+    {
+      "id": "balancer-v1:sum-weights",
+      "sources": [
+        "../../swaps/balancer-v1-family/balancer-v1.json"
+      ]
+    },
+    {
+      "id": "oneswap:proxy",
+      "sources": [
+        "../../swaps/oneswap-family/oneswap.json"
+      ]
+    },
+    {
+      "id": "ekubo:core-swap-log",
+      "sources": [
+        "../../swaps/ekubo-family/ekubo.json"
+      ]
+    }
+  ],
+  "migrations": [
+    {
+      "selector": "0x022c0d9f",
+      "source": "listener/src/searcher/venues/swaps/ammalgam-family/ammalgam.json",
+      "variant": "standard",
+      "programKey": "parameters:68325b7eea3a5a546c9a33a0ace27a07868463bdb4d13c12ea0ac194c65eba18",
+      "sourceSha256": "3347bd7198b9febf8d34f298addb96c869baff1ba6ff2321fe6404eafd55a9eb",
+      "kind": "typed-to-data"
+    },
+    {
+      "selector": "0x022c0d9f",
+      "source": "listener/src/searcher/venues/swaps/univ2-family/univ2.json",
+      "variant": "factory-child-reverse-binding",
+      "directions": [
+        "one-for-zero",
+        "zero-for-one"
+      ],
+      "programKey": "parameters:2d0154dececaee08c201bb23da9a7354b71cb259e9f6707d39f612bc54b3b731",
+      "alternativeProgramKeys": [
+        "parameters:a4d2ea39e0d679280493f202dea4facd8730b58c3fd606757c10f6ad3f3bbf62"
+      ],
+      "sourceSha256": "6f2c64b5c27abf430022d7ca9e5bcc3c2f4141a256640527c622d65de29deacb",
+      "executionSha256": "f8232ab9c314ebf2f99fee9028bebd3d8d0c6e55852c95c8110a0cbcb29d9e39",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x022c0d9f",
+      "source": "listener/src/searcher/venues/swaps/univ2-family/univ2.json",
+      "variant": "pool-owned-amount",
+      "directions": [
+        "one-for-zero",
+        "zero-for-one"
+      ],
+      "programKey": "parameters:ae71b107dbd08ad31e38c4e07261d9f43e0d2792e568014d0266f63de7f26f3b",
+      "sourceSha256": "6f2c64b5c27abf430022d7ca9e5bcc3c2f4141a256640527c622d65de29deacb",
+      "executionSha256": "3e1cf0a4350b8f093901407daaf07bdd180e613caf97388db25ba0fea107b9e7",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x022c0d9f",
+      "source": "listener/src/searcher/venues/swaps/univ2-family/univ2.json",
+      "variant": "solidly-pool-owned-amount",
+      "directions": [
+        "one-for-zero",
+        "zero-for-one"
+      ],
+      "programKey": "parameters:eba004a4fafe480598efd4222c8299bac586cbf5e585605a3a2bd0fff3e0b87a",
+      "sourceSha256": "6f2c64b5c27abf430022d7ca9e5bcc3c2f4141a256640527c622d65de29deacb",
+      "executionSha256": "2e5d0cd689a6ef839cae4e74dfcefcaea795008e43e227640d406ea01436cfa0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x128acb08",
+      "source": "listener/src/searcher/venues/swaps/univ3-family/univ3.json",
+      "variant": "factory-child-reverse-binding",
+      "directions": [
+        "one-for-zero",
+        "zero-for-one"
+      ],
+      "programKey": "parameters:1d9d7f251a702f1ae7c43a12fd1b0c3277ed1cccbf93a6f8f6655bf8a0e450d1",
+      "sourceSha256": "2ee38b224f2a545307a786b643ec6f9248b70cc8712c3e8a046cc9f410ca3722",
+      "executionSha256": "8805b59983820dbfe016be0c658fad78366c9bd2cded919e2a1d1efbccc63731",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x1a4d01d2",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-lp-family/curve-plain-lp.json",
+      "variant": "ng-stableswap-2coin-lp-cycle",
+      "directions": null,
+      "programKey": "parameters:61329cc0a4c911a72c27023bb134616d280b7b4cd6b64e9dbe1afe2b61533b9f",
+      "sourceSha256": "61b47d91df92648c40f8533d9f5d20138a5f665261c0a62570a5585bd5e4acc2",
+      "executionSha256": "30477ee26273c1bd245f440c2e24bf91c359ba029703ee927a55d50f9a3104a5",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x26599850",
+      "source": "listener/src/searcher/venues/protocols/few-wrapped-family/few-wrapped.json",
+      "variant": "factory-wrapper-effects",
+      "directions": [
+        "wrap"
+      ],
+      "programKey": "parameters:82195d7b07dc7da7ba22db6eba75f7f0cc30bd451a79ea4310a9c5aa615a1c7a",
+      "sourceSha256": "aae022825621a7487001d924301ca8fbb4509b67d5558706450d36ac63489551",
+      "executionSha256": "10316965b049bcaaee4df810ccd7e5c17477326131f77203c607e061fdb28126",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x2668dfaa",
+      "source": "listener/src/searcher/venues/swaps/fluid-dex-family/fluid-dex.json",
+      "variant": "factory-child-active-quote",
+      "directions": [
+        "swap0-to-1",
+        "swap1-to-0"
+      ],
+      "programKey": "parameters:3131318c76051861406b880271302ee847ed593ae48a498195ee6a01380457fc",
+      "sourceSha256": "8a76ae5ac07e9efd3df9f390374c31f1fd0f65d9c54d6e375395e1699c04b3bb",
+      "executionSha256": "ac3d1617a952b600a1a524cf74e60768073700d3c633b1cb07931df4424ec86d",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x2b2dfd2c",
+      "source": "listener/src/searcher/venues/protocols/token-conversion-family/token-conversion.json",
+      "variant": "xwin-allocations-v1",
+      "directions": [
+        "mint"
+      ],
+      "programKey": "parameters:7317f6d1d2ca2cafe56f7109d4a514d155e823295e634554e2411ddfebdacbcb",
+      "sourceSha256": "4b76d33d7dcdec3391d43dab00af7d9701d197afa8fafa297238440051205b4b",
+      "executionSha256": "5ce616aad86bfec4b9269ba9dc80a99d1b881e25156d87484a1654c834270c10",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x2e1a7d4d",
+      "source": "listener/src/searcher/venues/protocols/badger-sett-withdraw-family/badger-sett-withdraw.json",
+      "variant": "badger-sett-withdraw-liquid",
+      "directions": [
+        "redeem"
+      ],
+      "programKey": "parameters:346f4c2a67edee666016b1c1f72a5baa00f06be6be1838e4ae3b1f65ab360b06",
+      "sourceSha256": "125d6e5457fe6aff0c6453459e4f4b98551baf1774017601aa4d4462561db859",
+      "executionSha256": "83feb28eb1ce74af6664500824f50c99f28b3fe177b0df12d82b397075c51114",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x2e1a7d4d",
+      "source": "listener/src/searcher/venues/protocols/ethertoken-native-redeem-family/ethertoken-native-redeem.json",
+      "variant": "active-ethertoken-native-effect-proof",
+      "directions": [
+        "withdraw-to-native"
+      ],
+      "programKey": "parameters:e73f5866fb6b0ef5f27a17af0b95b7850711c6ceb4ed91f0670905ea4c4a2351",
+      "sourceSha256": "9daa3dcdba742a0ac81ddf0e9570d97010624e23462b98155c189024d60c42d7",
+      "executionSha256": "0d9a9b68342b2c4e0fd92fdf6f17cb857e702ac47977546018569938d5555f8f",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x2ebe07c8",
+      "source": "listener/src/searcher/venues/protocols/eigenpie-family/eigenpie.json",
+      "variant": "observed-active-pair",
+      "directions": [
+        "deposit-asset"
+      ],
+      "programKey": "parameters:090d0288c9739298fcd9db32609c2c890436fe36c8bd6d4cbd06ca3c957316ed",
+      "sourceSha256": "020c75df068195bcedb15de00301ff69a06e418907a814299b1c15a26b7797de",
+      "executionSha256": "c17a417402dec1fa678cbd4c48230195336004e40f589595451bf1671d10ea60",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x3df02124",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+      "variant": "clone-execution-sim",
+      "directions": null,
+      "programKey": "parameters:2cd06799d1cc902862fbd1d7e6f45ba11fe1b4b7d1d90a38e3cc6b9eaa0e4ecb",
+      "sourceSha256": "2a1e934a6e6d80b6a9f574a7516d09cbb48131530512870f1cf3d35969519936",
+      "executionSha256": "3ecc34d2d9769e23d551e6d11f9a8ac8d131b0aacfba9c681a27c1c299d1d18e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x3df02124",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+      "variant": "registry-execution-sim",
+      "directions": null,
+      "programKey": "parameters:e0b469677dc7641933f3c6a69f58f303e65a59ab01ab98bbc1651cb3eb20bd66",
+      "sourceSha256": "2a1e934a6e6d80b6a9f574a7516d09cbb48131530512870f1cf3d35969519936",
+      "executionSha256": "3ecc34d2d9769e23d551e6d11f9a8ac8d131b0aacfba9c681a27c1c299d1d18e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x40c10f19",
+      "source": "listener/src/searcher/venues/protocols/goldx-family/goldx.json",
+      "variant": "active-unit-mint",
+      "directions": [
+        "mint"
+      ],
+      "programKey": "parameters:9b97daec39c813cd9baa95f4b2344fdc0091624e4233b3b3bb9edc84f44eeb68",
+      "sourceSha256": "df975d0d370dcb283e466112f3b4d3542cfdd1e2a88407b05ad5bb28b49c2ec3",
+      "executionSha256": "8bc1bcd293f51655db2b682d0af9cd13fb36c03c233f4986965e559d8da5f7c1",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x44ee1986",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "factory-v1-execution-sim",
+      "directions": null,
+      "programKey": "parameters:b21f75502b8bd9005625034931eb28b2a3bd4dbfd2b30613d1beb9d7c4615c25",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x44ee1986",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "legacy-factory-execution-sim",
+      "directions": null,
+      "programKey": "parameters:c41fcf2e617abf6b0420a33729ba4f7adbadd3c6c79d4ecc942955a4371eeb25",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x44ee1986",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "lending-execution-sim",
+      "directions": null,
+      "programKey": "parameters:74d7b9b7fec8a8c2abd4a6a4d2ebe8ee412a4bce9f53f32e276e66efa40b53f9",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x44ee1986",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "metaregistry-execution-sim",
+      "directions": null,
+      "programKey": "parameters:0c36978eb91b3356f3551a75628cb965857086d9600529e6ebfcfb918834e31c",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x44ee1986",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "ng-factory-execution-sim",
+      "directions": null,
+      "programKey": "parameters:9f3d3ddb709489b2ad29c5fc0f0864af55cae4bd5a958156af9bb0dd00e58a48",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x48c89491",
+      "source": "listener/src/searcher/venues/swaps/univ4-family/univ4.json",
+      "variant": "singleton-poolkey-active-proof",
+      "directions": [
+        "one-for-zero",
+        "zero-for-one"
+      ],
+      "programKey": "parameters:fd26d295d092329564dc9c0eb9116492109f9fff0f466e06be602ee157363827",
+      "sourceSha256": "8ccd381b3bde3b9dcdc14cd0eb0d1f3b72ec3795f4b2f3a454903e95103f8916",
+      "executionSha256": "45d05e4fe93c7ed0282fa390380f50fc09044c8b7e3eee9673cc22bc4bfdb5f3",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x48c89491",
+      "source": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/univ4-fee-hook.json",
+      "variant": "fee-hook-sat1-active-proof",
+      "directions": [
+        "one-for-zero",
+        "zero-for-one"
+      ],
+      "programKey": "parameters:5b6c9666c1a533d04168978d0e8fe565c9839b12c6f5867e77acb6688ce2ec3c",
+      "sourceSha256": "15ddb8b3dd9e187aa65fda254cab4a98287ce85833fc27d8ac166c7872c66361",
+      "executionSha256": "95278f603523acf956d266736843a2a4e6918d294c66a6abdaf2e2f436be5da2",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x48c89491",
+      "source": "listener/src/searcher/venues/swaps/univ4-fee-hook-family/univ4-fee-hook.json",
+      "variant": "fee-hook-tiered-active-proof",
+      "directions": [
+        "one-for-zero",
+        "zero-for-one"
+      ],
+      "programKey": "parameters:b1a2c6f62808cb0ce17153e3e77a42c777bc90f2f6c94e191a208085ca34ad5f",
+      "sourceSha256": "15ddb8b3dd9e187aa65fda254cab4a98287ce85833fc27d8ac166c7872c66361",
+      "executionSha256": "7e7d2b8d8e91821fc5089e7f749dfaa3ff5fd824a64b1065e6e31220e29bebb9",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x52bbbe29",
+      "source": "listener/src/searcher/venues/swaps/balancer-v2-family/balancer-v2.json",
+      "variant": "vault-registered-pool",
+      "directions": null,
+      "programKey": "parameters:77d350838faf97ef8bbf0252b85174a8f4b5452184719b5c0cd02bbe1a61877b",
+      "sourceSha256": "de9e02e4c9121d6b209e1b95eaefb9f1c07c01cb046fc7663b249169d0cab089",
+      "executionSha256": "85bd5cfe1036fa966b2b484c6b581f68326491da0f4cd0a7e98a107dbdc9a574",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x59a87bc1",
+      "source": "listener/src/searcher/venues/swaps/zero1-curve-family/zero1-curve.json",
+      "variant": "bonding-sale",
+      "directions": [
+        "buy"
+      ],
+      "programKey": "parameters:7facfb470983b08b0913da9880fe28b749009475793f449ffade41792a075925",
+      "sourceSha256": "63b5f52476561567ad64d5f3d73863a8bc9de75d36d862ac7b9678f94c5d8b84",
+      "executionSha256": "083f2ec5aea98e45bad1a6bf54a32d42591593685224eb705906a4a59832c432",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x5b41b908",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+      "variant": "clone-execution-sim",
+      "directions": null,
+      "programKey": "parameters:ffba8e6dc6ad4475d1b9a9772ab91b2fd6475b5984e64d65ce254a85f05bc2a3",
+      "sourceSha256": "2a1e934a6e6d80b6a9f574a7516d09cbb48131530512870f1cf3d35969519936",
+      "executionSha256": "3ecc34d2d9769e23d551e6d11f9a8ac8d131b0aacfba9c681a27c1c299d1d18e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x5b41b908",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+      "variant": "registry-execution-sim",
+      "directions": null,
+      "programKey": "parameters:5421144452349540648a0622979048596c5c361ef6343e26597e4986caa6d24e",
+      "sourceSha256": "2a1e934a6e6d80b6a9f574a7516d09cbb48131530512870f1cf3d35969519936",
+      "executionSha256": "3ecc34d2d9769e23d551e6d11f9a8ac8d131b0aacfba9c681a27c1c299d1d18e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x5dbd6059",
+      "source": "listener/src/searcher/venues/protocols/few-wrapped-family/few-wrapped.json",
+      "variant": "factory-wrapper-effects",
+      "directions": [
+        "unwrap"
+      ],
+      "programKey": "parameters:6fc0f11974e64eebdd782a2cc901d5523561798fb841bbfb06a3060e6952fb9d",
+      "sourceSha256": "aae022825621a7487001d924301ca8fbb4509b67d5558706450d36ac63489551",
+      "executionSha256": "10316965b049bcaaee4df810ccd7e5c17477326131f77203c607e061fdb28126",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x5e5144eb",
+      "source": "listener/src/searcher/venues/protocols/astra-multitoken-family/astra-multitoken.json",
+      "variant": "observed-active-registry",
+      "directions": null,
+      "programKey": "parameters:a683300f33c95fb2d2cc206bb910840027dbb0ce6ed890357080b580f8709e10",
+      "sourceSha256": "289adb1c4b718eca354fe431fbfc9b36dc0758ce753f52f1ee6513b0d86d0618",
+      "executionSha256": "dca67cf6bda83a101c6d488a153052ec1f8b39f9c3a749040b4f6b9f944938b6",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x6145d1b7",
+      "source": "listener/src/searcher/venues/protocols/token-conversion-family/token-conversion.json",
+      "variant": "xwin-allocations-v1",
+      "directions": [
+        "redeem"
+      ],
+      "programKey": "parameters:87369c1d7dfd352fb63468cdb05c8afc6e82b08549a0e1211f9108bde18b6bba",
+      "sourceSha256": "4b76d33d7dcdec3391d43dab00af7d9701d197afa8fafa297238440051205b4b",
+      "executionSha256": "5ce616aad86bfec4b9269ba9dc80a99d1b881e25156d87484a1654c834270c10",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x65b2489b",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "factory-v1-execution-sim",
+      "directions": null,
+      "programKey": "parameters:e80cf3f97882c8936d8e38f19595cf24f8f1cb14d403f5286d85482e047dd2d8",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x65b2489b",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "legacy-factory-execution-sim",
+      "directions": null,
+      "programKey": "parameters:6f32a4e54ffb995672c037aeb7bff609120495eaea7e5deffc81c34031c42f36",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x65b2489b",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "lending-execution-sim",
+      "directions": null,
+      "programKey": "parameters:20f8e3e530961fe937e06f05821e37d7c3858564f83459cba3df811e619427b3",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x65b2489b",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "metaregistry-execution-sim",
+      "directions": null,
+      "programKey": "parameters:2c7004edc0d69c31bf16bcd9344a0aec416c9244cf7703c1f2f41d756752667b",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x65b2489b",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "ng-factory-execution-sim",
+      "directions": null,
+      "programKey": "parameters:2cc4bbd0fac7340c27c2891a2fdabecb46c6616d7a0c11766d710fd30377f2a7",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x6e553f65",
+      "source": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+      "variant": "frax-custodian-sync-conversion",
+      "directions": [
+        "deposit"
+      ],
+      "programKey": "parameters:67e6cce27240e76e3478fa4b0b4f191c390b5c5f3ddb54df1a955662f6267d85",
+      "sourceSha256": "f0e3d1541321aac3d513d6335d98d65f9e0c6b97330876b47ee8f42fed4dc639",
+      "executionSha256": "6c479743cd8a1dc0cff5dadf799f172bd8b0774a6b03d48ccd6af7d8b6cef2df",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x6e553f65",
+      "source": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+      "variant": "morpho-vault-v2",
+      "directions": [
+        "deposit"
+      ],
+      "programKey": "parameters:84891f44877178705b40a5c27fd19e93c4aa567d193d2ffdc911edf3ee184788",
+      "sourceSha256": "f0e3d1541321aac3d513d6335d98d65f9e0c6b97330876b47ee8f42fed4dc639",
+      "executionSha256": "9dd0a322ef3457103861ec7836d27b23ac4661e1e212dac89fca67de7bc56c3d",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x6e553f65",
+      "source": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+      "variant": "standalone-standard-behavior",
+      "directions": [
+        "deposit"
+      ],
+      "programKey": "parameters:493a0a57e55777c0beac67ea1134ca85b50906262d027cd67c387cd1df026901",
+      "sourceSha256": "f0e3d1541321aac3d513d6335d98d65f9e0c6b97330876b47ee8f42fed4dc639",
+      "executionSha256": "11e172fe204786624b0a57284cd557b679cbadf5f4a0d2f0977c722b580b4a57",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x6e553f65",
+      "source": "listener/src/searcher/venues/protocols/staked-usdat-family/staked-usdat.json",
+      "variant": "source-bound-staked-usdat-deposit",
+      "directions": [
+        "deposit"
+      ],
+      "programKey": "parameters:086afcd9170c9e06d922387f5dc58797ddecb09d95030fbe269f6dba657d1008",
+      "sourceSha256": "b564abf55a7a274c298109af01e1a30b1c7d34a58d996214308701ebcf292838",
+      "executionSha256": "4e661e8c204fb01be402496cef8b475fd15e82ea70fe542ae2185325d521d614",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x767691e7",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+      "variant": "clone-execution-sim",
+      "directions": null,
+      "programKey": "parameters:019087723cc7b86da1e4e5e912864a00f4987c6506232dc9e26dbe8db1f68f15",
+      "sourceSha256": "2a1e934a6e6d80b6a9f574a7516d09cbb48131530512870f1cf3d35969519936",
+      "executionSha256": "3ecc34d2d9769e23d551e6d11f9a8ac8d131b0aacfba9c681a27c1c299d1d18e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x767691e7",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+      "variant": "registry-execution-sim",
+      "directions": null,
+      "programKey": "parameters:63fee7ca9efce42b16f52771ea2d2507fd7726a56379654dbb3ba10fa3375339",
+      "sourceSha256": "2a1e934a6e6d80b6a9f574a7516d09cbb48131530512870f1cf3d35969519936",
+      "executionSha256": "3ecc34d2d9769e23d551e6d11f9a8ac8d131b0aacfba9c681a27c1c299d1d18e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x7e3db030",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+      "variant": "clone-execution-sim",
+      "directions": null,
+      "programKey": "parameters:4c341dab1d15f0a3bd9569fd97f15a2fe7a19a6796882f8540ce0aa4ad46ea47",
+      "sourceSha256": "2a1e934a6e6d80b6a9f574a7516d09cbb48131530512870f1cf3d35969519936",
+      "executionSha256": "3ecc34d2d9769e23d551e6d11f9a8ac8d131b0aacfba9c681a27c1c299d1d18e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x7e3db030",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+      "variant": "registry-execution-sim",
+      "directions": null,
+      "programKey": "parameters:04b7fd664db594fbfb1707fb9a3556466b09de896dbc9de4982311d1c1d9c49a",
+      "sourceSha256": "2a1e934a6e6d80b6a9f574a7516d09cbb48131530512870f1cf3d35969519936",
+      "executionSha256": "3ecc34d2d9769e23d551e6d11f9a8ac8d131b0aacfba9c681a27c1c299d1d18e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x8201aa3f",
+      "source": "listener/src/searcher/venues/swaps/balancer-v1-family/balancer-v1.json",
+      "variant": "crpt-created-finalized-bpool",
+      "directions": null,
+      "programKey": "parameters:bf0b97cb7141bcc69aaf3ef30f86de28048c5181ccb4be3dac87e6ea0ce5a393",
+      "sourceSha256": "1091264f31cfe6d931e6af50d5ffe28a5533ccadc8eccc28898097d8117e7939",
+      "executionSha256": "d8c743afaa05bd274481bda8b696e151a48665da30d033496829a180dded58de",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x8201aa3f",
+      "source": "listener/src/searcher/venues/swaps/balancer-v1-family/balancer-v1.json",
+      "variant": "factory-created-finalized-bpool",
+      "directions": null,
+      "programKey": "parameters:ce0b7d5017df01625c1767d4d1a3452a422c9ee409fc700a946b29521f5a9701",
+      "sourceSha256": "1091264f31cfe6d931e6af50d5ffe28a5533ccadc8eccc28898097d8117e7939",
+      "executionSha256": "d8c743afaa05bd274481bda8b696e151a48665da30d033496829a180dded58de",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x86b01724",
+      "source": "listener/src/searcher/venues/swaps/ella-exchange-family/ella-exchange.json",
+      "variant": "verified-native-base-runtime",
+      "directions": [
+        "sell-token"
+      ],
+      "programKey": "parameters:1c897cb55b708d5aca1756b034fa198ab7e613eef0024812f083763fe1b8daa7",
+      "sourceSha256": "b500af267a77dbc88d9ae6b0d904fd3bf43af07e62a3f7f17eab9e43c65751f6",
+      "executionSha256": "74bfd41db50e37fbae8264dd0cef0e43d60de1ca58e3c1e39cd097a9ec1390ef",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x8d7ef9bb",
+      "source": "listener/src/searcher/venues/protocols/psm-family/psm.json",
+      "variant": "lite-active-pair",
+      "directions": [
+        "buy-gem"
+      ],
+      "programKey": "parameters:896960aa34a55d2337bb6e85d41515fc7c426808df2cf91c67ec17444c37438d",
+      "sourceSha256": "900dcfc3ab68ec398c5617861f4b2cdd5f8b05e7d6fa42425d5ed3303e1cf761",
+      "executionSha256": "d80e25b0b64633cee046804e33e0296c70408cd1565abcbf4b245448f5e968bc",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x94bf804d",
+      "source": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+      "variant": "morpho-vault-v2",
+      "directions": [
+        "mint"
+      ],
+      "programKey": "parameters:75aed31ddd316aa5ffa664671ca9afc53904bd7f37d4cca0962b1f9eff75943e",
+      "sourceSha256": "f0e3d1541321aac3d513d6335d98d65f9e0c6b97330876b47ee8f42fed4dc639",
+      "executionSha256": "9dd0a322ef3457103861ec7836d27b23ac4661e1e212dac89fca67de7bc56c3d",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x95991276",
+      "source": "listener/src/searcher/venues/protocols/psm-family/psm.json",
+      "variant": "lite-active-pair",
+      "directions": [
+        "sell-gem"
+      ],
+      "programKey": "parameters:f4a88804a209fbed04f090e302a49e83a67fe8cddfc3b2253d3c05b37c116f27",
+      "sourceSha256": "900dcfc3ab68ec398c5617861f4b2cdd5f8b05e7d6fa42425d5ed3303e1cf761",
+      "executionSha256": "d80e25b0b64633cee046804e33e0296c70408cd1565abcbf4b245448f5e968bc",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0x95e3c50b",
+      "source": "listener/src/searcher/venues/swaps/uniswap-v1-family/uniswap-v1.json",
+      "variant": "immutable-vyper-clone-factory-registration",
+      "directions": [
+        "buy",
+        "sell"
+      ],
+      "programKey": "parameters:77ca6b0f08511d4ba80f328decd3d1c80b2e93755628383bb5bd97c159fa1700",
+      "sourceSha256": "d54b948a57f5efaafa056759b671e86b6e7a71a4dbf24e7ecaeeb8c2a82cd472",
+      "executionSha256": "565f5ed4b0760d2d00285b6341e5352ef59f1baaa94c0dcaff19b4d6f4898b20",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xa0712d68",
+      "source": "listener/src/searcher/venues/protocols/token-conversion-family/token-conversion.json",
+      "variant": "btb-bear-v1",
+      "directions": [
+        "mint"
+      ],
+      "programKey": "parameters:7c9a1cc2070e139ac00c0c6a93bb6f6e48151b5fa890cd0248cb9b653617c553",
+      "sourceSha256": "4b76d33d7dcdec3391d43dab00af7d9701d197afa8fafa297238440051205b4b",
+      "executionSha256": "a09a65976a2885271785bfef8f3b7410e5329eb0cacaf7da835eacd9fb2638a7",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xa6220b66",
+      "source": "listener/src/searcher/venues/swaps/precision-pool-family/precision-pool.json",
+      "variant": "precision-pool-direct-zero-hook-v1",
+      "directions": [
+        "0-1",
+        "1-0"
+      ],
+      "programKey": "parameters:b4e9e901aa021b574ef5d76ad172cc0869597c795ec2355d2a8255d4f90a171f",
+      "sourceSha256": "0e6e82dbb1a99bedc81f3f2895093a7bec021af3a8ba66ec5b2c2c59778a82cc",
+      "executionSha256": "8373df70f8dc31679a651c62d68a7ab303faeb40cde6a4b74cabe60342423b1e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xa6417ed6",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "factory-v1-execution-sim",
+      "directions": null,
+      "programKey": "parameters:96cf2f6c48262aa5d95fea050f6740bfd72b8b581ea07b60fec28f87f40444ea",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xa6417ed6",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "legacy-factory-execution-sim",
+      "directions": null,
+      "programKey": "parameters:b5a01bf94631ad1118b3b0f63ed9f76dfff183e7204108dd62abb9639940db4f",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xa6417ed6",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "lending-execution-sim",
+      "directions": null,
+      "programKey": "parameters:73c6c372ac923860cc69faf94363d4b8dee92576c57988e615075b53d04424ca",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xa6417ed6",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "metaregistry-execution-sim",
+      "directions": null,
+      "programKey": "parameters:3c2a81fba9b865c7886138a1fa9c8a292af91d4d7414ed3090a08bf1ddd05395",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xa6417ed6",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "ng-factory-execution-sim",
+      "directions": null,
+      "programKey": "parameters:4c351add2834b5534847d44cd310d462006f018a960ec26a2bb2423e17e6d74a",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xa6e81533",
+      "source": "listener/src/searcher/venues/swaps/oneswap-family/oneswap.json",
+      "variant": "proxy-and-bidirectional-factory-registration",
+      "directions": null,
+      "programKey": "parameters:b6093e9c9fa2b625edbdd4109532b2e59d6e2c5f23e6f5927a818bcdc429a125",
+      "sourceSha256": "b2dffe6ad485ab94249089dbca4b4604842b9f2e27a25797a841a8d9c0d392fd",
+      "executionSha256": "8eabfea3292e0b15a84d428aa3b7646708ab49fe8bdeff469a71703b15b257be",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xa88f90c1",
+      "source": "listener/src/searcher/venues/swaps/angstrom-v4-family/angstrom-v4.json",
+      "variant": "official-hook-poolkey-active-proof",
+      "directions": [
+        "one-for-zero",
+        "zero-for-one"
+      ],
+      "programKey": "parameters:ca65c147059b2b0601ba4f724b01d31c46c98d131c0c4af4c952d43ac63b5b6f",
+      "sourceSha256": "7a879892e788dec55041fc4b81b9f373b5a6874e220a6f7e3302d67da0101341",
+      "executionSha256": "92c115aefa6311c3edd8b45c8d4eb850b3758d2531506dfc303def3d64a19ff3",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xa9059cbb",
+      "source": "listener/src/searcher/venues/protocols/self-burn-native-family/self-burn-native.json",
+      "variant": "active-self-burn-effect-proof",
+      "directions": [
+        "self-burn-to-native"
+      ],
+      "programKey": "parameters:4ed77de0261a3159cade0b0f0438e19f9a83b9d425fc0c8e7f0616d379029c64",
+      "sourceSha256": "e5c638fa94577bed19cc6ecb225c64340d0f5c7a31e15de979aeaf15267b486a",
+      "executionSha256": "dd52d9c162d405288e778952b1eec03e9ae086bcf5b2a71e22cbdac07a257a31",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xad65d76d",
+      "source": "listener/src/searcher/venues/swaps/uniswap-v1-family/uniswap-v1.json",
+      "variant": "immutable-vyper-clone-factory-registration",
+      "directions": [
+        "buy",
+        "sell"
+      ],
+      "programKey": "parameters:4d66da5bf11bb96e5c9c601e221254d45ee4c6becc8a079819ec4ed13d600ad2",
+      "sourceSha256": "d54b948a57f5efaafa056759b671e86b6e7a71a4dbf24e7ecaeeb8c2a82cd472",
+      "executionSha256": "565f5ed4b0760d2d00285b6341e5352ef59f1baaa94c0dcaff19b4d6f4898b20",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xadc9772e",
+      "source": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+      "variant": "infinifi-gateway-staking",
+      "directions": [
+        "deposit"
+      ],
+      "programKey": "parameters:b469334217aa40e745df002b84b8fe7137c5ecc6412eee5252733475d2a19dea",
+      "sourceSha256": "f0e3d1541321aac3d513d6335d98d65f9e0c6b97330876b47ee8f42fed4dc639",
+      "executionSha256": "908a5057db7e9a643fb0fa2aa560819dd7a44e1c34f7ce221cbf47b72251085b",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xafb43012",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+      "variant": "clone-execution-sim",
+      "directions": null,
+      "programKey": "parameters:0b100a64b5185dcbf625aba454a20d5c041569d5a6df2c4fef7910cc0d57d587",
+      "sourceSha256": "2a1e934a6e6d80b6a9f574a7516d09cbb48131530512870f1cf3d35969519936",
+      "executionSha256": "3ecc34d2d9769e23d551e6d11f9a8ac8d131b0aacfba9c681a27c1c299d1d18e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xafb43012",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-family/curve-plain.json",
+      "variant": "registry-execution-sim",
+      "directions": null,
+      "programKey": "parameters:0a9b083500fe48e7c6cc38fd085f7d4f18f3deaf0a52cdea8aa6e2a1035e9e8c",
+      "sourceSha256": "2a1e934a6e6d80b6a9f574a7516d09cbb48131530512870f1cf3d35969519936",
+      "executionSha256": "3ecc34d2d9769e23d551e6d11f9a8ac8d131b0aacfba9c681a27c1c299d1d18e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xb460af94",
+      "source": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+      "variant": "morpho-vault-v2",
+      "directions": [
+        "withdraw"
+      ],
+      "programKey": "parameters:4df6c7b714df0f68a8b43ffa3ea168b12af8768cc87775929640c521c82ba3df",
+      "sourceSha256": "f0e3d1541321aac3d513d6335d98d65f9e0c6b97330876b47ee8f42fed4dc639",
+      "executionSha256": "9dd0a322ef3457103861ec7836d27b23ac4661e1e212dac89fca67de7bc56c3d",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xb72df5de",
+      "source": "listener/src/searcher/venues/swaps/curve-plain-lp-family/curve-plain-lp.json",
+      "variant": "ng-stableswap-2coin-lp-cycle",
+      "directions": null,
+      "programKey": "parameters:4dc3427140a87384402c3c6d4c3725274d224fe5fb676fcbded6094f057cfb0a",
+      "sourceSha256": "61b47d91df92648c40f8533d9f5d20138a5f665261c0a62570a5585bd5e4acc2",
+      "executionSha256": "30477ee26273c1bd245f440c2e24bf91c359ba029703ee927a55d50f9a3104a5",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xba087652",
+      "source": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+      "variant": "frax-custodian-sync-conversion",
+      "directions": [
+        "redeem"
+      ],
+      "programKey": "parameters:8841ac292576fdcab331f678743c82b45d11375a01a814787b154e6ec2b10e44",
+      "sourceSha256": "f0e3d1541321aac3d513d6335d98d65f9e0c6b97330876b47ee8f42fed4dc639",
+      "executionSha256": "6c479743cd8a1dc0cff5dadf799f172bd8b0774a6b03d48ccd6af7d8b6cef2df",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xba087652",
+      "source": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+      "variant": "morpho-vault-v2",
+      "directions": [
+        "redeem"
+      ],
+      "programKey": "parameters:0fe40ff251aefde6ca9eb7a3da8a5a425d014068273564309b1805bfd4a86fee",
+      "sourceSha256": "f0e3d1541321aac3d513d6335d98d65f9e0c6b97330876b47ee8f42fed4dc639",
+      "executionSha256": "9dd0a322ef3457103861ec7836d27b23ac4661e1e212dac89fca67de7bc56c3d",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xba087652",
+      "source": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+      "variant": "standalone-standard-behavior",
+      "directions": [
+        "redeem"
+      ],
+      "programKey": "parameters:9ce0fa60df7712df720e3fab9a1feea2ee87cef02b9b0943dca260beaf937e5d",
+      "sourceSha256": "f0e3d1541321aac3d513d6335d98d65f9e0c6b97330876b47ee8f42fed4dc639",
+      "executionSha256": "11e172fe204786624b0a57284cd557b679cbadf5f4a0d2f0977c722b580b4a57",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xbd6015b4",
+      "source": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
+      "variant": "registry-member-0",
+      "directions": [
+        "sell-base"
+      ],
+      "programKey": "parameters:d4f35fb90effa333c129eccab0864e712d01c0de87049a6aa7039a57390e9af9",
+      "sourceSha256": "c2042c415868a836102670dc620aea2d17947893b568923588dce1a02059e3c8",
+      "executionSha256": "eab96a04f77e27d23dcd654b56bd5e329ad4ae2d25c5e81b3eaf045bcfbc6c3e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xbd6015b4",
+      "source": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
+      "variant": "registry-member-1",
+      "directions": [
+        "sell-base"
+      ],
+      "programKey": "parameters:d4f35fb90effa333c129eccab0864e712d01c0de87049a6aa7039a57390e9af9",
+      "sourceSha256": "c2042c415868a836102670dc620aea2d17947893b568923588dce1a02059e3c8",
+      "executionSha256": "eab96a04f77e27d23dcd654b56bd5e329ad4ae2d25c5e81b3eaf045bcfbc6c3e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xbd6015b4",
+      "source": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
+      "variant": "registry-member-2",
+      "directions": [
+        "sell-base"
+      ],
+      "programKey": "parameters:d4f35fb90effa333c129eccab0864e712d01c0de87049a6aa7039a57390e9af9",
+      "sourceSha256": "c2042c415868a836102670dc620aea2d17947893b568923588dce1a02059e3c8",
+      "executionSha256": "eab96a04f77e27d23dcd654b56bd5e329ad4ae2d25c5e81b3eaf045bcfbc6c3e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xbd6015b4",
+      "source": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
+      "variant": "registry-member-3",
+      "directions": [
+        "sell-base"
+      ],
+      "programKey": "parameters:d4f35fb90effa333c129eccab0864e712d01c0de87049a6aa7039a57390e9af9",
+      "sourceSha256": "c2042c415868a836102670dc620aea2d17947893b568923588dce1a02059e3c8",
+      "executionSha256": "eab96a04f77e27d23dcd654b56bd5e329ad4ae2d25c5e81b3eaf045bcfbc6c3e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xc2a672e0",
+      "source": "listener/src/searcher/venues/protocols/erc4626-family/erc4626.json",
+      "variant": "infinifi-gateway-staking",
+      "directions": [
+        "redeem"
+      ],
+      "programKey": "parameters:66218c2b64860f38db90ed86c3c3fc72a9b8c87681aa6eda49b422b28fc255d4",
+      "sourceSha256": "f0e3d1541321aac3d513d6335d98d65f9e0c6b97330876b47ee8f42fed4dc639",
+      "executionSha256": "908a5057db7e9a643fb0fa2aa560819dd7a44e1c34f7ce221cbf47b72251085b",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xcb70e273",
+      "source": "listener/src/searcher/venues/protocols/metronome-hgusdc-family/metronome-hgusdc.json",
+      "variant": "observed-path-active-quote-proof",
+      "directions": [
+        "msusd-to-usdc"
+      ],
+      "programKey": "parameters:820ceb5858828a786f389576f0d8d1feb5fbb366cc420bf96681798b0ed868db",
+      "sourceSha256": "f96737e50d01582d38f47d856517bef19914739822437b6f2f9f66ef8967117d",
+      "executionSha256": "c519114af47de9e29ff5bad2ea6c245c0ffe36f18c4efac5f0da4534a42984fb",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xd0137d8d",
+      "source": "listener/src/searcher/venues/swaps/ella-exchange-family/ella-exchange.json",
+      "variant": "verified-native-base-runtime",
+      "directions": [
+        "buy-token"
+      ],
+      "programKey": "parameters:e936f0fe09472feefcf25717c2f389c0f49100efc82bde046440fc50888503bb",
+      "sourceSha256": "b500af267a77dbc88d9ae6b0d904fd3bf43af07e62a3f7f17eab9e43c65751f6",
+      "executionSha256": "74bfd41db50e37fbae8264dd0cef0e43d60de1ca58e3c1e39cd097a9ec1390ef",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xd01d073a",
+      "source": "listener/src/searcher/venues/protocols/rocksolid-family/rocksolid.json",
+      "variant": "active-sync-deposit",
+      "directions": [
+        "sync-deposit"
+      ],
+      "programKey": "parameters:e3ee98618e406be6ef7d83611177db8da1de60cea41dc8ec6ef07da8ec445e3f",
+      "sourceSha256": "2a2ee9a418a1f7a551c754669a78cc0011c56a37e4c7e8faf6eafdfa4ae87db7",
+      "executionSha256": "6f5a6b36637281c80a6a50e893f58a878a88d6c339aa3852c58c274b8dd9a7d9",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xd04c6983",
+      "source": "listener/src/searcher/venues/swaps/zero1-curve-family/zero1-curve.json",
+      "variant": "bonding-sale",
+      "directions": [
+        "sell"
+      ],
+      "programKey": "parameters:721cbaeb65a870496723a88ac381ce4a60860403cfcce9d1fd6382fb34472d14",
+      "sourceSha256": "63b5f52476561567ad64d5f3d73863a8bc9de75d36d862ac7b9678f94c5d8b84",
+      "executionSha256": "083f2ec5aea98e45bad1a6bf54a32d42591593685224eb705906a4a59832c432",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xdb006a75",
+      "source": "listener/src/searcher/venues/protocols/compound-ctoken-family/compound-ctoken.json",
+      "variant": "comptroller-registered-ctoken",
+      "directions": [
+        "redeem"
+      ],
+      "programKey": "parameters:10d6d88ca25c81d32ca6e5998b12c41887fdb43386d538fea4d09b7800e94787",
+      "sourceSha256": "271d32ce2b394872cf81577bec30103661eb6bbb19e5002102ab6edafca0bf81",
+      "executionSha256": "c22860816c8d1a471fef7b25cc613e924abbc97340c946fc9ef148ee448cbaab",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xdb006a75",
+      "source": "listener/src/searcher/venues/protocols/token-conversion-family/token-conversion.json",
+      "variant": "btb-bear-v1",
+      "directions": [
+        "redeem"
+      ],
+      "programKey": "parameters:c44e5189bf799787ec7d9203aa29966d3395b0212003b06d8a6534e2bcd38c9c",
+      "sourceSha256": "4b76d33d7dcdec3391d43dab00af7d9701d197afa8fafa297238440051205b4b",
+      "executionSha256": "a09a65976a2885271785bfef8f3b7410e5329eb0cacaf7da835eacd9fb2638a7",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xdd93f59a",
+      "source": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
+      "variant": "registry-member-0",
+      "directions": [
+        "sell-quote"
+      ],
+      "programKey": "parameters:f0ba3a11450c5f041cb1bea8e94a9d0b40862e6eb81f4f2856e71ee92cace753",
+      "sourceSha256": "c2042c415868a836102670dc620aea2d17947893b568923588dce1a02059e3c8",
+      "executionSha256": "eab96a04f77e27d23dcd654b56bd5e329ad4ae2d25c5e81b3eaf045bcfbc6c3e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xdd93f59a",
+      "source": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
+      "variant": "registry-member-1",
+      "directions": [
+        "sell-quote"
+      ],
+      "programKey": "parameters:f0ba3a11450c5f041cb1bea8e94a9d0b40862e6eb81f4f2856e71ee92cace753",
+      "sourceSha256": "c2042c415868a836102670dc620aea2d17947893b568923588dce1a02059e3c8",
+      "executionSha256": "eab96a04f77e27d23dcd654b56bd5e329ad4ae2d25c5e81b3eaf045bcfbc6c3e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xdd93f59a",
+      "source": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
+      "variant": "registry-member-2",
+      "directions": [
+        "sell-quote"
+      ],
+      "programKey": "parameters:f0ba3a11450c5f041cb1bea8e94a9d0b40862e6eb81f4f2856e71ee92cace753",
+      "sourceSha256": "c2042c415868a836102670dc620aea2d17947893b568923588dce1a02059e3c8",
+      "executionSha256": "eab96a04f77e27d23dcd654b56bd5e329ad4ae2d25c5e81b3eaf045bcfbc6c3e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xdd93f59a",
+      "source": "listener/src/searcher/venues/swaps/dodo-v2-family/dodo-v2.json",
+      "variant": "registry-member-3",
+      "directions": [
+        "sell-quote"
+      ],
+      "programKey": "parameters:f0ba3a11450c5f041cb1bea8e94a9d0b40862e6eb81f4f2856e71ee92cace753",
+      "sourceSha256": "c2042c415868a836102670dc620aea2d17947893b568923588dce1a02059e3c8",
+      "executionSha256": "eab96a04f77e27d23dcd654b56bd5e329ad4ae2d25c5e81b3eaf045bcfbc6c3e",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xde0e9a3e",
+      "source": "listener/src/searcher/venues/protocols/few-wrapped-family/few-wrapped.json",
+      "variant": "factory-wrapper-effects",
+      "directions": [
+        "unwrap"
+      ],
+      "programKey": "parameters:fd42cbce6121995fd0d73e45a910c7dec0342fd432a4e97a321da99034d25fe7",
+      "sourceSha256": "aae022825621a7487001d924301ca8fbb4509b67d5558706450d36ac63489551",
+      "executionSha256": "10316965b049bcaaee4df810ccd7e5c17477326131f77203c607e061fdb28126",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xde0e9a3e",
+      "source": "listener/src/searcher/venues/protocols/wsteth-family/wsteth.json",
+      "variant": "steth-active-binding",
+      "directions": [
+        "unwrap"
+      ],
+      "programKey": "parameters:4e2fb6195632029ef60a5c89c58de381302d6b58c52550add517e3f014dc2b44",
+      "sourceSha256": "c3888b1aae47f17fd6c124754532eb6ebd5008607d250ebbd9d4157c7b5d31b1",
+      "executionSha256": "037053e031743718621a61b70e3aaace02feb472a99ba3e90a8d61e04db52556",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xdf791e50",
+      "source": "listener/src/searcher/venues/protocols/metronome-synth-family/metronome-synth.json",
+      "variant": "active-synth-membership",
+      "directions": null,
+      "programKey": "parameters:18749beeac6d77746e5103a1257b2ab88637c624b963aa7f70994220f0d34d71",
+      "sourceSha256": "a366160df2987abcafe1b3530382cb65d380c3488a7b72eff48878f0644b28bf",
+      "executionSha256": "b5b908a9a5d07b7ce4a05f905f351a4330e1dc71472a170c7daf95b1e12beac3",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xe2ad025a",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "factory-v1-execution-sim",
+      "directions": null,
+      "programKey": "parameters:4b30046fc056fc300eff71303bd949c15ea538b1dbe46d53a478e1c5fc31cb2b",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xe2ad025a",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "legacy-factory-execution-sim",
+      "directions": null,
+      "programKey": "parameters:8ee53d6b8bc14044a3bc83b60918e783dee2f929029030fcf551d03c0c32d029",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xe2ad025a",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "lending-execution-sim",
+      "directions": null,
+      "programKey": "parameters:5b3b2184a1ea07a5a5daddf9ba6f0c8852c5cf51e1b76dda24b170e0b1baf915",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xe2ad025a",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "metaregistry-execution-sim",
+      "directions": null,
+      "programKey": "parameters:07b02c6cb5a1d09f6f3c7daeb300935faec62f3f99cd990571ef1f25ce270168",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xe2ad025a",
+      "source": "listener/src/searcher/venues/swaps/curve-underlying-family/curve-underlying.json",
+      "variant": "ng-factory-execution-sim",
+      "directions": null,
+      "programKey": "parameters:229f461bc48060345a1e997eb171b8082817908d0be015c46beecd47f7696aef",
+      "sourceSha256": "4bfd4eead1df2166643fb69924889e6a9a276ef3222b12dc070f7de29abc4399",
+      "executionSha256": "f826d9e8af77834552634d71ec04829c0d7ff6214ae330b2e74706b2a20f4bb0",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xe331d039",
+      "source": "listener/src/searcher/venues/swaps/mooniswap-family/mooniswap.json",
+      "variant": "verified-erc20-runtime",
+      "directions": [
+        "token0-to-token1",
+        "token1-to-token0"
+      ],
+      "programKey": "parameters:22e846f7d299c014b8f6e13a1975461027cd06305aa16d73a4fd6401cb03ee9b",
+      "sourceSha256": "07bb2f65542ee6afc04ed684de34464893dde755941652f770ef1bfcfd1ebee4",
+      "executionSha256": "02520a8b9af5ff85a362feae9ba49ef4ab1a8df8b745e55fc039b2e704c0fbf2",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xea598cb0",
+      "source": "listener/src/searcher/venues/protocols/few-wrapped-family/few-wrapped.json",
+      "variant": "factory-wrapper-effects",
+      "directions": [
+        "wrap"
+      ],
+      "programKey": "parameters:cfdb5070a1d54bb366e393211741a653b11bc7c729d67932e3ed11528a2637df",
+      "sourceSha256": "aae022825621a7487001d924301ca8fbb4509b67d5558706450d36ac63489551",
+      "executionSha256": "10316965b049bcaaee4df810ccd7e5c17477326131f77203c607e061fdb28126",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xea598cb0",
+      "source": "listener/src/searcher/venues/protocols/wsteth-family/wsteth.json",
+      "variant": "steth-active-binding",
+      "directions": [
+        "wrap"
+      ],
+      "programKey": "parameters:10ddec4cda61c9572ce5677bcce4c45a32760b8d9dd40bee933d9ad40f7ccb07",
+      "sourceSha256": "c3888b1aae47f17fd6c124754532eb6ebd5008607d250ebbd9d4157c7b5d31b1",
+      "executionSha256": "037053e031743718621a61b70e3aaace02feb472a99ba3e90a8d61e04db52556",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xf196187f",
+      "source": "listener/src/searcher/venues/swaps/ekubo-family/ekubo.json",
+      "variant": "vanilla-core-key-active-quote",
+      "directions": null,
+      "programKey": "parameters:bd040ec9fbcce3b6b4f6c32bc7778a6be95e6dfc01861b213c8ac096b8b2e81e",
+      "sourceSha256": "d3686f2fbfb4ed4636ef8c6572e0949ff7869dddb485fb74958853b6efe01a9e",
+      "executionSha256": "33bdbf255c155ad3b2d9c1b070631fcf89e1ad3acbaac56a3e29525aa9d95aeb",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xf39b5b9b",
+      "source": "listener/src/searcher/venues/swaps/uniswap-v1-family/uniswap-v1.json",
+      "variant": "immutable-vyper-clone-factory-registration",
+      "directions": [
+        "buy",
+        "sell"
+      ],
+      "programKey": "parameters:0e92e98b7072d1ba617db90324f64c2328431a31315b53d6c34be3020acdd333",
+      "sourceSha256": "d54b948a57f5efaafa056759b671e86b6e7a71a4dbf24e7ecaeeb8c2a82cd472",
+      "executionSha256": "565f5ed4b0760d2d00285b6341e5352ef59f1baaa94c0dcaff19b4d6f4898b20",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xf5720c4a",
+      "source": "listener/src/searcher/venues/protocols/token-migration-family/token-migration.json",
+      "variant": "mantle-immutable-runtime",
+      "directions": [
+        "migrate"
+      ],
+      "programKey": "parameters:caa1e27cc03a7fa87dfbcf5c9ee2d9937ce67721ab468a2f531a40830b7d6151",
+      "sourceSha256": "a099f5d9906f372f68fd59f6df0fa9ccdaf7d7d7165447a05b509aaf70933784",
+      "executionSha256": "015e26b3de54054c5e4fd148bdd81dc63b1210d77a77d175736d786439094afd",
+      "kind": "execution-and-parameter-data"
+    },
+    {
+      "selector": "0xfea53be1",
+      "source": "listener/src/searcher/venues/protocols/erc4626-silo-redeem-family/erc4626-silo-redeem.json",
+      "variant": "observed-payout-active-proof",
+      "directions": [
+        "silo-redeem"
+      ],
+      "programKey": "parameters:24292d4f727b3a53f9f697a6cb66a72edb919825398b4293c0545668ad3d5536",
+      "sourceSha256": "7e8650f4454bcda8b153f42d1045093c8ef0f265cdd380ddb090aec9394f6d29",
+      "executionSha256": "1f515b9de656781b99e0db8c14c044ff04ebcd017ffa84c6537ba09d4b053da1",
+      "kind": "execution-and-parameter-data"
+    }
+  ]
+}

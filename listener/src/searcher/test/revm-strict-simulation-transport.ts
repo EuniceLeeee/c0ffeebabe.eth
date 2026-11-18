@@ -476,7 +476,7 @@ test("actual node funding rejection retains its cause without becoming revert ev
   await assert.rejects(f.transport.simulate(invocation()), error => {
     assert(error instanceof RevmStrictError);
     assert.equal(error.message, "node input funding unsupported balance layout");
-    assert.equal(error.kind, "execution");
+    assert.equal(error.kind, "observation", "unproven funding layout is incomplete observation, not a completed EVM failure");
     return notEvidence(error);
   });
   await f.transport.simulate(invocation());

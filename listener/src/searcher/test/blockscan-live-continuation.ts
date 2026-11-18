@@ -99,9 +99,9 @@ test("startup results defer during catch-up, reuse clean paths, and recheck chan
     simulateStandalone: Object.assign(async (input: any) => {
       calls++;
       let amount = input.amount;
-      const receipts = [{ hop: -1, amountIn: amount, amountOut: amount }];
+      const receipts = [{ hop: -1, amountIn: amount, amountOut: amount, amountSpent: amount }];
       for (let hop = 0; hop < input.legs.length; hop++) {
-        receipts.push({ hop, amountIn: amount, amountOut: amount * 2n }); amount *= 2n;
+        receipts.push({ hop, amountIn: amount, amountOut: amount * 2n, amountSpent: amount }); amount *= 2n;
       }
       return { kind: "success" as const, returnData: "0x", gasUsed: 1n, targetBlock: input.source.number + 1,
         scriptHash: hash(1), inputFundingMode: "native-prefix" as const, receipts, simulationMs: 1, nodeQueueMs: 0 };

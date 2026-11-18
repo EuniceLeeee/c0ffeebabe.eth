@@ -1,0 +1,1502 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x867904b4",
+  "signature": "function issue(address, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": false,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_867904B4_ENABLED"
+  },
+  "programs": [
+    {
+      "parameters": [
+        {
+          "path": [
+            0
+          ],
+          "role": "tokenOut"
+        }
+      ],
+      "values": {
+        "abi": {
+          "basket": [
+            "function getComponents() view returns(address[])",
+            "function getUnits() view returns(uint256[])",
+            "function naturalUnit() view returns(uint256)"
+          ],
+          "core": [
+            "function transferProxy() view returns(address)",
+            "function vault() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "nomination": {
+          "poolIdPath": [
+            0
+          ],
+          "poolNamespace": "component-basket",
+          "parameterPaths": [
+            [
+              0
+            ]
+          ]
+        },
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "basket",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "components",
+                  "kind": "eth-call",
+                  "to": "$args.0",
+                  "completion": "return-data",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "basket",
+                      "getComponents",
+                      []
+                    ]
+                  }
+                },
+                {
+                  "id": "transferProxy",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "completion": "return-data",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "core",
+                      "transferProxy",
+                      []
+                    ]
+                  }
+                },
+                {
+                  "id": "vault",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "completion": "return-data",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "core",
+                      "vault",
+                      []
+                    ]
+                  }
+                }
+              ],
+              "result": {
+                "components": {
+                  "op": "map",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "basket",
+                        "getComponents",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "components"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "token",
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$token"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "transferProxy": {
+                  "op": "decode",
+                  "args": [
+                    "core",
+                    "transferProxy",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "transferProxy"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                },
+                "vault": {
+                  "op": "decode",
+                  "args": [
+                    "core",
+                    "vault",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "vault"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            }
+          ],
+          "result": "$steps.basket"
+        },
+        "descriptor": {
+          "set": "$args.0",
+          "components": "$binding.components",
+          "componentRows": {
+            "op": "map",
+            "args": [
+              "$binding.components",
+              "token",
+              {
+                "token": "$token",
+                "index": "$index"
+              }
+            ]
+          },
+          "transferProxy": "$binding.transferProxy",
+          "vault": "$binding.vault",
+          "tokenIn": {
+            "op": "at",
+            "args": [
+              "$binding.components",
+              0
+            ]
+          },
+          "tokenOut": "$args.0"
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$binding.components"
+                  ]
+                },
+                0
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    {
+                      "op": "unique",
+                      "args": [
+                        "$binding.components"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$binding.components"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "every",
+              "args": [
+                "$binding.components",
+                "token",
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$token",
+                            "$args.0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$token",
+                            "$target"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$binding.components"
+                  ]
+                },
+                1
+              ]
+            }
+          ]
+        }
+      },
+      "routes": {
+        "resource": {
+          "target": "$descriptor.set"
+        }
+      },
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": {
+          "op": "concat",
+          "args": [
+            [
+              "$target",
+              "$route.tokenIn",
+              "$route.tokenOut"
+            ],
+            [
+              "$descriptor.vault",
+              "$descriptor.transferProxy"
+            ]
+          ]
+        },
+        "steps": [
+          {
+            "id": "membership",
+            "static": true,
+            "call": {
+              "target": "$descriptor.set",
+              "signature": "function getComponents() view returns(address[])",
+              "args": [],
+              "save": {
+                "member": {
+                  "arrayIndex": 0,
+                  "length": 1
+                }
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "member"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "$route.tokenIn"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "proxy",
+            "static": true,
+            "call": {
+              "target": "$target",
+              "signature": "function transferProxy() view returns(address)",
+              "args": [],
+              "save": {
+                "proxy": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "proxy"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "$descriptor.transferProxy"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "vault",
+            "static": true,
+            "call": {
+              "target": "$target",
+              "signature": "function vault() view returns(address)",
+              "args": [],
+              "save": {
+                "vault": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "vault"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "$descriptor.vault"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "oldCredit",
+            "static": true,
+            "call": {
+              "target": "$descriptor.vault",
+              "signature": "function getOwnerBalance(address,address) view returns(uint256)",
+              "args": [
+                "$route.tokenIn",
+                "$executor"
+              ],
+              "save": {
+                "oldCredit": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "oldCredit"
+                  },
+                  "operator": "eq",
+                  "right": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "units",
+            "static": true,
+            "call": {
+              "target": "$descriptor.set",
+              "signature": "function getUnits() view returns(uint256[])",
+              "args": [],
+              "save": {
+                "unit": {
+                  "arrayIndex": 0,
+                  "length": 1
+                }
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "unit"
+                  },
+                  "operator": "gte",
+                  "right": 1
+                }
+              ]
+            }
+          },
+          {
+            "id": "natural",
+            "static": true,
+            "call": {
+              "target": "$descriptor.set",
+              "signature": "function naturalUnit() view returns(uint256)",
+              "args": [],
+              "save": {
+                "natural": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "natural"
+                  },
+                  "operator": "gte",
+                  "right": 1
+                }
+              ]
+            }
+          },
+          {
+            "id": "quantity",
+            "math": {
+              "model": "naturalunitissuance",
+              "inputs": {
+                "input": {
+                  "runtime": "amountIn"
+                },
+                "unit": {
+                  "runtime": "unit"
+                },
+                "natural": {
+                  "runtime": "natural"
+                }
+              },
+              "outputs": {
+                "recomposed": "recomposed",
+                "quantity": "quantity"
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "recomposed"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "oldAllowance",
+            "static": true,
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function allowance(address,address) view returns(uint256)",
+              "args": [
+                "$executor",
+                "$descriptor.transferProxy"
+              ],
+              "save": {
+                "oldAllowance": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "oldAllowance"
+                  },
+                  "operator": "eq",
+                  "right": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "issue",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$descriptor.transferProxy",
+              "mode": "exact-clear",
+              "requireBool": false,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function issue(address,uint256)",
+              "args": [
+                "$descriptor.set",
+                {
+                  "runtime": "quantity"
+                }
+              ]
+            }
+          },
+          {
+            "id": "credit",
+            "static": true,
+            "call": {
+              "target": "$descriptor.vault",
+              "signature": "function getOwnerBalance(address,address) view returns(uint256)",
+              "args": [
+                "$route.tokenIn",
+                "$executor"
+              ],
+              "save": {
+                "credit": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "credit"
+                  },
+                  "operator": "eq",
+                  "right": 0
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "minimum": {
+              "runtime": "quantity"
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          },
+          {
+            "kind": "supply",
+            "token": "$route.tokenOut",
+            "direction": "increase",
+            "equals": {
+              "runtime": "quantity"
+            }
+          }
+        ]
+      },
+      "runtimeMath": {
+        "version": 1,
+        "entries": {
+          "naturalunitissuance": {
+            "model": "natural-unit-issuance",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "natural-unit-issuance",
+            "version": 1,
+            "inputs": [
+              "input",
+              "unit",
+              "natural"
+            ],
+            "outputs": [
+              "recomposed",
+              "quantity"
+            ],
+            "operations": [
+              {
+                "name": "lots",
+                "op": "div",
+                "left": {
+                  "input": "input"
+                },
+                "right": {
+                  "input": "unit"
+                }
+              },
+              {
+                "name": "recomposed",
+                "op": "mul",
+                "left": {
+                  "local": "lots"
+                },
+                "right": {
+                  "input": "unit"
+                }
+              },
+              {
+                "name": "quantity",
+                "op": "mul",
+                "left": {
+                  "local": "lots"
+                },
+                "right": {
+                  "input": "natural"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dependencies": {
+        "op": "concat",
+        "args": [
+          "$descriptor.components",
+          [
+            "$target",
+            "$descriptor.set",
+            "$descriptor.vault",
+            "$descriptor.transferProxy"
+          ]
+        ]
+      },
+      "meta": {
+        "sourceFamily": "set-redemption",
+        "migrationKey": "typed:set:legacy-issue:self:plain",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    },
+    {
+      "parameters": [
+        {
+          "path": [
+            0
+          ],
+          "role": "tokenOut"
+        }
+      ],
+      "values": {
+        "abi": {
+          "basket": [
+            "function getComponents() view returns(address[])",
+            "function getUnits() view returns(uint256[])",
+            "function naturalUnit() view returns(uint256)"
+          ],
+          "core": [
+            "function transferProxy() view returns(address)",
+            "function vault() view returns(address)"
+          ]
+        }
+      },
+      "binding": {
+        "nomination": {
+          "poolIdPath": [
+            0
+          ],
+          "poolNamespace": "component-basket",
+          "parameterPaths": [
+            [
+              0
+            ]
+          ]
+        },
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "basket",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "components",
+                  "kind": "eth-call",
+                  "to": "$args.0",
+                  "completion": "return-data",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "basket",
+                      "getComponents",
+                      []
+                    ]
+                  }
+                },
+                {
+                  "id": "transferProxy",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "completion": "return-data",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "core",
+                      "transferProxy",
+                      []
+                    ]
+                  }
+                },
+                {
+                  "id": "vault",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "completion": "return-data",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "core",
+                      "vault",
+                      []
+                    ]
+                  }
+                }
+              ],
+              "result": {
+                "components": {
+                  "op": "map",
+                  "args": [
+                    {
+                      "op": "decode",
+                      "args": [
+                        "basket",
+                        "getComponents",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "components"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "token",
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$token"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                "transferProxy": {
+                  "op": "decode",
+                  "args": [
+                    "core",
+                    "transferProxy",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "transferProxy"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                },
+                "vault": {
+                  "op": "decode",
+                  "args": [
+                    "core",
+                    "vault",
+                    {
+                      "op": "get",
+                      "args": [
+                        {
+                          "op": "returned",
+                          "args": [
+                            "vault"
+                          ]
+                        },
+                        "data"
+                      ]
+                    },
+                    0
+                  ]
+                }
+              }
+            }
+          ],
+          "result": "$steps.basket"
+        },
+        "descriptor": {
+          "set": "$args.0",
+          "components": "$binding.components",
+          "componentRows": {
+            "op": "map",
+            "args": [
+              "$binding.components",
+              "token",
+              {
+                "token": "$token",
+                "index": "$index"
+              }
+            ]
+          },
+          "transferProxy": "$binding.transferProxy",
+          "vault": "$binding.vault",
+          "tokenIn": {
+            "op": "at",
+            "args": [
+              "$binding.components",
+              0
+            ]
+          },
+          "tokenOut": "$args.0"
+        },
+        "match": {
+          "op": "and",
+          "args": [
+            {
+              "op": "gt",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$binding.components"
+                  ]
+                },
+                0
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    {
+                      "op": "unique",
+                      "args": [
+                        "$binding.components"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "length",
+                  "args": [
+                    "$binding.components"
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "every",
+              "args": [
+                "$binding.components",
+                "token",
+                {
+                  "op": "and",
+                  "args": [
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$token",
+                            "$args.0"
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "op": "not",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$token",
+                            "$target"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "eq",
+              "args": [
+                {
+                  "op": "length",
+                  "args": [
+                    "$binding.components"
+                  ]
+                },
+                1
+              ]
+            }
+          ]
+        }
+      },
+      "routes": {
+        "resource": {
+          "target": "$descriptor.set"
+        }
+      },
+      "execution": {
+        "version": 2,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": {
+          "op": "concat",
+          "args": [
+            [
+              "$target",
+              "$route.tokenIn",
+              "$route.tokenOut"
+            ],
+            [
+              "$descriptor.vault",
+              "$descriptor.transferProxy"
+            ]
+          ]
+        },
+        "steps": [
+          {
+            "id": "membership",
+            "static": true,
+            "call": {
+              "target": "$descriptor.set",
+              "signature": "function getComponents() view returns(address[])",
+              "args": [],
+              "save": {
+                "member": {
+                  "arrayIndex": 0,
+                  "length": 1
+                }
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "member"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "$route.tokenIn"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "proxy",
+            "static": true,
+            "call": {
+              "target": "$target",
+              "signature": "function transferProxy() view returns(address)",
+              "args": [],
+              "save": {
+                "proxy": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "proxy"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "$descriptor.transferProxy"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "vault",
+            "static": true,
+            "call": {
+              "target": "$target",
+              "signature": "function vault() view returns(address)",
+              "args": [],
+              "save": {
+                "vault": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "vault"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "op": "uint",
+                    "args": [
+                      "$descriptor.vault"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "oldCredit",
+            "static": true,
+            "call": {
+              "target": "$descriptor.vault",
+              "signature": "function getOwnerBalance(address,address) view returns(uint256)",
+              "args": [
+                "$route.tokenIn",
+                "$executor"
+              ],
+              "save": {
+                "oldCredit": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "oldCredit"
+                  },
+                  "operator": "eq",
+                  "right": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "units",
+            "static": true,
+            "call": {
+              "target": "$descriptor.set",
+              "signature": "function getUnits() view returns(uint256[])",
+              "args": [],
+              "save": {
+                "unit": {
+                  "arrayIndex": 0,
+                  "length": 1
+                }
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "unit"
+                  },
+                  "operator": "gte",
+                  "right": 1
+                }
+              ]
+            }
+          },
+          {
+            "id": "natural",
+            "static": true,
+            "call": {
+              "target": "$descriptor.set",
+              "signature": "function naturalUnit() view returns(uint256)",
+              "args": [],
+              "save": {
+                "natural": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "natural"
+                  },
+                  "operator": "gte",
+                  "right": 1
+                }
+              ]
+            }
+          },
+          {
+            "id": "quantity",
+            "math": {
+              "model": "naturalunitissuance",
+              "inputs": {
+                "input": {
+                  "runtime": "amountIn"
+                },
+                "unit": {
+                  "runtime": "unit"
+                },
+                "natural": {
+                  "runtime": "natural"
+                }
+              },
+              "outputs": {
+                "recomposed": "recomposed",
+                "quantity": "quantity"
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "recomposed"
+                  },
+                  "operator": "eq",
+                  "right": {
+                    "runtime": "amountIn"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "fee",
+            "static": true,
+            "call": {
+              "target": "$descriptor.set",
+              "signature": "function entryFee() view returns(uint256)",
+              "args": [],
+              "save": {
+                "fee": 0
+              },
+              "checks": [
+                {
+                  "left": "999999999999999999",
+                  "operator": "gte",
+                  "right": {
+                    "runtime": "fee"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "id": "feeRecipient",
+            "static": true,
+            "call": {
+              "target": "$descriptor.set",
+              "signature": "function feeRecipient() view returns(address)",
+              "args": [],
+              "save": {
+                "feeRecipient": 0
+              }
+            }
+          },
+          {
+            "id": "netReceipt",
+            "math": {
+              "model": "recipientnetentryfee",
+              "inputs": {
+                "quantity": {
+                  "runtime": "quantity"
+                },
+                "fee": {
+                  "runtime": "fee"
+                },
+                "feeRecipient": {
+                  "runtime": "feeRecipient"
+                },
+                "recipient": {
+                  "op": "uint",
+                  "args": [
+                    "$recipient"
+                  ]
+                }
+              },
+              "outputs": {
+                "minimum": "minimum"
+              }
+            }
+          },
+          {
+            "id": "oldAllowance",
+            "static": true,
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function allowance(address,address) view returns(uint256)",
+              "args": [
+                "$executor",
+                "$descriptor.transferProxy"
+              ],
+              "save": {
+                "oldAllowance": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "oldAllowance"
+                  },
+                  "operator": "eq",
+                  "right": 0
+                }
+              ]
+            }
+          },
+          {
+            "id": "issue",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$descriptor.transferProxy",
+              "mode": "exact-clear",
+              "requireBool": false,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function issue(address,uint256)",
+              "args": [
+                "$descriptor.set",
+                {
+                  "runtime": "quantity"
+                }
+              ]
+            }
+          },
+          {
+            "id": "credit",
+            "static": true,
+            "call": {
+              "target": "$descriptor.vault",
+              "signature": "function getOwnerBalance(address,address) view returns(uint256)",
+              "args": [
+                "$route.tokenIn",
+                "$executor"
+              ],
+              "save": {
+                "credit": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "credit"
+                  },
+                  "operator": "eq",
+                  "right": 0
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "minimum": {
+              "runtime": "minimum"
+            }
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          },
+          {
+            "kind": "supply",
+            "token": "$route.tokenOut",
+            "direction": "increase",
+            "equals": {
+              "runtime": "quantity"
+            }
+          }
+        ]
+      },
+      "runtimeMath": {
+        "version": 1,
+        "entries": {
+          "naturalunitissuance": {
+            "model": "natural-unit-issuance",
+            "version": 1
+          },
+          "recipientnetentryfee": {
+            "model": "recipient-net-entry-fee",
+            "version": 1
+          }
+        },
+        "models": [
+          {
+            "id": "natural-unit-issuance",
+            "version": 1,
+            "inputs": [
+              "input",
+              "unit",
+              "natural"
+            ],
+            "outputs": [
+              "recomposed",
+              "quantity"
+            ],
+            "operations": [
+              {
+                "name": "lots",
+                "op": "div",
+                "left": {
+                  "input": "input"
+                },
+                "right": {
+                  "input": "unit"
+                }
+              },
+              {
+                "name": "recomposed",
+                "op": "mul",
+                "left": {
+                  "local": "lots"
+                },
+                "right": {
+                  "input": "unit"
+                }
+              },
+              {
+                "name": "quantity",
+                "op": "mul",
+                "left": {
+                  "local": "lots"
+                },
+                "right": {
+                  "input": "natural"
+                }
+              }
+            ]
+          },
+          {
+            "id": "recipient-net-entry-fee",
+            "version": 1,
+            "inputs": [
+              "quantity",
+              "fee",
+              "feeRecipient",
+              "recipient"
+            ],
+            "outputs": [
+              "minimum"
+            ],
+            "operations": [
+              {
+                "name": "feeNumerator",
+                "op": "mul",
+                "left": {
+                  "input": "quantity"
+                },
+                "right": {
+                  "input": "fee"
+                }
+              },
+              {
+                "name": "feeAmount",
+                "op": "div",
+                "left": {
+                  "local": "feeNumerator"
+                },
+                "right": {
+                  "constant": "1000000000000000000"
+                }
+              },
+              {
+                "name": "receivesFee",
+                "op": "eq",
+                "left": {
+                  "input": "feeRecipient"
+                },
+                "right": {
+                  "input": "recipient"
+                }
+              },
+              {
+                "name": "otherReceiver",
+                "op": "sub",
+                "left": {
+                  "constant": "1"
+                },
+                "right": {
+                  "local": "receivesFee"
+                }
+              },
+              {
+                "name": "lostFee",
+                "op": "mul",
+                "left": {
+                  "local": "feeAmount"
+                },
+                "right": {
+                  "local": "otherReceiver"
+                }
+              },
+              {
+                "name": "minimum",
+                "op": "sub",
+                "left": {
+                  "input": "quantity"
+                },
+                "right": {
+                  "local": "lostFee"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "dependencies": {
+        "op": "concat",
+        "args": [
+          "$descriptor.components",
+          [
+            "$target",
+            "$descriptor.set",
+            "$descriptor.vault",
+            "$descriptor.transferProxy"
+          ]
+        ]
+      },
+      "meta": {
+        "sourceFamily": "set-redemption",
+        "migrationKey": "typed:set:legacy-issue:self:fee",
+        "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
+      }
+    }
+  ]
+}

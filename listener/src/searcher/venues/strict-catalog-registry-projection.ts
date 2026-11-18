@@ -27,7 +27,7 @@ import type {
   FundingSource,
   PreparedFundingFamily,
   RegisteredFundingFamily,
-} from "./funding/funding-capability.js";
+} from "./funding-capability.js";
 import type {
   LandedPoolMaterializationCapability,
   LandedPoolMaterializationContext,
@@ -236,7 +236,7 @@ function bridgeLandedEvents(
   family: LoadedStrictFamilyPlugin,
 ): SwapAdapter["landedEvents"] {
   const swapSemantics = strictPluginForDomain(family.plugin, "swap").swap;
-  const events = swapSemantics.landedEvents.patternIds.flatMap((patternId) => {
+  const events = (swapSemantics.landedEvents?.patternIds ?? []).flatMap((patternId) => {
     const topic = patternTopicById(family, patternId);
     // Call-based landed observations have no receipt topic and cannot be
     // indexed by the legacy lane; they stay strict-owned.
@@ -253,11 +253,7 @@ function bridgeLandedEvents(
       invalidatesWarmState: true,
     })];
   });
-  if (events.length === 0) {
-    throw new Error(
-      `strict projection: family ${family.plugin.manifest.familyId} declares no log-based landed event`,
-    );
-  }
+  if (events.length === 0) return undefined;
   return Object.freeze({
     swaps: events,
     mutations: Object.freeze([]),
@@ -276,7 +272,7 @@ function bridgeObservation(
   // The legacy LandedEventRegistry requires observation topics to equal the
   // landed swap topics exactly, so both bridge from the same pattern set.
   const topics = Object.freeze(
-    swapSemantics.landedEvents.patternIds.flatMap((patternId) => {
+    (swapSemantics.landedEvents?.patternIds ?? []).flatMap((patternId) => {
       const topic = patternTopicById(family, patternId);
       return topic === null ? [] : [topic];
     }),
@@ -309,7 +305,7 @@ function bridgePoolMaterialization(
   // every landed swap event id, so the bridge declares exactly the bridged
   // landed event set (the strict poolMaterialization patterns stay strict).
   const eventIds = Object.freeze(
-    swapSemantics.landedEvents.patternIds.filter(
+    (swapSemantics.landedEvents?.patternIds ?? []).filter(
       (patternId) => patternTopicById(family, patternId) !== null,
     ),
   );
@@ -668,6 +664,10 @@ function bridgeFundingFamily(
       },
     });
   };
+  if (fundingSemantics.repayment.target === undefined || fundingSemantics.repayment.liquidityHolder === undefined ||
+      fundingSemantics.repayment.paramShape === undefined) {
+    throw new Error("retired Funding registry cannot project selector/provider bindings; use the strict runtime funding offers");
+  }
   return Object.freeze({
     familyId: manifest.familyId as unknown as RegisteredFundingFamily["familyId"],
     actionAdapterId: manifest.ownedActionAdapterIds[0],
@@ -741,6 +741,8 @@ function projectSwapFamily(
   ]) as readonly PoolEntry["adapter"][];
   const edgeAdapterIds = Object.freeze([...(manifest.edgeAdapterIds ?? [])]);
   const matureDex = familyIsMatureDex(poolAdapters, matureDexCatalogInfo);
+  const landedEvents = bridgeLandedEvents(family);
+  const victimSupport = strictPluginForDomain(family.plugin, "swap").swap.victimSupport;
   return Object.freeze({
     id: familyId,
     kind: "swap",
@@ -774,18 +776,18 @@ function projectSwapFamily(
             strength: 0,
           }),
         }),
-    landedEvents: bridgeLandedEvents(family),
+    ...(landedEvents === undefined ? {} : { landedEvents }),
     // Mature DEX families (univ2/univ3) keep the legacy shape: no family
     // materializer (generic address-emitter events). Every other swap family
     // carries a fail-closed materializer; the strict pipeline owns landing.
-    ...(matureDex
+    ...(matureDex || landedEvents === undefined
       ? {}
       : { poolDiscovery: bridgePoolMaterialization(family) }),
-    observation: bridgeObservation(family),
-    victimModel: Object.freeze({
+    ...(landedEvents === undefined ? {} : { observation: bridgeObservation(family) }),
+    ...(victimSupport === "none" ? {} : { victimModel: Object.freeze({
       id: `${manifest.familyId}:strict-detect-only`,
       mode: "detect-only",
-    }) as SwapVictimModelDeclaration,
+    }) as SwapVictimModelDeclaration }),
     pricingState: createStrictViewsPricingCapability(family),
     quoteExact() {
       return strictOnlyThrow(manifest.familyId, "quoteExact");

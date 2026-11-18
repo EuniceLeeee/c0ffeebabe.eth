@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0xc6a5026a",
+  "signature": "function quoteExactInputSingle((address, address, uint256, uint24, uint160))",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_C6A5026A_ENABLED"
+  },
+  "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

@@ -201,13 +201,17 @@ export async function readStartupTable(path: string, identity: StartupTableIdent
 
 /** Preserve production startup-once lifecycle in the CLI, without manufacturing
  * success receipts or changing any pool/price/graph filter. */
-export function cliStartupReplay(production: StartupExecutionPreflight) {
+export function cliStartupReplay(production: Pick<StartupExecutionPreflight, "run" | "reset"> &
+  Partial<Pick<StartupExecutionPreflight, "quoteEffective">>) {
   let restored = false;
   return {
     restore(table: Awaited<ReturnType<typeof readStartupTable>>) {
       assert(table.reused && table.mode === "observe-only" && table.filtersAdded === 0);
       restored = true;
     },
+    // Restoring an already priced table skips its screening pass only. Fresh
+    // prices at the next source still use the same funded execution as live.
+    quoteEffective: production.quoteEffective?.bind(production),
     run: ((work) => restored ? Promise.resolve(false) : production.run(work)) as StartupExecutionPreflight["run"],
     reset() { restored = false; production.reset(); },
   };

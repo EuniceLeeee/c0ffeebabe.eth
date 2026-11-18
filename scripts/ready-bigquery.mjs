@@ -9,7 +9,9 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statfs
 import { resolve, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import { tableRef, tableUrl, sourcePin, decodeRow, observationsFromTx, emptyCounts, digest, saveJson, makeApi } from './bigquery-table.mjs';
+import { tableRef, tableUrl, sourcePin, decodeRow, observationsFromTx, emptyCounts, digest, saveJson, makeApi,
+  readySelectorCensusFromTransaction, selectorCensusFingerprint, readySelectorEdgesFromCensus,
+  readySelectorEdgeKey, readySelectorEdgeFingerprint, assertReadySelectorEdgeObservation } from './bigquery-table.mjs';
 
 // Only a reference to the last completed result; the existing checkpoint remains
 // the sole authority for validation, memo reuse and retry history.
@@ -171,13 +173,16 @@ export async function main(argv = process.argv.slice(2)) {
   const configuredActivations = args['live-config'] !== undefined
     ? applyReadyLiveFamilyFlags(root, JSON.parse(readFileSync(args['live-config'], 'utf8')))
     : null;
-  const { createRebuildWiring, rebuildFamilyInstanceDedupeKey } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-production.ts'));
+  const { createRebuildWiring, rebuildFamilyInstanceDedupeKey, readyRuleCompatibilityFor, selectorReadyFamilyIds } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-production.ts'));
   const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog,
     PRODUCTION_STRICT_SHADOW_FAMILY_LOAD: load } = await import(pathToFileURL(root + '/listener/src/searcher/venues/production-family-composition.ts'));
-  const familyIds = catalog.listAll().map(family => family.plugin.manifest.familyId).sort();
+  const familyIds = selectorReadyFamilyIds(), selectedFamilies = new Set(familyIds);
+  const readyFamilies = catalog.listAll().filter(family => selectedFamilies.has(family.plugin.manifest.familyId));
+  const discoveryCatalog = { listAll: () => readyFamilies,
+    matches: observation => catalog.matches(observation).filter(match => selectedFamilies.has(match.familyId)) };
   const activations = configuredActivations ?? load.plugins.map(module => module.activation.envKey).filter(Boolean).sort();
   const identity = { executor: profile.executor, transactionOrigin: profile.wallet };
-  const wiring = createRebuildWiring({ rpcUrl: endpoint, executionIdentity: identity });
+  const wiring = createRebuildWiring({ rpcUrl: endpoint, executionIdentity: identity, familyIds, selectorCensus: [] });
   wiring.readyThrottle?.limitConcurrency(concurrency);
   const codeFiles = []; const visit = folder => { for (const file of readdirSync(folder, { withFileTypes: true }).sort((a,b) => a.name.localeCompare(b.name))) {
     const path = folder + '/' + file.name;
@@ -186,7 +191,7 @@ export async function main(argv = process.argv.slice(2)) {
   const codeHash = digest(codeFiles);
   const readerHash = digest([readFileSync(new URL('./ready-bigquery.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./bigquery-table.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./ready-family-activation.mjs', import.meta.url), 'utf8'), readFileSync(new URL('./ready-opaque-nominations.mjs', import.meta.url), 'utf8')]);
   const sqlReaderHash = bucket === undefined ? null : digest(readFileSync(new URL('./ready-bigquery-sql.mjs', import.meta.url), 'utf8'));
-  const libraries = bucket === undefined ? [] : await compileReadyDiscovery(root, catalog, bucket);
+  const libraries = bucket === undefined ? [] : await compileReadyDiscovery(root, discoveryCatalog, bucket);
   const sqlJob = bucket === undefined ? null : readyDiscoveryJob({ ref, pin, location, libraries, maxBytes, codeHash, sourceQuery });
   const runIdentity = { input: pin, codeHash, readerHash, executionIdentity: identity, simulator: 'node-rpc', activations, plan: wiring.expectedSourcePlanFingerprints(),
     profilePath: resolve(args.profile), checkpointReuse: reuse.enabled, reuseCheckpoint,
@@ -201,7 +206,31 @@ export async function main(argv = process.argv.slice(2)) {
     if (existsSync(path)) assert.equal(readFileSync(path, 'utf8'), sql, 'Saved candidate SQL changed');
     else writeFileSync(path, sql, { flag: 'wx', mode: 0o600 });
   }
-  const byKey = new Map(), opaque = new Map();
+  const byKey = new Map(), opaque = new Map(), selectorCensusByKey = new Map(), selectorCensusHashes = new Map();
+  const selectorEdgesByKey = new Map();
+  const familySignatures = new Map(readyFamilies.map(({ plugin }) => [plugin.manifest.familyId,
+    plugin.discovery?.callPatterns?.[0]?.signature]));
+  const mergeSelectorEdge = edge => {
+    assertReadySelectorEdgeObservation(edge);
+    assert.equal(edge.scope.chainId, 1, 'Selector edge chain differs');
+    if (window) assert(edge.blockNumber >= window.fromBlock && edge.blockNumber <= window.toBlock, 'Selector edge escaped source window');
+    const key = readySelectorEdgeKey(edge), prior = selectorEdgesByKey.get(key);
+    if (prior && (prior.blockNumber > edge.blockNumber || prior.blockNumber === edge.blockNumber &&
+        readySelectorEdgeFingerprint(prior) <= readySelectorEdgeFingerprint(edge))) return null;
+    selectorEdgesByKey.set(key, edge);
+    return key;
+  };
+  const mergeSelectorCensus = census => {
+    assert(census?.format === 'ready-selector-census/v1' && census.chainId === 1 && census.status === 'unverified' &&
+      /^0x[0-9a-f]{64}$/.test(census.transactionHash) && /^0x[0-9a-f]{64}$/.test(census.blockHash) &&
+      Number.isSafeInteger(census.blockNumber) && census.blockNumber > 0, 'Invalid selector census source');
+    if (window) assert(census.blockNumber >= window.fromBlock && census.blockNumber <= window.toBlock, 'Selector census escaped source window');
+    const key = census.chainId + '|' + census.transactionHash, hash = selectorCensusFingerprint(census);
+    assert(!selectorCensusHashes.has(key) || selectorCensusHashes.get(key) === hash, 'Conflicting selector census for the same transaction');
+    if (selectorCensusByKey.has(key)) return null;
+    selectorCensusByKey.set(key, census); selectorCensusHashes.set(key, hash);
+    return key;
+  };
   const mergeCandidate = candidate => {
     const key = rebuildFamilyInstanceDedupeKey(candidate), prior = byKey.get(key);
     const chosen = prior ? wiring.dedupeFamilyCandidates([{ kind: 'startup-candidate', candidate: prior }, { kind: 'startup-candidate', candidate }])[0] : candidate;
@@ -210,9 +239,9 @@ export async function main(argv = process.argv.slice(2)) {
   };
   // Shared-Vault/PoolManager retain evidence follows Family-declared emitter identity.
   // No protocol names, ABI/selectors or address allowlists live in this importer.
-  const collectOpaque = createOpaqueNominationCollector(catalog);
+  const collectOpaque = createOpaqueNominationCollector(discoveryCatalog);
   const segmentDir = out + '/pages'; mkdirSync(segmentDir, { recursive: true });
-  const counts = sqlJob ? { sqlCandidates: 0, sqlOpaque: 0 } : emptyCounts();
+  const counts = sqlJob ? { sqlCandidates: 0, sqlOpaque: 0, sqlSelectorCensus: 0, sqlSelectorEdges: 0 } : emptyCounts();
   let state = { pages: 0, rows: 0, nextPageToken: null, inputComplete: false, counts, minBlock: null, maxBlock: null, maxHash: null, chainHash: digest(pin) };
   for (const file of readdirSync(segmentDir).filter(file => /^\d{8}\.json$/.test(file)).sort()) {
     const segment = JSON.parse(readFileSync(segmentDir + '/' + file, 'utf8'));
@@ -221,6 +250,16 @@ export async function main(argv = process.argv.slice(2)) {
     const { segmentHash, ...payload } = segment; assert.equal(segmentHash, digest(payload), 'Checkpoint corrupted');
     for (const candidate of segment.candidates) mergeCandidate(wiring.decodeCandidateSnapshot(candidate));
     for (const [key, log] of segment.opaque) opaque.set(key, log);
+    assert(Array.isArray(segment.selectorCensus), 'Checkpoint page lacks selector census coverage');
+    for (const [key, census] of segment.selectorCensus) {
+      assert.equal(key, census.chainId + '|' + census.transactionHash, 'Checkpoint selector census key differs');
+      mergeSelectorCensus(census);
+    }
+    assert(Array.isArray(segment.selectorEdges), 'Checkpoint page lacks pre-admission selector edges');
+    for (const [key, edge] of segment.selectorEdges) {
+      assert.equal(key, readySelectorEdgeKey(edge), 'Checkpoint selector edge key differs');
+      mergeSelectorEdge(edge);
+    }
     state = { ...segment.state, chainHash: segmentHash };
   }
   let readSqlPage;
@@ -241,7 +280,9 @@ export async function main(argv = process.argv.slice(2)) {
     }
     const rows = page.rows ?? [];
     assert(rows.length || !page.pageToken, 'Empty non-terminal BigQuery page');
-    const observations = [], sqlCandidates = [], sqlOpaque = [];
+    const observations = [], sqlCandidates = [], rawCandidates = [], sqlOpaque = [], censusChanges = new Map(), edgeChanges = new Map();
+    const retainCensus = census => { const key = mergeSelectorCensus(census); if (key !== null) censusChanges.set(key, census); };
+    const retainEdge = edge => { const key = mergeSelectorEdge(edge); if (key !== null) edgeChanges.set(key, edge); };
     let sourceRows = state.rows;
     for (const row of rows) {
       if (readSqlPage) {
@@ -258,25 +299,41 @@ export async function main(argv = process.argv.slice(2)) {
           sourceRows = Number(decoded.coverage.rows);
         } else {
           assert(sourceRows > 0, 'SQL witnesses arrived before source coverage');
-          if (decoded.candidate) {
+          if (decoded.selectorCensus) {
+            retainCensus(decoded.selectorCensus);
+            state.counts.sqlSelectorCensus++;
+          } else if (decoded.selectorEdge) {
+            retainEdge(decoded.selectorEdge);
+            state.counts.sqlSelectorEdges++;
+          } else if (decoded.candidate) {
             sqlCandidates.push({ kind: 'startup-candidate', candidate: decoded.candidate });
             state.counts.sqlCandidates++;
-          } else {
+          } else if (decoded.opaque) {
             sqlOpaque.push(decoded.opaque);
             state.counts.sqlOpaque++;
-          }
+          } else throw Error('Unknown SQL discovery row');
         }
         continue;
       }
       const tx = decodeRow(meta.schema.fields, row), block = Number(tx.block_number);
-      for (const observation of observationsFromTx(tx, state.counts)) observations.push(observation);
+      const selectorCensus = readySelectorCensusFromTransaction(tx, { chainId: 1 });
+      retainCensus(selectorCensus);
+      const txObservations = observationsFromTx(tx, state.counts, selectorCensus);
+      observations.push(...txObservations);
+      const txCandidates = wiring.dedupeFamilyCandidates(txObservations);
+      rawCandidates.push(...txCandidates.map(candidate => ({ kind: 'startup-candidate', candidate })));
+      const edgeNominations = txCandidates.flatMap(candidate => {
+        const signature = familySignatures.get(candidate.familyId);
+        return signature ? [{ familyId: candidate.familyId, signature, candidate }] : [];
+      });
+      for (const edge of readySelectorEdgesFromCensus(selectorCensus, edgeNominations)) retainEdge(edge);
       sourceRows++;
       state.minBlock = state.minBlock === null ? block : Math.min(state.minBlock, block);
       if (state.maxBlock === null || block > state.maxBlock) { state.maxBlock = block; state.maxHash = tx.block_hash; }
       else if (block === state.maxBlock) assert.equal(tx.block_hash.toLowerCase(), state.maxHash.toLowerCase(), 'Conflicting maximum block hash');
     }
     const changed = new Set();
-    for (const candidate of wiring.dedupeFamilyCandidates(readSqlPage ? sqlCandidates : observations)) changed.add(mergeCandidate(candidate));
+    for (const candidate of wiring.dedupeFamilyCandidates(readSqlPage ? sqlCandidates : rawCandidates)) changed.add(mergeCandidate(candidate));
     const opaqueChanges = new Map();
     const retain = ({ key, log }) => {
       if (!opaque.has(key) || opaque.get(key).blockNumber < log.blockNumber) {
@@ -302,7 +359,8 @@ export async function main(argv = process.argv.slice(2)) {
     assert(next.rows <= Number(inputRows), 'Read beyond pinned row count');
     if (next.inputComplete) assert.equal(next.rows, Number(inputRows), 'Incomplete terminal page');
     const segment = { previousHash: state.chainHash, pageContentHash: digest(page), state: next,
-      candidates: [...changed].map(key => wiring.encodeCandidateSnapshot(byKey.get(key))), opaque: [...opaqueChanges] };
+      candidates: [...changed].map(key => wiring.encodeCandidateSnapshot(byKey.get(key))), opaque: [...opaqueChanges],
+      selectorCensus: [...censusChanges], selectorEdges: [...edgeChanges] };
     const segmentHash = digest(segment); saveJson(segmentDir + '/' + String(next.pages).padStart(8, '0') + '.json', { ...segment, segmentHash });
     state = { ...next, chainHash: segmentHash };
     status({ phase: 'reading', ...state, nextPageToken: undefined, candidates: byKey.size, opaqueInstances: opaque.size, rssMiB: Math.round(process.memoryUsage().rss / 1024 ** 2) });
@@ -310,10 +368,16 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (!state.inputComplete) { status({ phase: 'sample-complete', rows: state.rows, ...(sqlJob ? { sqlResultRows: state.sqlResultRows ?? 0 } : {}), pages: state.pages, candidates: byKey.size, opaqueInstances: opaque.size }); return; }
   assert(state.maxBlock !== null, 'Empty table cannot produce Ready');
+  assert.equal(selectorCensusByKey.size, Number(inputRows), 'Incomplete or duplicate selector census transaction coverage');
   await checkInputPin();
+  // This independent export is written before any Ready admission/simulation.
+  saveJson(out + '/selector-edges.json', { window, familyIds, status: 'unverified',
+    selectorEdges: [...selectorEdgesByKey.values()] });
   if (args['candidates-only']) {
     saveJson(out + '/nominations.json', { window, familyIds, jobId: sqlJob?.jobId ?? null,
       candidates: [...byKey.values()].map(candidate => wiring.encodeCandidateSnapshot(candidate)),
+      selectorCensus: [...selectorCensusByKey.values()],
+      selectorEdges: [...selectorEdgesByKey.values()],
       ...(sqlJob ? { opaqueKeyVersion: 2 } : {}), opaque: [...opaque.entries()] });
     status({ phase: 'candidates', jobId: sqlJob?.jobId ?? null, rows: state.rows, familyIds,
       candidates: byKey.size, opaqueInstances: opaque.size });
@@ -327,12 +391,11 @@ export async function main(argv = process.argv.slice(2)) {
   const reverse = await wiring.reverseBindOpaqueCandidates({ observations: sqlJob ? [...opaque.values()].flat() : [...opaque.values()], cutoff, knownCandidates: [...byKey.values()] });
   for (const candidate of reverse) mergeCandidate(candidate);
   const candidates = [...byKey.values()]; opaque.clear(); byKey.clear();
-  const full = createRebuildWiring({ rpcUrl: endpoint, executionIdentity: identity, startupCandidates: candidates,
-    readyThrottle: wiring.readyThrottle });
   const { rebuildUniverse } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-runner.ts'));
   const { UniverseRebuildCheckpointStore } = await import(pathToFileURL(root + '/listener/src/searcher/universe-rebuild-checkpoint.ts'));
-  // Imported candidates use the production startup source; the normal one-block
-  // activity scan seals its OWN coverage. Never fabricate week-long RPC receipts.
+  // Imported observations use the ordinary Ready supplied-input source. The
+  // pinned table/window and exact census row count cover that input only;
+  // neither whole-range RPC receipts nor unseen internal calls are fabricated.
   const store = new UniverseRebuildCheckpointStore({ path: out + '/checkpoint.json' });
   const runId = 'bigquery-ready-' + digest(runIdentity).slice(0, 20);
   let prior = await store.load();
@@ -343,13 +406,19 @@ export async function main(argv = process.argv.slice(2)) {
   } else if (prior === null) {
     console.log(JSON.stringify({ phase: 'ready-checkpoint-not-inherited', reason: reuse.enabled ? 'first-run-no-previous-result' : 'explicitly-disabled' }));
   }
+  const full = createRebuildWiring({ rpcUrl: endpoint, executionIdentity: identity, startupCandidates: candidates,
+    familyIds, selectorCensus: [...selectorCensusByKey.values()],
+    ruleCompatibility: await readyRuleCompatibilityFor(prior?.readyGeneration?.ruleBindings),
+    readyThrottle: wiring.readyThrottle });
   const ready = await rebuildUniverse({ ...full, store,
-    runId, observationRange: { fromBlock: cutoff.number, toBlock: cutoff.number },
+    runId, observationRange: { fromBlock: window?.fromBlock ?? state.minBlock, toBlock: cutoff.number },
     attestationConcurrency: concurrency,
     resumeCompletedOutcomes: args.resume === true && prior?.inProgressRun?.runId === runId,
     log: text => console.log(text) });
   saveJson(out + '/result.json', { input: pin, inputRange: { fromBlock: state.minBlock, toBlock: state.maxBlock }, read: state,
-    nominatedCandidates: candidates.length, cutoff: ready.cutoff, generation: ready.generation, accounting: ready.candidateAccounting, codeHash });
+    nominatedCandidates: candidates.length, selectorCensusTransactions: selectorCensusByKey.size,
+    selectorEdges: selectorEdgesByKey.size,
+    cutoff: ready.cutoff, generation: ready.generation, accounting: ready.candidateAccounting, codeHash });
   rememberReady(args.profile, out);
   status({ phase: 'ready', rows: state.rows, pages: state.pages, cutoff: ready.cutoff, accounting: ready.candidateAccounting });
   if (existsSync(tokenFile)) unlinkSync(tokenFile);

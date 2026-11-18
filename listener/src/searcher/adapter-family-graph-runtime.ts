@@ -1,5 +1,6 @@
 import { deriveEdgeTaxonomy } from "./strategy-taxonomy.js";
 import type { TokenEdge } from "./planner/token-graph.js";
+import { normalizeStateResourceKeys } from "./venues/route-state-resources.js";
 import {
   assertFamilyRouteRuntimeHandleBinding,
   assertIssuedFamilyRouteRuntimeHandle,
@@ -193,6 +194,11 @@ export function projectFamilyRouteGraph(
   const unboundEdge: TokenEdge = {
     instanceKey: input.route.instanceKey,
     executionVariantKey,
+    ...(first.observationTarget === undefined ? {} : { observationTarget: first.observationTarget }),
+    ...(first.observationPoolId === undefined ? {} : { observationPoolId: first.observationPoolId }),
+    ...(first.stateResourceKey === undefined ? {} : { stateResourceKey: first.stateResourceKey }),
+    ...(first.stateResourceKeys === undefined ? {} : { stateResourceKeys: first.stateResourceKeys }),
+    ...(first.executionVerification === undefined ? {} : { executionVerification: first.executionVerification }),
     adapterId: first.routeActionAdapterId,
     target: first.executionTarget,
     tokenIn: input.route.tokenIn,
@@ -260,6 +266,11 @@ export function familyRouteGraphExecutionVariantKey(input: {
     routeKey: input.route.routeKey,
     routeBindingFingerprint: input.route.bindingRef.fingerprint,
     venueIdentityHash: hashCanonical(input.graph.venueIdentity),
+    ...(input.graph.observationTarget === undefined ? {} : { observationTarget: input.graph.observationTarget.toLowerCase() }),
+    ...(input.graph.observationPoolId === undefined ? {} : { observationPoolId: input.graph.observationPoolId }),
+    ...(input.graph.stateResourceKey === undefined ? {} : { stateResourceKey: input.graph.stateResourceKey }),
+    ...(input.graph.stateResourceKeys === undefined ? {} : { stateResourceKeys: normalizeStateResourceKeys(input.graph.stateResourceKeys) }),
+    ...(input.graph.executionVerification === undefined ? {} : { executionVerification: input.graph.executionVerification }),
   });
 }
 
@@ -278,6 +289,11 @@ export function familyRouteCanonicalEdgeId(input: {
   const identityEdge: TokenEdge = {
     instanceKey: input.route.instanceKey,
     executionVariantKey: familyRouteGraphExecutionVariantKey(input),
+    ...(input.graph.observationTarget === undefined ? {} : { observationTarget: input.graph.observationTarget }),
+    ...(input.graph.observationPoolId === undefined ? {} : { observationPoolId: input.graph.observationPoolId }),
+    ...(input.graph.stateResourceKey === undefined ? {} : { stateResourceKey: input.graph.stateResourceKey }),
+    ...(input.graph.stateResourceKeys === undefined ? {} : { stateResourceKeys: normalizeStateResourceKeys(input.graph.stateResourceKeys) }),
+    ...(input.graph.executionVerification === undefined ? {} : { executionVerification: input.graph.executionVerification }),
     adapterId: input.graph.routeActionAdapterId,
     target: input.graph.executionTarget,
     tokenIn: input.route.tokenIn,
@@ -345,7 +361,12 @@ function validateGraphProjection(value: unknown): FamilyGraphProjection {
   const allowed = new Set([
     "centralScoreKey",
     "executionTarget",
+    "executionVerification",
+    "observationTarget",
+    "observationPoolId",
     "routeActionAdapterId",
+    "stateResourceKey",
+    "stateResourceKeys",
     "venueIdentity",
   ]);
   const keys = Reflect.ownKeys(value);
@@ -383,6 +404,20 @@ function validateGraphProjection(value: unknown): FamilyGraphProjection {
     throw new Error("Family graph execution target is required");
   }
   assertAddress(value.executionTarget, "Family graph execution target");
+  if (value.observationTarget !== undefined) {
+    if (typeof value.observationTarget !== "string") throw new Error("Family graph observation target must be an address");
+    assertAddress(value.observationTarget, "Family graph observation target");
+  }
+  if (value.observationPoolId !== undefined && typeof value.observationPoolId !== "string")
+    throw new Error("Family graph observation pool ID must be a typed string");
+  if (value.executionVerification !== undefined && value.executionVerification !== "startup-simulation") {
+    throw new Error("Family graph execution verification must be startup-simulation");
+  }
+  if (value.stateResourceKey !== undefined &&
+      (typeof value.stateResourceKey !== "string" || value.stateResourceKey.trim().length === 0 ||
+       value.stateResourceKey.length > 1024 || /[\u0000-\u001f\u007f]/.test(value.stateResourceKey))) {
+    throw new Error("Family graph state resource key must be a bounded non-empty string without control characters");
+  }
   if (
     value.centralScoreKey !== undefined &&
     (typeof value.centralScoreKey !== "string" ||
@@ -394,10 +429,16 @@ function validateGraphProjection(value: unknown): FamilyGraphProjection {
   // sparse arrays, cycles and unsupported values fail closed.
   hashCanonical(value.venueIdentity as CanonicalValue);
   const venueIdentity = sealCanonicalValue(value.venueIdentity);
+  const stateResourceKeys = value.stateResourceKeys === undefined ? undefined : normalizeStateResourceKeys(value.stateResourceKeys);
   return Object.freeze({
     routeActionAdapterId: value.routeActionAdapterId,
     executionTarget: value.executionTarget,
+    ...(value.observationTarget === undefined ? {} : { observationTarget: value.observationTarget.toLowerCase() }),
+    ...(value.observationPoolId === undefined ? {} : { observationPoolId: value.observationPoolId }),
     venueIdentity,
+    ...(value.stateResourceKey === undefined ? {} : { stateResourceKey: value.stateResourceKey }),
+    ...(stateResourceKeys === undefined ? {} : { stateResourceKeys }),
+    ...(value.executionVerification === undefined ? {} : { executionVerification: value.executionVerification }),
     ...(value.centralScoreKey === undefined
       ? {}
       : { centralScoreKey: value.centralScoreKey }),
@@ -408,8 +449,13 @@ function graphProjectionHash(value: FamilyGraphProjection): string {
   return hashCanonical({
     routeActionAdapterId: value.routeActionAdapterId,
     executionTarget: value.executionTarget.toLowerCase(),
+    ...(value.observationTarget === undefined ? {} : { observationTarget: value.observationTarget.toLowerCase() }),
+    ...(value.observationPoolId === undefined ? {} : { observationPoolId: value.observationPoolId }),
     venueIdentity: value.venueIdentity,
     centralScoreKey: value.centralScoreKey ?? null,
+    ...(value.stateResourceKey === undefined ? {} : { stateResourceKey: value.stateResourceKey }),
+    ...(value.stateResourceKeys === undefined ? {} : { stateResourceKeys: normalizeStateResourceKeys(value.stateResourceKeys) }),
+    ...(value.executionVerification === undefined ? {} : { executionVerification: value.executionVerification }),
   });
 }
 

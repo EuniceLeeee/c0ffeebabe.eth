@@ -1,0 +1,17 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x2bfb780c",
+  "signature": "function swap((uint8 kind, address pool, address tokenIn, address tokenOut, uint256 amountGivenRaw, uint256 limitRaw, bytes userData) params) returns (uint256 amountCalculatedRaw, uint256 amountInRaw, uint256 amountOutRaw)",
+  "domain": "swap",
+  "activation": {
+    "enabled": false,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_2BFB780C_ENABLED"
+  },
+  "programs": [],
+  "unsupportedReason": "Observed Vault interface requires its caller's unlock/settle/sendTo transaction context. The fdb Exact encoder executes swapSingleTokenExactIn; no independent Vault-swap execution proof is claimed.",
+  "meta": {
+    "sourceFamily": "balancer-v3",
+    "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465",
+    "role": "nested observation interface"
+  }
+}

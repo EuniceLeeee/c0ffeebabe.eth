@@ -37,7 +37,10 @@ function definition(): any {
 }
 function compile(raw = definition()) {
   const values = compileDeclarativeValues({ abi: { pool: reserveAbi.fragments.map(fn => fn.format("full")) }, constants: {}, expressions: {}, programs: {} });
-  return compileDeclarativeSwap(raw, values, { familyId: "fixture", edgeAdapterIds: [edge.adapterId] });
+  const compiled = compileDeclarativeSwap(raw, values, { familyId: "fixture", edgeAdapterIds: [edge.adapterId] });
+  assert(compiled.landedEvents, "this fixture declares landed event semantics");
+  assert(compiled.observation, "this fixture declares call/log observation semantics");
+  return { ...compiled, landedEvents: compiled.landedEvents, observation: compiled.observation };
 }
 function log(signature: string, args: any[], address = pool): any {
   const abi = new Interface([signature]), event = abi.fragments[0].format("sighash");
@@ -159,6 +162,34 @@ test("receipt matching cannot select an edge injected only into edgesByTarget or
     assert.equal(rejected.impacts.length, 0); assert.equal(rejected.mutations.length, 1);
   }
   assert.equal((await observe(definition(), { ...ctx, matchedOwnedTriggers: [...ctx.matchedOwnedTriggers, ...ctx.matchedOwnedTriggers] })).status, "unresolved");
+});
+
+test("shared physical observation aliases require identical verified impacts and never hide conflicts", async () => {
+  const raw = definition();
+  raw.events[0].requireReadyBinding = true;
+  raw.events[0].impact.pool = "$edge.observationTarget";
+  const graph = [5, 6].map(n => ({ ...edge, target: toBeHex(n, 20), observationTarget: pool,
+    instanceKey: `entry:${n}`, stateResourceKey: "physical-pool" }));
+  const ctx = { ...context([syncLog(), swapLog()]), graph, edgesByTarget: new Map([[pool, graph]]),
+    resolveBinding: (selected: typeof graph[number]) => ({ familyId: "fixture",
+      descriptor: { ...descriptor, familyId: "fixture", instanceKey: selected.instanceKey } }) };
+  const result = await observe(raw, ctx);
+  assert.equal(result.status, "resolved");
+  assert.equal(result.impacts.length, 1);
+  assert.equal(result.impacts[0].impact.pool, pool);
+  for (const resource of [undefined, "different-pool"]) {
+    const altered = [graph[0], { ...graph[1], stateResourceKey: resource }];
+    const rejected = await observe(raw, { ...ctx, graph: altered, edgesByTarget: new Map([[pool, altered]]) });
+    assert.equal(rejected.status, "unresolved", "a coincident observation address is insufficient to merge resource identities");
+  }
+  const conflict = clone(raw);
+  conflict.events[0].impact.amountOut = "$descriptor.feeBps";
+  const rejected = await observe(conflict, { ...ctx, resolveBinding: (selected: typeof graph[number]) => ({ familyId: "fixture",
+    descriptor: { ...descriptor, familyId: "fixture", instanceKey: selected.instanceKey,
+      feeBps: selected === graph[0] ? 30n : 31n } }) });
+  assert.equal(rejected.status, "unresolved", "the first binding cannot mask a conflicting interpretation");
+  assert.match(rejected.reason, /ambiguous Swap event route binding/);
+  assert.equal((await observe(raw, { ...ctx, resolveBinding: () => undefined })).status, "unresolved");
 });
 
 function withReads(): any {

@@ -105,6 +105,33 @@ test("input-first callback binds token address and unsigned amount", () => {
   assert.equal(paid, 19n); assert.equal(received, 38n);
 });
 
+test("callback frame derives packed slice and nested ABI bytes offsets around the authenticated script", () => {
+  const d: any = definition();
+  d.steps[0].frame.call.dataLayout = { kind: "packed-slices", prefixBits: 16, offsetBits: 16, prefix: 69,
+    slices: [toBeHex(1n, 32), { payload: "abi-bytes" }] };
+  d.steps[0].frame.callback.dataLayout = { kind: "abi-bytes" };
+  const leg = buildDeclarativeRuntimeLeg(d, context, values)!;
+  let paid = 0n, received = 0n;
+  const token = (call: RuntimeCall): string => {
+    const parsed = tokenAbi.parseTransaction({ data: call.data })!;
+    if (parsed.name === "balanceOf") return toBeHex(call.target.toLowerCase() === INPUT ? 120n - paid : 103n + received, 32);
+    assert.equal(parsed.name, "transfer"); assert.equal(parsed.args[0].toLowerCase(), POOL); paid += parsed.args[1]; return toBeHex(1n, 32);
+  };
+  inspectRuntime(leg.program, 19n, { nativeBalance: () => 17n, call(call) {
+    if ([INPUT, OUTPUT].includes(call.target.toLowerCase())) return token(call);
+    const outer = outerAbi.parseTransaction({ data: call.data })!.args;
+    const packed = getBytes(outer[3]), header = BigInt(hexlify(packed.slice(0, 6)));
+    assert.equal(header & 65535n, 69n); assert.equal((header >> 16n) & 65535n, 32n);
+    assert.equal(header >> 32n, BigInt(packed.length - 6));
+    const wrapped = hexlify(packed.slice(38)), payload = AbiCoder.defaultAbiCoder().decode(["bytes"], wrapped)[0];
+    assert.equal(call.outgoing, 164 + 6 + 32 + 64); assert.equal(call.incoming, 132 + 64);
+    received += 38n;
+    inspectRuntime(body(payload), 19n, { calldata: callbackAbi.encodeFunctionData("pay", [19n, -38n, wrapped]), call: token, nativeBalance: () => 17n });
+    return outerAbi.encodeFunctionResult("swap", [19n, -38n]);
+  } });
+  assert.equal(paid, 19n); assert.equal(received, 38n);
+});
+
 test("nested unlock frames use declared steps, native calls, captures and static bytes return", () => {
   const unlock = "function unlock(bytes data)", unlocked = "function unlocked(bytes data) returns(bytes)";
   const frame: any = { call: { target: POOL, signature: unlock, args: [], dataArgument: 0 },
@@ -461,7 +488,7 @@ for (const frame of [null, [], 42, false, "invalid"]) test(`malformed literal fr
 });
 
 test("callback aliases can only rename a signature with the same ABI layout", () => {
-  const frame: any = definition().steps[0].frame;
+  const frame: any = definition().steps![0]!.frame;
   frame.callback.alternativeSignatures = ["function alternate(int256,int256,bytes)"];
   validateDeclarativeCallbackFrame(frame);
   for (const aliases of [
@@ -469,8 +496,8 @@ test("callback aliases can only rename a signature with the same ABI layout", ()
     [frame.callback.signature],
     ["function alternate(int256,int256,bytes) returns(bool)"],
   ]) {
-    frame.callback.alternativeSignatures = aliases;
-    assert.throws(() => validateDeclarativeCallbackFrame(frame), /layout|duplicate/);
+    const invalid = { ...frame, callback: { ...frame.callback, alternativeSignatures: aliases } };
+    assert.throws(() => validateDeclarativeCallbackFrame(invalid), /layout|duplicate/);
   }
 });
 

@@ -11,14 +11,15 @@ const ABI = AbiCoder.defaultAbiCoder();
 const TAG = keccak256(toUtf8Bytes("mev.node-program-quote.receipt.v2"));
 const ERROR = new Interface(["error RuntimeHopFailed(uint256 hop,address target,bytes32 flowHash,bytes reason,bytes32 proof)"]);
 const WORD = (x: string | number) => (typeof x === "string" ? x.replace(/^0x/, "") : x.toString(16)).padStart(64, "0");
-const SAVE = "0x00000001", END = "0x00000002";
+const SAVE = "0x00000001", END = "0x00000002", MARK = "0x00000003";
 const push = (x: number) => "61" + x.toString(16).padStart(4, "0");
 
 /** Stores only values read by the ORIGINAL executor, without substituting its
  * code. Recorder slots are isolated to this RPC; simulateV1 can keep them across
  * its calls. A protocol cannot write a receipt on the executor's behalf.
  */
-function recorderCode(executor: string, count: number, terminalRevert: boolean, persistent = false): string {
+function recorderCode(executor: string, count: number, terminalRevert: boolean, persistent = false,
+  prefixLogBoundaryTopic?: string): string {
   const read = persistent ? "54" : "5c", write = persistent ? "55" : "5d";
   let s = "";
   const patches: [number, string][] = [], labels = new Map<string, number>();
@@ -26,6 +27,7 @@ function recorderCode(executor: string, count: number, terminalRevert: boolean, 
   const label = (name: string) => { labels.set(name, s.length / 2); s += "5b"; };
   s += `3373${executor.slice(2)}1415`; jump("bad");
   s += "60003560e01c600114"; jump("save");
+  if (prefixLogBoundaryTopic) { s += "60003560e01c600314"; jump("mark"); }
   s += "600435"; // discarded after exact end calldata validation
   s += "506004361460003560e01c6002141615"; jump("bad");
   s += "6000" + read + push(count) + "1415"; jump("bad");
@@ -38,6 +40,11 @@ function recorderCode(executor: string, count: number, terminalRevert: boolean, 
   s += "6004356000" + read + "1415"; jump("bad");
   s += push(count) + "6004351015"; jump("bad");
   s += "602435600435600101" + write + "6004356001016000" + write + "00";
+  if (prefixLogBoundaryTopic) {
+    label("mark");
+    s += "6004361415"; jump("bad");
+    s += "7f" + prefixLogBoundaryTopic.slice(2) + "60006000a100";
+  }
   label("bad"); s += "60006000fd";
   for (const [at, name] of patches) s = s.slice(0, at) + labels.get(name)!.toString(16).padStart(4, "0") + s.slice(at + 4);
   return "0x" + s;
@@ -66,15 +73,21 @@ export function buildNodeProgramQuote(input: {
   persistent?: boolean;
   /** Copy the actual final CALL return words before any balance probe overwrites them. */
   outputWords?: number;
+  /** Authenticate the boundary between prefix logs and target observations. */
+  prefixLogBoundary?: boolean;
 }) {
   if (!input.calls.length || input.calls.length > 64 || input.observations.length > 64)
     throw new Error("node receipt bounds");
   const outputWords = input.outputWords ?? 0;
   if (!Number.isInteger(outputWords) || outputWords < 0 || outputWords > 15 ||
-      input.persistent && input.terminalRevert) throw new Error("node receipt output bounds");
+      input.persistent && input.terminalRevert ||
+      input.baselineAfterPrefix && input.calls.length < 2 ||
+      input.prefixLogBoundary && (!input.baselineAfterPrefix || !input.persistent)) throw new Error("node receipt output bounds");
   const key = hexlify(randomBytes(32));
   const flowHash = keccak256(toUtf8Bytes(JSON.stringify(input.calls)));
   const recorder = `0x${keccak256(toUtf8Bytes(`node-program-quote:${input.executor}:${key}`)).slice(-40)}`;
+  const prefixLogBoundaryTopic = input.prefixLogBoundary
+    ? keccak256(toUtf8Bytes(`node-program-quote:prefix-complete:${key}`)) : undefined;
   const segments: Uint8Array[] = [];
   let program = new RuntimeAmountProgram();
   let pending = false;
@@ -120,7 +133,10 @@ export function buildNodeProgramQuote(input: {
       flush();
       segments.push(encodeCall(call.to, getBytes(call.data)));
     } else { program.call(call.to, call.data); pending = true; }
-    if (i === 0 && input.baselineAfterPrefix) snapshot(false);
+    if (i === 0 && input.baselineAfterPrefix) {
+      if (prefixLogBoundaryTopic) { program.call(recorder, MARK); pending = true; }
+      snapshot(false);
+    }
     if (i === input.calls.length - 1 && outputWords) {
       // Load every word BEFORE calling the recorder, whose return overwrites
       // the VM's last-call buffer. No expected output enters this program.
@@ -141,7 +157,8 @@ export function buildNodeProgramQuote(input: {
     return { before: input.observations.map((_, i) => word(i)), after: input.observations.map((_, i) => word(n + outputWords + i)),
       ...(input.outputWords === undefined ? {} : { output: hexlify(result.slice(32 + n * 32, 32 + (n + outputWords) * 32)) }) };
   };
-  return { recorder, code: recorderCode(input.executor, input.observations.length * 2 + outputWords, input.terminalRevert, input.persistent), key, flowHash,
+  return { recorder, code: recorderCode(input.executor, input.observations.length * 2 + outputWords,
+    input.terminalRevert, input.persistent, prefixLogBoundaryTopic), key, flowHash, prefixLogBoundaryTopic,
     diagnosticSlot: HOP_DIAGNOSTIC_SLOT, data: buildExecuteCalldata(concatBytes(...segments)),
     read,
     decode(data: string) {

@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x04e45aaf",
+  "signature": "function exactInputSingle((address, address, uint24, address, uint256, uint256, uint160))",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_04E45AAF_ENABLED"
+  },
+  "unsupportedReason": "ABI/evidence declaration has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

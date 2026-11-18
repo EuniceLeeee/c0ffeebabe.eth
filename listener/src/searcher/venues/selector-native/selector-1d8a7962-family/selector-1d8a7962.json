@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x1d8a7962",
+  "signature": "function swap((address, address, bytes32), bool, int128, uint96, uint256, int256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_1D8A7962_ENABLED"
+  },
+  "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified."
+}

@@ -4,12 +4,23 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { tableRef, sourcePin, decodeRow, observationsFromTx, emptyCounts, makeApi } from './bigquery-table.mjs';
+import { tableRef, sourcePin, decodeRow, observationsFromTx, emptyCounts, makeApi,
+  readySelectorCensusFromTransaction, selectorCensusFingerprint, readySelectorEdgesFromCensus,
+  readySelectorEdgeKey, readySelectorEdgeFingerprint } from './bigquery-table.mjs';
 import { main } from './ready-bigquery.mjs';
+import { FunctionFragment } from '../listener/node_modules/ethers/lib.esm/index.js';
 
 const hash = '0x' + 'a'.repeat(64), blockHash = '0x' + 'b'.repeat(64);
 const frame = (path, to, extra = {}) => ({ trace_address: path, to_address: to, from_address: 'trace-sender', call_type: 'call', status: '1', input: '0x12345678', ...extra });
 const tx = traces => ({ tx_hash: hash, block_number: '123', block_hash: blockHash, receipt_status: '1', logs: [], traces });
+function writeV2Entry(directory, name, enabled = true) {
+  const signature = 'function activationFixture(address input,address output,uint256 amount) returns(uint256)';
+  writeFileSync(directory + '/' + name + '.json', JSON.stringify({ selector: FunctionFragment.from(signature).selector, signature,
+    domain: 'protocol', parameters: ['tokenIn','tokenOut','amountIn'].map((role,index)=>({path:[index],role})), payment:{kind:'none'},
+    activation:{enabled,envKey:'SEARCHER_FAMILY_'+name+'_ENABLED'} }));
+  writeFileSync(directory + '/' + name + '.production.ts', 'import {defineSelectorFamilyModule} from "../selector-family-module.js";\n'+
+    'import definition from "./'+name+'.json";\nexport const selectorFamilyModule=defineSelectorFamilyModule(definition);\n');
+}
 
 test('table names are explicit; URI and malformed source inputs fail closed', () => {
   assert.deepEqual(tableRef('eth-token-480803.Ready.1008-1015'), { projectId: 'eth-token-480803', datasetId: 'Ready', tableId: '1008-1015' });
@@ -48,6 +59,28 @@ test('root absence, malformed row identity and path do not become admitted evide
   assert.throws(() => observationsFromTx({ ...tx([]), block_hash: 'bad' }, counts));
   assert.throws(() => observationsFromTx(tx([frame('x', 'child')]), counts));
 });
+test('saved tables may omit traces; their pins explicitly leave internal calls unobserved', () => {
+  const meta = { type: 'TABLE', numRows: '1', lastModifiedTime: '1', tableReference: tableRef('project1.Ready.source'),
+    schema: { fields: ['tx_hash', 'block_number', 'block_hash', 'receipt_status', 'logs', 'input'].map(name => ({ name, type: 'STRING' })) } };
+  const pin = sourcePin(meta);
+  assert.deepEqual(pin.observationScope, { topLevelInput: 'available-column', internalCalls: 'unobserved',
+    storedCallsColumn: false, allInternalCallsEnumerated: false });
+  assert.throws(() => sourcePin({ ...meta, schema: { fields: meta.schema.fields.filter(field => field.name !== 'logs') } }), /Missing input field: logs/);
+});
+test('ordinary top-level calldata produces census-linked call observations without any traces', () => {
+  const row = { ...tx(undefined), from_address: '0x' + '1'.repeat(40), to_address: '0x' + '2'.repeat(40), input: '0xdeadbabe' };
+  const counts = emptyCounts(), census = readySelectorCensusFromTransaction(row, { chainId: 1 });
+  const calls = observationsFromTx(row, counts, census);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].target, row.to_address);
+  assert.equal(calls[0].opaque.selectorCensus, census);
+  assert.equal(calls[0].opaque.callId, 'transaction');
+  assert.equal(calls[0].opaque.selectorCensus.coverage.internalCalls, 'unobserved');
+  assert.equal(counts.transactionsWithoutTraces, 1);
+  const root = { trace_address: '', from_address: row.from_address, to_address: row.to_address, input: row.input, call_type: 'call', status: 1 };
+  assert.equal(observationsFromTx({ ...row, traces: [root] }, emptyCounts()).length, 1, 'transaction and matching trace root are one call nomination');
+  assert.throws(() => observationsFromTx({ ...row, traces: [{ ...root, input: '0x11111111' }] }, emptyCounts()), /root call disagrees/);
+});
 test('bounded HTTP retries do not expose remote bodies or tokens', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'bq-auth-test-'));
   try {
@@ -60,9 +93,12 @@ test('bounded HTTP retries do not expose remote bodies or tokens', async () => {
   } finally { rmSync(dir, { recursive: true }); }
 });
 
-function fixture(withOpaque = false) {
+function fixture(withOpaque = false, { withoutTraces = false, noCandidateMatches = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'bq-ready-test-')), out = root + '/run';
   mkdirSync(out); mkdirSync(root + '/listener/src/searcher/venues/production-families', { recursive: true });
+  mkdirSync(root + '/listener/src/searcher/generated', { recursive: true });
+  writeFileSync(root + '/listener/src/searcher/generated/selector-execution-families.generated.ts',
+    'export const PRODUCTION_SELECTOR_EXECUTION_FAMILY_IDS=["test","opaque"];');
   mkdirSync(root + '/release/runtime/listener/revm-sim/target/release', { recursive: true });
   writeFileSync(root + '/release/runtime/listener/revm-sim/target/release/revm-sim', 'fixture');
   mkdirSync(root + '/listener/revm-sim/target/release', { recursive: true });
@@ -72,32 +108,35 @@ function fixture(withOpaque = false) {
   writeFileSync(out + '/bigquery-auth.json', JSON.stringify({ token: 'fixture-token', expiresAt: Date.now() + 60000 }));
   writeFileSync(root + '/listener/src/searcher/universe-rebuild-production.ts', `import {writeFileSync} from 'node:fs';
 export const rebuildFamilyInstanceDedupeKey = c => c.address;
+export const readyRuleCompatibilityFor = async bindings => bindings;
+export const selectorReadyFamilyIds = () => ["test", "opaque"];
 export function createRebuildWiring(input) { return {
  startupCandidates: input.startupCandidates,
+ selectorCensus: input.selectorCensus,
+ ruleCompatibility: input.ruleCompatibility,
  expectedSourcePlanFingerprints: () => ({startup:'s',activity:'a'}),
  encodeCandidateSnapshot: c => c, decodeCandidateSnapshot: c => c,
- dedupeFamilyCandidates: obs => [...new Map(obs.map(o => { const c=o.kind==='startup-candidate'?o.candidate:{familyId:'test',address:o.target??o.address,blockNumber:o.blockNumber};return [c.address,c];})).values()],
+ dedupeFamilyCandidates: obs => ${noCandidateMatches ? '[]' : "[...new Map(obs.map(o => { const c=o.kind==='startup-candidate'?o.candidate:{familyId:'test',address:o.target??o.address,blockNumber:o.blockNumber};return [c.address,c];})).values()]"},
  freezeCanonicalHead: async n => ({number:n,hash:'${blockHash}',generation:n}),
  reverseBindOpaqueCandidates: async ({observations}) => {writeFileSync('${out}/reverse.json',JSON.stringify(observations));return observations.map(o=>({familyId:'opaque',address:o.topics[1],blockNumber:o.blockNumber}));}
 }; }
 `);
-  writeFileSync(root + '/listener/src/searcher/venues/production-family-composition.ts', withOpaque
+  writeFileSync(root + '/listener/src/searcher/venues/production-family-composition.ts', (withOpaque
     ? `export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[{plugin:{manifest:{familyId:'opaque'},discovery:{reverseBinding:{kind:'implementation'},logPatterns:[{id:'pool-id',emitter:{mode:'singleton-indexed-bytes32',address:'shared-emitter',topicIndex:1,fromBlock:0}}]}}}],matches:o=>o.topics.length===2?[{familyId:'opaque',patternId:'pool-id'}]:[]};`
-    : 'export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[],matches:()=>[]};');
-  writeFileSync(root + '/listener/src/searcher/venues/production-family-composition.ts',
-    readFileSync(root + '/listener/src/searcher/venues/production-family-composition.ts', 'utf8') +
-    '\nexport const PRODUCTION_STRICT_SHADOW_FAMILY_LOAD = { plugins: [] };');
+    : 'export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>[],matches:()=>[]};') +
+    '\nexport const PRODUCTION_STRICT_SHADOW_FAMILY_LOAD={plugins:[]};');
   writeFileSync(root + '/listener/src/searcher/universe-rebuild-checkpoint.ts', `import {existsSync,readFileSync,writeFileSync} from 'node:fs';
 export class UniverseRebuildCheckpointStore {
  constructor(input){this.path=input.path;}
  async load(){return existsSync(this.path)?JSON.parse(readFileSync(this.path,'utf8')):null;}
  async inheritReadyFrom(source){const prior=await source.load();if(!prior?.readyGeneration||prior.inProgressRun)throw Error('Ready inheritance requires a completed source checkpoint');writeFileSync(this.path,JSON.stringify(prior),{flag:'wx'});return prior;}
 }`);
-  writeFileSync(root + '/listener/src/searcher/universe-rebuild-runner.ts', `import {writeFileSync,existsSync,mkdirSync} from 'node:fs'; export async function rebuildUniverse(input){if(input.resumeCompletedOutcomes)throw Error('completed-outcome resume requires a sealed unfinished run');if(existsSync('${root}/fail-strict'))throw Error('fixture strict failed');const prior=await input.store.load();writeFileSync(input.store.path,JSON.stringify({candidates:input.startupCandidates,range:input.observationRange,inheritedFingerprint:prior?.checkpointFingerprint,checkpointFingerprint:'result:'+input.runId,verifiedMemos:{},retryableAttemptsByCandidateKey:{},inProgressRun:null,readyGeneration:{cutoff:{number:123,hash:'${blockHash}'}}}));if(existsSync('${root}/fail-publication'))mkdirSync('${root}/profile.json.latest-ready.json');return {cutoff:{number:123,hash:'${blockHash}'},generation:1,candidateAccounting:{total:2,verified:2,retryable:0}};}`);
+  writeFileSync(root + '/listener/src/searcher/universe-rebuild-runner.ts', `import {writeFileSync,existsSync,mkdirSync} from 'node:fs'; export async function rebuildUniverse(input){if(input.resumeCompletedOutcomes)throw Error('completed-outcome resume requires a sealed unfinished run');if(existsSync('${root}/fail-strict'))throw Error('fixture strict failed');const prior=await input.store.load();writeFileSync(input.store.path,JSON.stringify({candidates:input.startupCandidates,selectorCensus:input.selectorCensus,range:input.observationRange,ruleCompatibility:input.ruleCompatibility,inheritedFingerprint:prior?.checkpointFingerprint,checkpointFingerprint:'result:'+input.runId,verifiedMemos:{},retryableAttemptsByCandidateKey:{},inProgressRun:null,readyGeneration:{cutoff:{number:123,hash:'${blockHash}'}}}));if(existsSync('${root}/fail-publication'))mkdirSync('${root}/profile.json.latest-ready.json');return {cutoff:{number:123,hash:'${blockHash}'},generation:1,candidateAccounting:{total:2,verified:2,retryable:0}};}`);
   const fields = [
     ...['tx_hash', 'block_number', 'block_hash', 'receipt_status'].map(name => ({ name, type: 'STRING' })),
     { name: 'logs', type: 'RECORD', mode: 'REPEATED', fields: [{name:'log_address',type:'STRING'},{name:'topics',type:'STRING',mode:'REPEATED'},{name:'data',type:'STRING'},{name:'log_index',type:'INTEGER'}] },
-    { name: 'traces', type: 'RECORD', mode: 'REPEATED', fields: ['trace_address','to_address','from_address','call_type','status','input'].map(name => ({name,type:'STRING'})) },
+    ...(withoutTraces ? ['from_address','to_address','input','value'].map(name => ({name,type:'STRING'}))
+      : [{ name: 'traces', type: 'RECORD', mode: 'REPEATED', fields: ['trace_address','to_address','from_address','call_type','status','input'].map(name => ({name,type:'STRING'})) }]),
   ];
   const encode = (schema, obj) => ({ f: schema.map(field => ({ v: field.mode === 'REPEATED' ? obj[field.name].map(value => ({ v: field.fields ? encode(field.fields, value) : value })) : obj[field.name] })) });
   const meta = { type: 'TABLE', tableReference: tableRef('project1.Ready.table'), lastModifiedTime: '1', numRows: '2', schema: { fields } };
@@ -107,6 +146,9 @@ export class UniverseRebuildCheckpointStore {
     if (!url.pathname.endsWith('/data')) return Response.json(meta);
     const second = url.searchParams.has('pageToken');
     const row = tx([frame('', second ? 'pool-two' : 'pool-one')]);
+    row.tx_hash = second ? '0x' + 'f'.repeat(64) : hash;
+    if (withoutTraces) row.block_number = second ? '123' : '122';
+    if (withoutTraces) Object.assign(row, { from_address: '0x' + '1'.repeat(40), to_address: '0x' + (second ? '3' : '2').repeat(40), input: '0xdeadbabe', value: '0' });
     if (withOpaque) {
       row.block_number = second ? '123' : '122';
       row.logs = (second ? ['c','d'] : ['c']).map((id, index) => ({ log_address:'shared-emitter',topics:['0x'+'e'.repeat(64),'0x'+id.repeat(64)],data:'0x',log_index:String(index) }));
@@ -187,12 +229,67 @@ test('actual entry point stops safely after a sample, then resumes every row int
     assert(f.requests.some(url => url.includes('pageToken=page-two')));
     const ready = JSON.parse(readFileSync(f.out + '/checkpoint.json'));
     assert.deepEqual(ready.candidates.map(c => c.address), ['pool-one','pool-two']);
+    assert.equal(ready.selectorCensus.length, 2);
+    assert(ready.selectorCensus.every(item => item.status === 'unverified'));
+    const pageOne = JSON.parse(readFileSync(f.out + '/pages/00000001.json'));
+    assert.equal(pageOne.selectorCensus[0][0], '1|' + hash);
+    assert.equal(pageOne.selectorCensus[0][1].transactionHash, hash);
     assert.deepEqual(ready.range, { fromBlock: 123, toBlock: 123 });
     assert.equal(JSON.parse(readFileSync(f.out + '/result.json')).read.rows, 2);
     assert(!existsSync(f.out + '/bigquery-auth.json'));
     f.requests.length = 0;
     await main([...f.argv, '--resume']);
     assert.equal(f.requests.length, 0, 'Completed Ready must not start another round');
+  } finally { globalThis.fetch = oldFetch; rmSync(f.root, { recursive: true }); }
+});
+test('ordinary Ready keeps unknown selector census through page resume even with zero catalog candidates and no traces', async () => {
+  const f = fixture(false, { withoutTraces: true, noCandidateMatches: true }), oldFetch = globalThis.fetch;
+  globalThis.fetch = f.fetcher;
+  try {
+    await main([...f.argv, '--max-pages', '1']);
+    assert(!existsSync(f.out + '/checkpoint.json'));
+    assert.equal(JSON.parse(readFileSync(f.out + '/pages/00000001.json')).selectorEdges.length, 1);
+    await main([...f.argv, '--resume']);
+    const ready = JSON.parse(readFileSync(f.out + '/checkpoint.json'));
+    assert.deepEqual(ready.candidates, []);
+    assert.deepEqual(ready.range, { fromBlock: 122, toBlock: 123 }, 'ordinary Ready must bind every supplied transaction block');
+    assert.equal(ready.selectorCensus.length, 2);
+    assert(ready.selectorCensus.every(census => census.calls[0].selector === '0xdeadbabe' && census.status === 'unverified'));
+    assert(ready.selectorCensus.every(census => census.coverage.internalCalls === 'unobserved'));
+    assert.equal(JSON.parse(readFileSync(f.out + '/result.json')).selectorCensusTransactions, 2);
+    const edges=JSON.parse(readFileSync(f.out + '/selector-edges.json')).selectorEdges;
+    assert.equal(edges.length,2);
+    assert(edges.every(edge=>edge.selector==='0xdeadbabe'&&edge.status==='unverified'&&edge.completeness==='incomplete'));
+    assert.equal(new Set(edges.map(readySelectorEdgeKey)).size,2,'unknown calldata scopes survive page resume before admission');
+    assert.equal(JSON.parse(readFileSync(f.out + '/input-pin.json')).observationScope.storedCallsColumn, false);
+  } finally { globalThis.fetch = oldFetch; rmSync(f.root, { recursive: true }); }
+});
+test('candidates-only output includes every unknown selector and does not start strict Ready', async () => {
+  const f = fixture(false, { withoutTraces: true, noCandidateMatches: true }), oldFetch = globalThis.fetch;
+  globalThis.fetch = f.fetcher;
+  try {
+    await main([...f.argv, '--candidates-only']);
+    const result = JSON.parse(readFileSync(f.out + '/nominations.json'));
+    assert.deepEqual(result.candidates, []);
+    assert.equal(result.selectorCensus.length, 2);
+    assert(result.selectorCensus.every(census => census.calls[0].selector === '0xdeadbabe'));
+    assert.equal(result.selectorEdges.length,2);assert(result.selectorEdges.every(edge=>edge.status==='unverified'));
+    assert(!existsSync(f.out + '/checkpoint.json'));
+    assert.equal(JSON.parse(readFileSync(f.out + '/status.json')).phase, 'candidates');
+  } finally { globalThis.fetch = oldFetch; rmSync(f.root, { recursive: true }); }
+});
+test('conflicting duplicate transaction census cannot be hidden by nomination deduplication', async () => {
+  const f = fixture(false, { withoutTraces: true, noCandidateMatches: true }), oldFetch = globalThis.fetch;
+  globalThis.fetch = async raw => {
+    const response = await f.fetcher(raw);
+    if (!String(raw).includes('pageToken=')) return response;
+    const page = await response.json();
+    page.rows[0].f[0].v = hash;
+    return Response.json(page);
+  };
+  try {
+    await assert.rejects(main(f.argv), /Conflicting selector census/);
+    assert(!existsSync(f.out + '/checkpoint.json'));
   } finally { globalThis.fetch = oldFetch; rmSync(f.root, { recursive: true }); }
 });
 test('shared emitter keeps both opaque pool IDs across page resume, choosing newest evidence', async () => {
@@ -225,7 +322,7 @@ test('new BigQuery run inherits a completed Ready through the existing store, ne
   try {
     const source = f.root + '/previous-checkpoint.json';
     const previous = { checkpointFingerprint: 'prior-proof', verifiedMemos: { a: {} },
-      retryableAttemptsByCandidateKey: {}, inProgressRun: null, readyGeneration: { cutoff: { number: 100 } } };
+      retryableAttemptsByCandidateKey: {}, inProgressRun: null, readyGeneration: { cutoff: { number: 100 }, ruleBindings: { fixture: 'preserved-scoped-hashes' } } };
     writeFileSync(source, JSON.stringify(previous));
     const argv = [...f.argv, '--reuse-checkpoint', source];
     await main([...argv, '--max-pages', '1']);
@@ -234,6 +331,7 @@ test('new BigQuery run inherits a completed Ready through the existing store, ne
     await main([...argv, '--resume']);
     const current = JSON.parse(readFileSync(f.out + '/checkpoint.json'));
     assert.equal(current.inheritedFingerprint, 'prior-proof');
+    assert.deepEqual(current.ruleCompatibility, previous.readyGeneration.ruleBindings, 'SQL Ready resolves inherited scoped compatibility before rebuild');
     assert.deepEqual(current.range, { fromBlock: 123, toBlock: 123 }, 'old coverage must not substitute for new coverage');
     assert.deepEqual(JSON.parse(readFileSync(source)), previous);
     assert.equal(JSON.parse(readFileSync(f.out + '/run-identity.json')).reuseCheckpoint, source);
@@ -372,6 +470,9 @@ test('SQL discovery uses the common UDF and keeps source coverage separate from 
   assert.match(spec.query.query, /ROW_NUMBER\(\) OVER \(\s+PARTITION BY kind, family, instance_key/);
   assert.match(spec.query.query, /SELECT DISTINCT SUBSTR\(instance_key, LENGTH\(family\) \+ 2\) AS physical_key/);
   assert.match(spec.query.query, /FROM opaque_evidence\s+GROUP BY physical_key/);
+  assert.match(spec.query.query, /FROM ranked_witnesses WHERE kind = 'selector-census'/);
+  assert.match(spec.query.query, /FROM best_witnesses WHERE kind = 'selector-edge'/);
+  assert.match(spec.query.query, /JSON_VALUE\(TO_JSON_STRING\(source_tx\), '\$\.input'\) AS input/);
   assert.match(spec.query.query, /CAST\(COUNT\(\*\) AS STRING\)/);
   assert.equal(spec.query.maximumBytesBilled, '1000000');
   const calls = [];
@@ -399,6 +500,21 @@ test('SQL discovery uses the common UDF and keeps source coverage separate from 
     witnesses: [{ ...candidate, snapshot: witness }, { ...candidate, block: 122, snapshot: { ...witness, blockNumber: 122 } }] };
   const decode = (kind, body) => decodeSqlDiscoveryRow(fields, row(kind, body), wiring, key, collect);
   assert.deepEqual(decode('witness', candidate), { candidate: candidate.snapshot });
+  const census = readySelectorCensusFromTransaction({ ...tx([]), from_address: '0x' + '1'.repeat(40),
+    to_address: '0x' + '2'.repeat(40), input: '0xdeadbabe' }, { chainId: 1 });
+  const censusRecord = { ...candidate, kind: 'selector-census', key: '1|' + hash, snapshot: census,
+    fingerprint: selectorCensusFingerprint(census) };
+  assert.deepEqual(decode('witness', censusRecord), { selectorCensus: census });
+  assert.throws(() => decode('witness', { ...censusRecord, key: 'foreign' }), /census key differs/);
+  assert.throws(() => decode('witness', { ...censusRecord, snapshot: { ...census, status: 'verified' } }), /execution authority/);
+  assert.throws(() => decode('witness', { ...censusRecord, fingerprint: '0'.repeat(64) }), /fingerprint differs/);
+  const edge=readySelectorEdgesFromCensus(census)[0];
+  const edgeRecord={...candidate,kind:'selector-edge',family:edge.familyId,key:readySelectorEdgeKey(edge),snapshot:edge,
+    fingerprint:readySelectorEdgeFingerprint(edge)};
+  assert.deepEqual(decode('witness',edgeRecord),{selectorEdge:edge});
+  assert.throws(()=>decode('witness',{...edgeRecord,key:'foreign'}),/edge key differs/);
+  assert.throws(()=>decode('witness',{...edgeRecord,fingerprint:'0'.repeat(64)}),/edge fingerprint differs/);
+  assert.throws(()=>decode('witness',{...edgeRecord,snapshot:{...edge,status:'verified'}}),/execution authority/);
   assert.deepEqual(decode('witness', opaque), { opaque: {key:'opaque-key', logs: [witness, { ...witness, blockNumber: 122 }] } });
   const head = { number: 123, blockHash };
   assert.deepEqual(decode('source', { sourceRows: '2', minBlock: 122, firstHead: head, lastHead: head }),
@@ -419,7 +535,8 @@ test('day and block windows select the same raw schema and preserve transaction 
   const ref = tableRef('project1.Ready.raw_tx_incremental');
   const raw = renderEthereumInputs(window);
   assert.match(raw, /crypto_ethereum\.logs/);
-  assert.match(raw, /crypto_ethereum\.traces/);
+  assert.doesNotMatch(raw, /crypto_ethereum\.traces/);
+  assert.match(renderEthereumInputs(window, { withStoredCalls: true }), /crypto_ethereum\.traces/);
   assert.match(raw, /crypto_ethereum\.transactions/);
   assert.match(renderRawWindow(ref,window), /block_number BETWEEN 10 AND 11/);
   const sql = renderRawRefresh(ref,window,tableRef('project1._tmp.result'));
@@ -427,7 +544,9 @@ test('day and block windows select the same raw schema and preserve transaction 
   assert.match(sql, /WHEN NOT MATCHED THEN/);
   assert.match(sql, /COUNT\(DISTINCT LOWER\(tx_hash\)\) = 3/);
   assert(!sql.includes('CREATE TABLE'));
-  assert(!sql.includes('WHEN MATCHED'));
+  assert.match(sql, /WHEN MATCHED AND/);
+  assert.match(sql, /input = COALESCE\(d\.input, s\.input\)/);
+  assert.doesNotMatch(sql.match(/UPDATE SET ([^\n]+)/)[1], /(?:logs|traces)\s*=/);
 });
 
 test('live Family flags disable missing entries and reject unavailable enabled entries', async () => {
@@ -436,8 +555,7 @@ test('live Family flags disable missing entries and reject unavailable enabled e
   try {
     const dir = f.root + '/listener/src/searcher/venues/production-families';
     for (const name of ['ON','OFF','UNLISTED']) {
-      writeFileSync(dir + '/' + name + '.production.ts',
-        'export const activation = defineFamilyActivation({enabled:true,envKey:"SEARCHER_FAMILY_' + name + '_ENABLED"});');
+      writeV2Entry(dir,name);
     }
     const env = { SEARCHER_FAMILY_UNLISTED_ENABLED:'1' };
     const flags = {SEARCHER_FAMILY_ON_ENABLED:'1', SEARCHER_FAMILY_OFF_ENABLED:'0', SEARCHER_FAMILY_ABSENT_ENABLED:'0'};
@@ -447,7 +565,6 @@ test('live Family flags disable missing entries and reject unavailable enabled e
     assert.throws(() => applyReadyLiveFamilyFlags(f.root, {...flags, SEARCHER_FAMILY_ABSENT_ENABLED:'1'}, env), /missing from the current checkout/);
   } finally { rmSync(f.root, { recursive:true, force:true }); }
 });
-
 
 test('whole-table Ready and candidates-only preserve entry defaults and explicit disables', async () => {
   const definitions = [
@@ -467,8 +584,7 @@ test('whole-table Ready and candidates-only preserve entry defaults and explicit
         globalThis.fetch = f.fetcher;
         const dir = f.root + '/listener/src/searcher/venues/production-families';
         for (const [name, enabled] of definitions) {
-          writeFileSync(dir + '/' + name + '.production.ts',
-            'defineFamilyActivation(' + JSON.stringify({ enabled, envKey: 'SEARCHER_FAMILY_' + name + '_ENABLED' }) + ')');
+          writeV2Entry(dir,name,enabled);
         }
         writeFileSync(f.root + '/listener/src/searcher/venues/production-family-composition.ts', `
 const entries = ${JSON.stringify(definitions)}.map(([familyId, defaultEnabled]) => {
@@ -481,6 +597,10 @@ export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG = {
   listAll: () => plugins.map(entry => ({plugin: {manifest: {familyId: entry.familyId}}})), matches: () => []
 };
 `);
+        const wiringPath = f.root + '/listener/src/searcher/universe-rebuild-production.ts';
+        writeFileSync(wiringPath, readFileSync(wiringPath, 'utf8').replace(
+          'export const selectorReadyFamilyIds = () => ["test", "opaque"];',
+          'import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "./venues/production-family-composition.ts";\nexport const selectorReadyFamilyIds = () => catalog.listAll().map(entry => entry.plugin.manifest.familyId);'));
         await main([...f.argv, ...(candidatesOnly ? ['--candidates-only'] : [])]);
         const identity = JSON.parse(readFileSync(f.out + '/run-identity.json', 'utf8'));
         assert.deepEqual(identity.activations, [keys[0], keys[2]]);
@@ -498,4 +618,48 @@ export const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG = {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
     }
   }
+});
+
+test('SQL selector Ready compiles enabled Funding discovery and preserves both providers beside unknown census calls', async () => {
+  const { fileURLToPath } = await import('node:url');
+  const { createContext, runInContext } = await import('node:vm');
+  const { compileReadyDiscovery } = await import('./ready-bigquery-sql.mjs');
+  const production = await import('../listener/src/searcher/universe-rebuild-production.ts');
+  const { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG: catalog } = await import('../listener/src/searcher/venues/production-family-composition.ts');
+  const selected = new Set(production.selectorReadyFamilyIds());
+  const families = catalog.listAll().filter(family => selected.has(family.plugin.manifest.familyId));
+  const funding = families.filter(family => family.plugin.manifest.domain === 'funding');
+  assert(funding.length >= 2);
+  const libraries = await compileReadyDiscovery(fileURLToPath(new URL('..', import.meta.url)),
+    { listAll: () => families }, 'offline-funding-fixture');
+  const context = createContext({});
+  for (const library of libraries) runInContext(library.bytes.toString(), context, { timeout: 30000 });
+  const kernel = context.DiscoveryKernel;
+  assert.deepEqual([...kernel.rules().map(rule => rule.familyId)].sort(), [...selected].sort());
+  const { Interface } = await import('../listener/node_modules/ethers/lib.esm/index.js');
+  const asset = '0x' + '12'.repeat(20), sender = '0x' + '34'.repeat(20), router = '0x' + '56'.repeat(20);
+  const calls = [...funding, funding[0]].map((family, index) => {
+    const pattern = family.plugin.discovery.callPatterns[0], abi = new Interface([pattern.signature]);
+    const function_ = abi.getFunction(pattern.selector);
+    const args = function_.inputs.length === 4 ? [sender, [asset], [17n], '0x'] : [asset, 17n, '0x'];
+    return { family, target: '0x' + (70 + index).toString(16).padStart(40,'0'), input: abi.encodeFunctionData(function_, args) };
+  });
+  const input = { tx_hash: hash, block_number: 123, block_hash: blockHash, receipt_status: 1,
+    from_address: sender, to_address: router, input: '0xdeadbabe', logs: [], traces: [
+      frame('', router, { from_address: sender, input: '0xdeadbabe' }),
+      ...calls.map((call, index) => frame(String(index), call.target, { from_address: router, input: call.input })),
+    ] };
+  const records = JSON.parse(kernel.compactTransactionJson(JSON.stringify(input)));
+  const candidates = records.filter(row => row.kind === 'candidate');
+  const expected = observationsFromTx(input, emptyCounts()).filter(row => row.kind === 'call')
+    .flatMap(row => production.candidatesFromCall(row, [...selected]));
+  assert.equal(candidates.length, calls.length);
+  assert.deepEqual(candidates.map(row => row.key).sort(), expected.map(production.rebuildFamilyInstanceDedupeKey).sort());
+  assert.deepEqual(candidates.map(row => row.family).sort(), calls.map(call => call.family.plugin.manifest.familyId).sort());
+  assert.equal(new Set(candidates.map(row => row.snapshot.target)).size, calls.length, 'one selector retains different providers');
+  const census = records.find(row => row.kind === 'selector-census').snapshot;
+  assert.equal(census.calls[0].selector, '0xdeadbabe');
+  assert.equal(census.calls[0].status, 'unverified');
+  assert.deepEqual(census.logs, []);
+  assert.equal(runInContext('typeof process + ":" + typeof require', context), 'undefined:undefined');
 });

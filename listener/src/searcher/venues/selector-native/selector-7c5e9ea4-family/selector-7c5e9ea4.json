@@ -1,0 +1,11 @@
+{
+  "format": "selector-family/v2",
+  "selector": "0x7c5e9ea4",
+  "signature": "function swapExactAmountOut(address, uint256, address, uint256, uint256)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_7C5E9EA4_ENABLED"
+  },
+  "unsupportedReason": "Historical capture/discovery selector has no matching entry in the original Exact execution programs; its observations remain unverified."
+}
