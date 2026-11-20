@@ -1,0 +1,59 @@
+{
+  "scope": "Historical SQL discovery, enabled-selector filtering, and selector signature labels. Not a live, execution, or touched-count acceptance test.",
+  "discoverySource": "be86af44c51e4aab6ee5ee406524c7a40a3e1094",
+  "receivingTimingBaseline": "ce307d16319299d9c7ddee14e99bd510d9eebd37",
+  "window": {
+    "chainId": 1,
+    "fromBlock": 26155910,
+    "toBlock": 26378389,
+    "lastBlockHash": "0x62b23cae3b410e09f24910f072a94e2a65b68917a91168dda8648e0d5375c618",
+    "transactions": 56390529
+  },
+  "method": "Rendered both SQL modes on the receiving source. Re-read every row of the original full-window export; applied the rendered final selector predicate to those rows. No new billed BigQuery job.",
+  "archivedExportSha256": "59486b21926e030d1eb012c24b5a8848f251b000eefbee1c88b5ec1718221367",
+  "coordinateOrder": ["selector", "poolAddress", "poolId", "tokenIn", "tokenOut"],
+  "encoding": "Lowercase hex, null poolId as empty string, tab-separated, bytewise ascending, LF after every row.",
+  "full": {
+    "renderedSqlSha256": "2caaafc1fa57b5a226fd917d08e3adb82bd075253b7720a4a6575e2969ad07c9",
+    "rows": 861031,
+    "distinctSelectors": 13302,
+    "duplicateKeys": 0,
+    "keySetSha256": "f1d1cf9d45eaa66c41c11a7ad3a044885b417f6923c277be541c782ce2e33dd1"
+  },
+  "filtered": {
+    "renderedSqlSha256": "faa2c5ae9fc90798b2795e935777805ea3095ac7eb243cbfc6ce11bacfec020a",
+    "enabledSelectors": 92,
+    "rows": 307622,
+    "distinctSelectors": 77,
+    "duplicateKeys": 0,
+    "keySetSha256": "ce32feb370c590143d63d8cb315c038219b4fdd2736cb69ba98cd7079a5f455d"
+  },
+  "knownDirections": {
+    "positiveHits": 1626,
+    "positiveTotal": 1740,
+    "inheritedMissing": 114,
+    "negativeHits": 0,
+    "negativeTotal": 18,
+    "receiptAndFrameReplay": "0x8d7d57966956639225a1e260c16837d67286665301c54b103d801a158a964690",
+    "oppositeDirectionsObserved": ["0xde0e9a3e", "0xea598cb0"]
+  },
+  "signatureAudit": {
+    "signaturesRehashed": true,
+    "sourceExportUnchanged": true,
+    "collisionSelector": "0x42966c68",
+    "matchingSignatures": ["burn(uint256)", "collate_propagate_storage(bytes16)"],
+    "labelsOnly": true
+  },
+  "receivingPipeline": {
+    "checksPassed": 54,
+    "checksSkipped": 0,
+    "previousCoordinatesManifestSha256": "ae0e81940714cab7e1cb26b8ae6878a673e9aab0b415971f2a1f94af28e253e6",
+    "readBackWithNativePriceLoader": 306534,
+    "existingIdsPreserved": 95286,
+    "notProjected": {
+      "representativeCallTargetDiffersFromPool": 1073,
+      "ambiguousAmongPreviousPublicIds": 15
+    },
+    "limitation": "All filtered discovery rows retained. Projection is not a quote, profitability test, or admission for execution. No full-window funding table or new live run."
+  }
+}

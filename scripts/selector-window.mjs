@@ -1,22 +1,18 @@
-// Complete selector SQL pipeline. The default comparison interval is fixed;
-// the reference Graph is never an input to any query stage.
+// Official swap discovery and independently sourced funding. Historical exports below
+// remain importable; none of the legacy swap queries are used by this CLI.
 import assert from 'node:assert/strict';
-import {existsSync,mkdirSync,mkdtempSync,writeFileSync,readFileSync} from 'node:fs';
-import {join,resolve,basename,dirname} from 'node:path';
+import {existsSync,mkdirSync,writeFileSync,readFileSync} from 'node:fs';
+import {join,resolve,basename} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
+import {spawnSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
 import {gzipSync} from 'node:zlib';
-import {googleApi,loadPublishedRules,sha} from './selector-query-client.mjs';
+import {googleApi,sha} from './selector-query-client.mjs';
 import {decodeRow} from './bigquery-table.mjs';
 import {openReadyDiscoveryJob} from './ready-bigquery-sql.mjs';
-import {resolveReadyWindow} from './ready-bigquery-window.mjs';
-import {loadCatalogEventRules,renderCatalogEventQuery} from './selector-event-catalog-sql.mjs';
-import {selectorWindowTopLevelSelectors,renderSelectorWindowCallsSql} from './selector-window-calls-sql.mjs';
-import {renderSelectorReceiptLayouts} from './selector-sql-sources/receipt-layouts.mjs';
-import {renderSelectorWindowLedger} from './selector-family-window-ledger-sql.mjs';
-import {candidateCoordinateFields,renderSelectorCandidateInstancesSql} from './selector-candidate-instances-sql.mjs';
+import {candidateCoordinateFields} from './selector-candidate-instances-sql.mjs';
 import {renderSqlFundingSources} from './selector-funding-sql.mjs';
-import {assertTraceFundingCoverage,splitSqlFundingRows} from './selector-live-funding-export.mjs';
+import {assertPinnedFundingWindow,assertTraceFundingCoverage,splitSqlFundingRows} from './selector-live-funding-export.mjs';
 import {renderTraceCoverageSql} from './selector-trace-window-sql.mjs';
 import {renderSelectorTraceSourceSql} from './selector-trace-source-sql.mjs';
 
@@ -48,41 +44,23 @@ export function exportPriceEdges(dir,candidates,window,resuming=false){
  saveQueryStage(dir,'edges.json',edges,resuming);saveQueryStage(dir,edgeFile,gz,resuming);saveQueryStage(dir,fixedManifest,manifest,resuming);
  return {fixedManifest,fixedManifestSha256:sha(readFileSync(join(dir,fixedManifest))),sortedNdjsonSha256:sha(wire)};
 }
-async function main(){
- const {values:v}=parseArgs({options:{preset:{type:'string',default:'ready21'},out:{type:'string'},resume:{type:'string'},reference:{type:'string'},'reuse-inputs':{type:'string'},help:{type:'boolean'}}});
- if(v.help){console.log('selector-window.mjs [--preset ready21] [--out parent-directory] [--resume incomplete-query-dir] [--reuse-inputs previous-manifest.json] [--reference graph.json (compare only after export)]');return;}
- assert.equal(v.preset,'ready21','use --preset ready21');
+
+// Funding has no swap-edge inputs. Same query shapes and billing ceilings as the previous producer.
+export async function runIndependentWindowFunding(dir,window,resuming=false,providedApi){
  const projectId=process.env.SELECTOR_BQ_PROJECT??'eth-token-480803';assert(/^[a-z][a-z0-9-]+$/.test(projectId));
- const base=resolve(v.out??join(root,'logs/selector-ready21-512'));mkdirSync(base,{recursive:true});
- const dir=v.resume?resolve(v.resume):mkdtempSync(join(base,'query-'));
- if(v.resume){assert.equal(dirname(dir),base);assert(/^query-[a-zA-Z0-9]{6}$/.test(basename(dir))&&existsSync(join(dir,'window.json'))&&!existsSync(join(dir,'manifest.json')),'resume an incomplete query only');}
- const save=(f,x)=>saveQueryStage(dir,f,x,!!v.resume);
- console.error('Query artifacts: '+dir);
- const api=googleApi(),ref={projectId},location='US',jobs={};
- const [window,{rules,libraries}]=await Promise.all([
-   resolveReadyWindow(api,ref,location,4*gib,{fromBlock:ready21.fromBlock,toBlock:ready21.toBlock}),loadPublishedRules(root,api)
- ]);
- checkReady21(window);save('window.json',window);
- const previous=v['reuse-inputs']?JSON.parse(readFileSync(resolve(v['reuse-inputs']))):null;
- if(previous){checkReady21(previous.window);assert.equal(previous.chainId,1);}
+ const ref={projectId},location='US',jobs={};
+ const scope={kind:'selector-window-funding/v1',projectId,location,dirName:basename(dir)};
+ const save=(f,x)=>saveQueryStage(dir,f,x,resuming);
+ if(resuming)assert(existsSync(join(dir,'funding-scope.json')),'resume original independent funding directory only');
+ save('funding-scope.json',scope);
+ save('window.json',window);
+ const api=providedApi??googleApi();
  async function stage(name,sql,limitGiB){
    const sqlSha256=sha(sql),jobId='sel512_'+name+'_'+sha(basename(dir)+sqlSha256).slice(0,24);
    const query={query:sql,useLegacySql:false,useQueryCache:true,maximumBytesBilled:String(limitGiB*gib)};
    save(name+'.sql',sql);const jobsUrl='https://bigquery.googleapis.com/bigquery/v2/projects/'+projectId+'/jobs';
-   // Only identical, unchanged upstream queries may be reused. Never accept a
-   // caller-supplied table in lieu of the successful, byte-matched query job.
-   if(previous&&['calls','catalog'].includes(name)){
-     const old=previous.jobs[name];assert.equal(old.sqlSha256,sqlSha256);
-     assert(/^sel512_[a-z]+_[0-9a-f]{24}$/.test(old.jobId));
-     const j=await api(jobsUrl+'/'+old.jobId+'?location='+location);assert.equal(j.status.state,'DONE');assert(!j.status.errorResult);
-     assert.equal(j.configuration.query.query,sql);const t=j.configuration.query.destinationTable;assert.equal(t.projectId,projectId);
-     const table=[t.projectId,t.datasetId,t.tableId].join('.');assert.equal(table,old.table);
-     const meta=await api('https://bigquery.googleapis.com/bigquery/v2/projects/'+projectId+'/datasets/'+t.datasetId+'/tables/'+t.tableId);
-     assert.deepEqual(meta.tableReference,t);
-     jobs[name]={...old,reused:true};save(name+'-job.json',jobs[name]);return {table};
-   }
    const req=name+'-request.json',reqfile=join(dir,req);let estimate;
-   if(v.resume&&existsSync(reqfile)){
+   if(resuming&&existsSync(reqfile)){
      const old=JSON.parse(readFileSync(reqfile,'utf8'));assert.equal(old.sqlSha256,sqlSha256);assert.equal(old.jobId,jobId);
      assert.equal(old.capBytes,limitGiB*gib);estimate=old.estimate;
    }else{
@@ -108,42 +86,103 @@ async function main(){
      for(const r of p.rows??[])all.push(decodeRow(p.schema.fields,r));token=p.pageToken;}while(token);
    assert.equal(all.length,count);return all;
  }
- const catalog=loadCatalogEventRules(root), selectors=selectorWindowTopLevelSelectors(rules);
- const [calls,events,enriched]=await Promise.all([
-   stage('calls',renderSelectorWindowCallsSql({window,selectors,libraries}),9),
-   stage('catalog',renderCatalogEventQuery({window,catalog}),9),
-   stage('receipts',await renderSelectorReceiptLayouts(window,{v4CalldataKeys:true,v4NativeReceiptKeys:true}),9)
- ]);
- const coverage=await rows(await stage('coverage',`SELECT 'calls' k,body FROM \`${calls.table}\` WHERE row_kind='source' UNION ALL SELECT 'receipts',body FROM \`${enriched.table}\` WHERE kind='coverage'`,1));
- assert.equal(coverage.length,2);const c=JSON.parse(coverage.find(x=>x.k==='calls').body),r=JSON.parse(coverage.find(x=>x.k==='receipts').body);
- assert.equal(String(c.sourceRows),window.transactions);assert.equal(Number(c.minBlock),window.fromBlock);assert.equal(Number(c.lastHead.number),window.toBlock);assert.equal(c.lastHead.blockHash,window.headHash);assert.deepEqual(c.firstHead,c.lastHead);
- assert.equal(Number(r.blocks),512);assert.equal(Number(r.distinctBlocks),512);assert.equal(String(r.transactions),window.transactions);assert.equal(r.headHash,window.headHash);
- const ledger=await stage('ledger',renderSelectorWindowLedger({calls:calls.table,events:events.table,enriched:enriched.table,rules}),2);
- const result=await stage('edges',renderSelectorCandidateInstancesSql(ledger.table),2);
- const candidates=(await rows(result)).map(x=>JSON.parse(x.body));assert.equal(new Set(candidates.map(x=>x.candidateInstanceKey)).size,candidates.length);
  const fundingFrames=await stage('funding-frames',renderSelectorTraceSourceSql({window}),4);
  const fundingCoverage=await rows(await stage('funding-coverage',renderTraceCoverageSql(fundingFrames.table),1));
- assert.equal(fundingCoverage.length,1);assertTraceFundingCoverage(window,fundingCoverage[0]);
+ assert.equal(fundingCoverage.length,1);assertTraceFundingCoverage(window,fundingCoverage[0],window.toBlock-window.fromBlock+1);
  const funds=await stage('funding',await renderSqlFundingSources(fundingFrames.table,join(root,'listener')),3);
  const {rows:fundingRows,failures}=splitSqlFundingRows((await rows(funds)).map(x=>JSON.parse(x.body)),window);
  const funding={format:'sql-live-funding/v1',chainId:1,window,rows:fundingRows,failures,
    sourceJob:jobs['funding-frames'].jobId,coverageJob:jobs['funding-coverage'].jobId,
    sourceCoverage:fundingCoverage[0],queryJob:jobs.funding.jobId,querySha256:jobs.funding.sqlSha256};
  save('funding.json',funding);
- const edgeReceipts=exportPriceEdges(dir,candidates,window,!!v.resume);
- save('manifest.json',{preset:'ready21',chainId:1,window,callsCoverage:c,receiptCoverage:r,ordinaryFamilies:catalog.ordinaryFamilies.length,...edgeReceipts,
-   fundingSources:fundingRows.length,fundingFailureGroups:failures.length,
-   fundingFailureObservations:failures.reduce((n,f)=>n+f.observations,0),fundingFile:'funding.json',fundingTableSha256:sha(readFileSync(join(dir,'funding.json'))),
-   jobs,count:candidates.length,observedSelector:candidates.filter(e=>e.observedTargetSelector).length,
-   semantics:'selector candidates, not verified graph edges',referenceUsedAsInput:false});
- let comparison;
- if(v.reference){
-   const reference=resolve(v.reference),bytes=readFileSync(reference),graph=JSON.parse(bytes);
-   checkReady21({...graph.window,transactions:String(graph.window?.transactions)});assert.equal(graph.edges.length,4403,'expected the verified Ready21 export');
-   const {writeSelectorWindowComparison}=await import('./selector-window-compare.mjs');
-   comparison=(await writeSelectorWindowComparison({instances:join(dir,'edges.json'),reference,referenceSha256:sha(bytes),instancesSha256:sha(readFileSync(join(dir,'edges.json'))),
-     chainId:1,pins:join(dir,'window.json'),out:join(dir,'comparison')})).counts;
+
+ return {funding:join(dir,'funding.json'),fundingSha256:sha(readFileSync(join(dir,'funding.json'))),rows:fundingRows.length};
+}
+
+const help=[
+ 'selector-window.mjs --sql-only [--window pinned.json | --preset ready21] [--live-selectors-only]',
+ '  Print only the official independent discovery SQL; no credentials, network or file writes.',
+ 'selector-window.mjs --out NEWDIR [--window pinned.json | --preset ready21] [--live-selectors-only]',
+ '  Fresh discovery only (BigQuery; original 16 GiB per-job cap). Full selector discovery by default.',
+ 'selector-window.mjs --funding-only --out NEWDIR [--window pinned.json | --preset ready21]',
+ '  Generate the independent funding.json for that same window (4/1/3 GiB stage caps).',
+ '  For a partial funding job use --funding-only --resume DIR; reopen only identical pinned stages.',
+ 'selector-window.mjs --from-manifest MANIFEST --manifest-sha256 SHA --previous PREVIOUS-FIXED-MANIFEST',
+ '  --previous-sha256 SHA --funding SAME-WINDOW-FUNDING --funding-sha256 SHA --out NEWDIR [--window pinned.json]',
+ '  Entirely offline: verify an independent discovery receipt (or a sealed full-export archive) and reuse',
+ '  the previous public IDs and independently sealed funding. Choose --no-prior for a new public-ID lineage',
+ '  instead of both previous arguments. --swaps-only omits funding and cannot start live.',
+ '  To discover then prepare both tables in one command: omit --from-manifest/--manifest-sha256 and supply',
+ '  the same --previous/--funding pairs with --out NEWDIR and your pinned window. Discovery then uses the live selector filter.',
+].join('\n');
+function sameWindow(a,b){
+ for(const k of ['chainId','fromBlock','toBlock','firstTime','lastTime','transactions','headHash'])assert.equal(a[k],b[k],'window mismatch: '+k);
+}
+function readPinned(file,expect,label){
+ assert(typeof file==='string'&&/^[a-f0-9]{64}$/.test(expect??''),'missing --'+label+' or its explicit SHA-256');
+ const b=readFileSync(resolve(file));assert.equal(sha(b),expect,label+' digest mismatch');return JSON.parse(b);
+}
+async function main(){
+ const keys=['preset','out','window','resume','from-manifest','manifest-sha256','previous','previous-sha256','funding','funding-sha256'];
+ const flags=['help','sql-only','live-selectors-only','swaps-only','funding-only','no-prior'];
+ const {values:v}=parseArgs({options:Object.fromEntries([...keys.map(k=>[k,{type:'string'}]),...flags.map(k=>[k,{type:'boolean'}])])});
+ if(v.help){console.log(help);return;}
+ const offline=v['from-manifest']!==undefined,prepare=offline||!!v['swaps-only']||!!v['no-prior']||['manifest-sha256','previous','previous-sha256','funding','funding-sha256'].some(k=>v[k]!==undefined);
+ assert(!(v.preset&&v.window),'select either --preset or --window');if(v.preset)assert.equal(v.preset,'ready21','unknown preset');
+ assert(!v.resume||v['funding-only'],'only incomplete funding jobs can --resume; use --from-manifest for a completed discovery');
+ assert(!v['manifest-sha256']||offline,'--manifest-sha256 requires --from-manifest');
+ assert(!(v['sql-only']&&(prepare||v['funding-only']||v.out||v.resume)),'--sql-only is renderer only');
+ assert(!(v['funding-only']&&(prepare||v['live-selectors-only'])),'funding is independent of swap discovery');
+ const {ready21Window,renderIndependentTraceEdges}=await import('./independent-trace-edges.mjs');
+ const receipt=offline?readPinned(v['from-manifest'],v['manifest-sha256'],'manifest'):undefined;
+ const resuming=!!v.resume;const out=v.out?resolve(v.out):undefined;
+ assert(!resuming||!out,'choose a new output directory or a partial funding directory');
+ const fundingResume=resuming?resolve(v.resume):undefined;
+ const window=v.window?JSON.parse(readFileSync(resolve(v.window),'utf8')):v.preset?ready21Window:
+   receipt?.window??(resuming?JSON.parse(readFileSync(join(fundingResume,'window.json'),'utf8')):ready21Window);
+ assert.equal(window.chainId,1,'a pinned mainnet window is required');
+ renderSelectorTraceSourceSql({window}); // validates all canonical interval/time/count/hash pins without IO
+ if(offline)sameWindow(window,receipt.window);
+ if(v['sql-only']){process.stdout.write(await renderIndependentTraceEdges(window,{liveSelectorsOnly:!!v['live-selectors-only']})+'\n');return;}
+ assert(out||fundingResume,'specify --out NEWDIR (no implicit paid discovery)');
+ if(out)assert(!existsSync(out),'refusing existing output directory');
+ if(v['funding-only']){
+   const dir=fundingResume??out;
+   if(resuming){assert(!existsSync(join(dir,'funding.json')),'funding job already completed');sameWindow(window,JSON.parse(readFileSync(join(dir,'window.json'),'utf8')));}
+   else mkdirSync(dir,{mode:0o700});
+   console.log(JSON.stringify(await runIndependentWindowFunding(dir,window,resuming)));return;
  }
- console.log(JSON.stringify({edges:join(dir,'edges.json'),count:candidates.length,window,comparison}));
+ if(prepare){
+   if(v['no-prior'])assert(!v.previous&&!v['previous-sha256'],'--no-prior excludes previous-coordinate arguments');
+   else {
+     const previous=readPinned(v.previous,v['previous-sha256'],'previous');
+     assert(previous.toBlock<=window.toBlock,'future published coordinates');
+     if(previous.toBlock===window.toBlock)assert.equal(previous.cutoffHash,window.headHash,'wrong prior cutoff');
+     if(!offline){const {loadSqlPriceEdges}=await import('../listener/src/searcher/sql-edge-price-index.ts');await loadSqlPriceEdges(resolve(v.previous));}
+   }
+   if(v['swaps-only'])assert(!v.funding&&!v['funding-sha256'],'--swaps-only does not accept funding');
+   else {
+     const funding=readPinned(v.funding,v['funding-sha256'],'funding');
+     assertPinnedFundingWindow(window,funding);
+     const {readSqlFundingRows}=await import('../listener/src/searcher/sql-live-tables.ts');
+     readSqlFundingRows(funding,{fromBlock:window.fromBlock,toBlock:window.toBlock,cutoffHash:window.headHash});
+   }
+ }
+ let upstream=offline?resolve(v['from-manifest']):undefined,upstreamSha256=v['manifest-sha256'],dest=out;
+ if(!offline){
+   // Preserve the upstream producer job receipt and SQL. No second discovery implementation.
+   mkdirSync(out,{mode:0o700});const discovery=prepare?join(out,'discovery'):out;
+   if(prepare){mkdirSync(discovery,{mode:0o700});dest=join(out,'live-input');}
+   saveQueryStage(discovery,'window.json',window,false);const argv=[join(root,'scripts','independent-trace-edges.mjs'),'--window',join(discovery,'window.json'),'--out',discovery];
+   if(prepare||v['live-selectors-only'])argv.push('--live-selectors-only');
+   const child=spawnSync(process.execPath,['--import',join(root,'listener','node_modules','tsx','dist','loader.mjs'),...argv],{cwd:root,stdio:'inherit'});
+   if(child.error)throw child.error;assert.equal(child.status,0,'independent discovery failed; no live input sealed');
+   if(!prepare)return;
+   upstream=join(discovery,'manifest.json');upstreamSha256=sha(readFileSync(upstream));
+ }else assert(!v['live-selectors-only'],'offline mode attests the selector mode from the upstream manifest');
+ const {exportIndependentLive}=await import('./selector-independent-live-export.mjs');
+ const result=await exportIndependentLive({upstream,upstreamSha256,previous:v.previous?resolve(v.previous):undefined,previousSha256:v['previous-sha256'],
+   funding:v.funding?resolve(v.funding):undefined,fundingSha256:v['funding-sha256'],out:dest,swapsOnly:!!v['swaps-only'],noPrior:!!v['no-prior']});
+ console.log(JSON.stringify({out:dest,...result}));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)main().catch(e=>{console.error(e.message);process.exitCode=1;});

@@ -27,7 +27,7 @@ function treeIssue(nodes){
 const source='bigquery-public-data.crypto_ethereum',addr="r'^0x[0-9a-f]{40}$'",hash="r'^0x[0-9a-f]{64}$'",bytes="r'^0x(?:[0-9a-f]{2})*$'";
 function stamp(s){assert(typeof s==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{6}Z$/.test(s)&&Number.isFinite(Date.parse(s)),'invalid UTC pin');return "TIMESTAMP('"+s+"')";}
 
-export function renderSelectorTraceSourceSql({window,...extra}){
+export function renderSelectorTraceSourceSql({window,materialize=false,...extra}){
  assert.equal(Object.keys(extra).length,0,'no auxiliary source, selector or target');
  const {chainId=1,fromBlock:lo,toBlock:hi,firstTime,lastTime,headHash,transactions}=window;
  assert(chainId===1&&Number.isSafeInteger(lo)&&Number.isSafeInteger(hi)&&lo>0&&hi>=lo,'invalid canonical mainnet block interval');
@@ -40,7 +40,7 @@ export function renderSelectorTraceSourceSql({window,...extra}){
 ${treeIssue.toString()}
 return treeIssue(nodes);
 ''';
-WITH header_base AS (
+${materialize?'CREATE TEMP TABLE canonical_trace AS\n':''}WITH header_base AS (
  SELECT b.number,LOWER(b.hash) block_hash,LOWER(b.parent_hash) parent_hash,b.timestamp ts,b.transaction_count n
  FROM \`${source}.blocks\` b WHERE ${limits('b.number','b.timestamp')}
 ), headers AS (

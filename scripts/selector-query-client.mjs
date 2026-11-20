@@ -19,12 +19,22 @@ export function googleApi(config=process.env.SELECTOR_GCLOUD_CONFIG??'mev-rpc-la
    }
  };
 }
-export async function loadPublishedRules(root,api){
- const lib=await compileReadyDiscovery(root,null,process.env.SELECTOR_BQ_LIBRARY_BUCKET??'contract_yoyo'),ctx=vm.createContext({});
- await Promise.all(lib.map(async l=>{
-   const data=await api('https://storage.googleapis.com/storage/v1/b/'+l.bucket+'/o/'+encodeURIComponent(l.object)+'?alt=media',{bytes:true});
-   assert.equal(sha(data),l.sha256,'published library differs from workspace: '+l.object);
+export async function loadPublishedRules(root,api,pinnedLibraries){
+ const lib=pinnedLibraries===undefined
+   ? await compileReadyDiscovery(root,null,process.env.SELECTOR_BQ_LIBRARY_BUCKET??'contract_yoyo')
+   : pinnedLibraries.map(uri=>{
+     assert(typeof uri==='string','Invalid pinned discovery library URI');
+     const match=/^gs:\/\/([a-z0-9_.-]+)\/(mev-discovery-json-check\/([0-9a-f]{64})\/[a-z0-9-]+\.js)$/.exec(uri);
+     assert(match,'Expected a content-addressed discovery library');
+     return {uri,bucket:match[1],object:match[2],sha256:match[3]};
+   });
+ assert(lib.length>0&&new Set(lib.map(l=>l.uri)).size===lib.length,'Empty or duplicate discovery libraries');
+ const resourceBytes=await Promise.all(lib.map(async l=>{
+   const bytes=await api('https://storage.googleapis.com/storage/v1/b/'+l.bucket+'/o/'+encodeURIComponent(l.object)+'?alt=media',{bytes:true});
+   assert.equal(sha(bytes),l.sha256,'Published library content differs: '+l.object);
+   return bytes;
  }));
- for(const l of lib)vm.runInContext(l.bytes.toString(),ctx,{timeout:30000});
+ const ctx=vm.createContext({});
+ for(const bytes of resourceBytes)vm.runInContext(bytes.toString(),ctx,{timeout:30000});
  return {rules:JSON.parse(JSON.stringify(ctx.DiscoveryKernel.rules())),libraries:lib.map(l=>l.uri)};
 }

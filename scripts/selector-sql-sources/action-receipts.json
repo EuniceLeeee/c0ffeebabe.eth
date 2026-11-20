@@ -1,0 +1,67 @@
+[
+  {
+    "actions": ["swap(uint256,uint256,address,bytes)"],
+    "event": "Swap(address indexed sender,uint256 in0,uint256 in1,uint256 out0,uint256 out1,address indexed recipient)",
+    "equals": {"sender":"caller","recipient":"arg2","out0":"arg0","out1":"arg1"},
+    "assets": ["token0()","token1()"],
+    "deltas": [["in0","-out0"],["in1","-out1"]],
+    "recipient": "recipient",
+    "snapshot": {"event":"Sync(uint112 reserve0,uint112 reserve1)","balances":["reserve0","reserve1"],"read":"balanceOf(address)"}
+  },
+  {
+    "actions": ["swap(address,bool,int256,uint160,bytes)"],
+    "event": "Swap(address indexed sender,address indexed recipient,int256 delta0,int256 delta1,uint160 price,uint128 liquidity,int24 tick)",
+    "equals": {"sender":"caller","recipient":"arg0"},
+    "assets": ["token0()","token1()"],
+    "deltas": [["delta0"],["delta1"]],
+    "recipient": "recipient"
+  },
+  {
+    "actions": ["deposit(uint256,address)","mint(uint256,address)"],
+    "event": "Deposit(address indexed sender,address indexed owner,uint256 assets,uint256 shares)",
+    "equals": {"sender":"caller","owner":"arg1"},
+    "actionAmounts": ["assets","shares"],
+    "transferProof": [
+      {"token":"external","amount":"assets","from":"sender"},
+      {"token":"self","amount":"shares","from":"zero","to":"owner"}
+    ],
+    "assets": ["asset()","self"],
+    "deltas": [["assets"],["-shares"]],
+    "payer": "sender", "recipient": "owner"
+  },
+  {
+    "actions": ["redeem(uint256,address,address)","withdraw(uint256,address,address)"],
+    "event": "Withdraw(address indexed sender,address indexed receiver,address indexed owner,uint256 assets,uint256 shares)",
+    "equals": {"sender":"caller","receiver":"arg1","owner":"arg2"},
+    "actionAmounts": ["shares","assets"],
+    "transferProof": [
+      {"token":"self","amount":"shares","from":"owner","to":"zero"},
+      {"token":"external","amount":"assets","to":"receiver"}
+    ],
+    "assets": ["asset()","self"],
+    "deltas": [["-assets"],["shares"]],
+    "payer": "owner", "recipient": "receiver"
+  },
+  {
+    "actions": ["swapIn(bool,uint256,uint256,address)"],
+    "event": "Swap(bool forward,uint256 paid,uint256 received,address beneficiary)",
+    "equals": {"forward":"arg0","paid":"arg1","beneficiary":"arg3-or-caller"},
+    "assets": ["token0()","token1()"],
+    "deltas": [["paid"],["-received"]], "reverseWhenFalse": "forward",
+    "payer":"caller", "recipient":"beneficiary"
+  },
+  {
+    "actions": ["tokenToEthSwapInput(uint256,uint256,uint256)"],
+    "event": "EthPurchase(address indexed buyer,uint256 indexed tokens,uint256 indexed eth)",
+    "equals": {"buyer":"caller","tokens":"arg0"},
+    "assets": ["tokenAddress()","native"],
+    "deltas": [["tokens"],["-eth"]], "payer":"buyer", "recipient":"buyer"
+  },
+  {
+    "actions": ["ethToTokenSwapInput(uint256,uint256)","ethToTokenTransferInput(uint256,uint256,address)"],
+    "event": "TokenPurchase(address indexed buyer,uint256 indexed eth,uint256 indexed tokens)",
+    "equals": {"buyer":"caller","eth":"value"},
+    "assets": ["native","tokenAddress()"],
+    "deltas": [["eth"],["-tokens"]], "payer":"buyer"
+  }
+]

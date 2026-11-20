@@ -39,10 +39,27 @@ export function splitSqlFundingRows(items,w){
   }
   return {rows,failures};
 }
-export function assertTraceFundingCoverage(w,c){
-  assert.equal(w.toBlock-w.fromBlock+1,512,'expected 512-block input');
+export function assertTraceFundingCoverage(w,c,expectedBlocks=512){
+  assert(Number.isSafeInteger(expectedBlocks)&&expectedBlocks>0);
+  assert.equal(w.toBlock-w.fromBlock+1,expectedBlocks,'unexpected funding window length');
   assert.equal(c.transactions,w.transactions);assert.equal(c.distinctTx,w.transactions);assert.equal(c.missingTraces,'0');
-  assert.equal(Number(c.activeHashes),512);assert.equal(Number(c.firstBlock),w.fromBlock);assert.equal(Number(c.lastBlock),w.toBlock);assert.equal(c.head,w.headHash);
+  assert.equal(Number(c.activeHashes),expectedBlocks);assert.equal(Number(c.firstBlock),w.fromBlock);assert.equal(Number(c.lastBlock),w.toBlock);assert.equal(c.head,w.headHash);
+}
+/** Bind the separate funding witness to the discovery interval, including its population.
+ * Older sealed tables can omit optional copies of pins but not the coverage counts. */
+export function assertPinnedFundingWindow(w,doc){
+  assert(w.chainId===1&&doc.format==='sql-live-funding/v1'&&doc.chainId===1&&doc.window,'invalid funding window');
+  for(const k of ['fromBlock','toBlock','headHash'])assert.equal(doc.window[k],w[k],'funding window mismatch: '+k);
+  for(const k of ['firstTime','lastTime','transactions','chainId'])if(doc.window[k]!==undefined)
+    assert.equal(doc.window[k],w[k],'funding window mismatch: '+k);
+  const copies=[doc.sourceCoverage,doc.provenance?.trace?.coverage].filter(c=>c!==undefined);
+  assert(copies.length,'missing funding trace coverage');
+  for(const c of copies){assert(c&&typeof c==='object','invalid funding coverage');assertTraceFundingCoverage(w,c,w.toBlock-w.fromBlock+1);}
+  if(copies.length===2)for(const k of Object.keys(copies[0]))if(Object.hasOwn(copies[1],k)) {
+    const [left,right]=copies.map(c=>c[k]);
+    if(typeof left==='object'||typeof right==='object')assert.deepEqual(left,right,'conflicting funding coverage: '+k);
+    else assert.equal(String(left),String(right),'conflicting funding coverage: '+k);
+  }
 }
 const optional={allowStatus:404},config={method:'POST',headers:{'Content-Type':'application/json'},timeoutMs:120000,maxAttempts:1};
 function complete(job,id,sql,projectId){
