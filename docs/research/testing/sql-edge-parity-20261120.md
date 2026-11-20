@@ -1,10 +1,10 @@
 # SQL edge 合并验收 · 2026-11-20
 
-接收端交付三项结果：固定窗口的 edge 集合校验值、OpenChain 查询样本、固定块的 touched 对照。这样可以分别发现边生成、selector 启用配置和刷新索引的偏差。
+本次交接到 SQL 输出的候选边为止。接收端核对独立发现的完整 edge 集合、启用 selector 后的子集，以及 OpenChain 对未知 selector 的签名标注。
 
 ## 1. 对齐代码和输入
 
-来源分支 `codex/impl-sql-trace-edges-20261120`，IMPL 基线 `1ce6bd77`。独立发现、调用方收支归属、证据归属精简依次在 `925b59d7`、`a8652fd0`、`5a2b3fb3`，最终过滤开关在 **`be86af44`**。已有部分改动的工作区可按入口和测试对齐，保留自身其他修改。只移植最后一笔提交需要接收端已有前三笔的发现实现。
+来源分支 `codex/impl-sql-trace-edges-20261120`，IMPL 基线 `1ce6bd77`。独立发现、调用方收支归属、证据归属精简依次在 `925b59d7`、`a8652fd0`、`5a2b3fb3`，最终过滤开关在 **`be86af44`**。已有部分改动的工作区可按入口和测试对齐，保留自身其他修改。只移植最后一笔提交需要接收端已有前三笔的发现实现。早期快照含同工作区的其他改动，按 `scripts/independent-trace-edges.mjs`、`scripts/audit-trace-edge-selectors.mjs`、它们的 SQL 依赖及专项测试移植即可。
 
 从接收工作区根目录运行，使用项目锁定的 listener 依赖。默认全量发现和开启过滤共用 `scripts/independent-trace-edges.mjs`、输出 schema 和四项去重逻辑。过滤发生在 trace 和回执完成归属之后，全部内部调用仍能提供结算证据。过滤名单来自生成的生产模块、本进程的 Family 启用开关以及 Swap／Protocol 两个兑换域。
 
@@ -33,7 +33,7 @@ done
 
 ## 2. 核对 edge 完备性
 
-固定窗口、固定名单，检查接收端实际导出结果。若已接入 live 表，还应对 live 实际读取的**兑换输入表**再算一次 filtered 集合。独立发现 CLI 输出 `edges.json` 和 `manifest.json`，live 的固定表有自己的封装。沿用接收端的导出和加载入口，核对读回的坐标即可。
+固定窗口和启用名单后，对 SQL 实际导出的全量、过滤结果分别计算完整集合的摘要。独立发现 CLI 输出 `edges.json` 和 `manifest.json`。
 
 | 指标 | 全量 | 开启过滤 |
 | --- | ---: | ---: |
@@ -80,21 +80,8 @@ node scripts/audit-trace-edge-selectors.mjs --edges "$case_dir/selector-sample.j
 
 全窗口的 13,302 个 selector 中，102 个出现在当时完整本地目录，13,200 个本地未知。历史实查的是按边数排序的未知前 25 个，其中 20 个返回匹配签名、5 个未解析。77 是启用后实际有边的兑换 selector 数，和本地目录匹配数各有口径。
 
-## 4. 同一块核对 touched
+## 4. 接收端回执
 
-使用 Alchemy 区块 `26378389`，哈希与上面的 `headHash` 相同，共 371 笔交易。将两个模式的**整段历史表**分别交给接收端的池刷新索引，通过现有日志匹配和被动余额触碰入口重放本块。每个独立池或逻辑池只计一次，将同池所有历史方向展开后去重。另从本块逐笔调用和回执统计本块出现的方向。
+请给出接收提交、区间及块哈希、实际启用的兑换 selector 数、专项回归结果、两个 SQL 输出的边数／重复数／键摘要，以及 OpenChain 样本结果。启用名单有变动时，按本次实际名单从全量表取子集核对。
 
-| 区块 26,378,389 | 全量 | 开启过滤 |
-| --- | ---: | ---: |
-| 本块实际观察到的池／方向边 | 90／121 | 63／74 |
-| 日志和被动余额触发刷新的池／历史边 | 112／205,293 | 71／28,478 |
-
-作为轻量集合对照，用第 2 节的排序与编码计算本块实际观察方向的 SHA-256，全量为 `5aa62613cb9ad8d5b1f6073efad8f6c6dc6d9c07dea19e1d0f19f4bd1b4a47bf`，过滤后为 `696dc813b5b2a761e1d37f7e5a7b84751048869d9e5986c3c93e21f8276e841f`。
-
-同一池的一次触碰可以触发多条历史方向刷新。这张表验收的是 SQL 输入及相同 touched 策略的结果。下游经过准入、报价复用、合并请求后的 RPC 数和实际耗时需从对应运行取数。
-
-## 5. 接收端回执
-
-请给出接收提交、区间及块哈希、实际启用的兑换 selector 数、专项回归结果、两种模式的边数／重复数／键摘要、OpenChain 样本结果，以及同块的两种 touched 数。若接收端采用不同 catalog 或刷新策略，先用上述冻结配置复核 SQL，再单列实际配置的差异。
-
-同机可复用来源工作区 `/Users/eunice/.codex/worktrees/impl-sql-20261119/MEV` 下的本地证据。全量导出在 `logs/ready20-caller-full-20261120/edges.jsonl.gz`，目标方向样本统计在同目录 `comparison.json`，Alchemy 原始块、回执和调用在 `logs/alchemy-touched-26378389/`，本次范围和 touched 结果在 `logs/sql-selector-filter-20261120/comparison.json`。这些运行产物未随 Git 分发。仓库本身可以独立运行专项回归、生成两种 SQL 并执行签名查询。需要从链数据重建整段输出时，先按原窗口估算 BigQuery 费用。全量回归在这里复用了已有导出。
+同机可复用来源工作区 `/Users/eunice/.codex/worktrees/impl-sql-20261119/MEV` 下的本地证据。全量导出在 `logs/ready20-caller-full-20261120/edges.jsonl.gz`，目标方向样本统计在同目录 `comparison.json`，历史签名抽查在 `logs/ready20-redundancy-20261120/unknown-top25-results.json`。这些运行产物未随 Git 分发。仓库本身可以独立运行专项回归、生成两种 SQL 并执行签名查询。
