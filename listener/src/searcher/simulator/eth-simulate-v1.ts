@@ -269,17 +269,25 @@ function validateCaller(executor: string, owner: string): void {
   }
 }
 
+// Only normalized, frozen primitive snapshots issued by this validator qualify.
+// External objects (including frozen copies and deserialized saved inputs) must
+// authenticate their own bytes. This memo is not a state/price/simulation cache.
+const authenticatedExecutorImages = new WeakSet<object>();
 function validateExecutorRuntimeCode(value: unknown): BotVmRuntimeCode | undefined {
   if (value === undefined) return undefined;
+  if (typeof value === "object" && value !== null && authenticatedExecutorImages.has(value)) return value as BotVmRuntimeCode;
   const code = record(value);
+  const bytes = code?.code, digest = code?.keccak256;
   if (!code || Object.keys(code).length !== 2 ||
       !Object.keys(code).every(key => key === "code" || key === "keccak256") ||
-      typeof code.code !== "string" || !/^0x(?:[0-9a-fA-F]{2})+$/.test(code.code) ||
-      typeof code.keccak256 !== "string" || !HASH.test(code.keccak256) ||
-      keccak256(code.code) !== code.keccak256.toLowerCase()) {
+      typeof bytes !== "string" || !/^0x(?:[0-9a-fA-F]{2})+$/.test(bytes) ||
+      typeof digest !== "string" || !HASH.test(digest) ||
+      keccak256(bytes) !== digest.toLowerCase()) {
     throw new Error("invalid final simulation executor code");
   }
-  return Object.freeze({ code: code.code.toLowerCase(), keccak256: code.keccak256.toLowerCase() });
+  const image = Object.freeze({ code: bytes.toLowerCase(), keccak256: digest.toLowerCase() });
+  authenticatedExecutorImages.add(image);
+  return image;
 }
 
 /** Stateless final simulation; the existing scheduler owns generation fencing.

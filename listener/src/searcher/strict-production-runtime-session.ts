@@ -2,11 +2,14 @@ import { ethers } from "ethers";
 import { AmountNotExecutableError } from "./solver/amount-rejection.js";
 import { types as nodeTypes } from "node:util";
 import type { BlockTouchedStateKeyResolver } from "./blockscan-touched-state.js";
+import { physicalRankingScope, sqlPoolPriceActivityScope } from "./blockscan-touched-state.js";
+import { canonicalPhysicalPoolId, observePoolBalanceRefresh, observePoolLegRefresh, PoolLegRefreshIndex, publishedPoolLegIndex, touchedPoolKey, type PoolLegBinding, type PoolLogScopes } from "./pool-leg-refresh.js";
+import { PoolTouchCounts, type PhysicalHit } from "./sql-pool-touch-counts.js";
 import type {
   AdapterWorkControl,
   CentralAdapterRuntime,
 } from "./adapter-work-intent.js";
-import { normalizeStateResourceKeys } from "./venues/route-state-resources.js";
+import { explicitStateResourceKeys, normalizeStateResourceKeys } from "./venues/route-state-resources.js";
 import {
   buildFamilyRouteGraphView,
 } from "./adapter-family-graph-runtime.js";
@@ -230,6 +233,88 @@ export interface StrictReadyPricingIndex {
   readonly readyGraphContractFingerprint: string;
 }
 
+/** One published conversion may have several privately issued encodings. Never
+ * expose an encoding's identifier as a Graph/price identity. The original
+ * physical index remains the authority for every reconstructed route handle. */
+class LogicalRouteIndex {
+  readonly publicEdges = new Map<string, TokenEdge>();
+  readonly recipes = new Map<string, readonly TokenEdge[]>();
+  readonly owner = new Map<string, TokenEdge>();
+  readonly privateGraph: TokenEdge[] = [];
+  readonly publicStates = new Map<string, Set<string>>();
+  readonly privateStates = new Map<string, Set<string>>();
+  /** Stable private IDs, populated only for mixed-policy published legs. Not a last-winner cache. */
+  readonly onTouchAlternatives = new Set<string>();
+  // An execution *hint*, not a receipt. Only reconstructed current-source
+  // handles may use it; the next independent funded simulation is mandatory.
+  readonly preferred = new Map<string, string>();
+  constructor(graph:readonly TokenEdge[], alternatives:ReadonlyMap<string,readonly TokenEdge[]>) {
+    if(graph.length!==alternatives.size)throw Error("incomplete logical route ownership");
+    for(const e of graph){
+      const id=requiredCanonicalEdgeId(e), candidates=alternatives.get(id);
+      if(!candidates||this.publicEdges.has(id)||!e.instanceKey)throw Error("duplicate or missing logical route");
+      this.publicEdges.set(id,e);
+      const ordered=[...candidates].sort((a,b)=>requiredCanonicalEdgeId(a).localeCompare(requiredCanonicalEdgeId(b)));
+      for(const p of ordered){
+        const pid=requiredCanonicalEdgeId(p);
+        if(this.owner.has(pid)||e.adapterId!==p.adapterId||e.tokenIn.toLowerCase()!==p.tokenIn.toLowerCase()||
+          e.tokenOut.toLowerCase()!==p.tokenOut.toLowerCase()||
+          e.slotKind!==p.slotKind||e.leavesStandingPosition!==p.leavesStandingPosition||
+          e.executionVerification!==p.executionVerification)throw Error("private route escapes logical conversion");
+        this.owner.set(pid,e);this.privateGraph.push(p);
+      }
+      this.recipes.set(id,Object.freeze(ordered));
+    }
+  }
+  checked(e:TokenEdge) {
+    const id=requiredCanonicalEdgeId(e),owned=this.publicEdges.get(id);
+    if(!owned||(owned!==e && (edgeBindingFingerprint(owned)!==edgeBindingFingerprint(e)||
+      blockScanEdgeMetadataFingerprint(owned)!==blockScanEdgeMetadataFingerprint(e))))throw Error("logical route shell mismatch");
+    return id;
+  }
+  translate(keys:Iterable<string>,direction:"public"|"private") {
+    const mapping=direction==="public"?this.publicStates:this.privateStates, result=new Set<string>();
+    for(const key of keys)for(const k of mapping.get(key.toLowerCase())??[])result.add(k);
+    return result;
+  }
+  pricing(index:StrictReadyPricingIndex,catalog:FamilyCapabilityCatalog):StrictReadyPricingIndex {
+    const state=new Map<string,string>(),family=new Map<string,string>(),instances=new Map<string,string>();
+    const byInstance=new Map<string,string[]>(),indexesByState=new Map<string,readonly number[]>();
+    const forced=new Set(index.perBlockRefreshStateKeys);
+    for(const [id,e] of this.publicEdges){
+      // SQL IDs are sealed lower-case strings; using that same ID avoids
+      // creating a second public identity just to propagate dirty state.
+      if(id!==id.toLowerCase())throw Error("logical route id must be lower-case");
+      const instance=e.instanceKey!, publicState=id;
+      const f=catalog.ownerOfAction(e.adapterId);
+      if(!f)throw Error("logical conversion lacks action ownership");
+      instances.set(id,instance);const ids=byInstance.get(instance)??[];ids.push(id);byInstance.set(instance,ids);
+      state.set(id,publicState);family.set(id,f);
+      const rawKeys=new Set<string>(),idx=new Set<number>();
+      for(const r of this.recipes.get(id)!){
+        const privateId=requiredCanonicalEdgeId(r),s=index.stateKeyByEdgeKey.get(privateId);
+        if(!s||index.familyIdByEdgeKey.get(privateId)!==f)throw Error("logical route lost private pricing ownership");
+        rawKeys.add(s);
+        const group=this.publicStates.get(s)??new Set<string>();group.add(publicState);this.publicStates.set(s,group);
+        for(const i of index.instanceIndexesByStateKey.get(s)??[])idx.add(i);
+      }
+      this.privateStates.set(publicState,rawKeys);indexesByState.set(publicState,Object.freeze([...idx]));
+      if(rawKeys.size>1 && [...rawKeys].some(k=>forced.has(k))){
+        for(const r of this.recipes.get(id)!){
+          const pid=requiredCanonicalEdgeId(r);
+          if(!forced.has(index.stateKeyByEdgeKey.get(pid)!))this.onTouchAlternatives.add(pid);
+        }
+      }
+    }
+    const keys=Object.freeze([...state.keys()].sort());
+    return Object.freeze({...index,expectedEdgeKeys:keys,expectedEdgeKeyHash:exactSetHash(keys),
+      familyIdByEdgeKey:family,stateKeyByEdgeKey:state,instanceKeyByEdgeKey:instances,edgeIdsByInstanceKey:byInstance,
+      instanceIndexesByStateKey:indexesByState,perBlockRefreshStateKeys:Object.freeze([...this.translate(index.perBlockRefreshStateKeys,"public")].sort()),
+      edgeIdByRouteIdentity:new Map([...index.edgeIdByRouteIdentity].map(([k,id])=>[k,requiredCanonicalEdgeId(this.owner.get(id)!)])),
+      readyGraphContractFingerprint:strictReadyGraphContractFingerprint([...this.publicEdges.values()])});
+  }
+}
+
 /**
  * Immutable startup authority used to mint one current-source execution
  * session. It owns only the instances admitted by the atomic readyGeneration;
@@ -237,6 +322,12 @@ export interface StrictReadyPricingIndex {
  * backfills, traces or changes topology.
  */
 export class StrictProductionRuntimeRoot {
+  readonly #poolTouchCounts=new PoolTouchCounts();
+  readonly #logical?: LogicalRouteIndex;
+  readonly #rankProfiles=new Map<string,{economic:readonly string[];assets:readonly string[];thirdPartySupplyIndependentAssets?:readonly string[];managedPool?:{manager:string;poolId:string}}|null>();
+  readonly #rankAssets=new Set<string>();
+  readonly #assetRankActors?:NonNullable<BlockTouchedStateKeyResolver["rankAssetActors"]>;
+  readonly #publishedIndex: StrictReadyPricingIndex;
   readonly #observationBindings = new WeakMap<TokenEdge, {
     readonly fingerprint: string;
     readonly binding: SwapObservationBinding;
@@ -251,6 +342,10 @@ export class StrictProductionRuntimeRoot {
   readonly #readyInstances: readonly PreparedFamilyInstance[];
   readonly #instanceIndexesByKey: ReadonlyMap<string, readonly number[]>;
   readonly #pricingIndex: StrictReadyPricingIndex;
+  readonly #poolLegs: PoolLegRefreshIndex;
+  readonly #sqlPricePools=new Map<string,string>();
+  readonly #periodicPrivate = new Set<string>();
+  readonly #poolLogScopes?: PoolLogScopes;
   readonly #mutationIndexesByDependency: ReadonlyMap<string, readonly CompiledMutationIndex[]>;
   readonly #passiveStateKeysByDependency: ReadonlyMap<string, ReadonlySet<string>>;
   readonly #readyFundingAssetsByFamily: ReadonlyMap<
@@ -262,12 +357,18 @@ export class StrictProductionRuntimeRoot {
     readonly catalog: FamilyCapabilityCatalog;
     readonly readySource: CanonicalSource;
     readonly readyGraph: readonly TokenEdge[];
+    readonly logicalRoutes?: ReadonlyMap<string,readonly TokenEdge[]>;
+    readonly poolLogScopes?: PoolLogScopes;
+    readonly historicalAssetLogActors?:NonNullable<BlockTouchedStateKeyResolver["rankAssetActors"]>;
     readonly readyInstances: readonly PreparedFamilyInstance[];
     readonly readyFundingAssets: readonly StrictReadyFundingAsset[];
   }) {
     assertCanonicalSource(input.readySource);
     const readyEdgeBindings = new Map<CanonicalEdgeId, string>();
-    for (const edge of input.readyGraph) {
+    this.#assetRankActors=input.historicalAssetLogActors;
+    const logical=this.#logical=input.logicalRoutes?new LogicalRouteIndex(input.readyGraph,input.logicalRoutes):undefined;
+    const physicalGraph=logical?.privateGraph??input.readyGraph;
+    for (const edge of physicalGraph) {
       const edgeId = requiredCanonicalEdgeId(edge);
       if (readyEdgeBindings.has(edgeId)) {
         throw new Error(`strict ready Graph duplicates ${edgeId}`);
@@ -320,6 +421,34 @@ export class StrictProductionRuntimeRoot {
           throw new Error("pricing.refreshPolicy returned an invalid policy");
         }
         if (refreshPolicy === "each-block") perBlockRefreshStateKeys.add(stateKey);
+        if(logical){
+          // Ambiguous shared state keys decline rather than alias another
+          // private encoding's profile. This capability controls ranking only.
+          let profile:{economic:readonly string[];assets:readonly string[];thirdPartySupplyIndependentAssets?:readonly string[];managedPool?:{manager:string;poolId:string}}|null=null;
+          try {
+            const reported=refreshPolicy==="on-touch"&&semantics.mutation?.historicalRankTriggers?.({
+              descriptor:pricing.pricingDescriptor,routes:pricing.routes,stateKey,dependencies:pricing.dependencies});
+            const declared=new Set(pricing.dependencies.map(k=>k.toLowerCase()));
+            if(reported&&Array.isArray(reported.economic)&&(reported.economic.length||reported.managedPool)&&Array.isArray(reported.assets)&&reported.assets.length){
+              const economic=Object.freeze([...new Set(reported.economic)].sort()),assets=Object.freeze([...new Set(reported.assets)].sort());
+              const constants=reported.constantIdentifiers??[];
+              const managed=reported.managedPool;
+              const rawSupply=reported.thirdPartySupplyIndependentAssets??[];
+              const supply=Array.isArray(rawSupply)&&!managed&&rawSupply.every(a=>assets.includes(a))
+                ?Object.freeze([...new Set(rawSupply)].sort()):undefined;
+              const roles=[...economic,...assets,...constants,...(managed?[managed.manager]:[])];
+              if((!managed||(typeof managed.poolId==="string"&&/^0x[0-9a-f]{64}$/.test(managed.poolId)&&
+                  !/^0x0{64}$/.test(managed.poolId)&&typeof managed.manager==="string"&&!/^0x0{40}$/.test(managed.manager)))&&
+                  Array.isArray(constants)&&roles.every(k=>typeof k==="string"&&/^0x[0-9a-f]{40}$/.test(k)&&declared.has(k))&&
+                  new Set(roles).size===roles.length&&new Set(roles).size===declared.size)profile=Object.freeze({economic,assets,
+                    ...(supply?.length?{thirdPartySupplyIndependentAssets:supply}:{}),
+                    ...(managed?{managedPool:Object.freeze({manager:managed.manager,poolId:managed.poolId})}:{})});
+            }
+          }catch{ /* malformed or absent optional data keeps original ranking work */ }
+          if(profile)for(const a of profile.assets)this.#rankAssets.add(a);
+          if(!this.#rankProfiles.has(stateKey))this.#rankProfiles.set(stateKey,profile);
+          else if(JSON.stringify(this.#rankProfiles.get(stateKey))!==JSON.stringify(profile))this.#rankProfiles.set(stateKey,null);
+        }
         const stateIndexes = instanceIndexesByStateKey.get(stateKey) ?? [];
         if (!stateIndexes.includes(index)) stateIndexes.push(index);
         instanceIndexesByStateKey.set(stateKey, stateIndexes);
@@ -364,20 +493,46 @@ export class StrictProductionRuntimeRoot {
         }
       }
     }
+    const poolLegs:PoolLegBinding[]=[];
     this.#pricingIndex = buildStrictReadyPricingIndex({
+      registerPoolLeg:row=>{
+        if(logical){const parent=logical.owner.get(row.legId);
+          if(!parent||row.poolAddress.toLowerCase()!==(parent.observationTarget??parent.target).toLowerCase()||
+            canonicalPhysicalPoolId(row.poolId)!==canonicalPhysicalPoolId(parent.observationPoolId??parent.poolId))throw Error("logical route pool differs from Family pricing resource");
+        } else poolLegs.push(row);
+      },
       registerObservationBinding: (edge, binding) => {
+        // Ambiguous execution-specific evidence must not be projected onto
+        // another encoding. Single-recipe logical edges retain observations.
+        if(logical){const e=logical.owner.get(requiredCanonicalEdgeId(edge))!;
+          if(logical.recipes.get(requiredCanonicalEdgeId(e))!.length===1)this.#observationBindings.set(e,{
+            fingerprint:edgeBindingFingerprint(e),binding:Object.freeze(binding)});}
         this.#observationBindings.set(edge, {
           fingerprint: edgeBindingFingerprint(edge), binding: Object.freeze(binding),
         });
       },
       catalog: input.catalog,
       source: input.readySource,
-      graph: input.readyGraph,
+      graph: physicalGraph,
       instances: input.readyInstances,
       stateKeyByRouteIdentity,
       instanceIndexesByStateKey,
       perBlockRefreshStateKeys: Object.freeze([...perBlockRefreshStateKeys]),
     });
+    this.#publishedIndex=logical?.pricing(this.#pricingIndex,input.catalog)??this.#pricingIndex;
+    if(logical){
+      for(const [id,e] of logical.publicEdges){
+        if(!e.stateResourceKey||this.#publishedIndex.stateKeyByEdgeKey.get(id)!==id)
+          throw Error("SQL leg lacks its published pricing or pool identity");
+        poolLegs.push({legId:id,stateKey:e.stateResourceKey,poolAddress:e.observationTarget??e.target,
+          poolId:e.observationPoolId??e.poolId??null});
+        this.#sqlPricePools.set(id,touchedPoolKey(e.observationTarget??e.target,e.observationPoolId??e.poolId));
+      }
+      for(const [variant,rawKey] of this.#pricingIndex.stateKeyByEdgeKey)
+        if(perBlockRefreshStateKeys.has(rawKey))this.#periodicPrivate.add(variant);
+      this.#poolLegs=publishedPoolLegIndex(poolLegs);
+    } else this.#poolLegs=new PoolLegRefreshIndex(poolLegs);
+    this.#poolLogScopes=input.poolLogScopes;
     const fundingAssetsByFamily = new Map<FamilyId, Map<string, StrictReadyFundingAsset>>();
     for (const entry of input.readyFundingAssets) {
       const family = input.catalog.forStrictFamily(entry.familyId);
@@ -416,30 +571,56 @@ export class StrictProductionRuntimeRoot {
 
   /** Read-only routing metadata for isolated activity diagnostics. */
   blockTouchedDependencyAddresses(): readonly string[] {
-    return Object.freeze([...this.#mutationIndexesByDependency.keys()]);
+    return Object.freeze([...new Set([...this.#mutationIndexesByDependency.keys(),...this.#poolLegs.addresses])]);
+  }
+
+  /** Physical pool observations only. A pool may have more than one published
+   * resource key. Unscoped manager fallbacks remain refresh work, not pool hits. */
+  sqlPoolTouches(observation: Parameters<BlockTouchedStateKeyResolver>[0]) {
+    if(!this.#logical)throw Error("SQL pool touches require a SQL startup graph");
+    const h=observePoolLegRefresh(this.#poolLegs,observation,this.#poolLogScopes);
+    return {directPools:h.directPools,poolKeys:h.directStateKeys,touchedPoolKeys:h.touchedPoolKeys,legIds:h.directLegIds,
+      unresolvedManagers:h.fallbackManagers,fallbackLegIds:h.fallbackLegIds};
   }
 
   /** Stable per Ready root: the reader's derived cache cannot cross this binding. */
   readonly resolveBlockTouchedStateKeys: BlockTouchedStateKeyResolver = Object.freeze(Object.assign(
-    ((observation, block) => {
+    ((observation, block, countHit, physicalHit) => {
     const address = observation.kind === "log" ? observation.address : observation.target;
     const indexes = this.#mutationIndexesByDependency.get(address.toLowerCase());
-    if (indexes === undefined) return [];
+    const pool=observePoolLegRefresh(this.#poolLegs,observation,this.#poolLogScopes);
+    // The wider set still belongs to Exact/receipt policy. Enumeration's
+    // market keys require an actually identified physical pool.
+    physicalHit?.(pool.legIds,pool.touchedPoolKeys);
+    countHit?.(pool);
+    if (indexes === undefined && !pool.legIds.length) return [];
     const source = Object.freeze({ ...block, generation: this.#readySource.generation });
     assertCanonicalSource(source);
     const currentObservation: UnifiedObservation = { ...observation, source };
     const touched = new Set<string>();
-    for (const index of indexes) {
+    for (const index of indexes??[]) {
       const keys = index.affectedStateKeys({ observation: currentObservation });
       for (const key of keys) touched.add(key.toLowerCase());
     }
-    return [...touched];
+    const published=this.#logical?.translate(touched,"public")??touched;
+    for(const key of this.#logical?pool.legIds:pool.stateKeys)published.add(key);
+    return [...published];
     }) as BlockTouchedStateKeyResolver, {
-      passiveStateKeys: (addresses: readonly string[], block: { readonly number: number; readonly hash: string }): readonly string[] => {
+      poolTouchCounts:()=>this.#logical?this.#poolTouchCounts:undefined,
+      supportsPhysicalRankingScope:()=>!!this.#logical&&!!this.#assetRankActors&&this.#rankAssets.size>0,
+      supportsSqlPoolPriceScope:()=>!!this.#logical,
+      rankAssetActors:(log:Extract<Parameters<BlockTouchedStateKeyResolver>[0],{kind:"log"}>)=>
+        this.#rankAssets.has(log.address)?this.#assetRankActors?.(log)??null:undefined,
+      passiveStateKeys: (addresses: readonly string[], block: { readonly number: number; readonly hash: string },countHit?:(hit:PhysicalHit)=>void,physicalHit?:(ids:readonly string[],poolKeys?:readonly string[])=>void): readonly string[] => {
         assertCanonicalSource({ ...block, generation: this.#readySource.generation });
+        const pool=observePoolBalanceRefresh(this.#poolLegs,addresses);
+        physicalHit?.(pool.legIds,pool.touchedPoolKeys);
+        countHit?.(pool);
         const keys = new Set<string>();
         for (const address of addresses) for (const key of this.#passiveStateKeysByDependency.get(address.toLowerCase()) ?? []) keys.add(key);
-        return [...keys];
+        const published=this.#logical?.translate(keys,"public")??keys;
+        for(const key of this.#logical?pool.legIds:pool.stateKeys)published.add(key);
+        return [...published];
       },
     }));
 
@@ -472,7 +653,13 @@ export class StrictProductionRuntimeRoot {
       StrictCurrentRoutePricing
     >();
     const kind = input.kind ?? "pricing";
-    const requiredEdgeIds = input.requiredEdgeIds;
+    const logical=this.#logical;
+    const requested=input.requiredEdgeIds;
+    const requiredEdgeIds = requested&&logical?new Set([...requested].flatMap(id=>{
+      const variants=logical.recipes.get(id);if(!variants)throw Error("unknown logical route requested");
+      return variants.map(requiredCanonicalEdgeId);
+    })):requested;
+    const touched=input.touchedPools&&logical?logical.translate(input.touchedPools,"private"):input.touchedPools;
     const requiredInstanceKeys = requiredEdgeIds === undefined
       ? undefined
       : requiredInstanceKeysForEdges(
@@ -480,12 +667,12 @@ export class StrictProductionRuntimeRoot {
           requiredEdgeIds,
         );
     let selectedPricingInstanceIndexes = kind === "pricing"
-      ? input.touchedPools === undefined
+      ? touched === undefined
         ? Array.from({ length: this.#readyInstances.length }, (_, index) => index)
         : selectedInstanceIndexesForTouchedPools(
             this.#pricingIndex.instanceIndexesByStateKey,
-            this.#pricingIndex.perBlockRefreshStateKeys.length === 0 ? input.touchedPools
-              : new Set([...input.touchedPools, ...this.#pricingIndex.perBlockRefreshStateKeys]),
+            this.#pricingIndex.perBlockRefreshStateKeys.length === 0 ? touched
+              : new Set([...touched, ...this.#pricingIndex.perBlockRefreshStateKeys]),
           )
       : [];
     if (kind === "pricing" && requiredEdgeIds !== undefined) {
@@ -806,7 +993,13 @@ export class StrictProductionRuntimeRoot {
       source: input.source,
       runtime: input.runtime,
       readySource: this.#readySource,
-      edges: view.edges,
+      edges: logical ? [...new Set([
+        ...view.edges.map(e=>logical.owner.get(requiredCanonicalEdgeId(e))!),
+        ...[...logical.publicEdges.values()].filter(e=>logical.recipes.get(requiredCanonicalEdgeId(e))!.length===0 &&
+          (!requested||requested.has(requiredCanonicalEdgeId(e))) &&
+          (!input.touchedPools||input.touchedPools.has(this.#publishedIndex.stateKeyByEdgeKey.get(requiredCanonicalEdgeId(e))!)))
+      ])] : view.edges,
+      logical,
       bindings,
       currentPricing,
       stateKeyByEdge,
@@ -814,13 +1007,85 @@ export class StrictProductionRuntimeRoot {
       fundingOutcomes,
       pricingComplete: kind === "pricing",
       creationTiming,
-      pricingIndex: this.#pricingIndex,
+      pricingIndex: this.#publishedIndex,
     });
   }
 
   /** Static ownership/index data shared by all source-bound sessions. */
   pricingIndex(): StrictReadyPricingIndex {
-    return this.#pricingIndex;
+    return this.#publishedIndex;
+  }
+
+  /** Membership in the startup SQL table, not proof a variant executed. */
+  ownsSqlMarketVariant(edge:TokenEdge,variant:string):boolean {
+    const id=edge.canonicalEdgeId, logical=this.#logical, owner=id&&logical?.publicEdges.get(id);
+    return !!owner && logical!.owner.get(variant)===owner && (owner===edge ||
+      (edgeBindingFingerprint(owner)===edgeBindingFingerprint(edge) &&
+       blockScanEdgeMetadataFingerprint(owner)===blockScanEdgeMetadataFingerprint(edge)));
+  }
+
+  /** Scheduling historical indications for enumeration only. It cannot mint
+   * an execution receipt, establish a current paid prefix or fund a route. */
+  sqlPoolPriceRefreshPlan(original:ReadonlySet<string>,base:{number:number;hash:string},target:{number:number;hash:string}){
+    const logical=this.#logical,scope=sqlPoolPriceActivityScope(original,this.resolveBlockTouchedStateKeys,base,target);
+    if(!logical||!scope)return;
+    const reasonFor=(edge:TokenEdge,verifiedVariant?:string):"pool"|"per-block"|"unverified"|undefined=>{
+      const id=edge.canonicalEdgeId,owned=id&&logical.publicEdges.get(id),key=id&&this.#sqlPricePools.get(id);
+      if(!id||!owned||!key||(owned!==edge&&(edgeBindingFingerprint(owned)!==edgeBindingFingerprint(edge)||
+        blockScanEdgeMetadataFingerprint(owned)!==blockScanEdgeMetadataFingerprint(edge))))return "unverified";
+      if(scope.touchedPoolKey(key))return "pool";
+      const recipes=logical.recipes.get(id)!;
+      if(verifiedVariant!==undefined&&logical.owner.get(verifiedVariant)!==owned)return "unverified";
+      // A dormant every-block alternative isn't a request to refresh the
+      // whole market. Without a prior winner only an unconditional policy
+      // shared by all its bound alternatives is a per-block declaration.
+      if(verifiedVariant!==undefined?this.#periodicPrivate.has(verifiedVariant):
+        recipes.length>0&&recipes.every(r=>this.#periodicPrivate.has(requiredCanonicalEdgeId(r))))return "per-block";
+      // Rank profiles include execution/configuration addresses. They do not
+      // register a pool-price notification. Exact keeps its original input.
+      return undefined;
+    };
+    return Object.freeze({reasonFor,shouldRefresh:(edge:TokenEdge,verifiedVariant?:string)=>reasonFor(edge,verifiedVariant)!==undefined,
+      // Diagnostic only: legacy execution safety may explicitly consider an
+      // unallocated manager balance/event. Never report it as a proven pool.
+      hasUnscopedPoolEvidence:(edge:TokenEdge)=>{
+        const id=edge.canonicalEdgeId,key=id&&this.#sqlPricePools.get(id);
+        return !!id&&!!key&&scope.poolDirty(id)&&!scope.touchedPoolKey(key);
+      }});
+  }
+
+  /** Only interprets activity actually returned by this immutable root. The
+   * consumer separately authenticates the old paid indication and topology.
+   * A true value is never current pricing or a transferable execution proof. */
+  historicalRankingPolicy(original:ReadonlySet<string>,base:{number:number;hash:string},target:{number:number;hash:string}){
+    const logical=this.#logical;
+    const scope=physicalRankingScope(original,this.resolveBlockTouchedStateKeys,base,target);
+    if(!scope||!logical||!this.resolveBlockTouchedStateKeys.supportsPhysicalRankingScope?.())return;
+    return {isCleanOnTouchReceipt:(edge:TokenEdge,stateKey:string,variantId:string):boolean=>{
+      const id=edge.canonicalEdgeId;
+      if(!id||stateKey!==this.#publishedIndex.stateKeyByEdgeKey.get(id)||scope.poolDirty(id))return false;
+      const owner=logical.owner.get(variantId),raw=this.#pricingIndex.stateKeyByEdgeKey.get(variantId);
+      if(!owner||owner!==logical.publicEdges.get(id)||!raw)return false;
+      if(owner!==edge&&(edgeBindingFingerprint(owner)!==edgeBindingFingerprint(edge)||
+        blockScanEdgeMetadataFingerprint(owner)!==blockScanEdgeMetadataFingerprint(edge)))return false;
+      const profile=this.#rankProfiles.get(raw);
+      const holder=(owner.observationTarget??owner.target).toLowerCase();
+      if(profile?.managedPool&&(holder!==profile.managedPool.manager||owner.observationPoolId!==profile.managedPool.poolId||
+        !this.#poolLegs.forPool(holder,profile.managedPool.poolId).legIds.includes(id)))return false;
+      return !!profile&&!profile.economic.some(a=>scope.addressDirty(a))&&
+        !profile.assets.some(a=>scope.uncertainAsset(a,profile.thirdPartySupplyIndependentAssets?.includes(a))||(owner.observationPoolId==null&&scope.assetHolder(a,holder)));
+    }};
+  }
+
+  /** Only narrows the added each-block rule, never actual pool/dependency activity.
+   * A source-bound caller must independently verify the funded receipt that supplies variantId. */
+  isOnTouchReceiptVariant(edge:TokenEdge,stateKey:string,variantId:string):boolean {
+    const logical=this.#logical, id=edge.canonicalEdgeId;
+    if(!logical||!id||!logical.onTouchAlternatives.has(variantId)||this.#publishedIndex.stateKeyByEdgeKey.get(id)!==stateKey)return false;
+    const owner=logical.owner.get(variantId);
+    return owner!==undefined && owner===logical.publicEdges.get(id) && (owner===edge ||
+      (edgeBindingFingerprint(owner)===edgeBindingFingerprint(edge) &&
+       blockScanEdgeMetadataFingerprint(owner)===blockScanEdgeMetadataFingerprint(edge)));
   }
 
   private unpricedInstanceRoutes(input: {
@@ -997,6 +1262,7 @@ export class StrictProductionRuntimeRoot {
 
 /** One current-source strict authority consumed by propagation and planning. */
 export class StrictProductionRuntimeSession {
+  readonly #logical?: LogicalRouteIndex;
   readonly source: CanonicalSource;
   readonly edges: readonly TokenEdge[];
   readonly readySource: CanonicalSource;
@@ -1015,6 +1281,7 @@ export class StrictProductionRuntimeSession {
   readonly #exactBindings = new WeakMap<object, ExactBinding>();
 
   constructor(input: {
+    readonly logical?: LogicalRouteIndex;
     readonly catalog: FamilyCapabilityCatalog;
     readonly source: CanonicalSource;
     readonly readySource: CanonicalSource;
@@ -1032,6 +1299,7 @@ export class StrictProductionRuntimeSession {
     readonly creationTiming: StrictProductionSessionCreationTiming;
     readonly pricingIndex: StrictReadyPricingIndex;
   }) {
+    this.#logical=input.logical;
     this.#catalog = input.catalog;
     this.source = Object.freeze({ ...input.source });
     this.readySource = Object.freeze({ ...input.readySource });
@@ -1048,10 +1316,12 @@ export class StrictProductionRuntimeSession {
   }
 
   familyIdForEdge(edge: TokenEdge): string {
+    if(this.#logical)return this.#pricingIndex.familyIdByEdgeKey.get(this.#logical.checked(edge))!;
     return this.#resolve(edge).family.plugin.manifest.familyId;
   }
 
   blocksPrefixInversion(edge: TokenEdge): boolean {
+    if(this.#logical)return this.#catalog.forStrictFamily(familyId(this.familyIdForEdge(edge))).plugin.manifest.domain==="credit";
     return this.#resolve(edge).kind === "credit";
   }
 
@@ -1060,6 +1330,15 @@ export class StrictProductionRuntimeSession {
    * Legacy Credit without pricing remains unpriced.
    */
   currentPricingForEdge(edge: TokenEdge): StrictCurrentRoutePricing | null {
+    if(this.#logical){
+      const candidates=this.executionVariantIds(edge);
+      const results=candidates.map(id=>this.#currentPricing.get(id as CanonicalEdgeId)).filter(p=>p!==undefined);
+      // Coarse hints only; never certify the encoding used for actual execution.
+      const p=results.find(p=>p.status==="priced")??results.find(p=>p.status==="unresolved")??results[0];
+      if(p)return bindCurrentPricingToEdge(p,edge);
+      if(!candidates.length)return {status:"unresolved",reason:"no executable route encoding for logical edge"};
+      return null;
+    }
     const binding = this.#resolve(edge);
     const pricing = this.#currentPricing.get(binding.edge.canonicalEdgeId);
     return pricing ?? null;
@@ -1067,6 +1346,7 @@ export class StrictProductionRuntimeSession {
 
   /** Family-declared state identity used by the coordinator's carry contract. */
   stateKeyForEdge(edge: TokenEdge): string | null {
+    if(this.#logical)return this.#pricingIndex.stateKeyByEdgeKey.get(this.#logical.checked(edge))??null;
     return this.#stateKeyByEdge.get(this.#resolve(edge).edge.canonicalEdgeId) ?? null;
   }
 
@@ -1269,6 +1549,7 @@ export class StrictProductionRuntimeSession {
   }
 
   supportsVictimReplay(edge: TokenEdge): boolean {
+    if(this.#logical&&!this.#selected(edge))return false;
     const route = this.#resolve(edge);
     if (
       route.kind !== "route" ||
@@ -1339,6 +1620,7 @@ export class StrictProductionRuntimeSession {
 
   creditDebtBpsCandidates(path: { readonly edges: readonly TokenEdge[] }): readonly bigint[] {
     for (const edge of path.edges) {
+      if(this.#logical&&!this.blocksPrefixInversion(edge))continue;
       const route = this.#resolve(edge);
       if (route.kind !== "credit") continue;
       // Amount-capable Credit uses the same default Exact program as its
@@ -1367,6 +1649,7 @@ export class StrictProductionRuntimeSession {
     readonly control?: AdapterWorkControl;
   }): FamilyAmountQuoteReuseContext | null {
     this.#runtime.generationFence.assertCurrent(this.source.generation, this.source);
+    if(this.#logical&&this.#logical.recipes.get(this.#logical.checked(input.edge))?.length!==1)return null;
     const route = this.#resolve(input.edge);
     if (route.kind !== "route") return null;
     return describeFamilyAmountQuoteReuse({
@@ -1378,6 +1661,7 @@ export class StrictProductionRuntimeSession {
 
   async issueExact(input: {
     readonly edge: TokenEdge;
+    readonly variantId?: string;
     readonly amountIn: bigint;
     readonly executor: string;
     readonly runtimeEvidence: readonly RuntimeEvidence[];
@@ -1391,7 +1675,22 @@ export class StrictProductionRuntimeSession {
       this.source.generation,
       this.source,
     );
-    const route = this.#resolve(input.edge);
+    if(this.#logical && input.variantId===undefined){
+      // Try concrete route-local semantic negatives only. A provider failure,
+      // cancellation or generation fence never turns into an alternative win.
+      let amountRejected=false,unavailable=false;
+      for(const variantId of this.executionVariantIds(input.edge)){
+        try{return await this.issueExact({...input,variantId});}
+        catch(e){
+          if(e instanceof AmountNotExecutableError)amountRejected=true;
+          else if(e instanceof ChainAmountQuoteUnavailableError)unavailable=true;
+          else throw e;
+        }
+      }
+      if(amountRejected&&!unavailable)throw new AmountNotExecutableError("amount unavailable on all private encodings");
+      throw new ChainAmountQuoteUnavailableError();
+    }
+    const route = this.#resolve(input.edge,input.variantId);
     const priorQuotes = Object.freeze([...(input.priorQuotes ?? [])]);
     const prefix: SealedFamilyExactQuoteHandle[] = [];
     for (let i = 0; i < priorQuotes.length; i++) {
@@ -1470,12 +1769,14 @@ export class StrictProductionRuntimeSession {
 
   buildRuntimeAmountLeg(input: {
     readonly edge: TokenEdge;
+    readonly variantId?: string;
     readonly executor: string;
     readonly runtimeEvidence: readonly RuntimeEvidence[];
     readonly settlement?: import("../adapters/runtime-amount-program.js").RuntimeSettlementRequest;
   }): import("../adapters/runtime-amount-program.js").RuntimeAmountLeg | null {
     this.#runtime.generationFence.assertCurrent(this.source.generation, this.source);
-    const route = this.#resolve(input.edge);
+    if(this.#logical&&input.variantId===undefined&&this.#logical.recipes.get(this.#logical.checked(input.edge))?.length!==1)return null;
+    const route = this.#resolve(input.edge,input.variantId);
     if (route.kind === "credit") return null;
     return buildFamilyRuntimeAmountLeg({ family: route.family, route: route.handle,
       source: this.source, runtime: this.#runtime, executor: input.executor,
@@ -1494,8 +1795,8 @@ export class StrictProductionRuntimeSession {
       this.source.generation,
       this.source,
     );
-    const route = this.#resolve(input.edge);
     const exactBinding = this.#exactBindings.get(input.exact);
+    const route = this.#resolve(input.edge,exactBinding?.route.edge.canonicalEdgeId);
     if (
       exactBinding === undefined ||
       exactBinding.route !== route ||
@@ -1538,8 +1839,38 @@ export class StrictProductionRuntimeSession {
     });
   }
 
-  #resolve(edge: TokenEdge): StrictRouteBinding {
+  /** Candidate identifiers are implementation-private; their existence is not proof of settlement. */
+  needsPublishedExecutionVariant(edge: TokenEdge): boolean {
+    if(!this.#logical)return false;
+    this.#logical.checked(edge);return true;
+  }
+  executionVariantIds(edge:TokenEdge):readonly string[]{
+    if(!this.#logical){this.#resolve(edge);return [requiredCanonicalEdgeId(edge)];}
+    const id=this.#logical.checked(edge), chosen=this.#logical.preferred.get(id);
+    const ids=this.#logical.recipes.get(id)!.map(requiredCanonicalEdgeId).filter(p=>this.#bindings.has(p));
+    return Object.freeze(chosen&&ids.includes(chosen as CanonicalEdgeId)?[chosen,...ids.filter(p=>p!==chosen)]:ids);
+  }
+  confirmExecutionVariant(edge:TokenEdge,variantId:string):void {
+    this.#runtime.generationFence.assertCurrent(this.source.generation,this.source);
+    this.#resolve(edge,variantId);
+    this.#logical?.preferred.set(requiredCanonicalEdgeId(edge),variantId);
+  }
+  #selected(edge:TokenEdge):string|undefined {
+    if(!this.#logical)return requiredCanonicalEdgeId(edge);
+    const id=this.#logical.checked(edge), recipes=this.#logical.recipes.get(id)!;
+    return this.#logical.preferred.get(id)??(recipes.length===1?requiredCanonicalEdgeId(recipes[0]!):undefined);
+  }
+  #resolve(edge: TokenEdge,variantId?:string): StrictRouteBinding {
     const edgeId = requiredCanonicalEdgeId(edge);
+    if(this.#logical){
+      this.#logical.checked(edge);
+      const selected=variantId??this.#selected(edge);
+      if(!selected||this.#logical.owner.get(selected)!==this.#logical.publicEdges.get(edgeId))throw Error("no bound private encoding for logical edge");
+      const b=this.#bindings.get(selected as CanonicalEdgeId);
+      if(!b)throw Error("current session has no issued encoding for logical edge");
+      return b;
+    }
+    if(variantId!==undefined&&variantId!==edgeId)throw Error("foreign private encoding");
     const binding = this.#bindings.get(edgeId);
     if (binding === undefined) {
       throw new Error(`strict session has no ready edge ${edgeId}`);
@@ -1616,6 +1947,7 @@ function currentPricingForRoute(
 }
 
 function buildStrictReadyPricingIndex(input: {
+  readonly registerPoolLeg: (row:PoolLegBinding)=>void;
   readonly registerObservationBinding: (edge: TokenEdge, binding: SwapObservationBinding) => void;
   readonly perBlockRefreshStateKeys: readonly string[];
   readonly catalog: FamilyCapabilityCatalog;
@@ -1694,6 +2026,7 @@ function buildStrictReadyPricingIndex(input: {
           };
         });
     const projected = buildFamilyRouteGraphView({ routes: routeInputs, creditRoutes });
+    const routesByHandle=new Map(routeInputs.map(r=>[r.handle.routeKey,r]));
     for (const item of projected.routes) {
       const edgeKey = requiredCanonicalEdgeId(item.edge);
       const readyEdge = graphByEdgeKey.get(edgeKey);
@@ -1729,6 +2062,15 @@ function buildStrictReadyPricingIndex(input: {
         familyId: instance.familyId, descriptor: instance.descriptor,
       });
       stateKeyByEdgeKey.set(edgeKey, stateKey);
+      const r=routesByHandle.get(item.handle.routeKey);
+      if(r && r.family.plugin.routes.pricingPools){
+        const physical=r.family.plugin.routes.pricingPools({descriptor:r.descriptor,route:r.route});
+        const declared=new Set(explicitStateResourceKeys(readyEdge)??[]);
+        if(!Array.isArray(physical)||physical.length>256||physical.some(p=>!declared.has(p.resourceKey))||
+           (physical.length>0 && new Set(physical.map(p=>p.resourceKey)).size!==declared.size))
+          throw Error("pool refresh projection differs from verified physical resources");
+        for(const p of physical)input.registerPoolLeg({...p,legId:edgeKey,stateKey:stateKey.toLowerCase()});
+      }
       edgeIdByRouteIdentity.set(routeIdentity, edgeKey);
     }
   }

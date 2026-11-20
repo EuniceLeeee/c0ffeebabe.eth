@@ -2613,3 +2613,53 @@ test("production call sites carry transport rather than a constructor-bound fall
   assert.match(loop, /const producerSnapshot = amountPricingSnapshot/);
   assert.match(loop, /executionContext === null \? this\.nextGeneration\(\) : \+\+this\.pendingGeneration/);
 });
+
+test("hot-recovery isolated: same-anchor distinct deadlines, bounded backlog, no stale success or hot budget relaxation", async context => {
+  const lines: string[] = [];
+  context.mock.method(console,"log",(v:unknown)=>{ if(typeof v==="string")lines.push(v); });
+  const f=loopFixture(()=>({transport:{async simulate(){throw Error("unexpected execution");}},async closeAndDrain(){}}));
+  const l=f.loop as any, stages:string[]=[], steps:number[][]=[];
+  const digest=(n:number)=>hash(n);
+  let p:any={sourceBlock:100,sourceBlockHash:digest(100),generation:1,effectiveMids:{complete:true}}, fail=true, unknown=false;
+  const timeout=()=>Error("strict current runtime deadline expired"), timestamps=()=>({sourceHeadSeenAtMs:Date.now(),sourceHeadSeenAtMonotonicMs:performance.now()});
+  f.coordinator.latestPricingSnapshot=()=>p;
+  Object.assign(f.deps,{startupWarmBudgetMs:120_000,strictSession:async()=>({edges:[],runtimeEvidenceFromPendingExecution:()=>[]}),
+    exactQuoteStateFactory:()=>({async call(){throw Error("unexpected quote");}}),
+    frozenTopology:{topologyKey:"fixture",async observeHeader(n:number){return {number:n,hash:hash(n),parentHash:hash(n-1),
+      timestamp:1,baseFeePerGas:1n,gasUsed:0n,gasLimit:30_000_000n,transactionHashes:[]};}}});
+  f.coordinator.prepare=async (i:any)=>{
+    stages.push("hot:"+i.graph.sourceBlock);assert(i.deadlineAtMs-Date.now()<=10_000);
+    if(unknown)throw Error("activity range canonical hash chain mismatch or duplicate");
+    if(fail)throw timeout();
+    const r=completeRuntimeFixture(i.graph);p=r.snapshot.pricing;return r;
+  };
+  f.coordinator.prepareCoarsePricing=async(i:any)=>{
+    assert.equal(i.fundingTokens,undefined);assert(i.deadlineAtMs-Date.now()>110_000);
+    steps.push([i.canonicalActivity.previousSource.number,i.graph.sourceBlock]);
+    stages.push("price:"+i.graph.sourceBlock);p=pricingFixture(i.graph);return {status:"complete",snapshot:p};
+  };
+  const byPrefix=(tag:string)=>lines.filter(v=>v.startsWith(tag)).map(v=>JSON.parse(v.slice(v.indexOf("{"))));
+  const pass=(n:number)=>l.runScheduledHead(n,timestamps());
+  try {
+    await assert.rejects(pass(101),/strict current/);assert.equal(l.priceCatchupPending,false);
+    await assert.rejects(pass(101),/strict current/);assert.equal(l.priceCatchupPending,false,"same head isn't consecutive");
+    unknown=true;await assert.rejects(pass(102),/hash chain/);unknown=false;
+    await assert.rejects(pass(103),/strict current/);assert.equal(l.priceCatchupPending,false,"nonmatching error breaks streak");
+    fail=false;await pass(104);assert.equal(p.sourceBlock,104);assert.equal(l.priceCatchupPending,false);
+    fail=true;await assert.rejects(pass(105),/strict current/);assert.equal(l.priceCatchupPending,false);
+    await assert.rejects(pass(106),/strict current/);assert.equal(l.priceCatchupPending,true);
+    const stale=byPrefix("[searcher/blockscan-family] {").filter(v=>[105,106].includes(v.source_block));
+    assert.equal(stale.length,2);assert(stale.every(v=>v.startup_warm===false&&v.stages.state.status==="failed"&&v.outcome==="stale_state"));
+    const before=f.inputs.length;await pass(617);assert.equal(f.inputs.length,before,"recovery cannot start funding");
+    assert.deepEqual(steps,[[104,360],[360,616],[616,617]]);
+    assert.equal(l.priceCatchupPending,false);assert.equal(l.priceCatchupCompletedThrough,617);
+    const repairs=byPrefix("[searcher/blockscan-family] {").filter(v=>[360,616,617].includes(v.source_block));
+    assert.equal(repairs.length,3);assert(repairs.every(v=>v.startup_warm&&v.decision==="live_continuation_prices_only"),"real timing identifies prices-only");
+    await pass(617);assert(!stages.includes("hot:617"));
+    await assert.rejects(pass(618),/strict current/);await assert.rejects(pass(619),/strict current/);
+    assert.equal(l.priceCatchupPending,false,"do not alternate endlessly without an actual formal success");
+    fail=false;await pass(620);assert.equal(p.sourceBlock,620);
+    assert.equal(l.recoveryWithoutFormalSuccess,false);
+    fail=true;await assert.rejects(pass(621),/strict current/);await assert.rejects(pass(622),/strict current/);assert(l.priceCatchupPending);
+  }finally{await f.loop.shutdown();}
+});

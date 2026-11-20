@@ -31,6 +31,7 @@ import {
 } from "../shared/state/state-backend.js";
 import {
   RethTransportScheduler,
+  RethTransientReadError,
   isRethTransportTimeout,
   type RethTransportAttempt,
   type RethTransportLease,
@@ -123,6 +124,7 @@ export class PinnedRethQuoteBackend
   private transportLoad: RethTransportLoad | undefined;
   private throttleRetries = 0;
   private timeoutRetries = 0;
+  private connectionResetRetries = 0;
   private readonly transportLane: "producer-critical" | "producer-bulk" | "exact";
   private criticalBackend?: PinnedRethQuoteBackend;
   /** Parent of a critical-call view. Identity stays structural: a view
@@ -267,19 +269,34 @@ export class PinnedRethQuoteBackend
     req: { to: string; data: string; from?: string },
     control: StateCallControl = {},
   ): Promise<string> {
+    return this.readBytes("eth_call", req, control);
+  }
+
+  /** Same source, physical batches, cancellation and permit/retry accounting
+   * as getters. Code is memoized only within this backend, never written to
+   * the persistent eth_call cache or confused with an empty-calldata call. */
+  getCode(address: string, control: StateCallControl = {}): Promise<string> {
+    return this.readBytes("eth_getCode", { to: ethers.getAddress(address), data: "0x" }, control);
+  }
+
+  private readBytes(
+    kind: "eth_call" | "eth_getCode",
+    req: { to: string; data: string; from?: string },
+    control: StateCallControl,
+  ): Promise<string> {
     const controlError = this.callControlError(control, req.to);
     if (controlError) return Promise.reject(controlError);
     const identity = persistentCallIdentity(
       this.blockSpecifier.blockHash,
       req,
     );
-    const memoKey = identity.key;
+    const memoKey = kind === "eth_call" ? identity.key : "code:" + req.to.toLowerCase();
     const memoized = this.callMemo.get(memoKey);
     if (memoized !== undefined) {
       this.memoHits++;
       return memoized;
     }
-    const persisted = this.persistentCallCache?.get(identity);
+    const persisted = kind === "eth_call" ? this.persistentCallCache?.get(identity) : undefined;
     if (persisted !== undefined) {
       const result = Promise.resolve(persisted);
       this.callMemo.set(memoKey, result);
@@ -296,7 +313,7 @@ export class PinnedRethQuoteBackend
     this.totalCalls++;
     const promise = new Promise<string>((resolve, reject) => {
       const item: PendingQuoteItem = {
-        kind: "eth_call",
+        kind,
         id: this.nextId++,
         req: {
           to: req.to,
@@ -614,6 +631,7 @@ export class PinnedRethQuoteBackend
     currentBatchSizeLimit: number;
     throttleRetries: number;
     timeoutRetries: number;
+    connectionResetRetries: number;
     totalCalls: number;
     memoHits: number;
     batchesSent: number;
@@ -654,6 +672,7 @@ export class PinnedRethQuoteBackend
       currentBatchSizeLimit: this.currentBatchSizeLimit,
       throttleRetries: this.throttleRetries,
       timeoutRetries: this.timeoutRetries,
+      connectionResetRetries: this.connectionResetRetries,
       totalCalls: this.totalCalls,
       memoHits: this.memoHits,
       batchesSent: this.batchesSent,
@@ -855,8 +874,10 @@ export class PinnedRethQuoteBackend
         (!isRethTransportTimeout(error) && !this.options.retryRpcThrottle)) return false;
     if (!this.transportLoad?.retry(error, items, attempt)) return false;
     if (isRethTransportTimeout(error)) this.timeoutRetries++;
+    else if (error instanceof PinnedReadConnectionReset) this.connectionResetRetries++;
     else this.throttleRetries++;
-    const marker = isRethTransportTimeout(error) ? "transport-timeout-retry" : "rpc-throttle-retry status=429";
+    const marker = isRethTransportTimeout(error) ? "transport-timeout-retry"
+      : error instanceof PinnedReadConnectionReset ? "transport-read-reset-retry code=ECONNRESET" : "rpc-throttle-retry status=429";
     const atOne = Math.max(...items.map(item => item.transportRetriesAtOne ?? 0));
     const next = this.transportLoad.limits(this.maxBatchSize, this.maxConcurrentBatches, items);
     console.warn(`[pinned-reth-quote-backend] ${marker} concurrency=${attempt.concurrency}->${next.concurrency} retry_at_one=${atOne}/${this.transportLoad.maxRetriesAtOne ?? 3} delay_ms=${this.transportLoad.retryDelayMs(items)} items=${items.length} retry_scope=batch batch_size=${next.batchSize}`);
@@ -994,6 +1015,12 @@ export class PinnedRethQuoteBackend
   }
 
   private async flushBatch(alive: PendingQuoteItem[], scheduledLimit: number): Promise<void> {
+    if (alive[0]?.kind === "eth_getCode") {
+      return this.sendBatchPayloads(alive.map(item => ({
+        jsonrpc: "2.0", id: item.id, method: "eth_getCode",
+        params: [item.req.to, this.blockSpecifier],
+      })), alive, "eth_getCode", scheduledLimit);
+    }
     const calls = alive.filter((item) => item.kind === "eth_call");
     const simulations = alive.filter(
       (item) => item.kind === "eth_simulateV1",
@@ -1194,6 +1221,16 @@ export class PinnedRethQuoteBackend
         try {
           response = await postJsonRpc(this.rpcUrl, payloads as never, wireSignal,
             wireStartedAtMs === undefined ? undefined : timing => { httpTiming = timing; });
+        } catch (err) {
+          // Deliberately BEFORE JSON-RPC response processing. A provider can
+          // return any error code/message; only a physical read failure here
+          // with Node's typed code is eligible for the existing batch budget.
+          if (this.options.retryRpcThrottle && !wireSignal.aborted &&
+              (method === "eth_call" || method === "eth_getCode") &&
+              err instanceof Error && (err as NodeJS.ErrnoException).code === "ECONNRESET") {
+            throw new PinnedReadConnectionReset(err);
+          }
+          throw err;
         } finally {
           if (wireStartedAtMs !== undefined) {
             try {
@@ -1256,7 +1293,7 @@ export class PinnedRethQuoteBackend
         return;
       }
       this.batchFailures++;
-      if (isRethTransportTimeout(transportError)) {
+      if (isRethTransportTimeout(transportError) || transportError instanceof PinnedReadConnectionReset) {
         for (const item of items) this.rejectItem(item, transportError);
         return; // Exhaustion must not manufacture single-call retries.
       }
@@ -1319,13 +1356,13 @@ export class PinnedRethQuoteBackend
           rpcItemError({ to: item.req.to }, record.error),
         );
       } else if (
-        item.kind === "eth_call" &&
+        item.kind !== "eth_simulateV1" &&
         typeof record.result !== "string"
       ) {
         this.rejectItem(
           item,
           new Error(
-            `eth_call ${item.req.to} returned a non-string result`,
+            `${item.kind} ${item.req.to} returned a non-string result`,
           ),
         );
       } else {
@@ -1393,7 +1430,9 @@ export class PinnedRethQuoteBackend
     }
     try {
       const result =
-        method === "eth_simulateV1"
+        method === "eth_getCode"
+          ? await this.rpcSingle(method, [item.req.to, this.blockSpecifier], item.req.to, item.control)
+          : method === "eth_simulateV1"
           ? await this.rpcSingle(
               method,
               [item.simulation, this.blockSpecifier],
@@ -2227,10 +2266,14 @@ function sha256CacheFile(path: string): string {
 }
 
 class QueuedTransportRetry extends Error {}
+class PinnedReadConnectionReset extends RethTransientReadError {
+  readonly code = "ECONNRESET";
+  constructor(cause: Error) { super("source-pinned read connection reset (ECONNRESET)", { cause }); }
+}
 
 interface PendingQuoteItem extends RethTransportRetryState {
   readonly id: number;
-  readonly kind: "eth_call" | "eth_simulateV1";
+  readonly kind: "eth_call" | "eth_getCode" | "eth_simulateV1";
   readonly control: StateCallControl;
   readonly req: { to: string; data: string; from?: string };
   readonly simulation?: unknown;

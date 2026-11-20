@@ -3,6 +3,21 @@
   "selector": "0x48c89491",
   "signature": "function unlock(bytes)",
   "domain": "swap",
+  "managerCustody": {
+    "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+    "erc20Transfers": "settlement-only",
+    "physicalPoolEvents": [{
+      "signature": "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+      "indexedPoolId": "id"
+    }],
+    "ledgerEvents": [
+      "event Transfer(address caller,address indexed sender,address indexed receiver,uint256 indexed id,uint256 amount)"
+    ]
+  },
+  "physicalPoolActivity": [{
+    "signature": "event ProtocolFeeUpdated(bytes32 indexed id,uint24 protocolFee)",
+    "indexedPoolId": "id"
+  }],
   "activation": {
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_48C89491_ENABLED"
@@ -10,6 +25,13 @@
   "programs": [
     {
       "binding": {
+        "stateBinding": {
+          "poolNamespace": "contract-pool-id",
+          "candidate": {
+            "manager": "$target",
+            "poolId": "$scope.poolId"
+          }
+        },
         "nomination": {
           "poolNamespace": "contract-pool-id",
           "poolIdLogs": [

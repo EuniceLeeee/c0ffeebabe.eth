@@ -1,4 +1,4 @@
-import { BlockActivityRangeInvalidatedError, MAX_ACTIVITY_TRANSITIONS } from "./blockscan-touched-state.js";
+import { BlockActivityRangeInvalidatedError, MAX_ACTIVITY_TRANSITIONS, hasCanonicalPhysicalRankingInput, sqlPoolPriceSpanUnion } from "./blockscan-touched-state.js";
 
 export type StartupCatchupSource = "bigquery" | "rpc";
 
@@ -12,14 +12,23 @@ export interface ActivityRangeControl {
   readonly previousSource: { readonly number: number; readonly hash: string };
   readonly signal?: AbortSignal;
   readonly deadlineAtMs?: number;
+  readonly captureSqlPoolSpan?:true;
 }
 
 type ActivityAnchor = ActivityRangeControl["previousSource"];
+/** Carry only the SAME reader-owned canonical single span. Never certify a copied,
+ * normalized, SQL-indexed, resumed-prefix, or stitched set from its string keys. */
+function originalIfWhole(keys:ReadonlySet<string>,normalized:ReadonlySet<string>,base:ActivityAnchor,target:ActivityAnchor){
+  if(!hasCanonicalPhysicalRankingInput(keys,base,target)||keys.size!==normalized.size)return;
+  for(const key of keys)if(!normalized.has(key))return;
+  return keys;
+}
 interface StartupActivityCheckpoint {
   readonly base: ActivityAnchor;
   cursor: ActivityAnchor;
   targetNumber: number;
   readonly touched: Set<string>;
+  readonly prices:ReturnType<typeof sqlPoolPriceSpanUnion>;
 }
 
 /** One runtime/interpretation owns one retained prefix, not a cache per target.
@@ -71,11 +80,12 @@ export class StartupActivityCollector<Header extends ActivityAnchor> {
         await canonical(checkpoint.base);
         if (checkpoint.cursor.number !== checkpoint.base.number) await canonical(checkpoint.cursor);
       } else {
-        checkpoint = { base, cursor: base, targetNumber: target.number, touched: new Set() };
+        checkpoint = { base, cursor: base, targetNumber: target.number, touched: new Set(), prices:sqlPoolPriceSpanUnion(base) };
         this.checkpoint = checkpoint;
       }
       checkpoint.targetNumber = target.number;
       const retained = checkpoint;
+      let direct:ReadonlySet<string>|undefined;
       await collectStartupActivity({ target, range: { ...range, previousSource: retained.cursor },
         readHeader: number => this.reader.readHeader(number, range),
         readRange: async (number, header, chunk) => {
@@ -88,6 +98,9 @@ export class StartupActivityCollector<Header extends ActivityAnchor> {
             next.add(key.toLowerCase());
           }
           check();
+          if(same(chunk.previousSource,base)&&same(header,target)&&retained.touched.size===0)
+            direct=originalIfWhole(keys,next,base,target);
+          retained.prices.append(keys,chunk.previousSource,header);
           for (const key of next) retained.touched.add(key);
           retained.cursor = { number, hash: header.hash };
           return next;
@@ -95,7 +108,7 @@ export class StartupActivityCollector<Header extends ActivityAnchor> {
       });
       await canonical(target);
       check();
-      return new Set(retained.touched);
+      return direct??retained.prices.finish(target)??new Set(retained.touched);
     } catch (error) {
       if (error instanceof BlockActivityRangeInvalidatedError) this.checkpoint = undefined;
       throw error;
@@ -173,17 +186,22 @@ export async function collectStartupActivity<Header extends { readonly number: n
   }
   const touched = new Set<string>();
   let previousSource = { ...range.previousSource };
+  const prices=sqlPoolPriceSpanUnion(previousSource);
+  let direct:ReadonlySet<string>|undefined;
   while (previousSource.number < target.number) {
     check();
     const number = Math.min(target.number, previousSource.number + MAX_ACTIVITY_TRANSITIONS);
     const header = number === target.number ? target : await input.readHeader(number);
     check();
     if (header.number !== number) throw new Error("startup activity chunk header height mismatch");
-    const keys = await input.readRange(number, header, { ...range, previousSource });
+    const keys = await input.readRange(number, header, { ...range, previousSource, captureSqlPoolSpan:true });
     check();
     for (const key of keys) touched.add(key.toLowerCase());
+    if(previousSource.number===range.previousSource.number&&number===target.number)
+      direct=originalIfWhole(keys,touched,range.previousSource,target);
+    else prices.append(keys,previousSource,header);
     previousSource = { number, hash: header.hash };
   }
   check();
-  return touched;
+  return direct??prices.finish(target)??touched;
 }

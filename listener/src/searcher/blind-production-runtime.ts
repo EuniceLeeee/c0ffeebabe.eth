@@ -1,5 +1,6 @@
 import { createInterface } from "node:readline";
 import type { PoolEntry } from "./planner/token-graph.js";
+import type { SqlObservedPool } from "./strategy-views.js";
 import type { VerifiedGraphView } from "./venues/blockscan-state-capability.js";
 import type { StrictRouteFamilyDeclaration } from
   "./strict-production-family-declarations.js";
@@ -159,10 +160,8 @@ export function normalizeBlindArtifactValue(value: unknown): unknown {
 
 export function createBlindProductionStaticArtifacts(input: {
   readonly effectiveConfig: Readonly<Record<string, unknown>>;
-  readonly productionPools: readonly PoolEntry[];
-  readonly configuredUniverseContentSha256: string;
-  readonly universeGeneratedAt: string | null;
-  readonly selectedUniverse: readonly PoolEntry[];
+  readonly pools: readonly SqlObservedPool[];
+  readonly sqlInputFingerprint: string;
   readonly strategyViewVersion: string;
   readonly families: readonly StrictRouteFamilyDeclaration[];
 }) {
@@ -183,18 +182,13 @@ export function createBlindProductionStaticArtifacts(input: {
     "production-universe",
     {
       builderFingerprint: blindProductionAuditHash({
-        loader: "pool-universe.loadPoolUniverse+buildStrategyViews",
-        schema: 1,
+        loader: "authenticated-sql-graph/buildSqlStrategyIntakeView",
+        schema: 2,
       }),
-      contentSha256: blindProductionAuditHash(
-        input.productionPools.map(normalizeBlindPoolIdentity),
-      ),
-      poolCount: input.productionPools.length,
+      contentSha256: blindProductionAuditHash(input.pools),
+      poolCount: input.pools.length,
       provenanceSha256: blindProductionAuditHash({
-        configuredContent: input.configuredUniverseContentSha256,
-        generatedAt: input.universeGeneratedAt,
-        selectedUniverse:
-          input.selectedUniverse.map(normalizeBlindPoolIdentity),
+        sqlInputFingerprint: input.sqlInputFingerprint,
         strategyViewVersion: input.strategyViewVersion,
       }),
     },

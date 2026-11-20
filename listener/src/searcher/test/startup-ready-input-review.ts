@@ -8,7 +8,7 @@ import { createHash } from "node:crypto";
 import ts from "typescript";
 import { canonicalJson } from "../universe-rebuild-checkpoint.js";
 
-const source = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+const source = readFileSync(new URL("./legacy-ready-producer.fixture.ts", import.meta.url), "utf8");
 const parsed = ts.createSourceFile("main.ts", source, ts.ScriptTarget.ES2022, true);
 function functionSource(name: string): string {
   const fn = parsed.statements.find((node): node is ts.FunctionDeclaration =>
@@ -87,7 +87,8 @@ function harness(initial = checkpoint(), env: Record<string, string> = {}, fail?
     { env },
     async function* () { yield Buffer.from("sealed checkpoint"); }, createHash, () => env.TEST_JOURNAL === "1",
     () => [{familyId:"fixture:a",instanceKey:"verified:a"},
-      {familyId:"fixture:funding",instanceKey:"verified:funding",asset:identity.executor}],
+      {familyId:"fixture:funding",instanceKey:"verified:funding",asset:identity.executor,
+        bindings:env.TEST_MISSING_FUNDING_BINDING==="1"?[]:[{asset:identity.executor}]}],
     (memos: any[], enabled: (id: string)=>boolean) => { checks.push("activation"); assert(memos.every(m=>enabled(m.familyId)), "disabled Family"); },
     {forStrictFamily: (id: string) => ({plugin:{manifest:{domain:id==="fixture:funding"?"funding":"protocol"}}})},
     {getAddress:(address:string)=>address}, class {}, class {},
@@ -212,9 +213,16 @@ test("prepared Ready consumes the sealed graph through production assembly witho
   assert.equal(result.lineage.generation,4);
   assert.equal(result.instanceCount,1);
   assert.equal(result.graph.length,1);
+  assert.deepEqual(result.flashTokens,[identity.executor]);
   assert.equal(h.calls.length,0);
   assert.deepEqual(h.canonicalChecks,[cutoff]);
   assert.deepEqual(h.checks,["definition","definition","activation","rehydrate","rehydrate","graph"]);
+});
+
+test("prepared Ready still requires a funding binding; an asset label alone is insufficient", async () => {
+  const h=harness(checkpoint(),{TEST_MISSING_FUNDING_BINDING:"1"},undefined,true);
+  await assert.rejects(h.invoke({preparedReady:preparedSeal}),/produced no observed\/retained funding token/);
+  assert.equal(h.calls.length,0);
 });
 
 test("prepared Ready fails closed on changed bytes/generation, incomplete inputs and missing coverage", async () => {

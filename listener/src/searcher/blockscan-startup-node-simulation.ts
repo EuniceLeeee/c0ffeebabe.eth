@@ -33,6 +33,8 @@ export function createStartupNodeSimulation(input: {
   rpcUrl: string; chainId: bigint; executor: string; transactionOrigin: string;
   executorRuntimeCode?: BotVmRuntimeCode; rawExecutionEntry?: boolean;
   scheduler: RethTransportScheduler; requestsPerSecond?: number;
+  /** A bounded historical caller can account for every physical attempt, including retries. */
+  beforeRpc?: (method: "eth_getBlockByNumber" | "eth_simulateV1") => void;
 }): StartupNodeSimulation {
   const rate = input.requestsPerSecond ?? 200;
   if (!Number.isSafeInteger(rate) || rate < 1 || rate > 200) throw new Error("invalid startup node request rate");
@@ -46,7 +48,7 @@ export function createStartupNodeSimulation(input: {
     const next = admission.then(async () => {
       signal.throwIfAborted();
       while (performance.now() < dispatchedAt + 1000 / rate) await pause(dispatchedAt + 1000 / rate - performance.now(), signal);
-      signal.throwIfAborted(); dispatchedAt = performance.now();
+      signal.throwIfAborted(); input.beforeRpc?.(method === "header" ? "eth_getBlockByNumber" : "eth_simulateV1"); dispatchedAt = performance.now();
       stats.requests++; if (method === "header") stats.headers++; else stats.simulations++;
       while (window[0] && window[0].time <= dispatchedAt - 1000) window.shift();
       window.push({ time: dispatchedAt, cu: method === "header" ? 20 : 40 });

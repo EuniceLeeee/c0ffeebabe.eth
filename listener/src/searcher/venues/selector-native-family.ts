@@ -8,11 +8,14 @@ import { createDeclarativeProgramAction, assertDeclarativeExecutionSource } from
 import { compileDeclarativeSwap } from "./declarative-swap-domain.js";
 import { compileDeclarativeEventCodec } from "./declarative-event-codec.js";
 import { createObservedExecutionMutation } from "./observed-execution-mutation.js";
+import { createSqlEdgePriceLogScopes } from "./sql-edge-price-log-scopes.js";
+import { selectorNativePricingPools, selectorNativeMutationRole, scopeSelectorNativeMutation } from "./selector-native-pricing-activity.js";
+import {selectorPaidRankRole} from "./selector-native/paid-ranking-registry.js";
 import { selectorExecutionInstanceKey, selectorExecutionResourceKey, selectorExecutionRouteKey } from "./selector-execution-keys.js";
 import { assertSource } from "./selector-execution-evidence.js";
 import { edgeObservationTarget } from "./route-observation-identity.js";
 import { freezeSelectorNative, normalizeSelectorNativeExecutionDefinition, selectorNativeFamilyId } from "./selector-native-definition.js";
-import { assertSelectorNativeCandidate, compileSelectorNativeDiscovery, type SelectorNativeCandidate } from "./selector-native-discovery.js";
+import { assertSelectorNativeCandidate, compileSelectorNativeDiscovery, type SelectorNativeBindingCandidate } from "./selector-native-discovery.js";
 import { createSelectorNativeRuntime, selectorNativeHasNonFungibleFlow, type SelectorNativeBindingProof, type SelectorNativeRuntime } from "./selector-native-runtime.js";
 type Data=Record<string,any>;
 const clean=(v:any):any=>Array.isArray(v)?v.map(clean):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).filter(([,x])=>x!==undefined).map(([k,x])=>[k,clean(x)])):v;
@@ -34,7 +37,7 @@ export function compileSelectorNativeExecutionFamily<Domain extends 'swap'|'prot
  const definition=normalizeSelectorNativeExecutionDefinition(raw),projection=compileSelectorNativeDiscovery(definition),family=selectorNativeFamilyId(definition),actionId=`${family}:call`;
  const runtimes=definition.programs.map(p=>createSelectorNativeRuntime(definition,p)),byKey=new Map(runtimes.map(r=>[r.key,r]));
  const runtimeFor=(descriptor:Data)=>byKey.get(descriptor.programKey)??(()=>{throw new Error('execution parameter program changed');})();
- function descriptorFor(runtime:SelectorNativeRuntime,candidate:SelectorNativeCandidate,proof:SelectorNativeBindingProof):Data{
+ function descriptorFor(runtime:SelectorNativeRuntime,candidate:SelectorNativeBindingCandidate,proof:SelectorNativeBindingProof):Data{
   assertSelectorNativeCandidate(candidate,definition);if(candidate.programKey!==runtime.key)throw new Error('execution candidate belongs to another recipe');const bound=runtime.verify(candidate,proof);
   const logicalInstanceKey=selectorExecutionInstanceKey({chainId:candidate.scope.chainId,familyId:family,target:candidate.target,
    ...(candidate.scope.poolId===undefined?{}:{poolId:candidate.scope.poolId}),...(candidate.scope.poolNamespace===undefined?{}:{poolNamespace:candidate.scope.poolNamespace}),immutableParameters:candidate.immutableParameters});
@@ -112,6 +115,34 @@ export function compileSelectorNativeExecutionFamily<Domain extends 'swap'|'prot
    const mapped=invocation({descriptor,route:r});runtime.dependencies({...mapped.inner,source:descriptor.proof.source,executor:descriptor.proof.executor,transactionOrigin:descriptor.proof.transactionOrigin,runtimeEvidence:[]}).forEach(address=>found.add(address));});
   return [...found].sort();
  }
+ const physicalCache=new WeakMap<object,WeakMap<object,ReturnType<typeof selectorNativePricingPools>>>();
+ function pricingPools(input:Data){
+  const old=physicalCache.get(input.descriptor)?.get(input.route);if(old)return old;
+  const {runtime,inner}=invocation(input);
+  const result=selectorNativePricingPools(runtime.program,input.route,inner.route);
+  if(checked.has(input.descriptor)&&deeplyFrozen(input.route)){
+   let byRoute=physicalCache.get(input.descriptor);if(!byRoute){byRoute=new WeakMap();physicalCache.set(input.descriptor,byRoute);}
+   byRoute.set(input.route,result);
+  }
+  return result;
+ }
+ const programScopes=new Map<string,ReturnType<typeof createSqlEdgePriceLogScopes>>();
+ const noScopes=()=>null;
+ const mutation=scopeSelectorNativeMutation(createObservedExecutionMutation<Data,Data>({
+  isLearned:()=>true,stateKey:route=>route.pricingStateKey,dependencies
+ }),entry=>{
+  const instance=entry.descriptor.instance??entry.descriptor,runtime=assertDescriptor(instance);
+  const pools=entry.routes.map(route=>pricingPools({descriptor:instance,route}));
+  let scopes=programScopes.get(runtime.key)??noScopes;
+  if(scopes===noScopes&&pools.some(rs=>rs.some(r=>r.poolId!==undefined))){
+   scopes=createSqlEdgePriceLogScopes([{...definition,programs:[runtime.program]}]);programScopes.set(runtime.key,scopes);
+  }
+  return selectorNativeMutationRole({program:runtime.program,instance,routes:entry.routes,pools,scopes});
+ },dependencies,(entry,physical)=>{
+  const instance=entry.descriptor.instance??entry.descriptor,runtime=assertDescriptor(instance);
+  const owned=selectorPaidRankRole(runtime.key);
+  return owned?{profile:owned({program:runtime.program,instance,routes:entry.routes,dependencies:entry.dependencies,physical})}:undefined;
+ });
  function quote(input:Data,results:readonly AdapterRequestResult[]):Data{
   const {runtime,inner}=invocation(input),request=runtime.simulation(inner,`${input.route.routeKey}:simulation:${input.amountIn}`);
   const optional=runtime.ethCall(inner,`${request.id}:eth-call`),expected=[request.id,...(optional?[optional.id]:[])];
@@ -133,15 +164,21 @@ export function compileSelectorNativeExecutionFamily<Domain extends 'swap'|'prot
   identity:{memoReuse:'recheck-identity',requiredReadRounds:Math.max(1,...runtimes.map(r=>r.requiredReadRounds)),variants,identityKey:(identity:Data)=>identity.descriptor.instanceKey},
   instance:{instanceKey:(identity:Data)=>identity.descriptor.instanceKey,compileDraft(identity:Data){assertDescriptor(identity.descriptor);if(identity.familyId!==family||identity.lineageId!==identity.descriptor.lineageId||identity.subject!==identity.descriptor.target)throw new Error('native ownership changed');return identity.descriptor;},
    finalizeDescriptor({draft,sharedBindings}:Data){if(sharedBindings.length)throw new Error('unexpected native shared binding');assertDescriptor(draft);return draft;},staticBindingProjection(descriptor:Data){assertDescriptor(descriptor);return [descriptor.programKey,descriptor.bindingFingerprint];}},
-  routes:{project:({descriptor}:Data)=>routesFor(descriptor),projectGraph(input:Data){invocation(input);return {routeActionAdapterId:actionId,executionTarget:input.route.target,executionVerification:'startup-simulation',stateResourceKey:input.route.resourceKey,
+  routes:{project:({descriptor}:Data)=>routesFor(descriptor),pricingPools,projectGraph(input:Data){invocation(input);return {routeActionAdapterId:actionId,executionTarget:input.route.target,executionVerification:'startup-simulation',stateResourceKey:input.route.resourceKey,
    ...(input.route.resourceKeys?{stateResourceKeys:input.route.resourceKeys}:{}),
    observationTarget:input.route.observationTarget,...(input.route.observationPoolId===undefined?{}:{observationPoolId:input.route.observationPoolId}),
    venueIdentity:{scope:input.route.scope,resource:input.route.resource,...(input.route.resources?{resources:input.route.resources}:{}),selector:definition.selector,signature:definition.signature,immutableParameters:input.descriptor.candidate.immutableParameters,programKey:input.descriptor.programKey}};}},
   pricing:{refreshPolicy:runtimes.some(r=>r.program.refreshPolicy!=='on-touch')?'each-block':'on-touch',stateKey:(route:Data)=>route.pricingStateKey,
+   // A descriptor identifies one verified recipe, not every recipe of the selector.
+   // Leave homogeneous families (including the single-recipe Credit wrapper) unchanged.
+   ...(runtimes.some(r=>r.program.refreshPolicy==='on-touch')&&runtimes.some(r=>r.program.refreshPolicy!=='on-touch')?{
+    refreshPolicyForInstance({descriptor}:Data){
+     return assertDescriptor(descriptor.instance).program.refreshPolicy==='on-touch'?'on-touch':'each-block';
+    }}:{}),
    staticBindingProjection(input:Data){assertDescriptor(input.descriptor);return [input.descriptor.bindingFingerprint];},snapshotCompatibilityProjection(input:Data){assertDescriptor(input.descriptor);return [input.descriptor.bindingFingerprint];},
    compileDraft(input:Data){input.routes.forEach((route:Data)=>{invocation({descriptor:input.descriptor,route});if(route.pricingStateKey!==input.stateKey)throw new Error('native pricing group changed');});return {instance:input.descriptor,routes:input.routes,stateKey:input.stateKey};},
    finalizePricingDescriptor({draft,sharedBindings}:Data){if(sharedBindings.length)throw new Error('unexpected native pricing binding');assertDescriptor(draft.instance);return draft;},dependencies,
-   mutation:createObservedExecutionMutation({isLearned:()=>true,stateKey:(route:Data)=>route.pricingStateKey,dependencies}),
+   mutation,
    current:{requirements:()=>({transports:[]}),buildRequests:()=>[],decodeSnapshot:()=>frozen({format:'awaiting-startup-simulation/v1'}),deriveMids:()=>new Map()}},
   exact:{methods(input:Data){const {runtime}=invocation(input);return [localZeroExactMethod('native-zero',()=>({amountOut:0n,evidence:{kind:'native-zero'}})),{
    id:'native-balance-simulation',kind:'request-program',chainAmountQuote:true,program:{requirements:()=>runtime.requirements,

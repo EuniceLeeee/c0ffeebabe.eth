@@ -88,4 +88,12 @@ assert.throws(() => coordinator.build({
   edges: Object.freeze([{ ...EDGE }]),
 }), /differs from ready edge objects/);
 
+const logical=Object.freeze({...EDGE, canonicalEdgeId:("candidate-edge:v1:"+"b".repeat(64)) as NonNullable<TokenEdge["canonicalEdgeId"]>});
+const sql=new StrictReadyGraphViewCoordinator({catalog:CATALOG,ready:READY,edges:[logical],publicationKind:"sql-edges"});
+for(const n of [101,102]) {
+  const view=sql.build({id:"sql-"+n,topologyKey:`sql-edges:${READY.generation}:${READY.graphHash}`,
+    generation:n,sourceBlock:n,sourceBlockHash:HASH,edges:[logical]});
+  assert.equal(view.edges[0]?.canonicalEdgeId,logical.canonicalEdgeId);
+}
+assert.throws(()=>new StrictReadyGraphViewCoordinator({catalog:CATALOG,ready:READY,edges:[EDGE],publicationKind:"sql-edges"}),/sealed input leg ID/);
 console.log("strict ready GraphView contract: PASS");

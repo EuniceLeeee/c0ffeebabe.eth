@@ -209,6 +209,7 @@
     "searcher:standing-guard": "node --import tsx src/searcher/test/standing-guard.ts",
     "searcher:live": "tsx src/searcher/main.ts",
     "searcher:at-block": "node --import tsx src/searcher/blockscan-at-block-cli.ts",
+    "searcher:seal-sql-input": "node --import tsx src/searcher/sql-live-input-cli.ts",
     "searcher:at-block-test": "node --import tsx src/searcher/test/blockscan-at-block-cli.ts",
     "searcher:blockscan-eth-signals": "node --import tsx src/searcher/test/blockscan-eth-signals.ts",
     "searcher:protocol-loop": "tsx src/searcher/test/protocol-loop-execute.ts",

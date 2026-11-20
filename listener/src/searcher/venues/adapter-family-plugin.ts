@@ -372,7 +372,8 @@ export interface FundingTokenCandidate extends FamilyCandidate {
 
 export type DiscoveryEvidenceChannel =
   | "nominate"
-  | "tx-evidence";
+  | "tx-evidence"
+  | "tx-evidence-or-reverse-binding";
 
 /**
  * Candidate-source lanes a dynamic-discovery family owns. The central
@@ -408,7 +409,9 @@ export interface DiscoverySemantics<Candidate extends FamilyCandidate> {
    * re-materializes real observations from opaque pool nominations;
    * "tx-evidence" means the Family admits only from real observed
    * transactions (verified txHash nominations whose receipts/traces the
-   * strict side re-reads). A Family with neither is rejected at definition
+   * strict side re-reads). "tx-evidence-or-reverse-binding" also permits a
+   * declared cold state observation to enter the same identity lifecycle.
+   * A Family with neither is rejected at definition
    * time, so a missing interface can never silently pass as "unresolved".
    * Legacy caches only nominate candidates; they never supply evidence.
    */
@@ -735,6 +738,14 @@ export interface FamilyGraphProjection {
   readonly centralScoreKey?: string;
 }
 
+/** Startup pricing routing only. Not a Graph fingerprint or a replacement for
+ * the Family's declared oracle, permission, time and other dependencies. */
+export interface FamilyPricingPool {
+  readonly poolAddress: string;
+  readonly poolId?: string;
+  readonly poolNamespace?: string;
+  readonly resourceKey: string;
+}
 export interface RouteProjectionSemantics<
   Descriptor extends CompiledInstanceDescriptor,
   Route extends FamilyRouteDescriptor,
@@ -744,6 +755,7 @@ export interface RouteProjectionSemantics<
     readonly descriptor: Descriptor;
     readonly route: Route;
   }): FamilyGraphProjection;
+  pricingPools?(input: { readonly descriptor: Descriptor; readonly route: Route }): readonly FamilyPricingPool[];
 }
 
 export interface CurrentPricingInput<PricingDescriptor, Route> {
@@ -848,6 +860,13 @@ export function sealCompiledMutationIndex(input: CompiledMutationIndex): Compile
 }
 
 export interface MutationSemantics<PricingDescriptor, Route> {
+  /** Optional profile for ranking from a past, paid indication only. It is never
+   * a claim about present output, execution success, or proof/cache reuse. */
+  historicalRankTriggers?(entry:MutationPricingEntry<PricingDescriptor,Route>):
+    {readonly economic:readonly string[];readonly assets:readonly string[];readonly constantIdentifiers?:readonly string[];
+      /** Subset of assets whose verified market model is indifferent to another holder's zero-endpoint transfer. Ranking only. */
+      readonly thirdPartySupplyIndependentAssets?:readonly string[];
+      readonly managedPool?:{readonly manager:string;readonly poolId:string}}|undefined;
   /** Compile all directions together once, so shared events are decoded once. */
   compile?(input: {
     readonly entries: readonly MutationPricingEntry<PricingDescriptor, Route>[];
@@ -2418,6 +2437,8 @@ function installSynchronousGuards(
     "routes.projectGraph",
     startupSimulationProof ? requireStartupSimulationProjection : undefined,
   );
+  if (routedPlugin.routes.pricingPools !== undefined)
+    guardSynchronousMethod(routedPlugin.routes, "pricingPools", "routes.pricingPools", validatePricingPools);
 
   if (domain === "credit") {
     const creditPlugin = pluginForDomain(plugin, "credit");
@@ -2581,6 +2602,7 @@ function guardOptionalPriceCapabilities(plugin: {
     }
     if (pricing.mutation !== undefined) {
       guardSynchronousMethod(pricing.mutation, "affectedStateKeys", "pricing.mutation.affectedStateKeys");
+      if(pricing.mutation.historicalRankTriggers!==undefined)guardSynchronousMethod(pricing.mutation,"historicalRankTriggers","pricing.mutation.historicalRankTriggers");
       if (pricing.mutation.compile !== undefined) guardSynchronousMethod(pricing.mutation, "compile", "pricing.mutation.compile");
     }
     if (pricing.liveStateProjection !== undefined) guardSynchronousMethod(pricing.liveStateProjection, "project", "pricing.liveStateProjection.project");
@@ -3695,10 +3717,11 @@ function validateDiscovery(
   }
   if (
     discovery.evidenceChannel !== "nominate" &&
-    discovery.evidenceChannel !== "tx-evidence"
+    discovery.evidenceChannel !== "tx-evidence" &&
+    discovery.evidenceChannel !== "tx-evidence-or-reverse-binding"
   ) {
     throw new Error(
-      "discovery must declare evidenceChannel: \"nominate\" or \"tx-evidence\"",
+      "discovery must declare a supported evidenceChannel",
     );
   }
   if (discovery.evidenceChannel === "nominate" &&
@@ -3707,20 +3730,24 @@ function validateDiscovery(
       "discovery evidenceChannel=nominate requires a nominate capability",
     );
   }
-  if (discovery.evidenceChannel === "tx-evidence" &&
+  if (discovery.evidenceChannel !== "nominate" &&
       discovery.nominate !== undefined) {
     throw new Error(
       "discovery evidenceChannel=tx-evidence must not declare nominate; " +
         "pick one evidence channel",
     );
   }
-  if (discovery.evidenceChannel === "tx-evidence" &&
+  if (discovery.evidenceChannel !== "nominate" &&
       (discovery.callPatterns?.length ?? 0) === 0 &&
       (discovery.logPatterns?.length ?? 0) === 0) {
     throw new Error(
       "discovery evidenceChannel=tx-evidence requires call or log patterns " +
         "for receipt/trace decoding",
     );
+  }
+  if (discovery.evidenceChannel === "tx-evidence-or-reverse-binding" &&
+      (discovery.reverseBinding?.kind !== "implementation" || !(discovery.addressSurfaces?.length))) {
+    throw new Error("discovery state evidence requires a declared reverse binding and address surface");
   }
   if (discovery.nominate !== undefined) {
     assertPlainRecord(discovery.nominate, "discovery nomination semantics");
@@ -4054,15 +4081,34 @@ function validateInstance(instance: InstanceSemantics<any, any, any, any>): void
   }
 }
 
+function validatePricingPools(result:unknown):void {
+  const label="routes.pricingPools";
+  if(!Array.isArray(result)||result.length>256||Reflect.ownKeys(result).some(k=>typeof k!=="string"||k!=="length"&&!/^(0|[1-9]\d*)$/.test(k)))
+    throw Error(label+" requires a bounded pool list");
+  const keys=new Set<string>(),identities=new Set<string>();
+  for(let i=0;i<result.length;i++){
+    const descriptor=Object.getOwnPropertyDescriptor(result,i);if(!descriptor||!("value" in descriptor))throw Error(label+" requires dense data rows");
+    const item=descriptor.value;assertPlainRecord(item,label);assertExactKeys(item,["poolAddress","poolId","poolNamespace","resourceKey"],label,true,["poolAddress","resourceKey"]);
+    assertHex(item.poolAddress,20,label);if(ethers.getAddress(item.poolAddress)===ethers.ZeroAddress)throw Error(label+" requires a nonzero pool address");
+    for(const k of ["poolId","poolNamespace","resourceKey"])if(Object.hasOwn(item,k)){
+      const v=nonemptyString(item[k],label+"."+k);if(v.length>1024||/[\u0000-\u001f\u007f]/u.test(v))throw Error(label+" contains invalid data");
+    }
+    if(item.poolNamespace!==undefined&&item.poolId===undefined)throw Error(label+" requires poolId with namespace");
+    const id=JSON.stringify([item.poolAddress.toLowerCase(),item.poolNamespace??null,item.poolId??null]);
+    if(keys.has(item.resourceKey)||identities.has(id))throw Error(label+" repeated resource or pool");
+    keys.add(item.resourceKey);identities.add(id);
+  }
+}
 function validateRoutes(routes: RouteProjectionSemantics<any, any>): void {
   assertPlainRecord(routes, "route projection semantics");
   assertExactKeys(
     routes,
-    ["project", "projectGraph"],
-    "route projection semantics",
+    ["project", "projectGraph","pricingPools"],
+    "route projection semantics",true,["project","projectGraph"],
   );
   assertSynchronousFunction(routes.project, "routes.project");
   assertSynchronousFunction(routes.projectGraph, "routes.projectGraph");
+  if(routes.pricingPools!==undefined)assertSynchronousFunction(routes.pricingPools,"routes.pricingPools");
 }
 
 function validatePricing(pricing: PricingSemantics<any, any, any, any, any, any>): void {
@@ -4166,7 +4212,7 @@ function validatePricing(pricing: PricingSemantics<any, any, any, any, any, any>
     assertPlainRecord(pricing.mutation, "pricing.mutation");
     assertExactKeys(
       pricing.mutation,
-      ["affectedStateKeys", "compile"],
+      ["affectedStateKeys", "compile", "historicalRankTriggers"],
       "pricing.mutation",
       true,
       ["affectedStateKeys"],
@@ -4178,6 +4224,7 @@ function validatePricing(pricing: PricingSemantics<any, any, any, any, any, any>
     if (pricing.mutation.compile !== undefined) {
       assertSynchronousFunction(pricing.mutation.compile, "pricing.mutation.compile");
     }
+    if(pricing.mutation.historicalRankTriggers!==undefined)assertSynchronousFunction(pricing.mutation.historicalRankTriggers,"pricing.mutation.historicalRankTriggers");
   }
   if (pricing.liveStateProjection !== undefined) {
     assertPlainRecord(pricing.liveStateProjection, "pricing.liveStateProjection");

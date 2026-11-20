@@ -35,6 +35,32 @@ test("direct method requires the actual full header, never zero fee or invented 
   }
 });
 
+test("production startup does not spawn a fork for node-native simulation; Anvil startup failures propagate", async () => {
+  const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
+  const ast = ts.createSourceFile("main.ts", main, ts.ScriptTarget.Latest, true);
+  let initialization = "";
+  function find(node: ts.Node): void {
+    if (ts.isBlock(node)) {
+      const indexOf = (name: string) => node.statements.findIndex(s => ts.isVariableStatement(s) &&
+        s.declarationList.declarations.some(d => ts.isIdentifier(d.name) && d.name.text === name));
+      const start = indexOf("blockScanAnvilPort"), end = indexOf("isolatedPlanner");
+      if (start >= 0 && end > start) initialization = node.statements.slice(start, end).map(s => s.getText(ast)).join("\n");
+    }
+    ts.forEachChild(node, find);
+  }
+  find(ast); assert(initialization);
+  const js = ts.transpileModule("(async () => {" + initialization + "})()", {
+    compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS},
+  }).outputText;
+  let starts = 0;
+  const scope = { config: {rpcUrl:"unused"}, process: {env:{}, once(){}},
+    AnvilStateBackend: class {async start(){starts++; throw Error("no local fork binary");}} };
+  await runInNewContext(js, {...scope, blockScanFinalSimulationMethod:"eth_simulateV1"});
+  assert.equal(starts, 0);
+  await assert.rejects(runInNewContext(js, {...scope, blockScanFinalSimulationMethod:"anvil"}), /no local fork binary/);
+  assert.equal(starts, 1);
+});
+
 test("production observed-header projection preserves direct-simulation context in both read paths", async () => {
   const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
   const mainAst = ts.createSourceFile("main.ts", main, ts.ScriptTarget.Latest, true);
@@ -51,7 +77,9 @@ test("production observed-header projection preserves direct-simulation context 
     baseFeePerGas: "0xa", gasUsed: "0x64", gasLimit: "0x3e8", transactions: [] };
   let reads = 0, observed = 0;
   const topology = runInNewContext(code, {
-    readyUniverse: { generation: 1, graphHash: hash }, ethers, blockScanChainId: 1n,
+    sqlProducer: { topologyKey: hash }, ethers, blockScanChainId: 1n,
+    blockScanActivityProvider: { observeHeader: (_n: number, load: () => Promise<unknown>) => load() },
+    activityReadFailed: (e: unknown) => { throw e; },
     config: { rpcUrl: "unused" }, parseBlockScanObservedHeader,
     provider: { async send() { reads++; return raw; } },
     async readBlockScanObservedHeader(_url: string, chain: bigint, n: number) { reads++; return parseBlockScanObservedHeader(raw, n, chain); },
@@ -103,7 +131,7 @@ for (const direct of [false, true]) for (const nMinusOne of [false, true]) {
       }, terminate() { assert(!direct); } },
       ensureExecutionWorkerForked: async () => { assert(!direct); forkCalls++; },
       backgroundFinalSimForks: new Map([[worker, { wait: async () => { assert(!direct); waits++; }, cancel() {} }]]),
-      useNMinusOneFallback: nMinusOne,
+      useNMinusOneFallback: nMinusOne, replayPricing: null,
       assertFinalSimulationSource(g: number, s: any) { assert.equal(g, 2); assert.equal(s.hash, hash); },
       finalSimForkWaitMs: 0,
       finalSimulationPlanIdentity: { bytesHex: () => "0x1234", resultBytesHex: (r: any) => r.scriptHex },

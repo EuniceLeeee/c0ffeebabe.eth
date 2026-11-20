@@ -29,13 +29,15 @@ const pricing = { sourceBlock: source.number, sourceBlockHash: source.hash, gene
   mids: new Map(), coverage: { resolvedEdgeKeys: edges.map(edge => String(edge.canonicalEdgeId)) } };
 const legs = edges.map(edge => ({ tokenIn: edge.tokenIn, tokenOut: edge.tokenOut, program }));
 
-function harness(options: { failToken?: string; unavailable?: boolean } = {}) {
+function harness(options: { failToken?: string; unavailable?: boolean; twoRecipes?: boolean } = {}) {
   const calls: StartupNodeInvocation[] = [], observations: Readonly<Record<string, unknown>>[] = [];
+  const confirmed:string[]=[];
+  const rejectedProgram=hexlify(new RuntimeAmountProgram().constant(0,7n).bytes());
   const simRejects = new BlockScanSimRejectCache();
   const simulateStandalone = Object.assign(async (input: StartupNodeInvocation) => {
     calls.push(input);
     const compiled = compileStartupPrefix(input, actor);
-    if (input.legs.at(-1)?.tokenOut === options.failToken) return {
+    if (input.legs.at(-1)?.tokenOut === options.failToken || input.legs.at(-1)?.program===rejectedProgram) return {
       kind: "revert" as const, receipts: [], returnData: "0x1234", gasUsed: 50_000n,
       targetBlock: input.source.number + 1, scriptHash: keccak256(compiled.scriptHex), inputFundingMode: "native-prefix" as const,
       failure: { hop: input.legs.length - 1, callTarget: edges[input.legs.length - 1]!.target, reason: "0x1234" },
@@ -51,13 +53,18 @@ function harness(options: { failToken?: string; unavailable?: boolean } = {}) {
       targetBlock: input.source.number + 1, scriptHash: keccak256(compiled.scriptHex), inputFundingMode: "native-prefix" as const,
       simulationMs: 1, nodeQueueMs: 0 };
   }, { stats: () => ({ requests: calls.length, retries: 0, simulations: calls.length, headers: 1, maxCuIn1000Ms: 40 }) }) as StartupNodeSimulation;
-  const session = { buildRuntimeAmountLeg: () => options.unavailable ? undefined : { program } } as unknown as StrictProductionRuntimeSession;
+  const session = {
+    ...(options.twoRecipes?{executionVariantIds:()=>["rejected","winning"],
+      confirmExecutionVariant:(_edge:TokenEdge,id:string)=>confirmed.push(id)}:{}),
+    buildRuntimeAmountLeg: ({variantId}:{variantId?:string}) => options.unavailable ? undefined
+      : { program:variantId==="rejected"?rejectedProgram:program }
+  } as unknown as StrictProductionRuntimeSession;
   const prepareQuote = async () => {}, sessionFor = () => session;
   const preflight = createBlockScanStartupExecutionPreflight({ executor: actor, transactionOrigin: origin,
     concurrency: 2, simRejects, simulateStandalone, filterTargetReverts: true,
     onObservation: observation => observations.push(observation) });
   let fallbackQuotes = 0;
-  return { preflight, calls, observations, simRejects, prepareQuote, sessionFor,
+  return { preflight, calls, observations, simRejects, prepareQuote, sessionFor,confirmed,
     fallbackQuotes: () => fallbackQuotes,
     build: (maxInputPathHops: number, extra: Partial<Parameters<typeof buildEffectiveMids>[0]> = {}) => buildEffectiveMids({
       pricing, weth: ADDR.WETH, gasCostWei: null, fixedWethInput: 100n, enumerationSpreadBps: 200,
@@ -68,6 +75,28 @@ function harness(options: { failToken?: string; unavailable?: boolean } = {}) {
     }),
   };
 }
+
+test("a private recipe revert does not filter a logical edge when another recipe executes",async()=>{
+  const h=harness({twoRecipes:true}), table=await h.build(1);
+  for(const id of ["edge-0","edge-1"]) {
+    const row=table.rows.get(id)!;
+    assert.equal(row.status,"quoted");assert.equal(row.executionVerification?.variantId,"winning");
+    assert.equal(table.rows.has("winning"),false);
+  }
+  assert.deepEqual(h.confirmed,["winning","winning"]);
+  assert.equal(h.fallbackQuotes(),0);
+  assert.equal(await h.preflight.run({effective:table,edges,control:{},prepareQuote:h.prepareQuote,sessionFor:h.sessionFor}),false);
+  assert.equal(h.simRejects.hasPool(edges[0]!),false);
+});
+
+test("replaying one priced encoding cannot blacklist its sibling under the same SQL id",async()=>{
+  const origin=harness({twoRecipes:true}),table=await origin.build(1);
+  const replay=harness({twoRecipes:true,failToken:tokens[1]});
+  assert.equal(await replay.preflight.run({effective:table,edges,control:{},
+    prepareQuote:replay.prepareQuote,sessionFor:replay.sessionFor}),false);
+  assert(replay.observations.some(o=>o.edgeId==="edge-0"&&o.failureStage==="target-encoding-only"));
+  assert.equal(replay.simRejects.hasPool(edges[0]!),false);
+});
 
 test("startup price configuration has one default and rejects invalid hop counts", () => {
   assert.equal(resolveEffectiveInputPathHops({}), 4);

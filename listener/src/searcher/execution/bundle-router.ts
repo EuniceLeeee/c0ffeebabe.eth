@@ -210,14 +210,14 @@ export function createBundleRouter(input: {
   bribeGasBasis?: BribeGasBasis;
   evidence?: BuilderEvidenceSink;
   dryRun: boolean;
-  wallet: ethers.Wallet;
+  wallet: ethers.Wallet | ethers.VoidSigner;
   provider: ethers.JsonRpcProvider;
   botvmAddress: string;
   defaultGasUsed: number;
 }): BundleRouter {
-  return input.dryRun
-    ? new DryRunBundleRouter(input.botvmAddress, input.defaultGasUsed)
-    : new ProductionBundleRouter(
+  if (input.dryRun) return new DryRunBundleRouter(input.botvmAddress, input.defaultGasUsed);
+  if (input.wallet instanceof ethers.VoidSigner) throw new Error("live submission requires a signing wallet");
+  return new ProductionBundleRouter(
       input.wallet,
       input.provider,
       input.botvmAddress,

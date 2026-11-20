@@ -14,7 +14,7 @@ import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import { StateCallAbortedError } from "../shared/state/state-backend.js";
 import { applyStartupTargetFilters } from "./blockscan-startup-filter.js";
 import type { CanonicalSource } from "./venues/adapter-request-program.js";
-import { RevmStrictError } from "./revm-sim-client.js";
+import { startupPriceRevert } from "./startup-prefix-failure.js";
 import type { StartupPrefixReceipt } from "./simulator/startup-prefix-program.js";
 
 export type StartupExecutionPreflight = ReturnType<typeof createBlockScanStartupExecutionPreflight>;
@@ -59,6 +59,17 @@ export function createBlockScanStartupExecutionPreflight(input: {
   const reusable = new Map<string, { readonly key: string; readonly observation: StartupPrefixObservation }>();
   let changes = new Map<string, StartupContinuationState["rows"][number][1]>(), resetPending = false;
   const successful = new Set<string>();
+  // All quotes in a published GraphView share this immutable topology. Index
+  // it once rather than rebuilding a full-table Map for every SQL leg/amount.
+  const publishedGraphs = new WeakMap<readonly TokenEdge[],ReadonlyMap<string,TokenEdge>>();
+  const graphFor = (edges:readonly TokenEdge[]):ReadonlyMap<string,TokenEdge> => {
+    const cached=publishedGraphs.get(edges);
+    if(cached) return cached;
+    const graph=new Map(edges.map(edge=>[blockScanEdgeKey(edge),edge]));
+    assert.equal(graph.size,edges.length,"duplicate public leg ID in price graph");
+    if(Object.isFrozen(edges) && edges.every(edge=>Object.isFrozen(edge) && !!edge.canonicalEdgeId)) publishedGraphs.set(edges,graph);
+    return graph;
+  };
   const issued = new Map<string, { sourceKey: string; requestKey: string; key?: string;
     observation: StartupPrefixObservation; result?: StartupEffectiveQuote }>();
   const usePolicy = (maxInputPathHops: number) => {
@@ -110,7 +121,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
           throw new StateCallAbortedError("startup execution price deadline", "deadline");
       };
       open();
-      const graph = new Map(work.edges.map(value => [blockScanEdgeKey(value), value]));
+      const graph = graphFor(work.edges);
       const edgeId = blockScanEdgeKey(edge), instanceKey = edgeInstanceKey(edge);
       assert(graph.size === work.edges.length && graph.get(edgeId) === edge &&
         work.amountIn > 0n && reference.amountIn === work.amountIn && reference.path.length <= maxInputPathHops,
@@ -136,24 +147,37 @@ export function createBlockScanStartupExecutionPreflight(input: {
       const prior = issued.get(edgeId);
       if (prior?.requestKey === requestKey) {
         if (prior.result) return prior.result;
-        throw Object.assign(new RevmStrictError("observation", "startup execution price reverted"), { code: "STARTUP_EXECUTION_REVERT" });
+        throw startupPriceRevert(work,prior.observation);
       }
       const selected = [...reference.path.map(row => graph.get(row.edgeId)!), edge];
       await work.prepareQuote(new Set(selected.map(blockScanEdgeKey)));
       open();
-      const legs = selected.map(value => {
-        const leg = work.sessionFor(value).buildRuntimeAmountLeg({ edge: value, executor: input.executor, runtimeEvidence: [] });
+      const compile = (value:TokenEdge, variantId?:string) => {
+        const leg = work.sessionFor(value).buildRuntimeAmountLeg({ edge: value, executor: input.executor, runtimeEvidence: [], variantId });
         return leg && { tokenIn: value.tokenIn, tokenOut: value.tokenOut, program: leg.program };
-      });
-      if (legs.some(leg => !leg)) return undefined;
+      };
+      const prefix = selected.slice(0,-1).map((value,i)=>compile(value,reference.path[i]!.executionVerification?.variantId));
+      if (prefix.some(leg => !leg)) return undefined;
       const rootAmount = reference.path[0]?.amountIn ?? work.amountIn;
-      const invocation = { source, maxInputPathHops, control: work.control,
-        callerAuthority: { executor: input.executor, transactionOrigin: input.transactionOrigin },
-        amount: rootAmount, legs: legs.map(leg => leg!) };
-      const result = await input.simulateStandalone(invocation);
-      open();
-      assert(result.targetBlock === source.number + 1, "startup execution price virtual source mismatch");
       const targetIndex = selected.length - 1;
+      const session = work.sessionFor(edge);
+      const variants = session.executionVariantIds?.(edge) ?? [undefined];
+      let usedVariant:string|undefined, uncompiled = false, uncertainRevert = false;
+      let result:Awaited<ReturnType<StartupNodeSimulation>>|undefined;
+      for (const variantId of variants) {
+        open();
+        const targetLeg = compile(edge,variantId);
+        if (!targetLeg) {uncompiled = true;continue;}
+        result = await input.simulateStandalone({source,maxInputPathHops,control:work.control,
+          callerAuthority:{executor:input.executor,transactionOrigin:input.transactionOrigin},
+          amount:rootAmount,legs:[...prefix.map(leg=>leg!),targetLeg]});
+        open();
+        assert(result.targetBlock === source.number + 1, "startup execution price virtual source mismatch");
+        usedVariant = variantId;
+        if(result.kind==="success" || (result.failure && result.failure.hop!==targetIndex)) break;
+        if(!result.failure) uncertainRevert = true;
+      }
+      if(!result) return undefined;
       const stage = result.kind === "success" ? "none" : result.failure === undefined ? "unattributed"
         : result.failure.hop < 0 ? "funding" : result.failure.hop === targetIndex ? "target" : "prefix";
       let priced: StartupEffectiveQuote | undefined, rows: readonly EffectiveMidRow[] | undefined;
@@ -173,10 +197,12 @@ export function createBlockScanStartupExecutionPreflight(input: {
             amountIn: receipt.amountIn, amountOut: receipt.amountOut, amountSpent: receipt.amountSpent,
             effectiveMid: Number(receipt.amountOut) / Number(receipt.amountIn), status: "quoted" as const, quotedAt,
             pricingMethod: "startup-simulation" as const };
+          const variantId=index===targetIndex?usedVariant:reference.path[index]!.executionVerification?.variantId;
           const executionVerification = Object.freeze({ kind: "startup-simulation" as const,
+            ...(variantId===undefined?{}:{variantId}),
             targetBlock: result.targetBlock, scriptHash: result.scriptHash,
             receiptHash: effectiveExecutionReceiptHash(row,
-              { amountIn: receipt.amountIn, path: simulatedRows }, maxInputPathHops, result.targetBlock, result.scriptHash) });
+              { amountIn: receipt.amountIn, path: simulatedRows }, maxInputPathHops, result.targetBlock, result.scriptHash,variantId) });
           simulatedRows.push(Object.freeze({ ...row, executionVerification }));
         }
         rows = Object.freeze(simulatedRows);
@@ -186,10 +212,11 @@ export function createBlockScanStartupExecutionPreflight(input: {
           executionVerification: rows.at(-1)!.executionVerification!,
           inputReference: Object.freeze({ amountIn: target.amountIn, path: Object.freeze(rows.slice(0, -1)) }) });
       }
+      if(priced && usedVariant!==undefined) session.confirmExecutionVariant(edge,usedVariant);
       const observation = Object.freeze({ sourceBlock: source.number, sourceBlockHash: source.hash,
         generation: source.generation, edgeId, instanceKey, mode: "observe-only", filterApplied: false,
         pricingMethod: "startup-simulation", expectedAmountIn: String(work.amountIn), expectedAmountOut: null,
-        status: result.kind, failureStage: stage, failedHop: result.failure?.hop ?? null,
+        status: result.kind, failureStage: stage==="target" && (uncompiled || uncertainRevert) ? "unattributed" : stage, failedHop: result.failure?.hop ?? null,
         failedEdgeId: result.failure && result.failure.hop >= 0 ? blockScanEdgeKey(selected[result.failure.hop]!) : null,
         targetAttempted: result.kind === "success" || stage === "target" ? true : stage === "unattributed" ? null : false,
         prefixEdges: reference.path.map(step => step.edgeId), prefixCanAffectTargetState: reference.path.length > 0,
@@ -205,7 +232,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
         key: rows && issuedKey(source, maxInputPathHops, rows), observation, result: priced });
       console.log(`[searcher/startup-prefix-observation] ${JSON.stringify(observation)}`);
       input.onObservation?.(observation);
-      if (!priced) throw Object.assign(new RevmStrictError("observation", "startup execution price reverted"), { code: "STARTUP_EXECUTION_REVERT" });
+      if (!priced) throw startupPriceRevert(work,observation);
       return priced;
     },
     async run(work: {
@@ -219,7 +246,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
       const { source } = work.effective;
       const sourceKey = sourcePolicyKey(source, maxInputPathHops);
       if (sourceKey !== checkedSource) { checkedSource = sourceKey; successful.clear(); }
-      const graph = new Map(work.edges.map(edge => [blockScanEdgeKey(edge), edge]));
+      const graph = graphFor(work.edges);
       const priced = effectiveEnumerationMids({ sourceBlock: source.number, sourceBlockHash: source.hash,
         generation: source.generation, graph: { edges: work.edges }, effectiveMids: work.effective });
       const pending = [...priced.keys()].map(id => work.effective.rows.get(id)!);
@@ -341,12 +368,14 @@ export function createBlockScanStartupExecutionPreflight(input: {
                 }
                 const compileStarted = performance.now();
                 const legs = rows.map(step => {
-                  if (!programs.has(step.edgeId)) {
+                  const variantId=step.executionVerification?.variantId;
+                  const cacheKey=JSON.stringify([step.edgeId,variantId??null]);
+                  if (!programs.has(cacheKey)) {
                     const edge = graph.get(step.edgeId)!;
-                    programs.set(step.edgeId, work.sessionFor(edge).buildRuntimeAmountLeg({ edge,
-                      executor: input.executor, runtimeEvidence: [] })?.program ?? null);
+                    programs.set(cacheKey, work.sessionFor(edge).buildRuntimeAmountLeg({ edge,
+                      executor: input.executor, runtimeEvidence: [],variantId })?.program ?? null);
                   }
-                  return { tokenIn: step.tokenIn, tokenOut: step.tokenOut, program: programs.get(step.edgeId) };
+                  return { tokenIn: step.tokenIn, tokenOut: step.tokenOut, program: programs.get(cacheKey) };
                 });
                 counts.compilationTotalMs += performance.now() - compileStarted;
                 if (legs.some(leg => leg.program === null)) {
@@ -397,7 +426,11 @@ export function createBlockScanStartupExecutionPreflight(input: {
                   else if (stage === "funding") counts.fundingReverted++;
                   else counts.unattributedReverted++;
                 }
-                const observation = record(row, { status: result.kind, failureStage: stage, failedHop: result.failure?.hop ?? null,
+                // A replay of the stored receipt tests that exact private
+                // encoding, not its siblings. Do not poison the public ID.
+                const replayScope=stage==="target" && (work.sessionFor(graph.get(row.edgeId)!).executionVariantIds?.(graph.get(row.edgeId)!)?.length??1)>1
+                  ? "target-encoding-only" : stage;
+                const observation = record(row, { status: result.kind, failureStage: replayScope, failedHop: result.failure?.hop ?? null,
                   failedEdgeId: result.failure && result.failure.hop >= 0 ? rows[result.failure.hop]?.edgeId ?? null : null,
                   targetAttempted: result.kind === "success" || stage === "target" ? true : stage === "unattributed" ? null : false,
                   prefixEdges: rows.slice(0, -1).map(step => step.edgeId), targetInstanceInPrefix: overlap,

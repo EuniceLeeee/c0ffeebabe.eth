@@ -240,6 +240,8 @@ export class StrictCurrentRuntimeCoordinator
       backend?: Pick<StateBackend, "call">,
       reuse?: { readonly previous?: EffectiveMidSnapshot;
         readonly touchedStateKeys?: ReadonlySet<string>;
+        /** Available only for a complete forward range from the published effective base. */
+        readonly actualTouchedBeforeForcedRefresh?: ReadonlySet<string>;
         readonly disabledEdgeIds?: ReadonlySet<string>;
         /** Explicit quote target; snapshot remains the unmodified sizing reference. */
         readonly quoteGraph?: VerifiedGraphView },
@@ -298,6 +300,7 @@ export class StrictCurrentRuntimeCoordinator
   async restoreHistoricalBaseline(baseline: HistoricalPricingBaseline, input: {
     readonly graph: VerifiedGraphView; readonly rawGraph: VerifiedGraphView;
     readonly weth: string; readonly control: AdapterWorkControl;
+    readonly onVerifiedEffectiveRestore?:(table:EffectiveMidSnapshot,graph:VerifiedGraphView)=>void;
   }): Promise<void> {
     assert(this.publishedPricing === null && this.bootstrapRawPricing === null && baseline.version === 1,
       "historical pricing restore requires an empty coordinator");
@@ -327,8 +330,11 @@ export class StrictCurrentRuntimeCoordinator
     assert(Array.isArray(baseline.disabledInstances) && baseline.disabledInstances.every(key => validInstances.has(key)),
       "baseline run exclusions differ from Ready");
     const restoredRaw = Object.freeze({ ...raw, graph: rawGraph });
-    const built = buildEffectivePricingSnapshot(restoredRaw, graph, index, prior.effectiveMids, null, this.effectiveCoverageKeyCache);
+    // A deserialized row has no in-process lineage yet. Authenticate the
+    // complete source and every paid path before computing current coverage.
     restoreEffectiveMidReplayState(prior.effectiveMids, baseline.lineage, graph.edges, input.weth);
+    input.onVerifiedEffectiveRestore?.(prior.effectiveMids,graph);
+    const built = buildEffectivePricingSnapshot(restoredRaw, graph, index, prior.effectiveMids, null, this.effectiveCoverageKeyCache);
     this.exactQuoteCache?.resetState();
     this.resetSessions();
     for (const key of baseline.disabledInstances) this.disabledEffectiveInstances.add(key);
@@ -604,6 +610,7 @@ export class StrictCurrentRuntimeCoordinator
   ): Promise<{ session: StrictProductionRuntimeSession; built: StrictPricingBuildResult }> {
     // Raw is immutable after bootstrap, but effective/local Exact state still
     // obeys the Ready's environment-sensitive refresh policy every block.
+    const actualTouchedBeforeForcedRefresh = activity?.touchedStateKeys;
     if (activity !== undefined && previous?.perBlockRefreshStateKeys?.length) {
       activity = { ...activity, touchedStateKeys: new Set([
         ...activity.touchedStateKeys, ...previous.perBlockRefreshStateKeys,
@@ -641,13 +648,15 @@ export class StrictCurrentRuntimeCoordinator
         draft.snapshot.source.number === graph.sourceBlock &&
         draft.snapshot.source.hash.toLowerCase() === graph.sourceBlockHash.toLowerCase() &&
         draft.snapshot.source.generation <= graph.generation ? draft.snapshot : undefined;
+      const carryActivity = rawBasis !== null && activityAllowsEffectiveCarry(previous, graph, activity) ? activity : undefined;
       return quote(sizing, control, backend, {
         previous: rawBasis === null ? resume : previous?.effectiveMids,
         disabledEdgeIds: this.disabledEffectiveEdges(sizing),
         quoteGraph: rawBasis === null ? undefined : graph,
-        touchedStateKeys: resume !== undefined ? new Set<string>()
-          : rawBasis !== null && activityAllowsEffectiveCarry(previous, graph, activity)
-            ? activity.touchedStateKeys : undefined,
+        touchedStateKeys: resume !== undefined ? new Set<string>() : carryActivity?.touchedStateKeys,
+        ...(carryActivity && carryActivity.reorg === undefined && previous?.effectiveMids?.complete &&
+            graph.sourceBlock > previous.sourceBlock
+          ? { actualTouchedBeforeForcedRefresh } : {}),
       }, simulationTransport);
     })();
     // A rejection cannot leave the sibling pricing work detached from the

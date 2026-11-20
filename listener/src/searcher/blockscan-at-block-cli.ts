@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { productionPoolLogScopes } from "./venues/production-pool-log-scopes.js";
 import { cleanupHistoricalResources } from "./historical-resource-cleanup.js";
 export { cleanupHistoricalResources } from "./historical-resource-cleanup.js";
 import { blockScanRouteId, blockScanRouteLocator } from "./blockscan-route-identity.js";
@@ -580,7 +581,7 @@ export async function runAtBlock(argv: string[]): Promise<void> {
   assert.equal(instances.length + fundingInstanceCount, ready.activeInstanceKeys.length);
   for (const token of args.fundingTokens) assert(funding.some(f => f.asset.toLowerCase() === token),
     `--funding-token ${token} is absent from Ready funding; CLI does not discover or inject assets`);
-  const root = new StrictProductionRuntimeRoot({ catalog, readySource: ready.cutoff, readyGraph: graph,
+  const root = new StrictProductionRuntimeRoot({ catalog, poolLogScopes:productionPoolLogScopes(), readySource: ready.cutoff, readyGraph: graph,
     readyInstances: instances, readyFundingAssets: funding });
   const views = new StrictReadyGraphViewCoordinator({ catalog, ready, edges: graph });
   const abort = new AbortController();

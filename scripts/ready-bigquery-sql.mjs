@@ -8,7 +8,7 @@ import { decodeRow, digest, selectorCensusFingerprint, assertReadySelectorEdgeOb
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
-export function renderReadyDiscoverySql(ref, libraries, sourceQuery) {
+export function renderReadyDiscoverySql(ref, libraries, sourceQuery, { edgesOnly = false } = {}) {
   assert(/^[a-z][a-z0-9-]+$/.test(ref.projectId));
   const table = sourceQuery === undefined ? [ref.projectId, ref.datasetId, ref.tableId].join('.') : null;
   if (table !== null) assert(/^[a-z][a-z0-9-]+\.[A-Za-z_]\w*\.[A-Za-z0-9_-]+$/.test(table));
@@ -19,10 +19,19 @@ export function renderReadyDiscoverySql(ref, libraries, sourceQuery) {
   const source = sourceQuery === undefined ? '`' + table + '`' : 'source_transactions';
   const prefix = sourceQuery === undefined ? discovery : discovery.replace('WITH discovered AS (',
     'WITH source_transactions AS (\n' + sourceQuery + '\n), discovered AS (');
-  return prefix
+  const discoverySql = prefix
     .replace('__LIBRARY_URIS__', libraries.map(uri => JSON.stringify(uri)).join(', '))
-    .replace('`__SOURCE_TABLE__`', source)
-    + `, source_coverage AS (
+    .replace('`__SOURCE_TABLE__`', source);
+  const rows = edgesOnly
+    ? discoverySql.slice(0, discoverySql.indexOf(', records AS ('))
+      .replace('DiscoveryKernel.compactTransactionJson', 'DiscoveryKernel.directionEdgesJson')
+      + `, compact_witnesses AS (
+  SELECT DISTINCT edge AS body
+  FROM discovered, UNNEST(JSON_QUERY_ARRAY(discovery_result)) AS edge
+)`
+    : discoverySql;
+  if (edgesOnly) assert(rows.includes('DiscoveryKernel.directionEdgesJson') && rows.includes('SELECT DISTINCT edge AS body'));
+  return rows + `, source_coverage AS (
   SELECT CAST(COUNT(*) AS STRING) AS sourceRows,
     MIN(block_number) AS minBlock,
     ARRAY_AGG(STRUCT(block_number AS number, block_hash AS blockHash)
@@ -44,14 +53,14 @@ export async function compileReadyDiscovery(root, catalog, bucket) {
   const temporary = mkdtempSync(join(tmpdir(), 'ready-discovery-'));
   try {
     const out = join(temporary, 'kernel');
-    const expected = catalog.listAll().map(family => family.plugin.manifest.familyId).sort();
+    const expected = catalog?.listAll().map(family => family.plugin.manifest.familyId).sort();
     const report = await buildDiscoveryUdf({
       catalog: join(root, 'listener/src/searcher/generated/family-capability-shadow.generated.json'),
       sourceRoot: join(root, 'listener'),
       reader: join(root, 'scripts/bigquery-table.mjs'),
       out, familyIds: expected,
     });
-    assert.deepEqual([...report.familyIds].sort(), expected, 'Regenerate the capability catalog for this checkout before SQL discovery');
+    if (expected) assert.deepEqual([...report.familyIds].sort(), expected, 'Regenerate the capability catalog for this checkout before SQL discovery');
     return report.resources.map(resource => {
       const bytes = readFileSync(join(out, resource.file));
       assert.equal(sha256(bytes), resource.sha256, 'Discovery library changed');
@@ -63,15 +72,55 @@ export async function compileReadyDiscovery(root, catalog, bucket) {
   }
 }
 
-export function readyDiscoveryJob({ ref, pin, location, libraries, maxBytes, codeHash, sourceQuery }) {
+export function readyDiscoveryJob({ ref, pin, location, libraries, maxBytes, codeHash, sourceQuery, edgesOnly }) {
   assert(typeof location === 'string' && /^[A-Za-z0-9-]+$/.test(location), 'Missing BigQuery table location');
   assert(Number.isSafeInteger(maxBytes) && maxBytes > 0, '--sql-max-bytes must be a positive integer');
   const query = {
-    query: renderReadyDiscoverySql(ref, libraries.map(library => library.uri), sourceQuery),
+    query: renderReadyDiscoverySql(ref, libraries.map(library => library.uri), sourceQuery, { edgesOnly }),
     useLegacySql: false, useQueryCache: false, maximumBytesBilled: String(maxBytes),
   };
   const jobId = 'mev_ready_discovery_' + digest({ pin, location, query, codeHash }).slice(0, 32);
   return { jobId, location, query };
+}
+
+export async function readDirectionEdges(readPage, { window, pageSize }) {
+  const edges = new Map();
+  let pageToken, coverage, total, seen = 0;
+  do {
+    const page = await readPage(pageSize, pageToken);
+    total ??= Number(page.totalRows);
+    assert(Number.isSafeInteger(total) && total === Number(page.totalRows), 'Edge result row count changed');
+    for (const row of page.rows ?? []) {
+      const { row_kind, body } = decodeRow(page.schema.fields, row), record = JSON.parse(body);
+      if (row_kind === 'source') {
+        assert(!coverage, 'Duplicate source coverage');
+        coverage = record;
+      } else {
+        assert.equal(row_kind, 'witness');
+        assert.match(record.observationId, /^selector-edge:[0-9a-f]{64}$/);
+        assert(!edges.has(record.observationId), 'Conflicting edge identity');
+        assert.equal(record.chainId, 1);
+        for (const key of ['target', 'tokenIn', 'tokenOut']) assert.match(record[key], /^0x[0-9a-f]{40}$/);
+        assert.match(record.selector, /^0x[0-9a-f]{8}$/);
+        for (const key of ['familyId', 'programKey']) assert(typeof record[key] === 'string' && record[key]);
+        const { observationId, familyId, programKey, selector, chainId, target, tokenIn, tokenOut,
+          poolId, poolNamespace, tokenInId, tokenOutId, immutableParameters } = record;
+        edges.set(observationId, { observationId, familyId, programKey, selector, chainId, target, tokenIn, tokenOut,
+          poolId, poolNamespace, tokenInId, tokenOutId, immutableParameters });
+      }
+      seen++;
+    }
+    assert(seen <= total && (!page.pageToken || page.rows?.length), 'Invalid edge result pagination');
+    pageToken = page.pageToken;
+  } while (pageToken);
+  assert.equal(seen, total, 'Incomplete edge result');
+  assert(coverage?.sourceRows === window.transactions &&
+    coverage.minBlock >= window.fromBlock && coverage.firstHead?.number <= window.toBlock &&
+    coverage.firstHead?.number === coverage.lastHead?.number && coverage.firstHead?.blockHash === coverage.lastHead?.blockHash &&
+    (coverage.firstHead.number !== window.toBlock || coverage.firstHead.blockHash === window.headHash),
+    'Edge input does not match the pinned window');
+  return { format: 'selector-direction-edges/v1', coverage: 'observed-only', status: 'unverified', window,
+    edges: [...edges.values()] };
 }
 
 export async function openReadyDiscoveryJob(api, ref, spec, libraries, { waitForCompletion = false } = {}) {

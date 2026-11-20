@@ -1,8 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resolveBlockScanLiveStageSettings } from "../main.js";
+import { resolveBlockScanLiveStageSettings as resolveStagePolicy } from "../blockscan-live-stage-settings.js";
 import { RethTransportScheduler, type RethTransportRetryState } from "../reth-transport-scheduler.js";
 import { StateCallAbortedError } from "../../shared/state/state-backend.js";
+
+test("the production entry preserves the stage policy and independently sized lanes", () => {
+  assert.equal(resolveStagePolicy, resolveBlockScanLiveStageSettings);
+  const stage = resolveStagePolicy({ SEARCHER_RPC_TRANSPORT_MAX_CONCURRENCY:"20",
+    SEARCHER_RPC_THROTTLE_RETRIES_AT_ONE:"20", SEARCHER_RPC_THROTTLE_MAX_DELAY_MS:"8000" });
+  assert.deepEqual(stage.transport,{ capacity:20, producerReserved:4, maxRetriesAtOne:20, maxRetryDelayMs:8000 });
+  assert.deepEqual([stage.exactRpcBatchSize,stage.exactRpcBatchConcurrency,stage.stateRpcBatchConcurrency],[64,16,4]);
+});
 
 test("explicit shared cap preserves all search and local batching settings", () => {
   const base = resolveBlockScanLiveStageSettings({});

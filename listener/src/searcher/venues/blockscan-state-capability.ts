@@ -233,6 +233,9 @@ export interface CreateVerifiedGraphViewInput {
   readonly edges: readonly TokenEdge[];
   /** Production supplies the unique registry owner; fixtures may use adapterId. */
   readonly familyIdForEdge?: (edge: TokenEdge) => string;
+  /** A verified topology publisher can own the stable edge identity independently
+   * of its private execution encodings. Never derive it from a quote result. */
+  readonly publishedIdForEdge?: (edge: TokenEdge) => CanonicalEdgeId;
 }
 
 export type CanonicalEdgeId = string & {
@@ -1053,7 +1056,7 @@ export function createVerifiedGraphView(
   const sourceBlockHash = normalizeBlockHash(input.sourceBlockHash);
   const edges = Object.freeze(input.edges.map((edge) => freezeEdge({
     ...edge,
-    canonicalEdgeId: canonicalEdgeId(
+    canonicalEdgeId: input.publishedIdForEdge?.(edge) ?? canonicalEdgeId(
       input.familyIdForEdge?.(edge) ?? edge.adapterId,
       edge,
     ),

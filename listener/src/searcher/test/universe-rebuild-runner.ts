@@ -95,7 +95,7 @@ async function startupReadyFromMain(
   flags: { readonly blind: boolean; readonly useReadyGeneration: boolean },
   refresh: typeof refreshReadyInstances = refreshReadyInstances,
 ): Promise<{ readyUniverse: ReadyUniverseGeneration; rebuildEnvelope: StartupCheckpointEnvelope }> {
-  const source = await readFile(new URL("../main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("./legacy-ready-producer.fixture.ts", import.meta.url), "utf8");
   const start = source.indexOf("  let readyUniverse;", source.indexOf("  let rebuildEnvelope = await rebuildStore.load();"));
   const end = source.indexOf("  const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);", start);
   assert(start >= 0 && end > start, "main Ready selection/root-check boundary must exist");

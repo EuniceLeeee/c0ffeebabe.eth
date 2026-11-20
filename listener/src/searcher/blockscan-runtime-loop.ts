@@ -48,6 +48,8 @@ import { effectiveEthPricing } from "./blockscan-eth-view.js";
 import { assertHistoricalEffectivePricing, type HistoricalEffectivePricing } from "./blockscan-at-block-history.js";
 import { scanBlockStateFromResolvedMids } from "./detector/blockscan-scanner-core.js";
 import type { EffectivePricingInput } from "./blockscan-effective-mid.js";
+import {matchesHistoricalAmountTrial} from "./simulator/blockscan-sim-amount-selector.js";
+import {blockScanEdgeKey} from "./venues/blockscan-state-capability.js";
 import { edgeInstanceKey } from "./venues/route-instance-identity.js";
 import { emitEvent, makeBlockScanOpportunityId } from "./events.js";
 import type { CandidatePlan, TemplatePlanner } from "./planner/planner.js";
@@ -718,6 +720,7 @@ export interface BlockScanRuntimeLoopDependencies {
    * The runtime supplies a source-bound trial capability, never S5 worker slots. */
   readonly amountSelectorFactory?: (context: {
     readonly source: CanonicalSource;
+    readonly effectiveMids?: import("./blockscan-effective-mid.js").EffectiveMidSnapshot;
     readonly workerIndex: number;
     readonly simulate: (plan: ResolvedPlan, control: TrialControl) => Promise<SimulationResult>;
   }) => Solver;
@@ -883,6 +886,8 @@ export interface BlockScanRuntimeLoopDependencies {
     readonly signal?: AbortSignal;
     readonly deadlineAtMs?: number;
   }): Promise<ReadonlySet<string>>;
+  /** Diagnostic callback only. Never affects the selected set or price publication. */
+  reportPhysicalTouches?(at:{base:{number:number;hash:string},target:{number:number;hash:string},mode:"range"|"block"|"reorg"|"initial",rawKeys:number}):void;
   formatRouteKey(opportunity: Pick<BlockScanOpportunity, "seedEdges">): string;
   formatRing(
     opportunity: Pick<BlockScanOpportunity, "seedEdges" | "affectedTokens">,
@@ -1038,6 +1043,11 @@ export class BlockScanRuntimeLoop {
     return this.deps.frozenTopology.observeHeader(blockNumber);
   }
 
+  private readonly hotPreparationDeadlines = new WeakSet<Error>();
+  private lateHotHead: { anchor: BlockScanStateSnapshot; height: number } | null = null;
+  private ordinaryPriceRecovery = false;
+  private recoveryWithoutFormalSuccess = false;
+
   private async runScheduledHead(number: number, observation: LatestHeadObservation): Promise<void> {
     if (this.reorgCatchupPending) {
       this.dropReorgExecutionRefreshes();
@@ -1073,7 +1083,7 @@ export class BlockScanRuntimeLoop {
         if (prior.sourceBlock < head) {
           const target = this.priceCatchupInitialComplete
             ? Math.min(head, prior.sourceBlock + MAX_ACTIVITY_TRANSITIONS) : head;
-          await this.runHead(target, { ...observation,
+          await this.runHead(target, { ...(this.ordinaryPriceRecovery ? {} : observation),
             sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
           const next = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
           if (!next?.effectiveMids?.complete || next.sourceBlock <= prior.sourceBlock) {
@@ -1081,7 +1091,8 @@ export class BlockScanRuntimeLoop {
           }
           this.priceCatchupInitialComplete = true;
           console.log(`[searcher/live-continuation] ${JSON.stringify({
-            phase: "catching-up-prices", from: prior.sourceBlock, to: next.sourceBlock, head,
+            phase: this.ordinaryPriceRecovery ? "hot-prices-advanced" : "catching-up-prices",
+            from: prior.sourceBlock, to: next.sourceBlock, head,
             startupSimulation: false, trading: false,
           })}`);
           continue;
@@ -1101,9 +1112,11 @@ export class BlockScanRuntimeLoop {
         this.priceCatchupCompletedThrough = prior.sourceBlock;
         this.deps.rethTransportScheduler?.completeStartup?.();
         console.log(`[searcher/live-continuation] ${JSON.stringify({
-          phase: "caught-up", sourceBlock: prior.sourceBlock, head,
+          phase: this.ordinaryPriceRecovery ? "hot-prices-ready" : "caught-up",
+          sourceBlock: prior.sourceBlock, head,
           nextHead: "full-production-pipeline",
         })}`);
+        this.ordinaryPriceRecovery = false;
         return;
       }
       return;
@@ -1142,7 +1155,37 @@ export class BlockScanRuntimeLoop {
         status: "source_reorged", sourceBlock: cached.number, observedHead: number,
       })}`);
     }
-    await this.runHead(number, observation, this.deps.diagnosticForHead?.(number));
+    const diagnostic = this.deps.diagnosticForHead?.(number);
+    const anchor = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
+    try {
+      await this.runHead(number, observation, diagnostic);
+      this.lateHotHead = null;
+    } catch (error) {
+      // runHead has already retired/drained the old source and emitted its
+      // failed FORMAL timing. Do not retry the expired trading window.
+      if (!warming && !diagnostic && !this.recoveryWithoutFormalSuccess && !this.reorgCatchupPending &&
+          !this.deps.blind.enabled && !this.deps.historicalReadOnly && !this.deps.nMinusOneFallbackEnabled &&
+          !this.deps.runtimeAbort.signal.aborted && !this.deps.isShuttingDown() &&
+          error instanceof Error && this.hotPreparationDeadlines.has(error) && anchor?.effectiveMids?.complete &&
+          anchor === this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot() && number > anchor.sourceBlock) {
+        if (this.lateHotHead?.anchor === anchor && number > this.lateHotHead.height) {
+          console.log(`[searcher/live-continuation] ${JSON.stringify({
+            phase: "hot-prices-required", from: anchor.sourceBlock, failed: [this.lateHotHead.height, number],
+            fromHash: anchor.sourceBlockHash, trading: false,
+          })}`);
+          this.lateHotHead = null;
+          this.recoveryWithoutFormalSuccess = this.ordinaryPriceRecovery = true;
+          this.dropReorgExecutionRefreshes("pending_evidence_hot_price_recovery");
+          this.beginPriceCatchup(true);
+          // Do not restart the first-restore/discovery window: the trusted
+          // published table can advance in MAX_ACTIVITY_TRANSITIONS segments.
+          this.priceCatchupInitialComplete = true;
+        } else if (!this.lateHotHead || number > this.lateHotHead.height || this.lateHotHead.anchor !== anchor) {
+          this.lateHotHead = { anchor, height: number };
+        }
+      } else this.lateHotHead = null;
+      throw error;
+    }
     if (warming) this.beginFreshPriceCatchup();
     if (this.priceCatchupPending) await this.runScheduledHead(number, observation);
   }
@@ -1293,8 +1336,9 @@ export class BlockScanRuntimeLoop {
   ): boolean {
     if (this.deps.runtimeAbort.signal.aborted || this.deps.isShuttingDown()) return false;
     validateBlockScanPendingEvidenceTrigger(trigger);
-    if (this.reorgCatchupPending) {
-      this.recordPendingEvidenceNotStarted(trigger, "pending_evidence_reorg_recovery");
+    if (this.reorgCatchupPending || this.ordinaryPriceRecovery) {
+      this.recordPendingEvidenceNotStarted(trigger, this.reorgCatchupPending ?
+        "pending_evidence_reorg_recovery" : "pending_evidence_hot_price_recovery");
       return false;
     }
     const evidence = Object.freeze(trigger.evidence.filter((item) =>
@@ -2824,6 +2868,10 @@ export class BlockScanRuntimeLoop {
         },
         (reason): PromiseSettledResult<ReadonlySet<string>> => {
           activityFinishedAtMs = Date.now();
+          if(this.deps.reportPhysicalTouches)try{
+            console.log(`[searcher/sql-pool-touch-counts] ${JSON.stringify({sourceBlock:blockNumber,sourceBlockHash:observedSourceBlockHash,
+              previousSource:activityPreviousSource??null,coverage:"unavailable",reason:"activity_read_not_completed"})}`);
+          }catch{/* No partial counts on failed or cancelled reads. */}
           return { status: "rejected", reason };
         },
       );
@@ -3059,6 +3107,12 @@ export class BlockScanRuntimeLoop {
         }
       }
       const passTouchedPools = await awaitActivity();
+      if(this.deps.reportPhysicalTouches&&!passSignal.aborted){
+        try{this.deps.reportPhysicalTouches({base:activityPreviousSource??{number:blockNumber-1,hash:sourceHeader.parentHash},
+          target:{number:blockNumber,hash:sourceHeader.hash},mode:reorgRecoveryAttempt?"reorg":
+          initialPriceCatchup&&this.deps.liveContinuation?.readInitialTouched?"initial":activityPreviousSource?"range":"block",
+          rawKeys:passTouchedPools.size});}catch{/* Evidence cannot influence preparation. */}
+      }
       const pricingFamilySettleDeadlineAtMs = startupWarmAttempt || this.priceCatchupPending
         ? preparationSettleDeadlineAtMs
         : Math.min(
@@ -3102,6 +3156,8 @@ export class BlockScanRuntimeLoop {
         }
       };
       let coarse: BlockScanOutcome;
+      let historicalRankingEdgeIds:ReadonlySet<string>|undefined;
+      let historicalStartTrialAmounts:ReadonlyMap<string,bigint>|undefined;
       let amountPricingSnapshot: (EffectivePricingInput & Pick<BlockScanStateSnapshot, "effectiveMids">) | null = null;
       let fallbackEnvelopes: readonly NMinusOneCoarseCandidate[] | null = null;
       let exactRefineStarted = false;
@@ -3258,7 +3314,14 @@ export class BlockScanRuntimeLoop {
               number: graphView.sourceBlock, hash: graphView.sourceBlockHash, generation,
             }) };
           } else {
-            runtime = await currentRuntimeCoordinator.prepare(request);
+            try { runtime = await currentRuntimeCoordinator.prepare(request); }
+            catch (error) {
+              if (passMode === "periodic" && !startupWarmAttempt && !passSignal.aborted &&
+                  error instanceof Error && error.message === "strict current runtime deadline expired") {
+                this.hotPreparationDeadlines.add(error);
+              }
+              throw error;
+            }
           }
         } catch (error) {
           sourcePricingBackend.abort(error);
@@ -3450,6 +3513,7 @@ export class BlockScanRuntimeLoop {
         beginStage("enumeration");
         const productionCoarse = detectProductionBlockScanOpportunities({
           runtime: snapshot,
+          allowHistoricalRankingHints:this.deps.amountSelectorFactory!==undefined && !this.deps.blind.enabled,
           // Touched state controls refresh work only; the dense snapshot is
           // the complete candidate input after safe carry-forward.
           swapTouched: null,
@@ -3464,6 +3528,8 @@ export class BlockScanRuntimeLoop {
           captureCoarseEnumeration: routeTelemetryPass !== null,
         });
         coarse = productionCoarse;
+        historicalRankingEdgeIds=productionCoarse.historicalRankingEdgeIds;
+        historicalStartTrialAmounts=productionCoarse.historicalStartTrialAmounts;
         recordEnumeration(
           coarse.opportunities, coarse.coarseEnumeration, coarse.selection.selectedCount,
         );
@@ -3847,10 +3913,21 @@ export class BlockScanRuntimeLoop {
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
       const exactQuoteStateRef: StateBackend = exactQuoteState;
-      const probeAmountsByOpportunity = this.deps.amountReference?.prepare({
+      let probeAmountsByOpportunity = this.deps.amountReference?.prepare({
         pricing: amountPricingSnapshot,
         opportunities: coarse.opportunities,
       });
+      if(probeAmountsByOpportunity && historicalStartTrialAmounts?.size &&
+          amountPricingSnapshot?.sourceBlock===exactSource.number && amountPricingSnapshot.generation===exactSource.generation &&
+          amountPricingSnapshot.sourceBlockHash.toLowerCase()===exactSource.hash.toLowerCase()){
+        const amounts=new Map(probeAmountsByOpportunity);
+        for(const o of coarse.opportunities){
+          const edge=o.seedEdges[0];if(!edge||edge.tokenIn.toLowerCase()!==o.flashToken.toLowerCase())continue;
+          const input=historicalStartTrialAmounts.get(blockScanEdgeKey(edge));
+          if(input && input===o.searchSeed.searchCenter && input<=o.searchSeed.maxInput)amounts.set(o,input);
+        }
+        probeAmountsByOpportunity=amounts;
+      }
       console.log(`[searcher/blockscan-amount-reference] ${JSON.stringify({
         block: blockNumber, sourceBlock: exactSource.number,
         enumerationSpreadBps: blockScanCfg.minSpreadBps,
@@ -4216,7 +4293,7 @@ export class BlockScanRuntimeLoop {
       const quoteSolvers = Array.from(
         { length: solverQuoteWorkers },
         (_, workerIndex) => this.deps.amountSelectorFactory
-          ? this.deps.amountSelectorFactory({ source: exactSource, workerIndex,
+          ? this.deps.amountSelectorFactory({ source: exactSource, workerIndex, effectiveMids: amountPricingSnapshot?.effectiveMids,
               simulate: (plan, control) => simulateAmount(plan, control) })
           : new AnvilSolver(),
       );
@@ -4403,9 +4480,13 @@ export class BlockScanRuntimeLoop {
               bestNet = candidate.netProfit;
             }
             if (candidate.netProfit <= 0n) continue;
+            const planBytes = finalSimulationPlanIdentity.bytesHex(candidate);
+            if(historicalRankingEdgeIds?.size && [...item.plan.tokenPath.edges,...item.opp.seedEdges].some(e=>historicalRankingEdgeIds!.has(blockScanEdgeKey(e))) &&
+               !matchesHistoricalAmountTrial(candidate,exactSource,planBytes)){
+              throw Error("historical screen did not yield a matching positive current-source amount trial");
+            }
             positiveCandidate = true;
             quotePositive++;
-            const planBytes = finalSimulationPlanIdentity.bytesHex(candidate);
             finalSimulationPlanCommitments.set(
               candidate,
               blindProductionCalldataSha256(planBytes),
@@ -4831,6 +4912,9 @@ export class BlockScanRuntimeLoop {
                   // for a two-branch invalidation proof, never silently warm all.
                   this.reorgRecoveryPending = true;
                   this.reorgCatchupPending = true;
+                  if (this.ordinaryPriceRecovery) {
+                    this.ordinaryPriceRecovery = this.priceCatchupPending = false;
+                  }
                   this.dropReorgExecutionRefreshes();
                   if (!currentRuntimeCoordinator.retirePricingForReorg) throw new Error("coordinator lacks guarded reorg recovery");
                   await currentRuntimeCoordinator.retirePricingForReorg(activityPreviousSource!);
@@ -4880,6 +4964,9 @@ export class BlockScanRuntimeLoop {
         }
         this.deps.onPassSettled?.();
         recordPass();
+        if (passMode === "periodic" && !startupWarmAttempt && !this.priceCatchupPending && !reorgCatchupAttempt &&
+            !diagnostic && !passSignal.aborted && stageBoundaries.state.status === "ran" &&
+            (outcome === "ran" || outcome === "degraded")) this.recoveryWithoutFormalSuccess = false;
       } finally {
         stateLatencySample?.finish("failed", observedSourceBlockHash);
         if (
@@ -4940,8 +5027,8 @@ export class BlockScanRuntimeLoop {
     }
   };
 
-  private dropReorgExecutionRefreshes(): void {
-    this.pruneEvidenceContexts(Infinity, "pending_evidence_reorg_recovery");
+  private dropReorgExecutionRefreshes(reason = "pending_evidence_reorg_recovery"): void {
+    this.pruneEvidenceContexts(Infinity, reason);
     // Ordinary retry revisions also refer to the retired execution authority.
     // A queued scheduler notification may still wake recovery, without revision.
     this.scheduledExecutionRefreshes.clear();

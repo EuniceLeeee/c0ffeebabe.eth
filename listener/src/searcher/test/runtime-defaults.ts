@@ -3,7 +3,7 @@ import { evaluateEv } from "../ev-evaluator.js";
 import { DEFAULT_BRIBE_BPS } from "../live-envelope.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "../blockscan-enumeration-config.js";
 import { resolveLiveBackrunSettings } from "../backrun-live-policy.js";
-import { resolveBlockScanAtomicPolicy, resolveReadyGenerationReuse } from "../main.js";
+import { resolveBlockScanAtomicPolicy } from "../main.js";
 
 const WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
 
@@ -141,50 +141,10 @@ for (const value of ["", "true", "false", "2", "yes"]) {
   catch (error) { rejected = error instanceof Error && error.message.endsWith("must be 0 or 1"); }
   assert(rejected, `invalid Exact toggle must fail closed: ${value}`);
 }
-assert(
-  /SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS === undefined\s*\?\s*\{\}/.test(searcherMain),
-  "live startup universe rebuild leaves observationWindowBlocks absent unless configured",
-);
-for (const dryRun of [false, true]) {
-  assert(!resolveReadyGenerationReuse({}, dryRun), "Ready reuse defaults off in either posture");
-  assert(!resolveReadyGenerationReuse({ SEARCHER_USE_READY_GENERATION: "0" }, dryRun),
-    "Ready reuse explicit off");
-  assert(resolveReadyGenerationReuse({ SEARCHER_USE_READY_GENERATION: "1" }, dryRun),
-    "explicit Ready reuse supports production and dry-run");
-  assert(!resolveReadyGenerationReuse({ SEARCHER_DRY_RUN_USE_READY_GENERATION: "0" }, dryRun),
-    "legacy Ready reuse explicit off");
-  for (const key of ["SEARCHER_USE_READY_GENERATION", "SEARCHER_DRY_RUN_USE_READY_GENERATION"]) {
-    for (const value of ["", "true", "false", "2", "yes"]) {
-      let rejected = false;
-      try { resolveReadyGenerationReuse({ [key]: value }, dryRun); }
-      catch (error) { rejected = error instanceof Error && error.message === `${key} must be 0 or 1`; }
-      assert(rejected, `invalid Ready reuse flag must fail closed: ${key}=${value}`);
-    }
-  }
-}
-for (const generalFlag of [undefined, "0", "1"]) {
-  const env = {
-    SEARCHER_USE_READY_GENERATION: generalFlag,
-    SEARCHER_DRY_RUN_USE_READY_GENERATION: "1",
-  };
-  assert(resolveReadyGenerationReuse(env, true), "legacy dry-run Ready reuse remains compatible");
-  let rejected = false;
-  try { resolveReadyGenerationReuse(env, false); }
-  catch (error) {
-    rejected = error instanceof Error && error.message ===
-      "SEARCHER_DRY_RUN_USE_READY_GENERATION=1 requires SEARCHER_DRY_RUN=1";
-  }
-  assert(rejected, "general Ready reuse must not bypass the legacy dry-run-only guard");
-}
-assert(
-  searcherMain.includes("resolveReadyGenerationReuse(process.env, config.dryRun)") &&
-    searcherMain.includes("blindUseIncumbentReady || useReadyGeneration") &&
-    searcherMain.includes("if (useReadyGeneration && !blindUseIncumbentReady)") &&
-    searcherMain.includes("readyUniverse = await refreshReadyInstances({") &&
-    searcherMain.includes("requires one complete Ready checkpoint"),
-  "explicit Ready reuse must retain complete-checkpoint and refresh validation",
-);
-console.log("[runtime-defaults] explicit Ready reuse and legacy dry-run-only guard: PASS");
+assert(searcherMain.includes("await initializeSqlLiveProducer(") &&
+  !/initializeReadyProducer|--verify-subset-parent|SEARCHER_USE_READY_GENERATION|SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH/.test(searcherMain),
+  "live and dry-run share one SQL-only input with no Ready/parent fallback");
+console.log("[runtime-defaults] production SQL input is mandatory: PASS");
 assert(
   searcherMain.includes("SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_SIZE") &&
     searcherMain.includes("SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY") &&
@@ -404,28 +364,29 @@ const atomicStart = mainSource.indexOf(
 );
 const atomicSource = mainSource.slice(atomicStart);
 const simulationAt = atomicSource.indexOf(
-  "const sim = await executeFinalSimulationWork({",
+  "return await executeFinalSimulationWork({",
 );
 const postSimulationFenceAt = atomicSource.indexOf(
-  '"post-simulation source-head verification"',
+  '"post-simulation and EV source-head verification"',
 );
 // Historical source-block diagnostics also record executed success; the live
-// positive-profit branch must still fence its source before success and EV.
+// positive-profit branch must still fence its source before success and the
+// final EV decision; speculative EV preparation runs concurrently with sim.
 const liveSuccessfulSimBranchAt = atomicSource.indexOf("if (sim.success && sim.netProfit > 0n)");
 const finalSimSucceededAt = atomicSource.indexOf(
   'finalSimStatus = "succeeded"',
   liveSuccessfulSimBranchAt,
 );
-const evEvaluationAt = atomicSource.indexOf("evaluateEv(");
+const evDecisionAt = atomicSource.indexOf("const selected = selectBlockScanProfitEvaluation(evaluatedEv,");
 assert(
   atomicStart >= 0 &&
     simulationAt >= 0 &&
     simulationAt < liveSuccessfulSimBranchAt &&
     liveSuccessfulSimBranchAt < postSimulationFenceAt &&
     postSimulationFenceAt < finalSimSucceededAt &&
-    finalSimSucceededAt < evEvaluationAt &&
-    atomicSource.includes('"blockscan_stale_after_sim"'),
-  "post-simulation block/hash fence must precede success and EV evaluation",
+    finalSimSucceededAt < evDecisionAt &&
+    atomicSource.slice(postSimulationFenceAt, finalSimSucceededAt).includes('return finish("blockscan_stale_after_sim")'),
+  "post-simulation block/hash fence must reject a stale source before success and EV selection",
 );
 console.log("[runtime-defaults] final-sim head/hash fence ordering: PASS");
 

@@ -1,19 +1,95 @@
 import { isRpcThrottleError } from "./rpc-throttle-guard.js";
+import type { PhysicalHit, PoolTouchCounts } from "./sql-pool-touch-counts.js";
 import type { UnifiedObservation } from "./venues/adapter-family-plugin.js";
 
 export type BlockTouchedObservation =
   | Omit<Extract<UnifiedObservation, { kind: "log" }>, "source">
   | Omit<Extract<UnifiedObservation, { kind: "call" }>, "source">;
 
+/** A pool's balance can change without an event emitted by the pool. Reuse
+ * exactly the activity reader's fungible transfer shape, not the token emitter. */
+export function blockTransferEndpoints(topics: readonly string[]): string[] {
+  if (topics.length !== 3 || topics[0]?.toLowerCase() !== ERC20_TRANSFER_TOPIC) return [];
+  return topics.slice(1).filter(topic => ADDRESS_TOPIC_RE.test(topic))
+    .map(topic => `0x${topic.slice(-40).toLowerCase()}`);
+}
+
 /** A stable, root/generation-bound interpreter; replace it when its bindings change. */
 export type BlockTouchedStateKeyResolver = ((
   observation: BlockTouchedObservation,
   block: { readonly number: number; readonly hash: string },
+  countHit?:(hit:PhysicalHit)=>void,
+  physicalHit?: (ids:readonly string[],poolKeys?:readonly string[])=>void,
 ) => readonly string[]) & {
+  readonly poolTouchCounts?:()=>PoolTouchCounts|undefined;
   /** Non-call state writes have no log/calldata to interpret. Conservatively
    * refresh declared dependency owners; never fabricate a Family observation. */
-  readonly passiveStateKeys?: (addresses: readonly string[], block: { readonly number: number; readonly hash: string }) => readonly string[];
+  readonly passiveStateKeys?: (addresses: readonly string[], block: { readonly number: number; readonly hash: string },countHit?:(hit:PhysicalHit)=>void,physicalHit?:(ids:readonly string[],poolKeys?:readonly string[])=>void) => readonly string[];
+  readonly supportsPhysicalRankingScope?:()=>boolean;
+  readonly supportsSqlPoolPriceScope?:()=>boolean;
+  readonly rankAssetActors?:(log:Extract<BlockTouchedObservation,{kind:"log"}>)=>readonly string[]|{readonly possibleSupplyHolder:string}|null|undefined;
 };
+
+type Height={readonly number:number;readonly hash:string};
+type RankBlock={readonly blocked:ReadonlySet<string>;readonly poolKeys:ReadonlySet<string>;readonly changed:ReadonlySet<string>;readonly ownerPairs:ReadonlySet<string>;readonly uncertainAssets:ReadonlySet<string>;readonly possibleSupply:ReadonlySet<string>};
+// Input authority belongs to the same validated result as the existing activity reader.
+// A copied/restored/indexed/partial set cannot obtain a packet by supplying a hash.
+const rankedInputs=new WeakMap<ReadonlySet<string>,{resolver:BlockTouchedStateKeyResolver;base:Height;target:Height;data:RankBlock}>();
+type PoolFacts=Pick<RankBlock,"poolKeys"|"blocked">;
+type PoolSpan={readonly resolver:BlockTouchedStateKeyResolver;readonly base:Height;readonly target:Height;readonly facts:PoolFacts;
+  readonly interpretation:object;readonly current:()=>boolean};
+// A plain set, replayed key, receipt or caller-created poolId cannot attest a span.
+// Only the original, fully covered RPC range below can issue an atomic fragment.
+const atomicPoolSpans=new WeakMap<ReadonlySet<string>,PoolSpan&{readonly observed:readonly string[]}>();
+const stitchedPoolSpans=new WeakMap<ReadonlySet<string>,PoolSpan>();
+const sameHeight=(a:Height,b:Height)=>a.number===b.number&&a.hash===b.hash;
+/** SQL enumeration-price scheduling only: never extend the general historical-ranking
+ * or execution authority to a stitched, recovered, or indexed key set. */
+export function sqlPoolPriceActivityScope(keys:ReadonlySet<string>,resolver:BlockTouchedStateKeyResolver,base:Height,target:Height){
+  const p=stitchedPoolSpans.get(keys);
+  if(!p)return physicalRankingScope(keys,resolver,base,target);
+  if(!p.current()||p.resolver!==resolver||!sameHeight(p.base,base)||!sameHeight(p.target,target))return;
+  return {poolDirty:(id:string)=>p.facts.blocked.has(id),touchedPoolKey:(k:string)=>p.facts.poolKeys.has(k)};
+}
+export function sqlPoolPriceSpanUnion(start:Height){
+  const base={...start},observed=new Set<string>(),poolKeys=new Set<string>(),blocked=new Set<string>();
+  let cursor=base,owner:PoolSpan|undefined,complete=true;
+  return {append(keys:ReadonlySet<string>,from:Height,to:Height){
+    if(!complete)return;
+    const p=atomicPoolSpans.get(keys);
+    if(!p||!p.current()||!sameHeight(cursor,from)||!sameHeight(p.base,from)||!sameHeight(p.target,to)||
+       to.number<=from.number||to.number-from.number>MAX_ACTIVITY_TRANSITIONS||
+       (owner&&owner.interpretation!==p.interpretation)||keys.size!==p.observed.length||p.observed.some(k=>!keys.has(k))){
+      complete=false;observed.clear();poolKeys.clear();blocked.clear();owner=undefined;return;
+    }
+    owner=p;cursor={...p.target};
+    for(const k of p.observed)observed.add(k);
+    for(const k of p.facts.poolKeys)poolKeys.add(k);
+    for(const k of p.facts.blocked)blocked.add(k);
+  },finish(target:Height){
+    if(!complete||!owner||!owner.current()||!sameHeight(cursor,target))return;
+    // New publication never mutates an older one if a later call extends this checkpoint.
+    const out=new Set(observed);
+    stitchedPoolSpans.set(out,{base,target:{...cursor},resolver:owner.resolver,interpretation:owner.interpretation,current:owner.current,
+      facts:{poolKeys:new Set(poolKeys),blocked:new Set(blocked)}});
+    return out;
+  }};
+}
+/** Non-authorizing identity test for returning a *single* unmodified
+ * already-verified RPC set from the startup collector. There is no setter.
+ * Pricing independently checks the exact producer/root. */
+export function hasCanonicalPhysicalRankingInput(keys:ReadonlySet<string>,base:Height,target:Height):boolean{
+  const p=rankedInputs.get(keys);
+  return !!p&&target.number>base.number&&p.base.number===base.number&&p.base.hash===base.hash&&
+    p.target.number===target.number&&p.target.hash===target.hash;
+}
+export function physicalRankingScope(keys:ReadonlySet<string>,resolver:BlockTouchedStateKeyResolver,base:Height,target:Height){
+  const p=rankedInputs.get(keys);if(!p||p.resolver!==resolver||p.base.number!==base.number||p.base.hash!==base.hash||
+    p.target.number!==target.number||p.target.hash!==target.hash||target.number<=base.number)return;
+  return {poolDirty:(id:string)=>p.data.blocked.has(id),touchedPoolKey:(key:string)=>p.data.poolKeys.has(key),addressDirty:(a:string)=>p.data.changed.has(a),
+    assetHolder:(a:string,o:string)=>p.data.ownerPairs.has(a+"/"+o),
+    uncertainAsset:(a:string,thirdPartySupplyIndependent=false)=>p.data.uncertainAssets.has(a)||(!thirdPartySupplyIndependent&&p.data.possibleSupply.has(a))};
+}
 
 interface BlockTouchedLog {
   readonly address: string;
@@ -62,6 +138,7 @@ export class BlockActivityRangeInvalidatedError extends Error {}
 interface CompletedBlockActivity {
   readonly anchor: BlockTouchedCanonicalAnchor;
   readonly touchedKeys: readonly string[];
+  readonly rank?:RankBlock;
 }
 // Completed data only, scoped to the existing reader's provider. A cancelled
 // range keeps its settled blocks, never promises, failed children or quote authority.
@@ -131,6 +208,7 @@ export async function readBlockTouchedStateKeys(
   anchor?: BlockTouchedCanonicalAnchor,
   range?: {
     readonly previousSource: { readonly number: number; readonly hash: string };
+    readonly captureSqlPoolSpan?:true;
     readonly readHeader: (number: number) => Promise<BlockTouchedCanonicalAnchor>;
     readonly signal?: AbortSignal;
     readonly deadlineAtMs?: number;
@@ -193,6 +271,8 @@ export async function readBlockTouchedStateKeys(
     rejectChain("cached activity target anchor mismatch");
   }
   const seenHashes = new Set([previousHash]);
+  let rankCovered=resolver?.supportsPhysicalRankingScope?.()===true||resolver?.supportsSqlPoolPriceScope?.()===true;
+  const poolKeys=new Set<string>(),blocked=new Set<string>(),changed=new Set<string>(),ownerPairs=new Set<string>(),uncertainAssets=new Set<string>(),possibleSupply=new Set<string>();
   let lastHash = previousHash;
   for (let number = previousNumber + 1; number <= blockNumber; number++) {
     assertOpen();
@@ -211,7 +291,7 @@ export async function readBlockTouchedStateKeys(
     if (observation === undefined) {
       const blockTouched = await readTouchedBlock(provider, number, uniswapV4PoolManager, header, assertOpen, resolver, options);
       assertOpen();
-      observation = Object.freeze({ anchor: header, touchedKeys: Object.freeze([...blockTouched]) });
+      observation = Object.freeze({ anchor: header, touchedKeys: Object.freeze([...blockTouched]),rank:rankedInputs.get(blockTouched)?.data });
       const concurrent = completed.get(number);
       if (concurrent !== undefined && !sameAnchor(concurrent.anchor, header)) {
         rejectChain("cached activity concurrent block anchor mismatch");
@@ -220,12 +300,28 @@ export async function readBlockTouchedStateKeys(
       while (completed.size > MAX_ACTIVITY_TRANSITIONS) completed.delete(completed.keys().next().value!);
     }
     for (const key of observation.touchedKeys) touched.add(key);
+    if(rankCovered){if(!observation.rank)rankCovered=false;else {
+      for(const key of observation.rank.poolKeys)poolKeys.add(key);
+      for(const id of observation.rank.blocked)blocked.add(id);
+      for(const a of observation.rank.changed)changed.add(a);
+      for(const pair of observation.rank.ownerPairs)ownerPairs.add(pair);
+      for(const a of observation.rank.uncertainAssets)uncertainAssets.add(a);
+      for(const a of observation.rank.possibleSupply)possibleSupply.add(a);
+    }}
     seenHashes.add(header.hash);
     lastHash = header.hash;
   }
   assertOpen();
   // Only a whole chain reaching the supplied target returns the shared union.
   // Cached blocks cannot silently relabel a fork. Each caller gets a fresh Set.
+  if(rankCovered&&resolver){
+    const base={number:previousNumber,hash:previousHash},target={number:blockNumber,hash:pinned.hash};
+    rankedInputs.set(touched,{resolver,base,target,data:{blocked,poolKeys,changed,ownerPairs,uncertainAssets,possibleSupply}});
+    if(range.captureSqlPoolSpan===true&&resolver.supportsSqlPoolPriceScope?.()===true){
+      atomicPoolSpans.set(touched,{resolver,base,target,interpretation:memo,current:()=>completedByProvider.get(provider)===memo,
+        facts:{poolKeys,blocked},observed:[...touched]});
+    }
+  }
   return touched;
 }
 
@@ -302,11 +398,29 @@ async function readTouchedBlockActivity(
   if (tracesResult.status === "rejected") throw tracesResult.reason;
   const logs = logsResult.value;
   const traces = tracesResult.value;
+  const measured=pinned&&beginOptionalPoolCounts(resolver,blockNumber,pinned,mode);
   const touched = new Set<string>();
+  const rank=pinned?.passiveTouchedAddresses!==undefined&&(resolver?.supportsPhysicalRankingScope?.()===true||resolver?.supportsSqlPoolPriceScope?.()===true)
+    ?{blocked:new Set<string>(),poolKeys:new Set<string>(),changed:new Set<string>(),ownerPairs:new Set<string>(),uncertainAssets:new Set(pinned.passiveTouchedAddresses),possibleSupply:new Set<string>()}:undefined;
+  const observed=rank?(ids:readonly string[],poolKeys?:readonly string[])=>{
+    for(const id of ids)rank.blocked.add(id);for(const key of poolKeys??[])rank.poolKeys.add(key);
+  }:undefined;
   const manager = uniswapV4PoolManager.toLowerCase();
   const resolve = resolver === undefined ? undefined : (observation: BlockTouchedObservation): void => {
     assertOpen();
-    const keys = resolver(observation, { number: blockNumber, hash: pinned!.hash });
+    if(rank&&observation.kind==="log"){
+      try{
+        const a=observation.address,owners=resolver.rankAssetActors?resolver.rankAssetActors(observation):null;
+        if(owners===null)rank.uncertainAssets.add(a);
+        else if(owners&&"possibleSupplyHolder" in owners){
+          const holder=owners.possibleSupplyHolder;
+          if(!/^0x[0-9a-f]{40}$/.test(holder)||/^0x0{40}$/.test(holder))rank.uncertainAssets.add(a);
+          else {rank.possibleSupply.add(a);rank.ownerPairs.add(a+"/"+holder);}
+        }
+        else if(owners)for(const owner of owners)rank.ownerPairs.add(a+"/"+owner);
+      }catch{rank.uncertainAssets.add(observation.address);}
+    }
+    const keys = resolver(observation, { number: blockNumber, hash: pinned!.hash },measured?.hit,observed);
     if (!Array.isArray(keys) || keys.some(key => typeof key !== "string" || key.length === 0)) {
       throw new Error("activity resolver returned malformed state keys");
     }
@@ -334,14 +448,7 @@ async function readTouchedBlockActivity(
     // A direct token donation changes a pool's balance headroom without a
     // pool call or Sync. Reuse these already-fetched logs; ERC721 Transfer
     // has four topics and must not be interpreted as an ERC20 balance move.
-    if (log.topics.length === 3 &&
-      log.topics[0]?.toLowerCase() === ERC20_TRANSFER_TOPIC) {
-      for (const topic of [log.topics[1]!, log.topics[2]!]) {
-        if (ADDRESS_TOPIC_RE.test(topic)) {
-          touched.add(`0x${topic.slice(-40).toLowerCase()}`);
-        }
-      }
-    }
+    for (const address of blockTransferEndpoints(log.topics)) touched.add(address);
     if (resolve !== undefined) {
       if (!matches(BYTES_RE, log.data) || (log.transactionHash !== undefined &&
           (!matches(HASH_RE, log.transactionHash) || !pinned!.transactionHashes.includes(log.transactionHash.toLowerCase())))) {
@@ -353,13 +460,13 @@ async function readTouchedBlockActivity(
   }
 
   if (mode === "trace") {
-    for (const key of collectTraceTouchedStateKeys(traces, blockNumber, pinned, resolver, assertOpen)) touched.add(key);
+    for (const key of collectTraceTouchedStateKeys(traces, blockNumber, pinned, resolver, assertOpen,measured?.hit,observed,rank?.uncertainAssets)) touched.add(key);
   }
 
   for (const address of pinned?.passiveTouchedAddresses ?? []) touched.add(address);
   if (pinned?.passiveTouchedAddresses !== undefined && resolver?.passiveStateKeys !== undefined) {
     assertOpen();
-    const keys = resolver.passiveStateKeys(pinned.passiveTouchedAddresses, { number: blockNumber, hash: pinned.hash });
+    const keys = resolver.passiveStateKeys(pinned.passiveTouchedAddresses, { number: blockNumber, hash: pinned.hash },measured?.hit,observed);
     if (!Array.isArray(keys) || keys.some(key => typeof key !== "string" || key.length === 0)) {
       throw new Error("activity resolver returned malformed passive state keys");
     }
@@ -367,13 +474,41 @@ async function readTouchedBlockActivity(
     assertOpen();
   }
   assertOpen();
+  if(rank&&pinned&&resolver){
+    // Independent internal address view; downstream mutation of its own Set
+    // cannot erase a previously observed economic dependency from this packet.
+    for(const key of touched)if(ADDRESS_RE.test(key))rank.changed.add(key);
+    rankedInputs.set(touched,{resolver,base:{number:blockNumber-1,hash:pinned.parentHash},target:{number:blockNumber,hash:pinned.hash},data:rank});
+  }
   if (pinned !== undefined && retained !== undefined && retainedByProvider.get(provider) === retained) {
     retained.blocks.set(pinned.hash, Object.freeze({ number: blockNumber, anchor: pinned,
       touchedKeys: Object.freeze([...touched]) }));
     while (retained.blocks.size > MAX_ACTIVITY_TRANSITIONS)
       retained.blocks.delete(retained.blocks.keys().next().value!);
   }
+  measured?.seal(pinned?.passiveTouchedAddresses!==undefined);
   return touched;
+}
+
+// Counts are evidence about activity, never a prerequisite for reading it.
+// Retire a partially-filled bucket on any observer error (including a seal
+// that throws after writing). Do not catch the actual Family resolver.
+function beginOptionalPoolCounts(resolver:BlockTouchedStateKeyResolver|undefined,n:number,
+  {hash,parentHash}:BlockTouchedCanonicalAnchor,mode:string){
+  let journal:PoolTouchCounts|undefined, ticket:ReturnType<PoolTouchCounts["begin"]>|undefined;
+  const retire=()=>{
+    ticket=undefined;
+    try{journal?.discard(hash);}catch{/* A broken observer has no authority over activity. */}
+  };
+  try{
+    journal=resolver?.poolTouchCounts?.();
+    if(!journal)return;
+    ticket=journal.begin(n,hash,parentHash,mode);
+  }catch{retire();return;}
+  return {
+    hit:(h:PhysicalHit)=>{try{ticket?.hit(h);}catch{retire();}},
+    seal:(complete:boolean)=>{try{ticket?.seal(complete);}catch{retire();}},
+  };
 }
 
 /** Pure validation/classification for the detached trace observer. No provider,
@@ -395,12 +530,15 @@ function collectTraceTouchedStateKeys(
   pinned: BlockTouchedCanonicalAnchor | undefined,
   resolver: BlockTouchedStateKeyResolver | undefined,
   assertOpen: () => void,
+  countHit?:(hit:PhysicalHit)=>void,
+  physicalHit?:(ids:readonly string[],poolKeys?:readonly string[])=>void,uncertainAssets?:Set<string>,
 ): ReadonlySet<string> {
   const traceMethod = pinned === undefined ? "debug_traceBlockByNumber" : "debug_traceBlockByHash";
   const touched = new Set<string>();
   const resolve = resolver === undefined ? undefined : (observation: BlockTouchedObservation): void => {
     assertOpen();
-    const keys = resolver(observation, { number: blockNumber, hash: pinned!.hash });
+    if(observation.kind==="call")uncertainAssets?.add(observation.target.toLowerCase());
+    const keys = resolver(observation, { number: blockNumber, hash: pinned!.hash },countHit,physicalHit);
     if (!Array.isArray(keys) || keys.some(key => typeof key !== "string" || key.length === 0)) {
       throw new Error("activity resolver returned malformed state keys");
     }

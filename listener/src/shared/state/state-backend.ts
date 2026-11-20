@@ -1351,8 +1351,15 @@ export function postJsonRpc(
           responseBytes += chunk.length;
         }
       });
-      incoming.once("aborted", () => rejectOnce(abortReason(signal)));
+      // Node emits "aborted" before the stream's typed ECONNRESET on an
+      // incomplete response. A peer reset is not a caller cancellation. Let
+      // its own error settle the request; close covers errorless transports.
+      incoming.once("aborted", () => { if (signal.aborted) rejectOnce(abortReason(signal)); });
       incoming.once("error", rejectOnce);
+      incoming.once("close", () => {
+        if (!settled && !incoming.complete) rejectOnce(signal.aborted
+          ? abortReason(signal) : incoming.errored ?? new Error("incomplete JSON-RPC HTTP response"));
+      });
       incoming.once("end", () => {
         if (settled) return;
         if (onTiming !== undefined) responseEndedAtMs = Date.now();

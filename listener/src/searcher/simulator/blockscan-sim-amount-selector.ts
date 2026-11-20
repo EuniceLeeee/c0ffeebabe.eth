@@ -12,6 +12,29 @@ import type { SimulationResult } from "./botvm-simulator.js";
 import { createSimAmountSelector, type createTrialLimiter, type TrialControl } from "./sim-amount-selector.js";
 import type { AmountSimulation } from "./sim-amount-search.js";
 import { prepareRuntimeSettlement } from "./runtime-settlement.js";
+import {effectiveRowExecutionVerified,effectiveHistoricalRankingHint,type EffectiveMidSnapshot} from "../blockscan-effective-mid.js";
+import type {TokenEdge} from "../planner/token-graph.js";
+
+/** No transport and no mutable last-winner lookup: use the receipt published
+ * for this pass, including the authenticated original receipt on a carry.
+ * A stale/forked/missing receipt is not authorization to try another encoding. */
+export function publishedSolverVariant(snapshot:EffectiveMidSnapshot|undefined,source:CanonicalSource,edge:TokenEdge):string {
+  const row=edge.canonicalEdgeId&&snapshot?.rows.get(edge.canonicalEdgeId);
+  const id=row&&row.executionVerification?.variantId;
+  if(!snapshot?.complete||snapshot.source.number!==source.number||snapshot.source.hash.toLowerCase()!==source.hash.toLowerCase()||
+    snapshot.source.generation!==source.generation||!row||typeof id!=="string"||!id.length||
+    !effectiveRowExecutionVerified(snapshot,row,edge))throw Error("SQL amount selection lacks its current published execution recipe");
+  return id;
+}
+
+const historicalTrials=new WeakMap<ResolvedPlan,{source:CanonicalSource;scriptHex:string;amount:bigint;net:bigint;token:string}>();
+/** Only the amount evaluator below writes this proof, after a real funded
+ * positive trial. Historical receipt hashes and quote marks are not inputs. */
+export function matchesHistoricalAmountTrial(plan:ResolvedPlan,source:CanonicalSource,scriptHex:string):boolean{
+  const proof=historicalTrials.get(plan);
+  return !!proof&&isDeepStrictEqual(proof.source,source)&&proof.scriptHex===scriptHex.toLowerCase()&&proof.net>0n&&
+    proof.amount===plan.flashAmount&&proof.net===plan.netProfit&&proof.token===plan.profitToken.toLowerCase();
+}
 
 /** Strict runtime programs pass actual receipts between hops without Exact.
  * Unsupported routes retain strict quoted construction; actual execution
@@ -19,6 +42,7 @@ import { prepareRuntimeSettlement } from "./runtime-settlement.js";
  * The runtime owns backend/environment, trial slots, cancellation and final sim. */
 export function createBlockScanSimAmountSelector(input: {
   source: CanonicalSource;
+  effectiveMids?: EffectiveMidSnapshot;
   executor: string;
   simulate(plan: ResolvedPlan, control: TrialControl): Promise<SimulationResult>;
   runTrial?: ReturnType<typeof createTrialLimiter>;
@@ -38,6 +62,7 @@ export function createBlockScanSimAmountSelector(input: {
     legsJson: string; unsupported: number | null;
     settlement: ReturnType<typeof prepareRuntimeSettlement>;
     callbackRejectedAtSeed: boolean;
+    hintTrial: boolean;
   }>();
   return createSimAmountSelector({
     record: input.record,
@@ -62,18 +87,31 @@ export function createBlockScanSimAmountSelector(input: {
           let prepared = routes.get(opts);
           const preparedHit = prepared !== undefined;
           if (!prepared) {
-            const legs = input.runtimeAmounts === false || !session.buildRuntimeAmountLeg ? null : plan.tokenPath.edges.map(edge => {
-              const leg = session.buildRuntimeAmountLeg({ edge, executor: input.executor, runtimeEvidence: opts.runtimeEvidence ?? [] });
+            let hintTrial=false;
+            const recipeFor=(edge:TokenEdge)=>{
+              if(!session.needsPublishedExecutionVariant?.(edge))return;
+              const snapshot=input.effectiveMids;
+              if(snapshot?.complete&&isDeepStrictEqual(snapshot.source,input.source)){
+                const hint=effectiveHistoricalRankingHint(snapshot,edge);
+                if(hint){hintTrial=true;return hint.variantId;}
+              }
+              return publishedSolverVariant(snapshot,input.source,edge);
+            };
+            const recipes=plan.tokenPath.edges.map(recipeFor);
+            const legs = input.runtimeAmounts === false || !session.buildRuntimeAmountLeg ? null : plan.tokenPath.edges.map((edge,index) => {
+              const leg = session.buildRuntimeAmountLeg({ edge, executor: input.executor, runtimeEvidence: opts.runtimeEvidence ?? [],
+                variantId:recipes[index] });
               return leg === null ? null : { ...leg, tokenIn: edge.tokenIn, tokenOut: edge.tokenOut };
             });
             const runtimeLegs = legs !== null && legs.every(leg => leg !== null) ? legs : null;
-            prepared = { callbackRejectedAtSeed: false, legs: runtimeLegs, legsJson: JSON.stringify(runtimeLegs), unsupported: legs?.filter(leg => leg === null).length ?? null,
-              settlement: input.callbackSettlement === false || !runtimeLegs ||
+            if(hintTrial&&!runtimeLegs)throw Error("historical screen requires current runtime amount legs");
+            prepared = { callbackRejectedAtSeed: false, hintTrial, legs: runtimeLegs, legsJson: JSON.stringify(runtimeLegs), unsupported: legs?.filter(leg => leg === null).length ?? null,
+              settlement: hintTrial || input.callbackSettlement === false || !runtimeLegs ||
                 !runtimeLegs.at(-1)?.settlement?.deferredInput ||
                 plan.tokenPath.edges.some(edge => session.blocksPrefixInversion(edge)) ? null : prepareRuntimeSettlement({
                   legs: runtimeLegs, executor: input.executor,
                   build: (index, request) => session.buildRuntimeAmountLeg({ edge: plan.tokenPath.edges[index]!, executor: input.executor,
-                    runtimeEvidence: opts.runtimeEvidence ?? [], settlement: request }),
+                    runtimeEvidence: opts.runtimeEvidence ?? [], settlement: request, variantId:recipes[index] }),
                 }) };
             routes.set(opts, prepared);
           }
@@ -85,6 +123,8 @@ export function createBlockScanSimAmountSelector(input: {
             hops: plan.tokenPath.edges.length, unsupportedLegs: prepared.unsupported, preparedHit, callbackRejectedAtSeed: prepared.callbackRejectedAtSeed, queueMs, preparationMs: performance.now() - quoteStart });
           const propagated = runtimeLegs ? null : await propagateAmountsWithRawOutputs(plan.tokenPath, amount, controlledState, {
             executor: input.executor, strictSession: session, runtimeEvidence: opts.runtimeEvidence ?? [],
+            executionVariantForEdge:edge=>session.needsPublishedExecutionVariant?.(edge)?
+              publishedSolverVariant(input.effectiveMids,input.source,edge):undefined,
             adapterWorkControl: control, safetyBps: opts.quoteSafetyBps ?? 10000n,
             toleranceRawUnits: tolerance, shouldStop: () => control.signal.aborted,
             onExactCall: () => { if (opts.timing) opts.timing.hopExactCalls++; },
@@ -144,7 +184,13 @@ export function createBlockScanSimAmountSelector(input: {
             }
             if (sim.failure) throw new Error("inconsistent amount simulation result");
             if (sim.netProfit > 0n && (!best.success || sim.netProfit > best.profit)) {
-              best = { success: true, profit: sim.netProfit, value: { ...candidate, netProfit: sim.netProfit } };
+              const value={ ...candidate, netProfit: sim.netProfit };
+              if(prepared.hintTrial){
+                if(!sim.scriptHex||!/^0x(?:[0-9a-f]{2})+$/i.test(sim.scriptHex))throw Error("positive historical-screen trial lacks simulated bytes");
+                historicalTrials.set(value,{source:Object.freeze({...input.source}),scriptHex:sim.scriptHex.toLowerCase(),
+                  amount:value.flashAmount,net:sim.netProfit,token:sim.profitToken.toLowerCase()});
+              }
+              best = { success: true, profit: sim.netProfit, value };
             }
             // The existing funded construction remains available when the
             // deferred composition cannot execute at this amount/state.

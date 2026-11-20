@@ -42,7 +42,7 @@ export interface SelectorNativeFundingCandidate extends FundingTokenCandidate {
   readonly callId: string;
 }
 const canonical = (v: unknown) => v as CanonicalValue;
-const fail = (message: string): never => { throw new Error(`selector funding: ${message}`); };
+function fail(message: string): never { throw new Error(`selector funding: ${message}`); }
 export function freezeFundingData<T>(value: T): T {
   if (value && typeof value === "object") { Object.values(value).forEach(freezeFundingData); Object.freeze(value); }
   return value;
@@ -200,28 +200,65 @@ export function selectorFundingImmutableParameters(definition:SelectorNativeFund
   for(const read of [definition.funding.liquidity,...(definition.funding.fee.kind==="rate"?definition.funding.fee.reads:[])]) {collect(read.target);collect(read.args);}
   return selectorImmutableParameters(definition.signature,args,paths);
 }
+/** Solidity permits callers to omit the final ABI word's zero padding.
+ * For a trailing opaque Funding callback, accept only that spelling:
+ * every declared payload byte must still be present, and the padded form
+ * must pass the same exact canonical round trip as ordinary calldata. */
+export function decodeSelectorFundingCalldata(definition:SelectorNativeFundingDefinition, calldata:string) {
+  if(!/^0x(?:[0-9a-f]{2}){4,}$/i.test(calldata))fail("invalid funding calldata");
+  const body=calldata.slice(10), size=body.length/2;
+  if(size%32===0)return decodeSelectorAbiArguments(definition.signature,calldata);
+  const fn=FunctionFragment.from(definition.signature);
+  const path=definition.parameters.find(p=>p.role==="children")?.path;
+  const index=fn.inputs.length-1;
+  // In this narrow form, each preceding ABI argument uses one head word.
+  if(path?.length!==1||path[0]!==index||fn.inputs[index]?.type!=="bytes"||
+     fn.inputs.slice(0,index).some(p=>p.baseType==="tuple"||p.baseType==="array"&&p.arrayLength!==-1))
+    fail("noncanonical funding callback ABI");
+  const word=(at:bigint):bigint=>{
+    if(at<0n||at+32n>BigInt(size))fail("truncated funding callback head");
+    return BigInt("0x"+body.slice(Number(at)*2,Number(at+32n)*2));
+  };
+  const offset=word(BigInt(index)*32n);
+  if(offset%32n!==0n||offset<BigInt(fn.inputs.length)*32n)fail("invalid funding callback offset");
+  const payloadSize=word(offset);
+  if(offset+32n+payloadSize>BigInt(size))fail("truncated funding callback bytes");
+  return decodeSelectorAbiArguments(definition.signature,calldata+"00".repeat(32-size%32));
+}
+/** Shared ABI projection. The caller owns evidence for the successful call frame;
+ * calldata alone is neither a completed loan nor current liquidity. */
+export function fundingBindingsFromCall(definition:SelectorNativeFundingDefinition, chainId:number,
+  call:{target:string;calldata:string;poolId?:string;poolNamespace?:string}):readonly FundingExecutionBinding[] {
+    if(!Number.isSafeInteger(chainId)||chainId<=0)fail("invalid funding chain");
+    const family=selectorFamilyIdentity(definition.signature,definition.selector),projection=selectorFundingParameterProjection(definition);
+    const args=decodeSelectorFundingCalldata(definition,call.calldata);
+    const at=(path:readonly number[])=>path.reduce<unknown>((item,index)=>Array.isArray(item)?item[index]:undefined,args);
+    const observedAssets=at(projection.assetsPath), observedAmounts=at(projection.amountsPath);
+    const assets=projection.multiple?observedAssets:[observedAssets], amounts=projection.multiple?observedAmounts:[observedAmounts];
+    if(!Array.isArray(assets)||!assets.length||assets.length>128||!Array.isArray(amounts)||amounts.length!==assets.length||amounts.some(n=>fundingUint(n)===0n))fail("invalid funded assets or amounts");
+    const provider=getAddress(call.target).toLowerCase(), normalized=assets.map((a:unknown)=>{
+      if(typeof a!=="string")fail("invalid funding asset");return getAddress(a).toLowerCase();
+    });
+    if(BigInt(provider)===0n||new Set(normalized).size!==normalized.length || normalized.some(a=>BigInt(a)===0n))fail("invalid provider or duplicate/zero asset");
+    const immutableParameters=selectorFundingImmutableParameters(definition,args);
+    const typedPool=definition.funding.scope?.poolIdPath?selectorAbiParameterAt(definition.signature,args,definition.funding.scope.poolIdPath).value:call.poolId;
+    if(typedPool!==undefined && (typeof typedPool!=="string" || !typedPool))fail("invalid funding pool identifier");
+    const pool=typedPool;
+    const common={chainId,provider,selector:family.selector,signature:family.signature,arguments:args,
+      ...(pool===undefined?{}:{poolId:pool,poolNamespace:definition.funding.scope?.poolNamespace??call.poolNamespace??"contract-pool-id"}),immutableParameters};
+    return freezeFundingData(normalized.map(asset=>({...common,asset})));
+}
 export function selectorNativeFundingCandidateFromCensus(raw: SelectorNativeFundingDefinition, census: any, callId: string): SelectorNativeFundingCandidate|null {
   try {
-    const definition=normalizeSelectorNativeFundingDefinition(raw), family=selectorFamilyIdentity(definition.signature,definition.selector),projection=selectorFundingParameterProjection(definition);
+    const definition=normalizeSelectorNativeFundingDefinition(raw),family=selectorFamilyIdentity(definition.signature,definition.selector);
     if(census?.format!=="ready-selector-census/v1" || census.receiptStatus!==1 || !Number.isSafeInteger(census.chainId)||census.chainId<=0 ||
        !/^0x[0-9a-f]{64}$/i.test(census.blockHash??"") || !/^0x[0-9a-f]{64}$/i.test(census.transactionHash??"")) return null;
     const calls=census.calls.filter((c:any)=>c.id===callId);if(calls.length!==1)return null;const call=calls[0];
-    if(call.executionStatus!=="success" || !call.target || !call.calldata || call.selector?.toLowerCase()!==family.selector || call.callType!==null && !["call","transaction"].includes(call.callType)) return null;
-    const args=decodeSelectorAbiArguments(definition.signature,call.calldata);
-    const at=(path:readonly number[])=>path.reduce<any>((item,index)=>Array.isArray(item)?item[index]:undefined,args);
-    const observedAssets=at(projection.assetsPath), observedAmounts=at(projection.amountsPath);
-    const assets=projection.multiple?observedAssets:[observedAssets], amounts=projection.multiple?observedAmounts:[observedAmounts];
-    if(!Array.isArray(assets)||!assets.length||assets.length>128||!Array.isArray(amounts)||amounts.length!==assets.length||amounts.some(n=>fundingUint(n)===0n))return null;
-    const provider=getAddress(call.target).toLowerCase(), normalized=assets.map(a=>getAddress(a).toLowerCase());
-    if(new Set(normalized).size!==normalized.length || normalized.some(a=>BigInt(a)===0n))return null;
-    const immutableParameters=selectorFundingImmutableParameters(definition,args);
-    const typedPool=definition.funding.scope?.poolIdPath?selectorAbiParameterAt(definition.signature,args,definition.funding.scope.poolIdPath).value:call.poolId;
-    if(typedPool!==undefined && (typeof typedPool!=="string" || !typedPool))return null;
-    const pool=typedPool;
-    const common={chainId:census.chainId,provider,selector:family.selector,signature:family.signature,arguments:args,
-      ...(pool===undefined?{}:{poolId:pool,poolNamespace:definition.funding.scope?.poolNamespace??call.poolNamespace??"contract-pool-id"}),immutableParameters};
+    if(call.executionStatus!=="success" || !call.target || !call.calldata || call.selector?.toLowerCase()!==family.selector || call.callType!==null && !["call","transaction"].includes(call.callType))return null;
+    const fundingBindings=fundingBindingsFromCall(definition,census.chainId,call),common=fundingBindings[0]!;
+    const provider=common.provider,normalized=fundingBindings.map(b=>b.asset);
     return freezeFundingData({candidateKind:"selector-funding",target:provider,provider,scope:{chainId:census.chainId,target:provider,...(common.poolId===undefined?{}:{poolId:common.poolId,poolNamespace:common.poolNamespace})},asset:normalized[0]!,assets:normalized,
-      fundingBindings:normalized.map(asset=>({...common,asset})),declarationFingerprint:hashCanonical(canonical(definition)),census:JSON.parse(JSON.stringify(census)),callId});
+      fundingBindings,declarationFingerprint:hashCanonical(canonical(definition)),census:JSON.parse(JSON.stringify(census)),callId});
   } catch {return null;}
 }
 export function assertSelectorNativeFundingCandidate(candidate: SelectorNativeFundingCandidate, definition: SelectorNativeFundingDefinition): void {

@@ -70,6 +70,15 @@ test("private atomic checkpoint roundtrip, corruption and incompatible versions 
     await store.write(data);
     const restored = (await store.read())!;
     const snapshot = restored.pricing.pricing.effectiveMids!;
+    assert.equal(store.ownsAnchoredEffectiveTable(restored,snapshot),false,"read without verified headers");
+    const checkHeaders=()=>validateLiveContinuationAnchors(restored,new BlockScanAmountReference(),async n=>({hash:hash(n)}));
+    await checkHeaders();
+    assert.equal(store.ownsAnchoredEffectiveTable(restored,snapshot),true);
+    assert.equal(store.ownsAnchoredEffectiveTable({...restored},snapshot),false,"not this store's object");
+    assert.equal(store.ownsAnchoredEffectiveTable(restored,{...snapshot}),false,"table copy is not the restored data");
+    await assert.rejects(validateLiveContinuationAnchors(restored,new BlockScanAmountReference(),async()=>({hash:hash(999)})),/anchor reorged/);
+    assert.equal(store.ownsAnchoredEffectiveTable(restored,snapshot),false,"failed recheck revokes a prior result");
+    await checkHeaders();
     restoreEffectiveMidReplayState(snapshot, restored.pricing.lineage, edges, ADDR.WETH);
     assert.equal(effectiveRowAmountReference(snapshot.rows.get("b")!)?.amountIn, 200n);
     let calls = 0;
@@ -80,6 +89,7 @@ test("private atomic checkpoint roundtrip, corruption and incompatible versions 
     await assert.rejects(new LivePricingContinuationStore(dir, "b".repeat(64)).read(), /incompatible/);
     await writeFile(join(dir, "checkpoint-interrupted.tmp"), "partial");
     assert(await store.read(), "incomplete side file cannot replace the last committed source");
+    assert.equal(store.ownsAnchoredEffectiveTable(restored,snapshot),false,"superseded read cannot authorize historical ranking");
     const archived = await store.beginFreshRound();
     assert(archived && (await readFile(archived)).length > 65, "old round retained recoverably");
     assert.equal(await store.read(), null, "a failed fresh startup cannot silently restore the old round");
@@ -274,7 +284,7 @@ test("reviewed migration binds both complete file inventories, exact changes and
     await writeFile(join(directory, "review.txt"), "fixture review evidence");
     await change(transport);
     assert.throws(() => compatibleLiveContinuationIdentity(context, manifest, consumer), /code changed/);
-    for (const file of ["compiler.ts", "encoder.ts", "searcher/venues/swaps/univ4-family/math.ts", "searcher/execution-asset-boundary.ts"]) {
+    for (const file of ["compiler.ts", "encoder.ts", "searcher/venues/declarative-execution.ts", "searcher/execution-asset-boundary.ts"]) {
       const original = await readFile(join(consumer, file));
       await change(file);
       await writeFile(manifest, JSON.stringify(proof()));

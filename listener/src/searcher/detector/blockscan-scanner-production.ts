@@ -1,6 +1,6 @@
 import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
-import { effectiveEthPricing } from "../blockscan-eth-view.js";
-import { effectiveEnumerationMids } from "../blockscan-effective-mid.js";
+import { buildBlockScanEthView, effectiveEthPricing } from "../blockscan-eth-view.js";
+import { effectiveAmountReferences, effectiveEnumerationMids, effectiveHistoricalRankingHint, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
 import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
 import {
@@ -15,10 +15,13 @@ import {
   type BlockScanCoreConfig,
   type BlockScanOutcome,
   type BlockScanScanTiming,
+  type ResolvedBlockScanQuote,
   type NaturalBlockScanSelectionProvenance,
 } from "./blockscan-scanner-core.js";
 
 export interface ProductionBlockScanInput {
+  /** Current-block blockscan lane with funded amount trials and independent final simulation only. */
+  readonly allowHistoricalRankingHints?: boolean;
   /**
    * The only production state input. Graph, prices and funding were published
    * together by AdapterRuntimeCoordinator for one canonical generation.
@@ -46,6 +49,9 @@ export interface ProductionBlockScanTiming {
 }
 
 export interface ProductionBlockScanOutcome extends BlockScanOutcome {
+  readonly historicalRankingEdgeIds?: ReadonlySet<string>;
+  /** Current independently acquired input references, never ranking-hint amounts. */
+  readonly historicalStartTrialAmounts?: ReadonlyMap<string,bigint>;
   readonly completeness: "complete" | "degraded";
   readonly incompleteFamilyIds: readonly string[];
   readonly selectionMode: "production";
@@ -62,6 +68,40 @@ export interface AtomicBlockScanPricingValidationTiming {
   readonly total: number;
 }
 
+/** Private to opportunity screening: never write into the shared current quote map. */
+export function createBlockScanHistoricalScreen(effective:EffectiveMidSnapshot|undefined,
+  edges:readonly TokenEdge[],current:ReadonlyMap<string,ResolvedBlockScanQuote>){
+  let mids:Map<string,ResolvedBlockScanQuote>|undefined;
+  const hinted=new Set<string>();
+  const startAmounts=new Map<string,bigint>();
+  const references=effective&&effectiveAmountReferences(effective);
+  if(effective?.complete) for(const edge of edges){
+    const id=blockScanEdgeKey(edge);
+    if(current.has(id)||edge.executionVerification!=="startup-simulation")continue;
+    const hint=effectiveHistoricalRankingHint(effective,edge);if(!hint)continue;
+    (mids??=new Map(current)).set(id,Object.freeze({kind:"external-swap",pool:hint.instanceKey,
+      edges:Object.freeze([edge]),mid:hint.effectiveMid,feeBps:0,depthProxy:0,
+      quoteAmountIn:hint.amountIn,quoteAmountOut:hint.amountOut}));
+    hinted.add(id);
+    const ref=references?.get(edge.tokenIn.toLowerCase());
+    if(ref && ref.amountIn>0n && (ref.path.length
+        ? ref.path.at(-1)!.tokenOut===edge.tokenIn.toLowerCase() && ref.path.at(-1)!.amountOut===ref.amountIn &&
+          ref.path.every(row=>{
+            const q=current.get(row.edgeId),live=effective.rows.get(row.edgeId);
+            // Derived ETH columns may wrap the native row. Match the current
+            // validated sample, not the wrapper's JavaScript object identity.
+            return live && q && live.tokenIn===row.tokenIn && live.tokenOut===row.tokenOut &&
+              live.quotedAt?.number===effective.source.number && live.quotedAt.generation===effective.source.generation &&
+              live.quotedAt.hash.toLowerCase()===effective.source.hash.toLowerCase() &&
+              row.quotedAt?.number===effective.source.number && row.quotedAt.generation===effective.source.generation &&
+              row.quotedAt.hash.toLowerCase()===effective.source.hash.toLowerCase() &&
+              q.quoteAmountIn===row.amountIn && q.quoteAmountOut===row.amountOut;
+          })
+        : ref.amountIn===effective.referenceWethInput))startAmounts.set(id,ref.amountIn);
+  }
+  return mids?{mids,hinted,startAmounts}:undefined;
+}
+
 /**
  * Strict production boundary: callers cannot independently supply a graph,
  * cache, block number or partial mid map.
@@ -74,13 +114,18 @@ export function detectProductionBlockScanOpportunities(
   let scanTiming: BlockScanScanTiming | null = null;
   assertAtomicRuntime(input.runtime, timing => { pricingValidation = timing; });
   const validated = performance.now();
-  const eth = effectiveEthPricing(input.runtime.pricing, input.cfg.ethSignalPairsPerToken, input.cfg.allowRepeatedPools);
+  const current = effectiveEthPricing(input.runtime.pricing, input.cfg.ethSignalPairsPerToken, input.cfg.allowRepeatedPools);
+  const screen=input.allowHistoricalRankingHints
+    ?createBlockScanHistoricalScreen(input.runtime.pricing.effectiveMids,input.runtime.graph.edges,current.mids):undefined;
+  // Never publish this working view into effective pricing/valuation caches.
+  const eth=screen?{mids:screen.mids,view:buildBlockScanEthView(input.runtime.graph.edges,screen.mids,
+    input.cfg.ethSignalPairsPerToken,input.cfg.allowRepeatedPools,current.view)}:current;
   const viewed = performance.now();
   const resolvedEdgeKeys = new Set(
     input.runtime.pricing.coverage.resolvedEdgeKeys,
   );
   const edges = input.runtime.graph.edges.filter(
-    (edge) => !scannerConsumesEdge(edge) || resolvedEdgeKeys.has(blockScanEdgeKey(edge)),
+    (edge) => !scannerConsumesEdge(edge) || resolvedEdgeKeys.has(blockScanEdgeKey(edge)) || screen?.hinted.has(blockScanEdgeKey(edge)),
   );
   const selected = performance.now();
   const outcome = scanBlockStateFromResolvedMids({
@@ -90,6 +135,10 @@ export function detectProductionBlockScanOpportunities(
     cfg: input.cfg,
     mids: eth.mids,
     ethView: eth.view,
+    ...(screen?{firstEdgeTrialAmount:(edge:TokenEdge,quoted:bigint)=>{
+      const id=blockScanEdgeKey(edge);
+      return screen.hinted.has(id)?(screen.startAmounts.get(id)??null):quoted;
+    }}:{}),
     routeEligible: input.routeEligible,
     rankedRouteEligible: input.rankedRouteEligible,
     edgeEligible: input.edgeEligible,
@@ -100,6 +149,7 @@ export function detectProductionBlockScanOpportunities(
   const scanned = performance.now();
   const result = Object.freeze({
     ...outcome,
+    ...(screen?{historicalRankingEdgeIds:screen.hinted,historicalStartTrialAmounts:screen.startAmounts}:{}),
     completeness: input.runtime.completeness,
     incompleteFamilyIds: input.runtime.pricing.incompleteFamilyIds,
     selectionMode: "production" as const,

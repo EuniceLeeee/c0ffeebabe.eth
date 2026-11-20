@@ -1,6 +1,4 @@
 import type { TokenEdge } from "./planner/token-graph.js";
-import type { ReadyUniverseGeneration } from
-  "./universe-rebuild-checkpoint.js";
 import {
   createVerifiedGraphView,
   type VerifiedGraphView,
@@ -17,6 +15,15 @@ interface CachedReadyTopology {
   readonly scannerEdgeKeyHash: string;
 }
 
+/** Only immutable graph provenance is consumed here. The producer that issued
+ * the topology owns its admission proof, not this per-head view builder. */
+export interface GraphPublicationIdentity {
+  readonly generation: number;
+  readonly graphHash: string;
+  readonly catalogHash: string;
+  readonly sourceCoverage: readonly { readonly familyId: string; readonly sourceId: string }[];
+}
+
 /**
  * Current-source shell for one immutable startup-ready topology.
  *
@@ -28,6 +35,7 @@ interface CachedReadyTopology {
 export class StrictReadyGraphViewCoordinator {
   private readonly topologyKey: string;
   private readonly readyEdges: readonly TokenEdge[];
+  private readonly sqlPublished: boolean;
   private readonly coverageOwners: readonly {
     readonly familyId: string;
     readonly sourceId: string;
@@ -37,9 +45,12 @@ export class StrictReadyGraphViewCoordinator {
 
   constructor(input: {
     readonly catalog: FamilyCapabilityCatalog;
-    readonly ready: ReadyUniverseGeneration;
+    readonly ready: GraphPublicationIdentity;
     readonly edges: readonly TokenEdge[];
+    readonly publicationKind?: "strict-ready" | "sql-edges";
   }) {
+    const kind = input.publicationKind ?? "strict-ready";
+    this.sqlPublished = kind === "sql-edges";
     if (input.edges.length === 0) {
       throw new Error("strict ready GraphView requires a non-empty ready Graph");
     }
@@ -56,6 +67,9 @@ export class StrictReadyGraphViewCoordinator {
           `strict ready Graph duplicates ${edge.canonicalEdgeId}`,
         );
       }
+      if (this.sqlPublished && !/^candidate-edge:v1:[0-9a-f]{64}$/.test(edge.canonicalEdgeId)) {
+        throw new Error("SQL graph requires the sealed input leg ID");
+      }
       readyEdgeIds.add(edge.canonicalEdgeId);
       input.catalog.ownerOfAction(edge.adapterId);
     }
@@ -68,9 +82,9 @@ export class StrictReadyGraphViewCoordinator {
       const key = `${coverage.familyId}\u0000${coverage.sourceId}`;
       coverageOwners.set(key, Object.freeze({
         familyId: coverage.familyId,
-        sourceId: `strict-ready:${coverage.sourceId}`,
+        sourceId: `${kind}:${coverage.sourceId}`,
         sourceFingerprint: [
-          "strict-ready-generation-v1",
+          `${kind}-generation-v1`,
           input.ready.generation,
           input.ready.graphHash,
           input.ready.catalogHash,
@@ -83,7 +97,7 @@ export class StrictReadyGraphViewCoordinator {
       throw new Error("strict ready GraphView requires source coverage");
     }
     this.topologyKey =
-      `strict-ready:${input.ready.generation}:${input.ready.graphHash}`;
+      `${kind}:${input.ready.generation}:${input.ready.graphHash}`;
     this.readyEdges = Object.freeze([...input.edges]);
     this.coverageOwners = Object.freeze([...coverageOwners.values()]);
     this.catalog = input.catalog;
@@ -138,6 +152,7 @@ export class StrictReadyGraphViewCoordinator {
         edges: input.edges,
         familyIdForEdge: (edge) =>
           this.catalog.ownerOfAction(edge.adapterId),
+        ...(this.sqlPublished ? {publishedIdForEdge: (edge: TokenEdge) => edge.canonicalEdgeId!} : {}),
       });
       const projectedIds = view.edges.map((edge) => edge.canonicalEdgeId);
       const readyIds = this.readyEdges.map((edge) => edge.canonicalEdgeId);

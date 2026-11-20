@@ -31,6 +31,27 @@ export interface StrategyViews {
   };
 }
 
+export interface SqlObservedPool { readonly address: string; readonly poolId: string | null }
+
+/** Intake addresses are physical endpoints. Audit counts/logical refresh may
+ * distinguish many pools on one endpoint; neither view grants execution. */
+export function buildSqlStrategyIntakeView(graph: readonly TokenEdge[], fingerprint: string) {
+  const addresses = new Set<string>();
+  const logicalPools = new Map<string, SqlObservedPool>();
+  for (const edge of graph) {
+    const target = ethers.getAddress(edge.target).toLowerCase();
+    const address = ethers.getAddress(edge.observationTarget ?? target).toLowerCase();
+    const poolId = edge.observationPoolId ?? edge.poolId ?? null;
+    addresses.add(target);
+    addresses.add(address);
+    logicalPools.set(JSON.stringify([address, poolId]), { address, poolId });
+  }
+  const targets = [...addresses].sort().map(address => ({ address }));
+  const pools = [...logicalPools.entries()].sort(([a],[b]) => a.localeCompare(b)).map(([,pool]) => pool);
+  const hash = keccakUtf8(JSON.stringify(["sql-intake/v1", fingerprint, pools, targets]));
+  return { targets, pools, version: hash };
+}
+
 export function buildStrategyViews(
   basePools: PoolEntry[],
   universeFile: PoolEntry[],

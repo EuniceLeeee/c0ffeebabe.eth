@@ -29,6 +29,9 @@ export interface LivePricingContinuation {
   readonly simRejects: SimRejectContinuation;
 }
 const sha = (data: Buffer | string) => createHash("sha256").update(data).digest("hex");
+// Process-local, read-side provenance. A copy or a file's digest alone isn't a
+// native price table that this store actually read and checked against both headers.
+const checkedAnchors=new WeakMap<LivePricingContinuation,EffectiveMidSnapshot>();
 
 export interface LiveContinuationDelta {
   readonly version: 2;
@@ -48,6 +51,7 @@ interface JournalPointer {
     historical?: { file: string; digest: string } };
   head: { file: string; digest: string; sequence: number } | null;
 }
+interface WriterSegment { readonly identity:string; readonly first:number; readonly last:number }
 const sameSource = (a: EffectiveMidSnapshot["source"], b: EffectiveMidSnapshot["source"]) =>
   a.number === b.number && a.hash === b.hash && a.generation === b.generation;
 
@@ -78,6 +82,7 @@ export async function validateLiveContinuationAnchors(
   data: LivePricingContinuation, amounts: BlockScanAmountReference,
   observeHeader: (number: number) => Promise<{ readonly hash: string }>,
 ): Promise<void> {
+  checkedAnchors.delete(data);
   amounts.restoreHistoricalBaseline(data.amounts);
   amounts.takeContinuationDelta(); // Start recording post-baseline anchor observations.
   for (const at of [data.pricing.pricing, data.pricing.raw]) {
@@ -85,6 +90,9 @@ export async function validateLiveContinuationAnchors(
     assert(header.hash.toLowerCase() === at.sourceBlockHash.toLowerCase(),
       "live continuation anchor reorged; use fresh-prices explicitly");
   }
+  const table=data.pricing.pricing.effectiveMids;
+  if(table?.complete && sameSource(table.source,{number:data.pricing.pricing.sourceBlock,
+    hash:data.pricing.pricing.sourceBlockHash,generation:data.pricing.pricing.generation}))checkedAnchors.set(data,table);
 }
 
 /** Semantic producers, not consumer ranking/solver code. A pricing, Family,
@@ -120,6 +128,10 @@ export function liveContinuationFiles(root = fileURLToPath(new URL("../", import
     const path = join(root, "searcher", name + ".ts");
     if (existsSync(path)) files.push(path);
   }
+  // Legacy producer inventories predate the shared pool-price scheduler.
+  // Preserve those historical identities; bind both modules for the new producer.
+  const prefixFailure=join(root,"searcher/startup-prefix-failure.ts");
+  if(existsSync(prefixFailure))files.push(prefixFailure,join(root,"searcher/pool-leg-refresh.ts"));
   return files.sort().map(path => [relative(root, path), sha(readFileSync(path))]);
 }
 
@@ -179,6 +191,109 @@ export function compatibleLiveContinuationIdentity(context: unknown, manifestPat
   return liveContinuationIdentity(context, proof.producerSourceRoot);
 }
 
+/** Independent review for SQL native stores, never inferred from an unreviewed change.
+ * The immutable release must pin an independently accepted manifest, not compute
+ * its expected digest from a file it has just received. Policy, diff review and
+ * evidence of read-side/forward semantics live in that external verifier. */
+export function reviewedNativeSqlResume(input:{
+  manifest:string; releasePin:string; directory:string; dryOnly:boolean; sqlInputSha256:string|undefined;
+  context:unknown; root?:string;
+}):{producerIdentity:string; producerIdentities:readonly string[]; readonly currentWriterTailVerified:boolean;
+  checkRead:(store:LivePricingContinuationStore,data:LivePricingContinuation|null)=>void} {
+  const hex=(s:unknown)=>typeof s==="string"&&/^[a-f0-9]{64}$/.test(s);
+  assert(input.dryOnly&&isAbsolute(input.directory)&&isAbsolute(input.manifest)&&hex(input.releasePin)&&hex(input.sqlInputSha256),
+    "incomplete or non-dry native SQL resume request");
+  const bytes=readFileSync(input.manifest);
+  assert.equal(sha(bytes),input.releasePin,"native SQL release pin mismatch");
+  const r=JSON.parse(bytes.toString("utf8")),ctx=input.context as {topology?:string;sqlInputFingerprint?:string};
+  // Reopening a mixed journal written lastly by this exact version does not
+  // make this version an independently compatible historical revision.
+  const identicalTail=r.schema==="reviewed-native-sql-current-tail-v5";
+  const ordered=identicalTail||r.schema==="reviewed-native-sql-ordered-resume-v4";
+  const three=r.schema==="reviewed-native-sql-mixed-resume-v3",mixed=ordered||three||r.schema==="reviewed-native-sql-mixed-resume-v2";
+  assert((r.schema==="reviewed-native-sql-resume-v1"||mixed)&&r.verdict==="approved-for-bounded-dry-run"&&r.pointerFormat===2&&
+    r.scope==="native-source-bound-pricing-only"&&r.executionAuthorityUpgrade===false&&
+    hex(r.independentEvidenceSha256)&&
+    typeof r.independentEvidencePath==="string"&&isAbsolute(r.independentEvidencePath),"ineligible native SQL review");
+  assert.equal(sha(readFileSync(r.independentEvidencePath)),r.independentEvidenceSha256,"independent evidence changed");
+  assert(typeof ctx?.topology==="string"&&ctx.topology.startsWith("sql-edges:")&&hex(ctx.sqlInputFingerprint)&&
+    r.sqlInputSha256===input.sqlInputSha256,"native SQL input differs");
+  const root=input.root??fileURLToPath(new URL("../",import.meta.url));
+  const b=sqlContinuationSourceFiles(root),bb=new Map(b);
+  assert.equal(sha(JSON.stringify(b)),r.consumerAllSourceSha256,"native consumer inventory differs");
+  // Compare BOTH actual historical source inventories directly against this
+  // consumer. No inheritance of one producer's previous acceptance, naked ID,
+  // renaming or checkpoint conversion. Roles aren't interchangeable.
+  const reviewProducer=(p:{producerRoot:string;producerAllSourceSha256:string;producerIdentity:string;changes:unknown}):string=>{
+    assert(typeof p?.producerRoot==="string"&&isAbsolute(p.producerRoot),"missing native producer source");
+    const a=sqlContinuationSourceFiles(p.producerRoot),aa=new Map(a);
+    assert.equal(sha(JSON.stringify(a)),p.producerAllSourceSha256,"native producer inventory differs");
+    const changes=[...new Set([...aa.keys(),...bb.keys()])].sort().filter(k=>aa.get(k)!==bb.get(k))
+      .map(file=>({file,beforeSha256:aa.get(file)??null,afterSha256:bb.get(file)??null}));
+    assert(changes.length,"native migration is not required");
+    assert.deepEqual(changes,p.changes,"native migration changed outside the independently reviewed bytes");
+    const id=liveContinuationIdentity(ctx,p.producerRoot);
+    assert.equal(id,p.producerIdentity,"native producer identity differs");
+    return id;
+  };
+  if(ordered)assert(Array.isArray(r.producers)&&r.producers.length>=2&&
+    !["baselineProducer","intermediateProducer","pointerProducer"].some(k=>Object.hasOwn(r,k)),
+    "expected only the ordered list of independently reviewed historical writers");
+  const roles=ordered?r.producers:three?[r.baselineProducer,r.intermediateProducer,r.pointerProducer]:
+    mixed?[r.baselineProducer,r.pointerProducer]:[r];
+  const current=liveContinuationIdentity(ctx,root);
+  const producerIdentities:readonly string[]=Object.freeze(roles.map((p:Parameters<typeof reviewProducer>[0],i:number)=>{
+    if(!identicalTail||i!==roles.length-1)return reviewProducer(p);
+    assert(p.producerRoot===resolve(root)&&p.producerIdentity===current&&p.producerAllSourceSha256===r.consumerAllSourceSha256,
+      "current archive tail is not the running source");
+    assert.deepEqual(p.changes,[],"current source cannot have a migration diff");
+    return current;
+  }));
+  const baselineId=producerIdentities[0],producerIdentity=producerIdentities[producerIdentities.length-1];
+  assert(!mixed||producerIdentity!==baselineId,"mixed native review requires distinct producers");
+  if(three||ordered){
+    assert(new Set(producerIdentities).size===producerIdentities.length && (identicalTail?
+      producerIdentity===current:!producerIdentities.includes(current)),
+      "distinct archive writers and a distinct consumer required");
+    assert(Array.isArray(r.writerSegments)&&r.writerSegments.length===producerIdentities.length,"missing native writer segments");
+    let next=1;
+    for(const [i,s] of r.writerSegments.entries()){
+      assert(s && s.identity===producerIdentities[i] && s.first===next && Number.isSafeInteger(s.last)&&s.last>=next,
+        "invalid native writer segment");
+      next=s.last+1;
+    }
+  }
+  // The archived identity already authenticates the actual entire argument object
+  // (including SQL fingerprint), not a reconstruction of it supplied by an author.
+  const ptr=liveContinuationPointer(input.directory);
+  assert(hex(r.pointerSha256)&&ptr.identity===producerIdentity&&ptr.digest===r.pointerSha256,"wrong native journal");
+  return {producerIdentity,producerIdentities,currentWriterTailVerified:identicalTail,checkRead:(store,data)=>{
+    assert(store.restoredNativePointerSha256()===r.pointerSha256&&data?.identity===baselineId,
+      "actual native read differs from reviewed journal");
+    if(three||ordered)assert.deepEqual(store.restoredWriterSegments(),r.writerSegments,"actual native writer history differs");
+    assert.deepEqual(data.pricing.pricing.effectiveMids?.source,r.source,"actual native pricing source differs");
+    assert.deepEqual({number:data.pricing.raw.sourceBlock,hash:data.pricing.raw.sourceBlockHash,generation:data.pricing.raw.generation},
+      r.rawSource,"actual native raw source differs");
+  }};
+}
+
+/** Used only by explicit SQL restore/migration review, never on ordinary startup. */
+export function sqlContinuationSourceFiles(root: string): [string, string][] {
+  const out: [string, string][] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, {withFileTypes:true})) {
+      const file = join(dir, entry.name);
+      if (entry.isDirectory()) walk(file);
+      else {
+        assert(entry.isFile(), "non-regular SQL source entry");
+        out.push([relative(root, file), sha(readFileSync(file))]);
+      }
+    }
+  };
+  walk(root);
+  return out.sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0);
+}
+
 /** A journal can retain a baseline and deltas from multiple reviewed producers.
  * Each producer must be checked directly against this consumer, not transitively
  * trusted via another release. Nested sets and bare identity lists are rejected. */
@@ -236,6 +351,9 @@ function shareContinuationStrings<T>(root: T): T {
 /** One immutable baseline, then hash-chained, atomic delta commits. There is
  * deliberately no periodic full-table write or full-table fallback. */
 export class LivePricingContinuationStore {
+  private writerHistory:readonly WriterSegment[]=[];
+  private lastNativeRead?:WeakRef<LivePricingContinuation>;
+  private readPointerSha256:string|null=null;
   private pointer: JournalPointer | null = null;
   private source: EffectiveMidSnapshot["source"] | null = null;
   private readonly acceptedIdentities: ReadonlySet<string>;
@@ -276,25 +394,31 @@ export class LivePricingContinuationStore {
       try { await dir.sync(); } finally { await dir.close(); }
     } finally { await unlink(temporary).catch(error => { if (error.code !== "ENOENT") throw error; }); }
   }
-  private async decode(name: string, expected?: string): Promise<{ value: any; digest: string }> {
+  private async decode(name: string, expected?: string, checkedBytes?:(bytes:Buffer)=>void): Promise<{ value: any; digest: string }> {
     await this.privatePath(this.file(name), false);
     const bytes = await readFile(this.file(name));
     const digest = bytes.subarray(0, 64).toString();
     assert(bytes.length > 65 && bytes[64] === 10 && sha(bytes.subarray(65)) === digest &&
       (expected === undefined || digest === expected), "live continuation checksum mismatch");
+    checkedBytes?.(bytes);
     return { value: deserialize(bytes.subarray(65)), digest };
   }
   private async commit(pointer: JournalPointer | null): Promise<void> {
     await this.atomic("current.bin", serialize({ version: 2, pointer }));
+    this.readPointerSha256=null;
+    this.lastNativeRead=undefined;
     this.pointer = pointer;
   }
   async read(): Promise<LivePricingContinuation | null> {
+    this.lastNativeRead=undefined;
+    this.writerHistory=[];
+    this.readPointerSha256=null; let consumedPointerSha256:string|null=null;
     try { await this.privatePath(this.directory, true); }
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return null; throw error; }
     let pointer: JournalPointer | null;
     let legacy: LivePricingContinuation | undefined;
     if (await this.exists("current.bin")) {
-      const current = (await this.decode("current.bin")).value;
+      const current = (await this.decode("current.bin",undefined,bytes=>{consumedPointerSha256=sha(bytes);})).value;
       assert(current.version === 2, "invalid continuation pointer version");
       pointer = current.pointer;
       if (!pointer) return null; // Explicit fresh round, even if an old v1 file remains.
@@ -325,6 +449,7 @@ export class LivePricingContinuationStore {
     // Walk only committed records. Uncommitted/partial side files are ignored;
     // any missing/corrupt committed record is an error, never a skipped block.
     const chain: NonNullable<JournalPointer["head"]>[] = [];
+    const history:WriterSegment[]=[];
     let head = pointer.head;
     while (head) {
       assert(Number.isSafeInteger(head.sequence) && head.sequence > 0, "invalid continuation sequence");
@@ -334,14 +459,32 @@ export class LivePricingContinuationStore {
         record.baseline === sha(JSON.stringify(pointer.baseline)) &&
         (record.previous === null ? head.sequence === 1 : record.previous.sequence === head.sequence - 1),
       "broken continuation chain");
+      const last=history.at(-1);
+      if(last && last.identity===record.identity)history[history.length-1]={...last,first:head.sequence};
+      else history.push({identity:record.identity,first:head.sequence,last:head.sequence});
       chain.push(head); head = record.previous;
     }
     const replay = new ContinuationReplay(data);
     for (const record of chain.reverse()) replay.apply((await this.decode(record.file, record.digest)).value.delta);
     const restored = replay.finish();
     this.pointer = pointer; this.source = restored.pricing.pricing.effectiveMids!.source;
-    return shareContinuationStrings(restored);
+    const shared=shareContinuationStrings(restored);
+    if(consumedPointerSha256)this.lastNativeRead=new WeakRef(shared);
+    this.writerHistory=Object.freeze(history.reverse().map(s=>Object.freeze(s)));
+    this.readPointerSha256=consumedPointerSha256;return shared;
   }
+  /** For historical enumeration only. Generic restores, clones and unanchored
+   * tables may not initialize the SQL pool-ranking cache. */
+  ownsAnchoredEffectiveTable(data:LivePricingContinuation,table:EffectiveMidSnapshot):boolean {
+    return this.readPointerSha256!==null && this.lastNativeRead?.deref()===data &&
+      table===data.pricing.pricing.effectiveMids && checkedAnchors.get(data)===table &&
+      !!this.source && sameSource(this.source,table.source);
+  }
+  /** Digest of the pointer this store already consumed (not a second read by filename). */
+  restoredNativePointerSha256():string|null {
+    return this.readPointerSha256;
+  }
+  restoredWriterSegments():readonly WriterSegment[]{return this.readPointerSha256?this.writerHistory:[];}
   /** Explicit new logical round: retire the old pointer before any warmup.
    * A failed fresh startup must not resume an older round on the next launch. */
   async beginFreshRound(): Promise<string | null> {

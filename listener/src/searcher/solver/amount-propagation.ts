@@ -72,6 +72,7 @@ export async function propagateAmountsWithRawOutputs(
     cache?: PoolStateCache;
     v4QuoteStats?: V4QuotePathStats;
     strictSession?: StrictProductionRuntimeSession;
+    executionVariantForEdge?: (edge:TokenEdge)=>string|undefined;
     runtimeEvidence?: readonly RuntimeEvidence[];
     adapterWorkControl?: AdapterWorkControl;
     safetyBps?: bigint;
@@ -119,6 +120,7 @@ export async function propagateAmountsWithRawOutputs(
       options.onExactCall?.();
       const exact = await options.strictSession.issueExact({
         edge,
+        ...(options.executionVariantForEdge?{variantId:options.executionVariantForEdge(edge)}:{}),
         amountIn: cur,
         executor: options.executor,
         runtimeEvidence: options.runtimeEvidence ?? Object.freeze([]),

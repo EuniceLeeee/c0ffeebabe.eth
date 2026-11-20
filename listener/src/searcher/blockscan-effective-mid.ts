@@ -11,6 +11,7 @@ import type { ResolvedBlockScanQuote } from "./detector/blockscan-scanner-core.j
 import { deltaMap, scannerConsumesEdge } from "./blockscan-pricing-delta.js";
 import type { TokenEdge } from "./planner/token-graph.js";
 import { observeAdapterRequests } from "./adapter-request-observation.js";
+import { startupFailedFundingEdge } from "./startup-prefix-failure.js";
 import type { EffectiveEthColumns } from "./blockscan-eth-view.js";
 import { DEFAULT_EFFECTIVE_INPUT_PATH_HOPS, effectiveInputPathHops,
   resolveEffectiveInputPathHops } from "./effective-input-path-policy.js";
@@ -63,6 +64,8 @@ export interface EffectiveMidRow {
 
 export interface EffectiveExecutionVerification {
   readonly kind: "startup-simulation";
+  /** Private encoding that produced the receipt; never a graph or price key. */
+  readonly variantId?: string;
   readonly targetBlock: number;
   readonly scriptHash: string;
   readonly receiptHash: string;
@@ -121,6 +124,28 @@ const amountReferenceState = new WeakMap<EffectiveMidSnapshot, {
   readonly verifiedExecutions: ReadonlySet<string>;
 }>();
 const rowAmountReferences = new WeakMap<EffectiveMidRow, EffectiveAmountReference>();
+/** An original funded sample for ranking only. Not an EffectiveMidRow or an
+ * execution capability; never serialized, fed into WETH prefixes or admitted to verifiedExecutions. */
+export interface EffectiveHistoricalRankingHint {
+  readonly kind:"historical-ranking-only"; readonly edgeId:string; readonly instanceKey:string;
+  readonly tokenIn:string; readonly tokenOut:string; readonly amountIn:bigint; readonly amountOut:bigint;
+  readonly effectiveMid:number; readonly quotedAt:CanonicalSource; readonly receiptHash:string; readonly variantId:string;
+}
+type RankingCause="prefixOnly"|"executionSubscriptionOnly"|"both"|"poolUnchanged";
+interface RankingEntry { readonly hint:EffectiveHistoricalRankingHint; readonly prefix:readonly string[]; readonly edge:TokenEdge; readonly cause:RankingCause }
+interface RankingState { readonly edges:readonly TokenEdge[]; readonly byId:ReadonlyMap<string,RankingEntry>;
+  /** One anchored SQL native read only. Never registered in the generic locally issued receipt set. */
+  readonly restoredPoolOrigins?:ReadonlyMap<string,EffectiveMidRow>;
+  /** Last authenticated samples used ONLY to request an entire prefix at another source. Never current lineage. */
+  readonly requestedOrigins?:ReadonlyMap<string,EffectiveMidRow> }
+const rankingState=new WeakMap<EffectiveMidSnapshot,RankingState>();
+const issuedRankingReceipts=new WeakSet<EffectiveExecutionVerification>();
+// The general replay reader can record what it validated, but cannot enable SQL pool pricing.
+const anchoredReplayGraphs=new WeakMap<EffectiveMidSnapshot,readonly TokenEdge[]>();
+export function effectiveHistoricalRankingHint(snapshot:EffectiveMidSnapshot,edge:TokenEdge):EffectiveHistoricalRankingHint|undefined {
+  const entry=rankingState.get(snapshot)?.byId.get(blockScanEdgeKey(edge));
+  return entry?.edge===edge ? entry.hint : undefined;
+}
 
 // Native changes belong to the effective producer, not to a second table scan.
 // Weak previous ownership avoids retaining every historical publication.
@@ -188,8 +213,11 @@ const executionReceiptFields = (row: EffectiveMidRow) => [row.edgeId, row.instan
  * This digest is not an independent EVM authenticator. Replay still requires
  * its original source, graph and complete amount lineage. */
 export function effectiveExecutionReceiptHash(row: EffectiveMidRow, reference: EffectiveAmountReference,
-  maxInputPathHops: number, targetBlock: number, scriptHash: string): string {
+  maxInputPathHops: number, targetBlock: number, scriptHash: string, variantId = row.executionVerification?.variantId): string {
   return keccak256(toUtf8Bytes(JSON.stringify({ kind: "startup-simulation", targetBlock, scriptHash,
+    ...(variantId === undefined ? {} : {variantId}),
+    ...(reference.path.some(step=>step.executionVerification?.variantId!==undefined)
+      ? {prefixVariants:reference.path.map(step=>step.executionVerification?.variantId??null)} : {}),
     maxInputPathHops, row: executionReceiptFields(row), path: reference.path.map(executionReceiptFields) },
   (_, value) => typeof value === "bigint" ? value.toString() : value)));
 }
@@ -313,6 +341,10 @@ export function exportEffectiveMidReplayDelta(snapshot: EffectiveMidSnapshot,
 
 export function restoreEffectiveMidReplayState(snapshot: EffectiveMidSnapshot,
   state: EffectiveMidReplayState, edges: readonly TokenEdge[], weth: string): void {
+  // Replay never confers locally observed ranking provenance, even when a
+  // caller passes the same object rather than a structured clone.
+  rankingState.delete(snapshot);
+  anchoredReplayGraphs.delete(snapshot);
   assert(snapshot.complete && state.version === 1 && state.weth === weth.toLowerCase(), "incompatible effective baseline");
   const maxInputPathHops = effectiveInputPathHops(snapshot.maxInputPathHops);
   assert(effectiveInputPathHops(state.maxInputPathHops) === maxInputPathHops, "effective input-path policy changed");
@@ -397,6 +429,33 @@ export function restoreEffectiveMidReplayState(snapshot: EffectiveMidSnapshot,
   }
   for (const [row, reference] of rows) rowAmountReferences.set(row, reference);
   amountReferenceState.set(snapshot, { source: Object.freeze({ ...snapshot.source }), weth: state.weth, references: tokens, verifiedExecutions });
+  if(anchored)anchoredReplayGraphs.set(snapshot,edges);
+}
+
+/** SQL native-store caller only, AFTER its exact read/anchor/producer checks and strict
+ * coordinator graph/index verification, BEFORE projecting columns. Does not add execution
+ * authority, modify native rows, reconstruct discarded hints, or alter ordinary replay. */
+export function bindVerifiedSqlNativePoolRestore(snapshot:EffectiveMidSnapshot,edges:readonly TokenEdge[],source:CanonicalSource,
+  ownsPaidVariant:(edge:TokenEdge,variantId:string)=>boolean):number {
+  const state=amountReferenceState.get(snapshot),index=graphEdgeIndex(edges);
+  assert(snapshot.complete&&state&&anchoredReplayGraphs.get(snapshot)===edges&&graphEdgeIndexes.has(edges)&&
+    snapshot.source.number===source.number&&snapshot.source.hash.toLowerCase()===source.hash.toLowerCase()&&snapshot.source.generation===source.generation&&
+    state.source.number===source.number&&state.source.hash.toLowerCase()===source.hash.toLowerCase()&&state.source.generation===source.generation&&
+    snapshot.rows.size===index.size&&[...snapshot.rows.keys()].every(id=>index.has(id)),"SQL pool restore requires the exact anchored native replay/immutable graph");
+  const origins=new Map<string,EffectiveMidRow>();
+  for(const[id,row]of snapshot.rows){
+    if(row.status!=="quoted")continue;
+    const edge=index.get(id)!,ref=rowAmountReferences.get(row),proof=row.executionVerification;
+    if(edge.leavesStandingPosition||edge.executionVerification!=="startup-simulation"||!Object.isFrozen(row)||!proof?.variantId||
+      !ref||!state.verifiedExecutions.has(proof.receiptHash)||!effectiveRowExecutionVerified(snapshot,row,edge,ref))continue;
+    if(![...ref.path,row].every(step=>{const bound=index.get(step.edgeId),variant=step.executionVerification?.variantId;
+      return !!bound&&!bound.leavesStandingPosition&&bound.executionVerification==="startup-simulation"&&step.instanceKey===edgeInstanceKey(bound)&&
+        step.tokenIn===bound.tokenIn.toLowerCase()&&step.tokenOut===bound.tokenOut.toLowerCase()&&!!variant&&ownsPaidVariant(bound,variant);} ))continue;
+    origins.set(id,row);
+  }
+  rankingState.set(snapshot,{edges,byId:new Map(),restoredPoolOrigins:origins});
+  anchoredReplayGraphs.delete(snapshot); // this successful native-restore promotion is one-shot
+  return origins.size;
 }
 
 export function resolveEffectiveAmountCascade(raw?: string): boolean {
@@ -448,6 +507,8 @@ export function withEffectiveRowColumns(snapshot: EffectiveMidSnapshot,
   const next = Object.freeze({ ...snapshot, rows: ownRows(deltaMap(snapshot.rows, updates, []), true) });
   const references = amountReferenceState.get(snapshot);
   if (references) amountReferenceState.set(next, references);
+  const ranking=rankingState.get(snapshot);
+  if(ranking)rankingState.set(next,ranking);
   const changes = nativeChanges.get(snapshot);
   if (changes) nativeChanges.set(next, changes);
   return next;
@@ -589,6 +650,19 @@ export async function buildEffectiveMids(input: {
    * bootstrap/full refresh, not an empty block. Pricing references only: no
    * per-method reuse declaration. Amount-change invalidation is opt-in above. */
   readonly touchedStateKeys?: ReadonlySet<string>;
+  /** Issued by the caller only for complete forward canonical activity and
+   * on-touch reusable receipts with independently clean target dependencies. */
+  readonly historicalRankingPolicy?: {
+    readonly isCleanOnTouchReceipt:(edge:TokenEdge,stateKey:string,variantId:string)=>boolean;
+  };
+  readonly poolPriceRefreshPlan?: {readonly shouldRefresh:(edge:TokenEdge,priorVerifiedVariantId?:string)=>boolean};
+  /** A complete, forward-only activity union, before the coordinator adds static each-block
+   * policies. For logical routes only, a verified funded receipt may identify an on-touch
+   * private encoding despite another encoding adding the same public key every block. */
+  readonly forcedRefresh?: {
+    readonly actualTouched: ReadonlySet<string>;
+    readonly isOnTouchVariant: (edge: TokenEdge, stateKey: string, variantId: string) => boolean;
+  };
   /** Bounded periodic telemetry. Observer errors cannot change quote results. */
   readonly onProgress?: (progress: EffectiveMidProgress) => void;
 }): Promise<EffectiveMidSnapshot> {
@@ -597,6 +671,7 @@ export async function buildEffectiveMids(input: {
   // Keep this outside the snapshot/replay contract and never trace per row.
   const diagnostic = process.env.SEARCHER_STATE_LATENCY_DIAGNOSTICS === "1" ? {
     startedAt: performance.now(), setupMs: 0, progressCallbackMs: 0, assemblyMs: 0,
+    prefixTouchedRejections: new Set<number>(),
     waves: [] as { depth: number; directions: number; fresh: number;
       planningMs: number; sessionPrepareMs: number; quoteWorkMs: number; propagationMs: number }[],
   } : undefined;
@@ -759,6 +834,8 @@ export async function buildEffectiveMids(input: {
       ...(result.pricingMethod === undefined ? {} : { pricingMethod: result.pricingMethod }),
       ...(result.executionVerification === undefined ? {} : { executionVerification: Object.freeze({ ...result.executionVerification }) }),
       ...(status === "quoted" ? { quotedAt: source } : {}) });
+    if(status==="quoted"&&item.edge.executionVerification==="startup-simulation"&&result.executionVerification?.variantId)
+      issuedRankingReceipts.add(rows[index]!.executionVerification!);
   };
 
   // Classify carry before any quote can yield. Only snapshots built with this
@@ -773,14 +850,41 @@ export async function buildEffectiveMids(input: {
       (source.number === previous.source.number && source.generation >= previous.source.generation &&
         source.hash === previous.source.hash.toLowerCase()));
   const reusable = new Map<number, EffectiveMidRow>();
-  const referenceCanCarry = (reference: EffectiveAmountReference | undefined, requireExecution: boolean) => {
+  const graphEdges=(input.quoteGraph??pricing.graph).edges;
+  const oldRanking=previous&&rankingState.get(previous);
+  const rankingPolicy=canReuse && previous?.complete && source.number>previous.source.number &&
+    !input.cascadeAmountChanges && oldRanking?.edges===graphEdges && graphEdgeIndexes.has(graphEdges)
+    ? input.historicalRankingPolicy:undefined;
+  const poolPlan=canReuse && previous.complete && source.number>previous.source.number && !input.cascadeAmountChanges &&
+    oldRanking?.edges===graphEdges && graphEdgeIndexes.has(graphEdges) ? input.poolPriceRefreshPlan : undefined;
+  const requestedOrigins=poolPlan?new Map(oldRanking?.requestedOrigins):undefined;
+  const poolClean=new Set<number>(),poolDirty=new Set<number>();let poolDispatches=0;
+  const rankingCandidates=new Map<number,RankingEntry>();
+  const forcedRefresh = canReuse && previous?.complete && source.number > previous.source.number
+    ? input.forcedRefresh : undefined;
+  // Eligibility only: the owning caller must still pass the normal previous-source
+  // receipt verification for the target AND each embedded step, including script/amount
+  // lineage. A prefix's variant can differ from the separately published row for that edge.
+  const stateRejectsReceipt = (key: string, row: EffectiveMidRow, edge: TokenEdge) => {
+    if (!input.touchedStateKeys!.has(key)) return false;
+    const rule = forcedRefresh, variant = row.executionVerification?.variantId;
+    return !rule || rule.actualTouched.has(key) || edge.executionVerification !== "startup-simulation" ||
+      row.status !== "quoted" || row.pricingMethod !== "startup-simulation" || !variant ||
+      !rule.isOnTouchVariant(edge, key, variant);
+  };
+  const referenceCanCarry = (reference: EffectiveAmountReference | undefined, requireExecution: boolean, diagnosticIndex?: number) => {
     if (!reference) return !requireExecution;
     const required = requireExecution || reference.path.some(row => edges.get(row.edgeId)?.executionVerification === "startup-simulation");
     return reference.path.every((row, i) => {
       const bound = edges.get(row.edgeId);
-      return bound !== undefined && (!required || previous !== undefined &&
-        !input.touchedStateKeys!.has(stateKeyFor(row.edgeId, bound)) && effectiveRowExecutionVerified(previous, row, bound,
-          { amountIn: row.amountIn!, path: reference.path.slice(0, i) }));
+      if (!bound || (forcedRefresh && input.disabledEdgeIds?.has(row.edgeId))) return false;
+      if (!required) return true;
+      if (!previous) return false;
+      if (stateRejectsReceipt(stateKeyFor(row.edgeId, bound), row, bound)) {
+        if (diagnostic && diagnosticIndex !== undefined) diagnostic.prefixTouchedRejections.add(diagnosticIndex);
+        return false;
+      }
+      return effectiveRowExecutionVerified(previous, row, bound, { amountIn: row.amountIn!, path: reference.path.slice(0, i) });
     });
   };
   const enabled = (index: number) => {
@@ -809,14 +913,62 @@ export async function buildEffectiveMids(input: {
     else {
       const prior = canReuse ? previous.rows.get(edgeId) : undefined;
       const stateKey = stateKeyFor(edgeId, edge);
+      if(poolPlan&&previous&&edge.executionVerification==="startup-simulation"&&!edge.leavesStandingPosition){
+        const old=oldRanking!.byId.get(edgeId);
+        const proof=prior?.executionVerification;
+        const verified=prior?.status==="quoted" && proof?.variantId && prior.quotedAt && typeof prior.amountIn==="bigint" &&
+          typeof prior.amountOut==="bigint"&&prior.effectiveMid!==null&&(issuedRankingReceipts.has(proof)||
+            oldRanking!.restoredPoolOrigins?.get(edgeId)?.executionVerification===proof)&&
+          previousState!.verifiedExecutions.has(proof.receiptHash)&&rowAmountReferences.has(prior);
+        if(verified)requestedOrigins!.set(edgeId,prior);
+        const existing=old?.edge===edge?old:undefined;
+        if(poolPlan.shouldRefresh(edge,verified?proof!.variantId:existing?.hint.variantId))poolDirty.add(index);
+        else {
+          poolClean.add(index);
+          if(existing)rankingCandidates.set(index,existing);
+          else if(verified)rankingCandidates.set(index,{edge,cause:"poolUnchanged",
+            prefix:Object.freeze(rowAmountReferences.get(prior!)!.path.map(s=>s.edgeId)),hint:Object.freeze({
+              kind:"historical-ranking-only",edgeId,instanceKey:prior!.instanceKey,tokenIn:prior!.tokenIn,tokenOut:prior!.tokenOut,
+              amountIn:prior!.amountIn!,amountOut:prior!.amountOut!,effectiveMid:prior!.effectiveMid!,quotedAt:prior!.quotedAt!,
+              receiptHash:proof!.receiptHash,variantId:proof!.variantId!})});
+          unavailable(index,"missing-valuation");
+        }
+        continue;
+      }
       if (prior && (prior.status === "quoted" || (previous!.complete && prior.status !== "cancelled")) && prior.edgeId === edgeId &&
           prior.instanceKey === edgeInstanceKey(edge) &&
           prior.tokenIn === edge.tokenIn.toLowerCase() && prior.tokenOut === edge.tokenOut.toLowerCase() &&
-          !input.touchedStateKeys!.has(stateKey) && referenceCanCarry(rowAmountReferences.get(prior), edge.executionVerification === "startup-simulation") &&
+          !stateRejectsReceipt(stateKey, prior, edge) && referenceCanCarry(rowAmountReferences.get(prior), edge.executionVerification === "startup-simulation", index) &&
           (edge.executionVerification !== "startup-simulation" ||
             effectiveRowExecutionVerified(previous!, prior, edge))) {
         reusable.set(index, prior);
         if (!input.cascadeAmountChanges) storeRow(index, prior, true);
+      } else if(rankingPolicy && previous && edge.executionVerification==="startup-simulation" && !edge.leavesStandingPosition){
+        const old=oldRanking!.byId.get(edgeId);
+        if(old && old.edge===edge && old.prefix.every(id=>!input.disabledEdgeIds?.has(id)) &&
+          rankingPolicy.isCleanOnTouchReceipt(edge,stateKey,old.hint.variantId)){
+          rankingCandidates.set(index,old);
+        } else if(!old && prior?.status==="quoted" && prior.quotedAt && prior.executionVerification?.variantId &&
+          issuedRankingReceipts.has(prior.executionVerification) && typeof prior.amountIn==="bigint" && typeof prior.amountOut==="bigint" &&
+          prior.effectiveMid!==null && effectiveRowExecutionVerified(previous,prior,edge) &&
+          rankingPolicy.isCleanOnTouchReceipt(edge,stateKey,prior.executionVerification.variantId)){
+          // A dirty upstream reference or a broad execution subscription rejects
+          // CURRENT execution authority. The separate positive market policy
+          // may admit the original sample only to ranking, never to current carry.
+          const prefix=rowAmountReferences.get(prior)?.path;
+          if(prefix && prefix.every(s=>edges.has(s.edgeId)&&!input.disabledEdgeIds?.has(s.edgeId))){
+            const dirtyPrefix=prefix.some(s=>stateRejectsReceipt(stateKeyFor(s.edgeId,edges.get(s.edgeId)!),s,edges.get(s.edgeId)!));
+            const dirtyExecutionSubscription=stateRejectsReceipt(stateKey,prior,edge);
+            if(!dirtyPrefix&&!dirtyExecutionSubscription)continue;
+            const hint:EffectiveHistoricalRankingHint=Object.freeze({kind:"historical-ranking-only",edgeId,
+              instanceKey:prior.instanceKey,tokenIn:prior.tokenIn,tokenOut:prior.tokenOut,
+              amountIn:prior.amountIn,amountOut:prior.amountOut,effectiveMid:prior.effectiveMid,
+              quotedAt:Object.freeze({...prior.quotedAt}),receiptHash:prior.executionVerification.receiptHash,
+              variantId:prior.executionVerification.variantId});
+            rankingCandidates.set(index,{edge,hint,prefix:Object.freeze(prefix.map(s=>s.edgeId)),
+              cause:dirtyPrefix?(dirtyExecutionSubscription?"both":"prefixOnly"):"executionSubscriptionOnly"});
+          }
+        }
       }
     }
   }
@@ -842,7 +994,93 @@ export async function buildEffectiveMids(input: {
     offer(row.tokenOut, Object.freeze({ amountIn: row.amountOut!,
       path: Object.freeze([...reference.path, row]) }));
   };
-  const seededClean = new Set<number>();
+  const seededClean = new Set<number>(poolClean);
+  // Limit bridge work to the intersection of two bounded frontiers: reachable
+  // from WETH and able to fund an actually dirty target input. Keeping only
+  // yesterday's winning path would starve the target if that route is disabled
+  // or its current quote fails. The existing forward pass still chooses the
+  // shortest successful depth and the best *current* output at that depth.
+  const bridges=new Set<string>();
+  if(!poolPlan && rankingCandidates.size && samplingDepthLimit>0){
+    const demanded=new Set<string>();
+    for(const [i,w] of work.entries()){
+      const t=w.edge.tokenIn.toLowerCase();
+      if(t!==weth&&enabled(i)&&!reusable.has(i)&&!rankingCandidates.has(i)&&input.touchedStateKeys!.has(stateKeyFor(w.edgeId,w.edge)))
+        demanded.add(t);
+    }
+    if(demanded.size){
+      const forward=new Map<string,Set<string>>(),back=new Map<string,Set<string>>(),neighbors=new Map<string,Set<string>>();
+      const link=(map:Map<string,Set<string>>,a:string,b:string)=>{
+        const list=map.get(a);if(list)list.add(b);else map.set(a,new Set([b]));
+      };
+      for(const [i,{edge}] of work.entries()){
+        if(!enabled(i)||edge.leavesStandingPosition)continue;
+        const a=edge.tokenIn.toLowerCase(),b=edge.tokenOut.toLowerCase();if(a===b||b===weth)continue;
+        link(forward,a,b);link(back,b,a);link(neighbors,a,b);link(neighbors,b,a);
+      }
+      // A dangling non-terminal token can only take a round trip through
+      // the same neighbor. The funded forward sampler forbids such cycles.
+      const removed=new Set<string>(),leaves=[...neighbors].filter(([,n])=>n.size<2).map(([t])=>t);
+      for(const t of leaves){
+        if(t===weth||demanded.has(t)||removed.has(t))continue;
+        removed.add(t);
+        for(const neighbor of neighbors.get(t)??[]){
+          const n=neighbors.get(neighbor)!;n.delete(t);if(n.size<2)leaves.push(neighbor);
+        }
+      }
+      function depths(start:Set<string>,adj:Map<string,Set<string>>,stop?:string){
+        const distance=new Map<string,number>();
+        let layer=start;for(let d=0;layer.size&&d<samplingDepthLimit;d++){
+          const next=new Set<string>();
+          for(const t of layer){if(distance.has(t))continue;distance.set(t,d);
+            if(t===stop||d+1>=samplingDepthLimit)continue;
+            for(const neighbor of adj.get(t)??[])if(!removed.has(neighbor)&&!distance.has(neighbor))next.add(neighbor);
+          }layer=next;
+        }return distance;
+      }
+      const soleDemand=demanded.size===1?demanded.values().next().value:undefined;
+      const fromWeth=depths(new Set([weth]),forward,soleDemand),toDemand=depths(demanded,back,weth);
+      for(const r of rankingCandidates.values()){
+        const t=r.hint.tokenIn,o=r.hint.tokenOut;
+        if(t!==o&&o!==weth&&t!==soleDemand&&!removed.has(t)&&!removed.has(o)&&
+          (fromWeth.get(t)??Infinity)+1+(toDemand.get(o)??Infinity)<=samplingDepthLimit)
+          bridges.add(r.hint.edgeId);
+      }
+    }
+  }
+  const rankOnly=new Map<string,RankingEntry>();
+  for(const [i,entry] of rankingCandidates){
+    if(bridges.has(entry.hint.edgeId))continue;
+    if(!poolClean.has(i))unavailable(i,"missing-valuation");seededClean.add(i);rankOnly.set(entry.hint.edgeId,entry);
+  }
+  // Proposals do not enter `references`, `pending`, or verifiedExecutions. Only the normal
+  // current-source funded prefix+target simulation can turn them into an observed amount.
+  const proposals=new Map<string,EffectiveAmountReference>(),proposedAt:number[][]=Array.from({length:samplingDepthLimit+1},()=>[]);
+  const paidChoices=new Map<string,Map<string,EffectiveAmountReference>>();
+  // Same target/source and same WETH seed, ordered edges and private encodings produce the
+  // same replay. A shared downstream pool reached through another prefix is NOT the same trial.
+  const planKey=(r:EffectiveAmountReference,hops=r.path.length)=>JSON.stringify([String(r.path[0]?.amountIn??r.amountIn),
+    ...r.path.slice(0,hops).map(s=>[s.edgeId,s.executionVerification?.variantId??null])]);
+  if(poolPlan&&poolDirty.size){
+    const wanted=new Set([...poolDirty].map(i=>work[i]!.edge.tokenIn.toLowerCase()));
+    const propose=(token:string,ref:EffectiveAmountReference)=>{
+      if(token===weth||!wanted.has(token)||!ref.path.length||ref.path.length>samplingDepthLimit||
+        ref.path[0]!.tokenIn!==weth||ref.path[0]!.amountIn!==referenceWethInput||ref.path.at(-1)!.tokenOut!==token||
+        ref.path.some(s=>!edges.has(s.edgeId)||input.disabledEdgeIds?.has(s.edgeId)||edges.get(s.edgeId)!.leavesStandingPosition)||
+        new Set([weth,...ref.path.map(s=>s.tokenOut)]).size!==1+ref.path.length)return;
+      const prior=proposals.get(token);
+      if(!prior||ref.path.length<prior.path.length||(ref.path.length===prior.path.length&&ref.amountIn>prior.amountIn))proposals.set(token,ref);
+      const choices=paidChoices.get(token)??new Map<string,EffectiveAmountReference>();paidChoices.set(token,choices);
+      const key=planKey(ref),same=choices.get(key);if(!same||ref.amountIn>same.amountIn)choices.set(key,ref);
+    };
+    if(!oldRanking?.restoredPoolOrigins)for(const [t,ref]of previousState!.references)propose(t,ref);
+    for(const r of requestedOrigins!.values()){
+      const ref=rowAmountReferences.get(r)!;propose(r.tokenIn,ref);
+      if(wanted.has(r.tokenOut)&&r.amountOut!==null&&ref.path.length<samplingDepthLimit)
+        propose(r.tokenOut,{amountIn:r.amountOut,path:[...ref.path,r]});
+    }
+    for(const i of poolDirty){const p=proposals.get(work[i]!.edge.tokenIn.toLowerCase());if(p)proposedAt[p.path.length]!.push(i);}
+  }
   if (!input.cascadeAmountChanges) {
     // With cascading off, clean tuples remain historical samples. Their
     // ORIGINAL lineage can seed quantities even if an upstream pool changed;
@@ -883,20 +1121,37 @@ export async function buildEffectiveMids(input: {
   try {
   for (let depth = 0; depth <= samplingDepthLimit; depth++) {
     const planningStartedAt = diagnostic ? performance.now() : 0;
-    const layer: number[] = depth === 0 ? [...(workByToken.get(weth) ?? [])] : [];
+    let layer: number[] = depth === 0 ? [...(workByToken.get(weth) ?? [])] : [];
     for (const [token, reference] of pending[depth]!) {
       if (!references.has(token)) {
         references.set(token, reference);
         for (const index of workByToken.get(token) ?? []) layer.push(index);
       }
     }
+    if(poolPlan)layer=[...new Set([...layer,...proposedAt[depth]!])].filter(i=>!rows[i]);
     // Preserve graph order within a layer, including preparation/dispatch order.
     layer.sort((a, b) => a - b);
     frontierDirections += layer.length;
     const fresh: number[] = [];
     for (const index of layer) {
       const item = work[index]!;
-      item.reference = references.get(item.edge.tokenIn.toLowerCase())!;
+      const token=item.edge.tokenIn.toLowerCase();
+      const reference = references.get(token)??proposals.get(token)!;
+      const bridge = bridges.has(item.edgeId) ? rankingCandidates.get(index) : undefined;
+      if (bridge && !closed()) {
+        // Only a market-clean ranking sample reserved for funding can use this.
+        // The existing offer()/offerOutput() would discard its paid output,
+        // even if settlement succeeded. All references at this depth are final;
+        // pending references at the NEXT depth still compete on actual output.
+        const out = item.edge.tokenOut.toLowerCase();
+        if (references.has(out) || reference.path.length >= samplingDepthLimit ||
+            reference.path.some(step => step.tokenIn === out)) {
+          rankOnly.set(item.edgeId, bridge);
+          unavailable(index, "missing-valuation");
+          continue; // No current amount, lineage or receipt on a ranking-only row.
+        }
+      }
+      item.reference = reference;
       item.amountIn = item.reference.amountIn;
       const prior = reusable.get(index);
       if (prior && prior.amountIn !== null &&
@@ -932,18 +1187,37 @@ export async function buildEffectiveMids(input: {
         const index = fresh[next++];
         if (index === undefined) return;
         if (closed()) { unavailable(index, "cancelled"); continue; }
-        const { edge, amountIn, reference } = work[index]!;
-        const observation = { revertedResults: 0 };
-        quoteCallsStarted++;
-        try {
-          accept(index, await observeAdapterRequests(observation,
-            () => input.quote({ edge, amountIn: amountIn!, control, source, reference: reference!, maxInputPathHops })));
-        } catch (error) { failed(index, error, observation.revertedResults); }
-        finally {
-          quoteCallsSettled++;
-          // Resolved/cached quotes can keep the microtask queue busy, so a
-          // timer alone cannot report progress while these workers advance.
-          if (Date.now() - lastProgressAt >= 5000) report();
+        const item=work[index]!,focused=!!poolPlan&&poolDirty.has(index);
+        if(focused)poolDispatches++;
+        let alternatives:EffectiveAmountReference[]|undefined,blocked:Set<string>|undefined;
+        for(;;){
+          const request:EffectiveMidQuoteRequest={edge:item.edge,amountIn:item.amountIn!,reference:item.reference!,control,source,maxInputPathHops};
+          const observation={revertedResults:0};quoteCallsStarted++;
+          try {
+            const result=await observeAdapterRequests(observation,()=>input.quote(request));
+            if(focused&&request.reference.path.length&&!result.inputReference)throw new Error("pool refresh lacks current-source prefix receipts");
+            accept(index,result);break;
+          } catch(error){
+            const id=focused&&!closed()&&startupFailedFundingEdge(error,request);
+            const hop=id?request.reference.path.findIndex(step=>step.edgeId===id):-1;
+            if(hop<0){failed(index,error,observation.revertedResults);break;}
+            (blocked??=new Set()).add(planKey(request.reference,hop+1));
+            alternatives??=[...(paidChoices.get(item.edge.tokenIn.toLowerCase())?.values()??[])]
+              .sort((a,b)=>b.path.length-a.path.length||(a.amountIn>b.amountIn?1:a.amountIn<b.amountIn?-1:0));
+            let alt:EffectiveAmountReference|undefined;
+            while(alternatives.length&&!closed()){
+              const candidate=alternatives.pop()!;
+              if(!candidate.path.some((_,i)=>blocked!.has(planKey(candidate,i+1)))){alt=candidate;break;}
+            }
+            if(!alt){ // The target never ran; do not persist a paid-looking budget or trigger a target failure exclusion.
+              item.reference=undefined;item.amountIn=null;unavailable(index,closed()?"cancelled":"missing-valuation");break;
+            }
+            item.reference=alt;item.amountIn=alt.amountIn;
+          } finally {
+            quoteCallsSettled++;
+            if(Date.now()-lastProgressAt>=5000)report();
+          }
+          if(closed()){unavailable(index,"cancelled");break;}
         }
       }
     };
@@ -985,6 +1259,8 @@ export async function buildEffectiveMids(input: {
     if (verified) for (const step of [...reference!.path, row]) verifiedExecutions.add(step.executionVerification!.receiptHash);
   }
   amountReferenceState.set(snapshot, { source, weth, references, verifiedExecutions });
+  if(snapshot.complete && graphEdgeIndexes.has(graphEdges))rankingState.set(snapshot,{edges:graphEdges,byId:rankOnly,
+    ...(requestedOrigins?{requestedOrigins}:{})});
   if (canReuse && immutableRows) nativeChanges.set(snapshot, Object.freeze({
     previous: new WeakRef(previous), edges: (input.quoteGraph ?? pricing.graph).edges,
     updates: Object.freeze(updates), removals: Object.freeze(removals),
@@ -1002,12 +1278,52 @@ export async function buildEffectiveMids(input: {
         const measuredMs = diagnostic.setupMs + diagnostic.progressCallbackMs + diagnostic.assemblyMs +
           diagnostic.waves.reduce((sum, wave) => sum + wave.planningMs + wave.sessionPrepareMs +
             wave.quoteWorkMs + wave.propagationMs, 0);
+        // Partition previous *quoted* rows, not raw activity addresses, all Graph directions,
+        // or this block's successful quotes. Keep diagnostics out of publication/replay and
+        // use the actual eligibility/winner decisions without rerunning receipt verification.
+        const carry = { priorQuoted: 0, carried: 0, ownStateTouched: 0, prefixOnlyTouched: 0,
+          failedVerification: 0, noCompatibleBase: 0, disabled: 0, cancelled: 0, interrupted: 0,
+          graphOrIdentityChanged: 0, unsupported: 0, cascadeAmountChanged: 0, eligibleNotUsed: 0 };
+        if (previous) {
+          const positions = new Map(work.map(({ edgeId }, i) => [edgeId, i] as const));
+          for (const [key, prior] of previous.rows) {
+            if (prior.status !== "quoted") continue;
+            carry.priorQuoted++;
+            const i = positions.get(key);
+            if (i === undefined) { carry.graphOrIdentityChanged++; continue; }
+            const item = work[i]!, edge = item.edge;
+            if (rows[i]?.status === "disabled-for-run") carry.disabled++;
+            else if (rows[i]?.status === "cancelled") carry.cancelled++;
+            else if (!rows[i]) carry.interrupted++;
+            else if (edge.leavesStandingPosition && !pricing.pricingStateKeyByEdgeKey?.has(key)) carry.unsupported++;
+            else if (!canReuse) carry.noCompatibleBase++;
+            else if (reusedIndices.has(i)) carry.carried++;
+            else if (reusable.has(i)) {
+              if (input.cascadeAmountChanges && item.amountIn !== null && prior.amountIn !== item.amountIn) carry.cascadeAmountChanged++;
+              else carry.eligibleNotUsed++;
+            } else if (prior.edgeId !== key || prior.instanceKey !== edgeInstanceKey(edge) ||
+                prior.tokenIn !== edge.tokenIn.toLowerCase() || prior.tokenOut !== edge.tokenOut.toLowerCase()) carry.graphOrIdentityChanged++;
+            // The coordinator includes Family each-block keys in the supplied state set.
+            // Own takes precedence over prefix when both were touched.
+            else if (stateRejectsReceipt(stateKeyFor(key, edge), prior, edge)) carry.ownStateTouched++;
+            else if (diagnostic.prefixTouchedRejections.has(i)) carry.prefixOnlyTouched++;
+            else carry.failedVerification++;
+          }
+        }
+        const rankCauses={prefixOnly:0,executionSubscriptionOnly:0,both:0,poolUnchanged:0,retainedHistorical:0};
+        for(const [id,r] of rankOnly){
+          if(oldRanking?.byId.get(id)===r)rankCauses.retainedHistorical++;
+          else rankCauses[r.cause]++;
+        }
         console.log(`[searcher/effective-phase-timing] ${JSON.stringify({
           sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
           status: phase, timingModel: "nonoverlapping-wall-includes-io-cpu-gc",
+          ...(poolPlan?{poolRefresh:{eligible:poolDirty.size,dispatched:poolDispatches,
+            unfunded:[...poolDirty].filter(i=>rows[i]?.status==="missing-valuation").length}}:{}),
           wallMs, setupMs: diagnostic.setupMs, progressCallbackMs: diagnostic.progressCallbackMs,
           assemblyMs: diagnostic.assemblyMs, unattributedMs: Math.max(0, wallMs - measuredMs),
-          waves: diagnostic.waves,
+          waves: diagnostic.waves, carry,
+          historicalRanking:{only:rankOnly.size,...rankCauses,protectedBridges:rankingCandidates.size-rankOnly.size},
         })}`);
       } catch { /* Diagnostic output must not alter an effective-price result. */ }
     }

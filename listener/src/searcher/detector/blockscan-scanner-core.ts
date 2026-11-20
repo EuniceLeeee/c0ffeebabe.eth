@@ -192,6 +192,8 @@ export function scanBlockStateFromResolvedMids(input: {
   mids: ReadonlyMap<string, ResolvedBlockScanQuote>;
   /** Optional precomputed view of these same edges and effective amounts. */
   ethView?: BlockScanEthView;
+  /** Ranking-only first-leg samples must not set the funded trial notional. */
+  firstEdgeTrialAmount?: (edge: TokenEdge, quotedInput: bigint) => bigint | null;
   routeEligible?: (edges: readonly TokenEdge[]) => boolean;
   /** Optional complete-route exclusion after choosing the ordinary funding
    * representative, before candidate caps. Rejected routes cannot switch to a
@@ -267,8 +269,9 @@ export function scanBlockStateFromResolvedMids(input: {
       const maxBorrow = input.cfg.pricedTokens.get(flashToken)!.maxBorrow;
       // The published effective quote owns P. Pool-depth proxies must not
       // recalculate or cap it; actual funding and amount quotes constrain execution.
-      const searchCenter = path[0]!.den;
-      if (searchCenter > maxBorrow) { capitalRejected++; return; }
+      const searchCenter = input.firstEdgeTrialAmount
+        ? input.firstEdgeTrialAmount(seedEdges[0]!,path[0]!.den) : path[0]!.den;
+      if (searchCenter === null || searchCenter <= 0n || searchCenter > maxBorrow) { capitalRejected++; return; }
       const ringTokens = seedEdges.map(edge => edge.tokenIn.toLowerCase());
       const canonicalRing = canonicalTokenRing(ringTokens);
       const opportunity: BlockScanOpportunity = {

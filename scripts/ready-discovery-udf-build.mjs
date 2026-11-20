@@ -157,7 +157,7 @@ function sourceExtractor(path, extracts) {
   };
 }
 
-const portableCrypto = `import {sha256} from '@noble/hashes/sha256';
+export const portableCrypto = `import {sha256} from '@noble/hashes/sha256';
 function utf8(text) { const bytes=[]; for(let i=0;i<text.length;i++){let p=text.codePointAt(i);if(p>65535)i++;else if(p>=55296&&p<=57343)p=65533;
 if(p<=127)bytes.push(p);else if(p<=2047)bytes.push(192|(p>>6),128|(p&63));else if(p<=65535)bytes.push(224|(p>>12),128|((p>>6)&63),128|(p&63));else bytes.push(240|(p>>18),128|((p>>12)&63),128|((p>>6)&63),128|(p&63));}return new Uint8Array(bytes);}
 export function createHash(algorithm){if(algorithm!=='sha256')throw Error('Unsupported portable hash algorithm: '+algorithm);const state=sha256.create();return {
@@ -218,26 +218,43 @@ const required=(map,id)=>{if(!map.has(id))throw Error('Unknown catalog key: '+id
 const PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG={listAll:()=>families,matches:observation=>index.matches(observation),forStrictFamily:id=>required(familyMap,id),ownerOfAction:id=>required(actionOwners,id),ownerOfPoolAdapter:id=>required(poolOwners,id)};`,
     checkpoint.fn('canonicalJson'),...methods.map(name=>prod.fn(name)),
     `const candidateEvidenceScore=${prod.nestedInitializer('preferCandidateRepresentative','evidenceScore')};`,
-    reader.fn('observationsFromTx'),reader.fn('emptyCounts'),
+    reader.fn('normalizeStoredCallRoot'),reader.fn('observationsFromTx'),reader.fn('emptyCounts'),
     `export function rules(){return families.map(({plugin:{manifest,discovery}})=>({familyId:manifest.familyId,callPatterns:discovery.callPatterns??[],logPatterns:discovery.logPatterns??[]}));}`,
     `const collectOpaque=createOpaqueNominationCollector(PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG);
-export function compactTransaction(tx){const census=readySelectorCensusFromTransaction(tx,{chainId:1});
-const censusFingerprint=digest('ready-selector-census/v1:'+canonicalJson(census));
-const out=[{kind:'selector-census',key:'1|'+(census.transactionHash??('unresolved:'+censusFingerprint)),block:census.blockNumber,
-score:0,fingerprint:censusFingerprint,snapshot:census,tx:census.transactionHash}];
-const counts=emptyCounts(),observations=observationsFromTx(tx,counts,census),edgeNominations=[];
+export function compactTransaction(tx,edgesOnly=false){tx=normalizeStoredCallRoot(tx);
+const census=readySelectorCensusFromTransaction(tx,{chainId:1}),out=[];
+if(!edgesOnly){const censusFingerprint=digest('ready-selector-census/v1:'+canonicalJson(census));
+out.push({kind:'selector-census',key:'1|'+(census.transactionHash??('unresolved:'+censusFingerprint)),block:census.blockNumber,
+score:0,fingerprint:censusFingerprint,snapshot:census,tx:census.transactionHash});}
+const counts=emptyCounts(),observations=observationsFromTx(edgesOnly?{...tx,logs:[]}:tx,counts,census),edgeNominations=[];
 for(const raw of observations){const isCall=raw.kind==='call';const observation=isCall?{...raw,source:{number:raw.blockNumber,hash:raw.blockHash,generation:raw.blockNumber}}:{...raw,kind:'log',source:{number:raw.blockNumber,hash:raw.blockHash,generation:raw.blockNumber}};
 for(const match of index.matches(observation)){const {familyId,patternId}=match;const discovery=familyMap.get(familyId).plugin.discovery;
 const candidate=isCall?candidateForFamilyCallObservation(raw,familyId,patternId):candidateForFamilyObservation(raw,familyId,patternId);
 const signature=isCall?raw.data.slice(0,10).toLowerCase():raw.topics[0].toLowerCase();
-if(candidate!==null){out.push({kind:'candidate',family:familyId,key:rebuildFamilyInstanceDedupeKey(candidate),block:raw.blockNumber,score:candidateEvidenceScore(candidate),fingerprint:candidateFingerprint(candidate),snapshot:encodeDurableValue(candidate),tx:raw.transactionHash.toLowerCase(),logIndex:raw.logIndex??null,signature});
+if(candidate!==null){if(!edgesOnly)out.push({kind:'candidate',family:familyId,key:rebuildFamilyInstanceDedupeKey(candidate),block:raw.blockNumber,score:candidateEvidenceScore(candidate),fingerprint:candidateFingerprint(candidate),snapshot:encodeDurableValue(candidate),tx:raw.transactionHash.toLowerCase(),logIndex:raw.logIndex??null,signature});
 if(isCall){const abi=discovery.callPatterns?.find(pattern=>pattern.id===patternId)?.signature;if(abi)edgeNominations.push({familyId,signature:abi,candidate});}}
 }
-for(const retained of collectOpaque(raw)){out.push({kind:'opaque',family:retained.family,key:retained.key,block:raw.blockNumber,score:0,fingerprint:'',snapshot:raw,tx:raw.transactionHash.toLowerCase(),logIndex:raw.logIndex??null,signature:raw.topics[0].toLowerCase()});}}
+if(!edgesOnly)for(const retained of collectOpaque(raw)){out.push({kind:'opaque',family:retained.family,key:retained.key,block:raw.blockNumber,score:0,fingerprint:'',snapshot:raw,tx:raw.transactionHash.toLowerCase(),logIndex:raw.logIndex??null,signature:raw.topics[0].toLowerCase()});}}
+if(edgesOnly){
+  const nominated=new Set(edgeNominations.map(n=>n.candidate.callId));
+  for(const edge of readySelectorEdgesFromCensus({...census,calls:census.calls.filter(call=>nominated.has(call.id))},edgeNominations)){
+    if(edge.completeness==='complete'){
+      const {chainId,target,poolId,poolNamespace,tokenIn,tokenOut,tokenInId,tokenOutId}=edge.scope;
+      out.push({observationId:readySelectorEdgeKey(edge),familyId:edge.familyId,programKey:edge.programKey,selector:edge.selector,
+        chainId,target,tokenIn,tokenOut,...(poolId===undefined?{}:{poolId}),...(poolNamespace===undefined?{}:{poolNamespace}),
+        ...(tokenInId===undefined?{}:{tokenInId}),...(tokenOutId===undefined?{}:{tokenOutId}),immutableParameters:edge.immutableParameters});
+    }
+  }
+  return out;
+}
 for(const edge of readySelectorEdgesFromCensus(census,edgeNominations))out.push({kind:'selector-edge',family:edge.familyId,key:readySelectorEdgeKey(edge),block:edge.blockNumber,score:edge.completeness==='complete'?1:0,fingerprint:readySelectorEdgeFingerprint(edge),snapshot:edge,tx:edge.transactionHash,signature:edge.selector});
 return out;}
 export function compactTransactionJson(input){return JSON.stringify(compactTransaction(JSON.parse(input)));}
-export function transactionJson(input){const tx=JSON.parse(input),counts=emptyCounts();const observations=observationsFromTx(tx,counts);return JSON.stringify({counts,observations,records:compactTransaction(tx)});}`,
+export function directionEdgesJson(input){const tx=JSON.parse(input);
+const known=data=>typeof data==='string'&&index.callMatches.has(data.slice(0,10).toLowerCase());
+if(Number(tx.receipt_status)!==1||!known(tx.input)&&!tx.traces?.some(frame=>frame.call_type==='call'&&known(frame.input)))return '[]';
+return JSON.stringify(compactTransaction(tx,true));}
+export function transactionJson(input){const tx=normalizeStoredCallRoot(JSON.parse(input)),counts=emptyCounts();const observations=observationsFromTx(tx,counts);return JSON.stringify({counts,observations,records:compactTransaction(tx)});}`,
   ].join('\n');
   mkdirSync(options.out,{recursive:false});
   writeFileSync(join(options.out,'entry.generated.ts'),generated,{flag:'wx',mode:0o600});

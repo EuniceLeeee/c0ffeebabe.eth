@@ -1,6 +1,11 @@
 import { ethers } from "ethers";
-import type { PoolEntry } from "./planner/token-graph.js";
 import type { SwapAdapter } from "./venues/route-leg-adapter.js";
+
+/** Subscription metadata only; this is not an executable pool registration. */
+export interface MempoolIntakeAddress {
+  readonly address: string;
+  readonly score?: number;
+}
 
 export interface MempoolIntakeOptions {
   readonly hotPoolTopN: number;
@@ -19,7 +24,7 @@ export interface MempoolIntakePlan {
 }
 
 export function buildMempoolIntakePlan(input: {
-  pools: readonly PoolEntry[];
+  pools: readonly MempoolIntakeAddress[];
   /** Legacy-shaped isolated-test input; production passes strict targets. */
   swaps?: readonly SwapAdapter[];
   canonicalTargets?: readonly string[];

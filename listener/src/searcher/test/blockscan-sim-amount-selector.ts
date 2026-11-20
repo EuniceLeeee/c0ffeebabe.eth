@@ -21,7 +21,7 @@ function fixture() {
     source,
     blocksPrefixInversion: () => false,
     async issueExact(input: any) { quotes.push(input); return { amountIn: input.amountIn, amountOut: input.amountIn + 1000n }; },
-    fundingActionIds: () => ["verified-flash"],
+    fundingChoices: () => [{actionAdapterId:"verified-flash",fundingId:"verified-provider"}],
     buildExecution(input: any) {
       builds.push(input);
       return { status: "resolved", fragment: { requirements: [], nodes: [{ ...input.edge,
@@ -201,7 +201,7 @@ test(`production sim selection rejects missing/mismatched ${invalid} before simu
   const f = fixture(); let called = false;
   if (invalid === "source") f.session.source = { ...source, generation: source.generation + 1 };
   if (invalid === "executor") f.probe.executor = middle;
-  if (invalid === "funding") f.session.fundingActionIds = () => [];
+  if (invalid === "funding") f.session.fundingChoices = () => [];
   const selector = createBlockScanSimAmountSelector({ source, executor, async simulate() { called = true; return f.result(5n); } });
   await assert.rejects(selector.solve(f.plan, f.state, f.probe, f.opts), /mismatch|missing verified funding/);
   assert(!called);

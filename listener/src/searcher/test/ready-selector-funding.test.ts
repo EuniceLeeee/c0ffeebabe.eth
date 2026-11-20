@@ -15,7 +15,7 @@ import { StrictProductionRuntimeRoot } from "../strict-production-runtime-sessio
 import { resolveStrictReadyRuntime } from "../strict-ready-runtime.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "../venues/production-family-composition.js";
 import { resolveFundingTransactionCase } from "./family-funding-acceptance-context.js";
-import { normalizeSelectorNativeFundingDefinition, selectorFundingParameterProjection } from "../venues/selector-native-funding-definition.js";
+import { decodeSelectorFundingCalldata, normalizeSelectorNativeFundingDefinition, selectorFundingParameterProjection } from "../venues/selector-native-funding-definition.js";
 import { historicalReadyFundingAssets } from "../blockscan-at-block-cli.js";
 const a=(n:number)=>toBeHex(n,20),h=(n:number)=>toBeHex(n,32);
 const ASSET=a(7001),SECOND=a(7002),ACTOR=a(7003),EXECUTOR=a(7004),UNKNOWN=a(7005);
@@ -53,6 +53,17 @@ test("native Funding source coverage and supplied census nominate selectors plus
  for(const id of fundingIds){assert(wiring.isFamilyEnabled!(id));assert(wiring.requiredSourceCoverageKeys().some(key=>key.startsWith(id+"|call:")));}
  const coverage=wiring.buildSelectorCoverage!({candidatesByKey:Object.fromEntries(selected.map(c=>[wiring.familyCandidateKey(c),wiring.encodeCandidateSnapshot!(c)])),outcomesByCandidateKey:{}});
  assert(coverage.entries.every(e=>e.status==="unverified"));assert(coverage.entries.some(e=>e.selector==="0xdeadbabe"));
+});
+test("Funding accepts omitted zero padding, never missing payload or noncanonical offsets",()=>{
+ const definition=normalizeSelectorNativeFundingDefinition(declarations[0]),abi=new Interface([definition.signature]);
+ const padded=abi.encodeFunctionData("flashLoan",[ASSET,10n,"0x120034"]);
+ const unpadded=padded.slice(0,-58);
+ assert.deepEqual(decodeSelectorFundingCalldata(definition,unpadded),decodeSelectorFundingCalldata(definition,padded));
+ assert.throws(()=>decodeSelectorFundingCalldata(definition,unpadded.slice(0,-2)),/truncated funding callback bytes/);
+ assert.throws(()=>decodeSelectorFundingCalldata(definition,unpadded+"01"),/noncanonical ABI calldata/);
+ const offsetStart=10+2*64;
+ assert.throws(()=>decodeSelectorFundingCalldata(definition,
+   unpadded.slice(0,offsetStart)+"00".repeat(32)+unpadded.slice(offsetStart+64)),/invalid funding callback offset/);
 });
 test("Ready and historical CLI retain every selector provider/asset binding through current-session refresh and explicit choice",async t=>{
  const host=transport(t),directory=await mkdtemp(join(tmpdir(),"selector-funding-ready-"));t.after(()=>rm(directory,{recursive:true,force:true}));

@@ -1,17 +1,15 @@
-import { readyRuleCompatibilityFor } from "./universe-rebuild-production.js";
+import { initializeSqlLiveProducer } from "./sql-live-intake.js";
 import { NodeStrictClient } from "./simulator/node-strict-client.js";
 import { createNodeFundingCache } from "./simulator/node-input-funding.js";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { BlockScanStartupCache, startupCacheNamespace } from "./blockscan-startup-cache.js";
-import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveReadySubsetPriceMode, liveContinuationIdentity, compatibleLiveContinuationIdentities, liveContinuationPointer, reconcileLiveContinuationFamilies, validateLiveContinuationAnchors } from "./blockscan-live-continuation.js";
+import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContinuationEnabled, liveContinuationIdentity, validateLiveContinuationAnchors, reviewedNativeSqlResume } from "./blockscan-live-continuation.js";
 import { createBlockScanActivityTransport } from "./blockscan-activity-transport.js";
 import { startupRevertFilterEnabled } from "./blockscan-startup-filter.js";
 import { writeEffectiveMidProgress } from "./effective-mid-progress-file.js";
-import { dirname, isAbsolute, resolve } from "node:path";
-import { pathToFileURL, fileURLToPath } from "node:url";
+import { isAbsolute, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import { resolveProfitMode, validatePositiveGrossProfitMode, type ProfitMode } from "../shared/profit-mode.js";
 import "../shared/adapters/index.js";
@@ -39,10 +37,10 @@ import {
 import {
   resolveBlockScanPricingSourceMode,
 } from "./blockscan-pricing-source-mode.js";
-import {
-  resolveBlockScanSolverSearchConfig,
-} from "./blockscan-solver-search-config.js";
+import { resolveBlockScanLiveStageSettings, resolveBlockScanRefineCandidates, type BlockScanLiveStageSettings } from "./blockscan-live-stage-settings.js";
+export { resolveBlockScanLiveStageSettings, resolveBlockScanRefineCandidates, type BlockScanLiveStageSettings } from "./blockscan-live-stage-settings.js";
 import { readBlockTouchedStateKeys, readRetainedBlockTouchedStateKeys, type BlockTouchedProvider, type BlockTouchedReadOptions } from "./blockscan-touched-state.js";
+import { priceCarryOutcomes, reportOptionalEffectiveCounts } from "./sql-pool-touch-counts.js";
 import { StartupActivityCollector, collectIndexedStartupActivity, startupCatchupSource, type ActivityRangeControl } from "./blockscan-startup-catchup.js";
 import { getBigQueryActivityCutoff, readBigQueryTouchedRange, type BigQueryActivityConfig } from "./blockscan-bigquery-activity.js";
 import { collectReorgActivity } from "./blockscan-reorg-activity.js";
@@ -63,7 +61,7 @@ import { createStartupNodeSimulation } from "./blockscan-startup-node-simulation
 import { BlockScanPoolRevertAttributor, poolRevertFilterEnabled } from "./blockscan-pool-revert.js";
 import { BlockScanAmountReference } from "./blockscan-amount-reference.js";
 import {
-  buildEffectiveMids, createEffectiveQuoteSessions, effectiveMidPairStatistics, effectiveMidRowCarried,
+  bindVerifiedSqlNativePoolRestore, buildEffectiveMids, createEffectiveQuoteSessions, effectiveMidPairStatistics, effectiveMidRowCarried,
   resolveEffectiveInputPathHops, resolveEffectiveAmountCascade, type EffectiveMidSnapshot,
 } from "./blockscan-effective-mid.js";
 import { effectiveEthPricing, organizeEffectivePricing, resolveEthSignalPairsPerToken, ethViewStatistics } from "./blockscan-eth-view.js";
@@ -88,14 +86,13 @@ import {
 } from "./production-family-startup-manifest.js";
 import {
   PRODUCTION_FAMILY_ACTIVATIONS,
-  PRODUCTION_STRICT_SHADOW_FAMILY_LOAD,
-  PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
 } from "./venues/production-family-composition.js";
 import { assertFamilyActivationEnvironment } from "./venues/production-families/activation.js";
 import {
   PRODUCTION_STRICT_VERIFIED_ACTORS,
 } from "./venues/production-verified-actors.js";
 import { createBundleRouter } from "./execution/bundle-router.js";
+import { liveDryRunEnabled, liveExecutionSigner } from "./live-signer.js";
 import { trackInclusion } from "./execution/inclusion-tracker.js";
 import { SubmissionCoordinator } from "./execution/submission-coordinator.js";
 import { TemplatePlanner } from "./planner/planner.js";
@@ -105,36 +102,16 @@ import { createLiveBackrunPlanner, resolveLiveBackrunSettings } from "./backrun-
 import { runBackrunCandidatePipeline } from "./backrun-candidate-pipeline.js";
 import {
   buildTokenIndex,
-  type PoolEntry,
   type TokenEdge,
   type TokenQueryBackend,
 } from "./planner/token-graph.js";
-import { mergePoolRegistries } from "./pool-registry-merge.js";
 import { sendDexDiscoveryRpc } from "./dex-discovery-transport.js";
-import type {
-  PoolIdentityFailureReason,
-  RejectedPoolIdentity,
-} from "./venues/identity.js";
-import { activeReadyMemos as sealedReadyMemos, canonicalJson, UniverseRebuildCheckpointStore, type StartupCheckpointEnvelope } from
-  "./universe-rebuild-checkpoint.js";
-import {
-  UniverseRunIncomplete,
-  assertReadyFamilyActivation,
-  rebuildUniverse,
-  type RebuildUniverseInput,
-} from "./universe-rebuild-runner.js";
-import { createRebuildWiring } from "./universe-rebuild-production.js";
-import { resolveStrictReadyRuntime } from "./strict-ready-runtime.js";
 import {
   StrictProductionRuntimeRoot,
   type StrictProductionRuntimeSession,
 } from "./strict-production-runtime-session.js";
 import { PRODUCTION_STRICT_FAMILY_DECLARATIONS } from
   "./strict-production-family-declarations.js";
-import type { PreparedFamilyInstance } from
-  "./venues/adapter-family-runtime.js";
-import { resolveProducerBaseline } from
-  "./startup-universe-rebuild.js";
 import {
   DEFAULT_PENDING_EVIDENCE_MAX_READS,
   DEFAULT_PENDING_EVIDENCE_TIMEOUT_MS,
@@ -148,7 +125,7 @@ import type {
 import {
   validateRouteImmutableBinding,
 } from "./venues/route-immutable-binding.js";
-import { buildMempoolIntakePlan, type MempoolIntakePlan } from "./mempool-intake.js";
+import { buildMempoolIntakePlan, type MempoolIntakePlan, type MempoolIntakeAddress } from "./mempool-intake.js";
 import {
   PendingEvidenceAdmissionQueue,
   PendingEvidenceHeadSnapshot,
@@ -160,7 +137,7 @@ import {
   type PendingEvidenceSession,
 } from "./pending-evidence-session.js";
 import {
-  buildStrategyViews,
+  buildSqlStrategyIntakeView,
   hashTokenGraph,
 } from "./strategy-views.js";
 import {
@@ -171,25 +148,7 @@ import {
   createProfitTokenValuation,
   type ProfitTokenValuation,
 } from "./profit-token-valuation.js";
-import { loadBlockScanViewOverrides } from "./blockscan-view-overrides.js";
-import {
-  DEFAULT_PINNED_WARM_POOLS_PATH,
-  loadPinnedWarmPools,
-  pinnedWarmHopsFromGraph,
-  type PinnedWarmPoolEntry,
-} from "./pinned-warm-pools.js";
-import {
-  DEFAULT_FORCE_INCLUDE_POOLIDS_PATH,
-  loadForceIncludePoolIds,
-  loadForceIncludeRouters,
-  mergeForceIncludePoolIds,
-} from "./force-include.js";
-import {
-  DEFAULT_POOL_UNIVERSE_PATH,
-  loadPoolUniverse,
-  loadPoolUniverseGeneratedAt,
-  poolRegistryKey,
-} from "./pool-universe.js";
+import { loadForceIncludeRouters } from "./force-include.js";
 import {
   BlockScanBackrunStateBridge,
   BufferedBlockScanBackrunStatePublisher,
@@ -199,13 +158,10 @@ import { blockScanEdgeKey } from "./venues/blockscan-state-capability.js";
 import { LiveRethReadPriority } from "./live-reth-read-priority.js";
 import {
   StrictCurrentRuntimeCoordinator,
-  reconcileLiveContinuationRawPricing,
   type StrictSessionProvider,
   type StrictSessionRequest,
 } from
   "./strict-current-runtime-coordinator.js";
-import { StrictReadyGraphViewCoordinator } from
-  "./strict-ready-graph-view.js";
 import {
   BlockScanRuntimeLoop,
   type BlockScanRuntimeLoopDependencies,
@@ -316,9 +272,7 @@ import {
 const DEFAULT_MEV_SHARE_SSE_URL = "https://mev-share.flashbots.net";
 const DEFAULT_BLOCKSCAN_MAX_HOPS = BLOCKSCAN_ENUMERATION_DEFAULTS.maxHops;
 const DEFAULT_BLOCKSCAN_CANDIDATES = BLOCKSCAN_ENUMERATION_DEFAULTS.maxCandidates;
-const DEFAULT_BLOCKSCAN_REFINE_CANDIDATES = BLOCKSCAN_ENUMERATION_DEFAULTS.refineCandidates;
 const TX_HASH_RE = /^0x[0-9a-fA-F]{64}$/;
-const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
 const FORK_ETH_BALANCE = "0x56bc75e2d63100000"; // 100 ETH
 
 interface HintLog {
@@ -345,7 +299,7 @@ interface LiveConfig {
   mevShareSseUrl: string;
   liveBackend: LiveBackendKind;
   botvmAddress: string;
-  wallet: ethers.Wallet;
+  wallet: ReturnType<typeof liveExecutionSigner>;
   minProfit: bigint;
   defaultGasUsed: number;
   inclusionWatchBlocks: number;
@@ -380,17 +334,8 @@ interface LiveConfig {
   finalVerifyFloorBps: bigint;
   revmPrewarmRouteHops: number;
   stateUpdaterEnabled: boolean;
-  statePinnedK: number;
   stateRecentK: number;
   stateWatchMaxPools: number;
-  pinnedWarmPoolPath: string;
-  poolUniversePath: string;
-  poolUniverseTopN: number;
-  poolUniverseMinScore: number;
-  poolUniverseForceInclude: string[];
-  forceIncludePoolIdsPath: string;
-  poolUniverseHighSpreadPairQuota: number;
-  poolUniverseHighSpreadMinFee: number;
   recordLiveFixtures: boolean;
   liveFixtureDir: string;
   /** Phantom-profit guard: reject final profit > this many bps of the flash
@@ -578,70 +523,6 @@ interface PendingVictimOutcome {
   targetBlock: number;
 }
 
-function logIdentityRejections(source: string, rejected: RejectedPoolIdentity[]): void {
-  if (rejected.length === 0) return;
-  const counts = new Map<string, number>();
-  for (const item of rejected) {
-    const key = `${item.reason}:${item.venueId ?? "unknown"}`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  const summary = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([key, count]) => `${key}=${count}`)
-    .join(",");
-  console.log(
-    `[searcher/live] venue identity rejected source=${source} count=${rejected.length} ${summary}`,
-  );
-}
-
-
-function logProvisionalGraphInstances(
-  plane: "backrun" | "blockscan",
-  successful: readonly {
-    readonly pool: PoolEntry;
-    readonly edges: readonly TokenEdge[];
-  }[],
-): void {
-  for (const { pool, edges } of successful) {
-    if (
-      pool.identitySource !== "factory-call-provisional" ||
-      edges.length === 0
-    ) {
-      continue;
-    }
-    console.log(
-      `[searcher/live] provisional_graph_instance ${JSON.stringify({
-        plane,
-        pool: pool.address.toLowerCase(),
-        factory: pool.factory?.toLowerCase() ?? null,
-        adapter: pool.adapter,
-        identity_source: pool.identitySource,
-        edge_count: edges.length,
-        edges: edges.map((edge) => ({
-          adapter_id: edge.adapterId,
-          target: edge.target.toLowerCase(),
-          token_in: edge.tokenIn.toLowerCase(),
-          token_out: edge.tokenOut.toLowerCase(),
-          v2_fee_bps: edge.v2FeeBps?.toString() ?? null,
-        })),
-      })}`,
-    );
-  }
-}
-
-function replaceArray<T>(target: T[], next: readonly T[]): void {
-  target.splice(0, target.length, ...next);
-}
-
-function replaceMap<K, V>(target: Map<K, V>, next: ReadonlyMap<K, V>): void {
-  target.clear();
-  for (const [key, value] of next) target.set(key, value);
-}
-
-function replaceSet<T>(target: Set<T>, next: ReadonlySet<T>): void {
-  target.clear();
-  for (const value of next) target.add(value);
-}
 
 function loadEnv(): void {
   if (process.env.SEARCHER_TEST_DISABLE_DOTENV === "1") return;
@@ -686,14 +567,6 @@ function liveWsUrl(rpcUrl: string): string {
   );
 }
 
-function parseAddressList(value: string | undefined): string[] {
-  if (!value) return [];
-  return value
-    .split(",")
-    .map((addr) => addr.trim())
-    .filter((addr) => addr.length > 0)
-    .map((addr) => BYTES32_RE.test(addr) ? addr.toLowerCase() : ethers.getAddress(addr));
-}
 
 export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env, maxHops = Number(env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS)): BlockScanCoreConfig {
   const blockScanMaxHops = maxHops;
@@ -759,106 +632,6 @@ export function resolveBlockScanCoreConfig(env: NodeJS.ProcessEnv = process.env,
       };
 }
 
-/** Coarse enumeration cap, shared by live and historical entry points. */
-export function resolveBlockScanRefineCandidates(env: NodeJS.ProcessEnv = process.env, maxCandidates = 0): number {
-  const requested = Number(env.SEARCHER_BLOCKSCAN_REFINE_CANDIDATES ?? DEFAULT_BLOCKSCAN_REFINE_CANDIDATES);
-  return Math.max(maxCandidates, Number.isFinite(requested) ? Math.floor(requested) : DEFAULT_BLOCKSCAN_REFINE_CANDIDATES);
-}
-
-/** Live stage policy, shared by main and diagnostics. Preserve each setting's
- * existing fallback/clamping rule; core enumeration config remains separate. */
-export function resolveBlockScanLiveStageSettings(env: NodeJS.ProcessEnv = process.env, maxCandidates = 0) {
-  const singleFundingRaw = env.SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED ?? "0";
-  if (singleFundingRaw !== "0" && singleFundingRaw !== "1")
-    throw new Error("SEARCHER_BLOCKSCAN_SINGLE_FUNDING_ENABLED must be 0 or 1");
-  const fixedInputRaw = env.SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT;
-  let fixedEffectiveWethInput: bigint | undefined;
-  if (fixedInputRaw !== undefined) {
-    if (!/^\d+(?:\.\d{1,18})?$/.test(fixedInputRaw))
-      throw new Error("SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT must be a positive WETH amount");
-    fixedEffectiveWethInput = ethers.parseEther(fixedInputRaw);
-    if (fixedEffectiveWethInput <= 0n || fixedEffectiveWethInput > ethers.MaxUint256)
-      throw new Error("SEARCHER_BLOCKSCAN_EFFECTIVE_WETH_INPUT must be a positive uint256 WETH amount");
-  }
-  const passBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_PASS_BUDGET_MS ?? "11000");
-  const passBudgetMs = Number.isFinite(passBudgetRaw)
-    ? Math.max(1, Math.floor(passBudgetRaw)) : 11_000;
-  const largeGraphPassBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_PASS_BUDGET_MS ?? "30000");
-  const largeGraphPassBudgetMs = Number.isFinite(largeGraphPassBudgetRaw)
-    ? Math.max(passBudgetMs, Math.floor(largeGraphPassBudgetRaw)) : Math.max(passBudgetMs, 30_000);
-  const largeGraphEdgeThresholdRaw = Number(env.SEARCHER_BLOCKSCAN_LARGE_GRAPH_EDGE_THRESHOLD ?? "20000");
-  const largeGraphEdgeThreshold = Number.isFinite(largeGraphEdgeThresholdRaw)
-    ? Math.max(1, Math.floor(largeGraphEdgeThresholdRaw)) : 20_000;
-  const startupWarmBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_STARTUP_PREWARM_BUDGET_MS ?? "300000");
-  const startupWarmBudgetMs = Number.isSafeInteger(startupWarmBudgetRaw) && startupWarmBudgetRaw > 0
-    ? startupWarmBudgetRaw : 300_000;
-  const hotPricingFamilyBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_STATE_HOT_FAMILY_BUDGET_MS ?? "5000");
-  const hotPricingFamilyBudgetMs = Number.isFinite(hotPricingFamilyBudgetRaw) && hotPricingFamilyBudgetRaw > 0
-    ? Math.floor(hotPricingFamilyBudgetRaw) : 5_000;
-  const runtimePublicationReserveRaw = Number(env.SEARCHER_BLOCKSCAN_RUNTIME_PUBLICATION_RESERVE_MS ?? "1500");
-  const runtimePublicationReserveMs = Number.isFinite(runtimePublicationReserveRaw) && runtimePublicationReserveRaw > 0
-    ? Math.floor(runtimePublicationReserveRaw) : 1_500;
-  const solveReserveRaw = Number(env.SEARCHER_BLOCKSCAN_SOLVE_RESERVE_MS ?? "8000");
-  const solveReserveMs = Number.isFinite(solveReserveRaw) ? Math.max(0, Math.floor(solveReserveRaw)) : 8_000;
-  const solveConcurrencyRaw = Number(env.SEARCHER_BLOCKSCAN_SOLVE_CONCURRENCY ?? "4");
-  const solveConcurrency = Number.isFinite(solveConcurrencyRaw) ? Math.max(1, Math.floor(solveConcurrencyRaw)) : 4;
-  const solverSearch = resolveBlockScanSolverSearchConfig(env);
-  const finalSimulationConcurrencyRaw = Number(env.SEARCHER_BLOCKSCAN_FINAL_SIM_CONCURRENCY ?? "1");
-  const finalSimulationConcurrency = Number.isFinite(finalSimulationConcurrencyRaw)
-    ? Math.max(1, Math.floor(finalSimulationConcurrencyRaw)) : 1;
-  const refineCandidates = resolveBlockScanRefineCandidates(env, maxCandidates);
-  const exactRefineHardBudgetRaw = Number(env.SEARCHER_BLOCKSCAN_EXACT_REFINE_HARD_BUDGET_MS ?? "4000");
-  const exactRefineHardBudgetMs = Number.isFinite(exactRefineHardBudgetRaw) && exactRefineHardBudgetRaw > 0
-    ? Math.max(1_000, Math.floor(exactRefineHardBudgetRaw)) : 4_000;
-  const exactConcurrencyRaw = Number(env.SEARCHER_BLOCKSCAN_EXACT_CONCURRENCY ??
-    // Backward-compatible read only. Exact has its own explicit name.
-    env.SEARCHER_BLOCKSCAN_MID_CONCURRENCY ?? String(refineCandidates));
-  const exactConcurrency = Number.isFinite(exactConcurrencyRaw) && exactConcurrencyRaw > 0
-    ? Math.max(1, Math.floor(exactConcurrencyRaw)) : refineCandidates;
-  const exactProbeTimeoutRaw = Number(env.SEARCHER_BLOCKSCAN_EXACT_PROBE_TIMEOUT_MS ?? "4000");
-  const exactProbeTimeoutMs = Number.isFinite(exactProbeTimeoutRaw) && exactProbeTimeoutRaw > 0
-    ? Math.max(100, Math.floor(exactProbeTimeoutRaw)) : 4_000;
-  const exactRpcBatchSizeRaw = Number(env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_SIZE ?? "64");
-  const exactRpcBatchSize = Number.isFinite(exactRpcBatchSizeRaw) && exactRpcBatchSizeRaw > 0
-    ? Math.max(1, Math.floor(exactRpcBatchSizeRaw)) : 64;
-  const exactRpcBatchConcurrencyRaw = Number(env.SEARCHER_BLOCKSCAN_EXACT_RPC_BATCH_CONCURRENCY ?? "16");
-  const exactRpcBatchConcurrency = Number.isFinite(exactRpcBatchConcurrencyRaw) && exactRpcBatchConcurrencyRaw > 0
-    ? Math.max(1, Math.floor(exactRpcBatchConcurrencyRaw)) : 16;
-  // Deliberately no rounding/fallback: the live transport constructor owns
-  // validation of non-integer/non-finite state concurrency, as before.
-  const stateRpcBatchConcurrency = Math.max(1, Number(env.SEARCHER_BLOCKSCAN_STATE_RPC_BATCH_CONCURRENCY ?? "4"));
-  const configuredTransportCapacity = stateRpcBatchConcurrency + exactRpcBatchConcurrency;
-  const transportCapacityOverride = env.SEARCHER_RPC_TRANSPORT_MAX_CONCURRENCY;
-  const transportCapacity = transportCapacityOverride === undefined ? configuredTransportCapacity : Number(transportCapacityOverride);
-  if (transportCapacityOverride !== undefined &&
-      (!Number.isSafeInteger(configuredTransportCapacity) || !Number.isSafeInteger(transportCapacity) ||
-        transportCapacity < 1 || transportCapacity > configuredTransportCapacity)) {
-    throw new Error("SEARCHER_RPC_TRANSPORT_MAX_CONCURRENCY must be a positive integer no greater than configured transport capacity");
-  }
-  // A throttled batch degrades to concurrency 1 and keeps retrying there; only
-  // that batch pays the patience, never the whole live scope. The backoff is
-  // capped so a long refusal cannot turn into an unbounded stall.
-  const throttleRetriesAtOneRaw = Number(env.SEARCHER_RPC_THROTTLE_RETRIES_AT_ONE ?? "3");
-  const throttleRetriesAtOne = Number.isSafeInteger(throttleRetriesAtOneRaw) && throttleRetriesAtOneRaw >= 1
-    ? throttleRetriesAtOneRaw : 3;
-  const throttleMaxDelayRaw = Number(env.SEARCHER_RPC_THROTTLE_MAX_DELAY_MS ?? "30000");
-  const throttleMaxDelayMs = Number.isSafeInteger(throttleMaxDelayRaw) && throttleMaxDelayRaw > 0
-    ? throttleMaxDelayRaw : 30_000;
-  return Object.freeze({ singleFunding: singleFundingRaw === "1", fixedEffectiveWethInput,
-    passBudgetMs, largeGraphPassBudgetMs, largeGraphEdgeThreshold,
-    startupWarmBudgetMs, hotPricingFamilyBudgetMs, runtimePublicationReserveMs, solveReserveMs,
-    solveConcurrency, solverSearch, finalSimulationConcurrency, refineCandidates,
-    sourceSimulationTimeoutMs: Number(env.SEARCHER_REVM_TIMEOUT_MS ?? "60000"),
-    exactRefineHardBudgetMs, exactConcurrency, exactProbeTimeoutMs, exactRpcBatchSize, exactRpcBatchConcurrency,
-    stateRpcBatchConcurrency, transport: Object.freeze({
-      capacity: transportCapacity,
-      producerReserved: transportCapacityOverride === undefined ? stateRpcBatchConcurrency
-        : Math.min(stateRpcBatchConcurrency, Math.max(1, transportCapacity - 1)),
-      maxRetriesAtOne: throttleRetriesAtOne, maxRetryDelayMs: throttleMaxDelayMs,
-    }) });
-}
-
-export type BlockScanLiveStageSettings = ReturnType<typeof resolveBlockScanLiveStageSettings>;
 type BlockScanAmountSelectorFactory = NonNullable<BlockScanRuntimeLoopDependencies["amountSelectorFactory"]>;
 
 export function logBlockScanAmountEvent({ source, workerIndex, event }: {
@@ -887,7 +660,7 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
   }): void;
 }): BlockScanAmountSelectorFactory {
   const runTrial = createTrialLimiter(input.quoteConcurrency);
-  return ({ source, workerIndex, simulate }) => {
+  return ({ source, workerIndex, simulate, effectiveMids }) => {
     let sequence = 0;
     return { async solve(plan, state, probe, opts) {
       const searchId = ++sequence;
@@ -907,7 +680,7 @@ export function createBlockScanLiveAmountSelectorFactory(input: {
         fundingActionId: funding.adapterId, fundingId: funding.fundingId, maxBorrow: funding.amount, policy: "max-borrow-per-token",
       } });
       const selector = createBlockScanSimAmountSelector({
-        source, executor: input.executor, runTrial,
+        source, executor: input.executor, runTrial, effectiveMids,
         fundingActionId: funding?.adapterId,
         fundingId: funding?.fundingId,
         async simulate(candidate, control) {
@@ -948,7 +721,7 @@ export function resolveBlockScanAtomicPolicy(env: NodeJS.ProcessEnv = process.en
   const quoteSafetyBps = BigInt(env.SEARCHER_QUOTE_SAFETY_BPS ?? "9999");
   const policy: BlockScanAtomicPolicy = {
     blockScanProfitMode: resolveProfitMode(env.SEARCHER_BLOCKSCAN_PROFIT_MODE),
-    dryRun: env.SEARCHER_DRY_RUN === "1",
+    dryRun: liveDryRunEnabled(env),
     finalVerifyFloorBps: BigInt(
       env.SEARCHER_FINAL_VERIFY_FLOOR_BPS ??
         defaultFinalVerifyFloorBps(
@@ -976,20 +749,10 @@ export function resolveBlockScanAtomicPolicy(env: NodeJS.ProcessEnv = process.en
 function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   const rpcUrl = liveRpcUrl();
 
-  const privateKey = process.env.PRIVATE_KEY ?? process.env.OWNER_PRIVATE_KEY;
-  if (!privateKey) throw new Error("PRIVATE_KEY or OWNER_PRIVATE_KEY required");
-
   const botvmAddress = process.env.BOTVM_ADDRESS;
   if (!botvmAddress) throw new Error("BOTVM_ADDRESS required");
 
-  const wallet = new ethers.Wallet(privateKey, provider);
-  const botvmOwner = process.env.BOTVM_OWNER;
-  if (botvmOwner && wallet.address.toLowerCase() !== botvmOwner.toLowerCase()) {
-    throw new Error(
-      `PRIVATE_KEY wallet ${wallet.address} does not match BOTVM_OWNER ${botvmOwner}`,
-    );
-  }
-  const dryRun = process.env.SEARCHER_DRY_RUN === "1";
+  const wallet = liveExecutionSigner(process.env, provider);
   const backrunSettings = resolveLiveBackrunSettings();
   const maxHops = backrunSettings.planner.maxHops;
   const finalVerifyMaxHops = process.env.SEARCHER_ENABLE_BLOCK_SCAN === "1"
@@ -998,13 +761,6 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
         Number(process.env.SEARCHER_BLOCKSCAN_MAX_HOPS ?? DEFAULT_BLOCKSCAN_MAX_HOPS),
       )
     : maxHops;
-  const forceIncludePoolIdsPath =
-    process.env.SEARCHER_FORCE_INCLUDE_POOLIDS_PATH ?? DEFAULT_FORCE_INCLUDE_POOLIDS_PATH;
-  const envForceInclude = parseAddressList(process.env.SEARCHER_POOL_UNIVERSE_FORCE_INCLUDE);
-  const fileForceInclude = loadForceIncludePoolIds(forceIncludePoolIdsPath);
-  const poolUniverseForceInclude = mergeForceIncludePoolIds(envForceInclude, fileForceInclude);
-  const poolUniversePath =
-    process.env.SEARCHER_POOL_UNIVERSE_PATH ?? DEFAULT_POOL_UNIVERSE_PATH;
 
   const wsUrl = liveWsUrl(rpcUrl);
 
@@ -1031,17 +787,8 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
     enableHashOnly: process.env.SEARCHER_ENABLE_HASH_ONLY === "1",
     maxHints: Number(process.env.SEARCHER_MAX_HINTS ?? "0"),
     stateUpdaterEnabled: process.env.SEARCHER_STATE_UPDATER_ENABLED !== "0",
-    statePinnedK: Number(process.env.SEARCHER_STATE_PINNED_K ?? "8"),
     stateRecentK: Number(process.env.SEARCHER_STATE_RECENT_K ?? "24"),
     stateWatchMaxPools: Number(process.env.SEARCHER_STATE_WATCH_MAX_POOLS ?? "64"),
-    pinnedWarmPoolPath: process.env.SEARCHER_PINNED_WARM_POOLS ?? DEFAULT_PINNED_WARM_POOLS_PATH,
-    poolUniversePath,
-    poolUniverseTopN: Number(process.env.SEARCHER_POOL_UNIVERSE_TOP_N ?? "20000"),
-    poolUniverseMinScore: Number(process.env.SEARCHER_POOL_UNIVERSE_MIN_SCORE ?? "1"),
-    poolUniverseForceInclude,
-    forceIncludePoolIdsPath,
-    poolUniverseHighSpreadPairQuota: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_PAIR_QUOTA ?? "150"),
-    poolUniverseHighSpreadMinFee: Number(process.env.SEARCHER_POOL_UNIVERSE_HIGH_SPREAD_MIN_FEE ?? "10000"),
     recordLiveFixtures: process.env.SEARCHER_RECORD_LIVE_FIXTURES === "1",
     liveFixtureDir: process.env.SEARCHER_LIVE_FIXTURE_DIR ?? resolve("searcher", "live-fixtures"),
     victimSourceFilter: {
@@ -1053,16 +800,6 @@ function buildConfig(provider: ethers.JsonRpcProvider): LiveConfig {
   };
 }
 
-function dryRunOnlyFlag(
-  name: string,
-  value: string | undefined,
-  dryRun: boolean,
-): boolean {
-  if (value === undefined || value === "0") return false;
-  if (value !== "1") throw new Error(`${name} must be 0 or 1`);
-  if (!dryRun) throw new Error(`${name}=1 requires SEARCHER_DRY_RUN=1`);
-  return true;
-}
 
 function booleanEnvFlag(
   name: string,
@@ -1075,24 +812,6 @@ function booleanEnvFlag(
   throw new Error(`${name} must be 0 or 1`);
 }
 
-/** Ready reuse changes startup discovery only, never signing/submission posture. */
-export function resolveReadyGenerationReuse(
-  env: Readonly<Record<string, string | undefined>>,
-  dryRun: boolean,
-): boolean {
-  // Always validate the legacy flag, even when the general opt-in is enabled.
-  const legacyDryRunReuse = dryRunOnlyFlag(
-    "SEARCHER_DRY_RUN_USE_READY_GENERATION",
-    env.SEARCHER_DRY_RUN_USE_READY_GENERATION,
-    dryRun,
-  );
-  const reuseReadyGeneration = booleanEnvFlag(
-    "SEARCHER_USE_READY_GENERATION",
-    env.SEARCHER_USE_READY_GENERATION,
-    false,
-  );
-  return reuseReadyGeneration || legacyDryRunReuse;
-}
 
 /** Only terminal shutdown: retain an early fatal until the runtime drain exists. */
 export function createLiveRuntimeStop({ runtimeAbort, emitFatal, exit }: {
@@ -1429,11 +1148,27 @@ export function createBlockScanPriceRuntime(input: {
             exactCallBackend: pricingBackend ?? ownedBackend! }));
         const maxInputPathHops = resolveEffectiveInputPathHops();
         console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} samplingSource=effective-forward maxInputPathHops=${maxInputPathHops} cascadeAmountChanges=${cascadeAmountChanges}`);
+        // Count attempts in this build (including same-source rebuilds); these are
+        // logical quote calls, not physical RPCs or submitted transactions.
+        const attemptedLegs=new Set<string>();let quoteAttempts=0,unkeyedAttempts=0,simulatedReturns=0,exactReturns=0,attemptsComplete=true;
         const build = (previous: EffectiveMidSnapshot | undefined, touchedStateKeys: ReadonlySet<string> | undefined) =>
           buildEffectiveMids({ pricing, quoteGraph: reuse?.quoteGraph, weth: ADDR.WETH, maxInputPathHops,
           fixedWethInput: input.fixedEffectiveWethInput,
           cascadeAmountChanges,
           previous, touchedStateKeys, disabledEdgeIds: disabledEdgeIds(),
+          ...(() => {
+            const observed = reuse?.actualTouchedBeforeForcedRefresh;
+            if (!observed || !previous || previous !== reuse.previous || touchedStateKeys !== reuse.touchedStateKeys) return {};
+            // Only a complete, source-bound SQL activity interval can supply the
+            // shared economic refresh decision. Never turn absent activity into
+            // an empty set. Exact execution keeps its own current-source checks.
+            const plan = previous.complete && !cascadeAmountChanges
+              ? strictRuntimeRoot.sqlPoolPriceRefreshPlan(observed, previous.source, source) : undefined;
+            if (plan) return { poolPriceRefreshPlan: plan };
+            return { historicalRankingPolicy: strictRuntimeRoot.historicalRankingPolicy(observed, previous.source, source),
+              forcedRefresh: { actualTouched: observed, isOnTouchVariant: (edge: TokenEdge, key: string, variantId: string) =>
+                strictRuntimeRoot.isOnTouchReceiptVariant(edge, key, variantId) } };
+          })(),
           gasCostWei: blockScanAmountReference.estimateGasCost(source),
           enumerationSpreadBps: blockScanCfg.minSpreadBps, control: effectiveControl, concurrency: 1024,
           onProgress: progress => {
@@ -1443,6 +1178,10 @@ export function createBlockScanPriceRuntime(input: {
           },
           prepareQuote: sessions.prepareQuote,
           quote: async (request) => {
+            if(attemptsComplete)try{
+              quoteAttempts++;
+              const id=request.edge.canonicalEdgeId;if(id)attemptedLegs.add(id);else unkeyedAttempts++;
+            }catch{attemptsComplete=false;}
             const session = sessions.sessionFor(request.edge);
             const startedAtMs = Date.now();
             let status = "failed";
@@ -1456,7 +1195,7 @@ export function createBlockScanPriceRuntime(input: {
                 edges: quoteEdges, control: effectiveControl,
                 prepareQuote: sessions.prepareQuote, sessionFor: sessions.sessionFor,
               });
-              if (simulated !== undefined) { status = "simulated"; return simulated; }
+              if (simulated !== undefined) { status = "simulated";simulatedReturns++; return simulated; }
               if (request.edge.executionVerification === "startup-simulation") {
                 throw Object.assign(new Error("effective execution simulation unavailable"), { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" });
               }
@@ -1464,6 +1203,7 @@ export function createBlockScanPriceRuntime(input: {
                 executor: config.botvmAddress, runtimeEvidence: [] });
               if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
               status = "returned";
+              exactReturns++;
               return { ...quote, pricingMethod: "exact" as const };
             } finally {
               try {
@@ -1491,7 +1231,7 @@ export function createBlockScanPriceRuntime(input: {
           effective = await build(effective, new Set());
           effectiveBuildWallMs += effective.wallMs;
         }
-        console.log(`[searcher/effective-mid] ${JSON.stringify({
+        reportOptionalEffectiveCounts(()=>({
           sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
           samplingSource: "effective-forward", maxInputPathHops: effective.maxInputPathHops, reference: effective.reference,
           referenceWethInput: effective.referenceWethInput.toString(),
@@ -1499,9 +1239,12 @@ export function createBlockScanPriceRuntime(input: {
           startupExecutionAndInvalidationMs: Date.now() - preflightStarted,
           cascadeAmountChanges,
           localQuoteCache: strictExactQuoteCache.snapshot(),
-          carried: [...effective.rows.values()].filter(row => effectiveMidRowCarried(effective, row)).length,
+          ...priceCarryOutcomes(effective.rows,reuse?.previous?.rows,row=>effectiveMidRowCarried(effective,row)),
+          previousEffectiveSource:reuse?.previous?.source??null,
+          quoteWork:attemptsComplete?{attemptedPublicLegs:attemptedLegs.size,logicalAttempts:quoteAttempts,unkeyedAttempts,simulatedReturns,exactReturns,
+            failedAttempts:quoteAttempts-exactReturns-simulatedReturns}:{coverage:"unavailable"},
           ...effectiveMidPairStatistics(effective),
-        })}`);
+        }),line=>console.log(line));
         return effective;
       } finally {
         await ownedBackend?.closeAndDrain();
@@ -1526,362 +1269,15 @@ export function createBlockScanPriceRuntime(input: {
   return { strictSessionFor, currentRuntimeCoordinator, blockScanAmountReference };
 }
 
-/** Ready reuse reviews the complete current inputs at the sealed parent's
- * historical source. Progress changes neither that input nor its time range. */
-export function readyStartupReviewPlan(
-  checkpoint: Pick<StartupCheckpointEnvelope, "readyGeneration" | "inProgressRun"> | null,
-  requestedRunId?: string,
-) {
-  const ready = checkpoint?.readyGeneration;
-  if (!ready) throw new Error("Ready reuse requires one complete Ready checkpoint");
-  const pending = checkpoint!.inProgressRun;
-  if (ready.universeRange.toBlock !== ready.cutoff.number ||
-      (pending && (pending.fromBlock !== ready.universeRange.fromBlock ||
-        canonicalJson(pending.cutoff) !== canonicalJson(ready.cutoff)))) {
-    throw new Error("Ready reuse must resume the sealed parent source and range");
-  }
-  return Object.freeze({
-    runId: pending?.runId ?? requestedRunId ?? "strict-startup-ready-review",
-    cutoff: Object.freeze({ ...ready.cutoff }),
-    observationRange: Object.freeze({ ...ready.universeRange }),
-    resumeCompletedOutcomes: pending !== null,
-  });
-}
-
-/** The launcher seals its activation preflight output; ordinary Ready updates have no seal. */
-export function readPreparedReadySeal(env: NodeJS.ProcessEnv) {
-  const generation = env.SEARCHER_PREPARED_READY_GENERATION;
-  const sha256 = env.SEARCHER_PREPARED_READY_SHA256;
-  if (generation === undefined && sha256 === undefined) return undefined;
-  if (!generation || !/^[1-9][0-9]*$/.test(generation) ||
-      !Number.isSafeInteger(Number(generation)) || !sha256 || !/^[a-f0-9]{64}$/.test(sha256)) {
-    throw new Error("prepared Ready requires a generation and checkpoint SHA256");
-  }
-  return Object.freeze({ generation: Number(generation), sha256 });
-}
-
-/** Keep checkpoint ownership inside startup; producers retain only runtime projections. */
-export async function initializeReadyProducer({
-  universeRebuildCheckpointPath, rpcUrl, startupCandidates, executionIdentity,
-  onSimulationFatal, blindUseIncumbentReady, useReadyGeneration, currentHead,
-  boundedLiveReadyResume = false, preparedReady,
-}: {
-  readonly universeRebuildCheckpointPath: string;
-  readonly rpcUrl: string;
-  readonly startupCandidates: NonNullable<Parameters<typeof createRebuildWiring>[0]>["startupCandidates"];
-  readonly executionIdentity: NonNullable<Parameters<typeof createRebuildWiring>[0]>["executionIdentity"];
-  readonly onSimulationFatal: NonNullable<Parameters<typeof createRebuildWiring>[0]>["onSimulationFatal"];
-  readonly blindUseIncumbentReady: boolean;
-  readonly useReadyGeneration: boolean;
-  readonly currentHead: number;
-  readonly boundedLiveReadyResume?: boolean;
-  readonly preparedReady?: ReturnType<typeof readPreparedReadySeal>;
-}) {
-  const subsetPriceMode = liveReadySubsetPriceMode(process.env);
-  const liveSubset = subsetPriceMode !== undefined;
-  const drySubset = process.env.SEARCHER_DRY_RUN === "1" && process.env.SEARCHER_BLOCKSCAN_SUBMIT === "0";
-  const liveResume = boundedLiveReadyResume && subsetPriceMode === "resume" &&
-    process.env.SEARCHER_DRY_RUN === "0" && process.env.SEARCHER_BLOCKSCAN_SUBMIT === "1";
-  if (liveSubset && (!useReadyGeneration || blindUseIncumbentReady ||
-      (!drySubset && !liveResume) ||
-      process.env.SEARCHER_ENABLE_BACKRUN !== "0" || process.env.SEARCHER_ENABLE_MEMPOOL !== "0")) {
-    throw new Error("Ready subset requires a sealed dry-run or a bounded live resume");
-  }
-  if (preparedReady) {
-    if (!useReadyGeneration || blindUseIncumbentReady) {
-      throw new Error("prepared Ready requires explicit Ready consumption");
-    }
-    if (existsSync(universeRebuildCheckpointPath + ".attestation-journal")) {
-      throw new Error("prepared Ready cannot consume an unsealed attestation journal");
-    }
-    const hash = createHash("sha256");
-    for await (const chunk of createReadStream(universeRebuildCheckpointPath)) hash.update(chunk);
-    if (hash.digest("hex") !== preparedReady.sha256) throw new Error("prepared Ready checkpoint hash changed");
-  }
-  const rebuildStore = new UniverseRebuildCheckpointStore({
-    path: universeRebuildCheckpointPath,
-  });
-  let rebuildEnvelope = await rebuildStore.load();
-  const selectorCensus = rebuildEnvelope?.inProgressRun?.selectorCensus ?? rebuildEnvelope?.readyGeneration?.selectorCoverage?.transactions;
-  const rebuildWiring = createRebuildWiring({
-    ruleCompatibility: await readyRuleCompatibilityFor(rebuildEnvelope?.readyGeneration?.ruleBindings),
-    rpcUrl,
-    ...(selectorCensus === undefined ? { startupCandidates } : { selectorCensus }),
-    executionIdentity,
-    onSimulationFatal,
-  });
-  let readyUniverse;
-  if (blindUseIncumbentReady || liveSubset || preparedReady) {
-    if (
-      rebuildEnvelope === null ||
-      rebuildEnvelope.readyGeneration === null ||
-      rebuildEnvelope.inProgressRun !== null
-    ) {
-      throw new Error(
-        (blindUseIncumbentReady ? "blind replay" : "Ready reuse") +
-          " requires one complete Ready checkpoint",
-      );
-    }
-    readyUniverse = rebuildEnvelope.readyGeneration;
-  } else {
-    let options: Pick<RebuildUniverseInput, "runId" | "observationRange" | "observationWindowBlocks" |
-      "resumeCompletedOutcomes"> & Partial<Pick<RebuildUniverseInput, "freezeCanonicalHead">>;
-    if (useReadyGeneration || selectorCensus !== undefined) {
-      const { cutoff, ...reviewPlan } = readyStartupReviewPlan(rebuildEnvelope,
-        process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID);
-      options = { ...reviewPlan, freezeCanonicalHead: async (requestedBlock) => {
-        if (requestedBlock !== cutoff.number) throw new Error("Ready reuse cannot move its sealed cutoff");
-        await rebuildWiring.assertCanonicalHead(cutoff);
-        return cutoff;
-      } };
-    } else {
-      options = {
-        runId: process.env.SEARCHER_UNIVERSE_REBUILD_RUN_ID ?? "strict-startup-rebuild",
-        ...(process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS === undefined ? {} : {
-          observationWindowBlocks: Number(process.env.SEARCHER_UNIVERSE_REBUILD_WINDOW_BLOCKS),
-        }),
-      };
-    }
-    try {
-      readyUniverse = await rebuildUniverse({
-        ...rebuildWiring,
-        store: rebuildStore,
-        ...options,
-        log: (message) => console.log("[searcher/startup] " + message),
-      });
-    } catch (error) {
-      if (error instanceof UniverseRunIncomplete) {
-        throw new Error(
-          "strict startup rebuild incomplete: run=" + error.runId +
-            " remainingUnaccounted=" + error.remainingUnaccounted +
-            " (resume the durable run before producer start)",
-        );
-      }
-      throw error;
-    }
-    rebuildEnvelope = await rebuildStore.load();
-  }
-  if (
-    rebuildEnvelope === null ||
-    rebuildEnvelope.readyGeneration === null ||
-    rebuildEnvelope.readyGeneration.generation !== readyUniverse.generation
-  ) {
-    throw new Error("strict startup readyGeneration failed root verification");
-  }
-  if (preparedReady) {
-    if (readyUniverse.generation !== preparedReady.generation) throw new Error("prepared Ready generation changed");
-    await rebuildWiring.assertCanonicalHead(readyUniverse.cutoff);
-    const coverage = new Set(readyUniverse.sourceCoverage.map(row => row.familyId + "|" + row.sourceId));
-    if (!rebuildWiring.requiredSourceCoverageKeys().every(key => coverage.has(key))) {
-      throw new Error("prepared Ready lacks active Family source coverage; update Ready first");
-    }
-  }
-  if (blindUseIncumbentReady || useReadyGeneration) {
-    console.log(
-      "[searcher/startup] " +
-        (blindUseIncumbentReady ? "blind replay" : liveSubset ? "Ready subset" : preparedReady ? "Prepared Ready" : "Ready input review") +
-        " uses readyGeneration=" +
-        readyUniverse.generation + " cutoff=" + readyUniverse.cutoff.number +
-        " activeInstances=" + readyUniverse.activeInstanceKeys.length +
-        " retryableQueue=" +
-        Object.keys(rebuildEnvelope.retryableAttemptsByCandidateKey).length,
-    );
-  }
-  const strictReadyRuntime = resolveStrictReadyRuntime(readyUniverse);
-  const liveFamilyIds = liveSubset
-    ? PRODUCTION_FAMILY_ACTIVATIONS.filter(row => row.enabled && rebuildWiring.isFamilyEnabled?.(String(row.familyId)) !== false).map(row => String(row.familyId)).sort()
-    : undefined;
-  const liveIds = liveFamilyIds && new Set(liveFamilyIds);
-  if (liveFamilyIds) {
-    if (!readyUniverse.familyPartitions || liveFamilyIds.some(id => !readyUniverse.familyPartitions![id]?.enabled)) {
-      throw new Error("live Family selection lacks a sealed Ready partition; update Ready first");
-    }
-    await rebuildWiring.assertCanonicalHead(readyUniverse.cutoff);
-  }
-  // The sealed catalog identifies the exact verified memo for each instance.
-  // Historical aliases in the checkpoint cache can share that instance key.
-  const sealedMemos = sealedReadyMemos(rebuildEnvelope);
-  const activeReadyMemos = liveIds
-    ? sealedMemos.filter(memo => liveIds.has(memo.familyId))
-    : sealedMemos;
-  if ((liveIds || preparedReady) && activeReadyMemos.some(memo => !rebuildWiring.isReadyMemoDefinitionCurrent!(memo))) {
-    throw new Error("retained live Family proof changed; update Ready before resuming");
-  }
-  assertReadyFamilyActivation(activeReadyMemos, rebuildWiring.isFamilyEnabled);
-  const routeReadyMemos = activeReadyMemos.filter((memo) =>
-    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-      .forStrictFamily(memo.familyId as never).plugin.manifest.domain !==
-        "funding"
-  );
-  const fundingReadyMemos = activeReadyMemos.filter((memo) =>
-    PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG
-      .forStrictFamily(memo.familyId as never).plugin.manifest.domain ===
-        "funding"
-  );
-  const readyInstances = routeReadyMemos
-    .map((memo) => rebuildWiring.rehydrateVerifiedInstance({
-      memo,
-      cutoff: readyUniverse.cutoff,
-    }) as PreparedFamilyInstance);
-  const fundingReadyEntries = fundingReadyMemos.map((memo) =>
-    rebuildWiring.rehydrateVerifiedInstance({
-      memo,
-      cutoff: readyUniverse.cutoff,
-    }) as {
-      readonly domain: "funding";
-      readonly familyId: string;
-      readonly instanceKey: string;
-      readonly asset: string;
-      readonly bindings: readonly import("./venues/adapter-family-plugin.js").FundingExecutionBinding[];
-    }
-  );
-  if (
-    readyInstances.length + fundingReadyEntries.length !==
-      activeReadyMemos.length
-  ) {
-    throw new Error(
-      "strict startup readyGeneration lost an active memo/instance",
-    );
-  }
-  if (preparedReady && !liveIds) {
-    const publications = rebuildWiring.aggregateOnceByFamily([...readyInstances, ...fundingReadyEntries]);
-    rebuildWiring.assertReadyGraphSnapshot!({ publications, graphSnapshot: readyUniverse.graphSnapshot,
-      cutoff: readyUniverse.cutoff });
-  }
-  const flashTokens = Object.freeze([...new Set(fundingReadyEntries.flatMap(
-    entry => entry.bindings.map(binding => ethers.getAddress(binding.asset).toLowerCase()),
-  ))].sort());
-  if (flashTokens.length === 0) {
-    throw new Error(
-      "strict startup rebuild produced no observed/retained funding token",
-    );
-  }
-  let graph = strictReadyRuntime.graph as TokenEdge[];
-  if (liveIds) {
-    const excludedActions = new Set(PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins.flatMap(
-      module => [...module.plugin.manifest.ownedActionAdapterIds] as string[],
-    ));
-    graph = graph.filter(edge => !excludedActions.has(edge.adapterId));
-    const publications = rebuildWiring.aggregateOnceByFamily([...readyInstances, ...fundingReadyEntries]);
-    const projected = rebuildWiring.buildGraphSnapshot(publications, readyUniverse.cutoff) as { edges: TokenEdge[] };
-    const byId = new Map(projected.edges.map(edge => [edge.canonicalEdgeId, edge]));
-    if (graph.length !== projected.edges.length || byId.size !== graph.length || graph.some(edge => {
-      const verified = byId.get(edge.canonicalEdgeId);
-      return !verified || canonicalJson(verified) !== canonicalJson(edge);
-    })) throw new Error("live subset edges differ from the sealed Ready and retained bindings");
-    console.log("[searcher/live-ready-scope] " + JSON.stringify({ parentGeneration: readyUniverse.generation,
-      parentGraphEdges: strictReadyRuntime.graph.length, liveGraphEdges: graph.length, liveFamilyIds }));
-  }
-  const strictRuntimeRoot = new StrictProductionRuntimeRoot({
-    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    readySource: readyUniverse.cutoff,
-    readyGraph: graph,
-    readyInstances,
-    readyFundingAssets: fundingReadyEntries.flatMap(entry => entry.bindings.map(binding => Object.freeze({
-      familyId: entry.familyId as never, asset: binding.asset, binding,
-    }))),
-  });
-  const graphViewCoordinator = new StrictReadyGraphViewCoordinator({
-    catalog: PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG,
-    ready: readyUniverse,
-    edges: graph,
-  });
-  const baseline = resolveProducerBaseline({ ready: readyUniverse, currentHead });
-  return {
-    runtimeRoot: strictRuntimeRoot,
-    selectorMode: readyUniverse.selectorCoverage !== undefined,
-    liveFamilyIds,
-    readyFingerprint: rebuildEnvelope.checkpointFingerprint,
-    parentFamilyIds: liveFamilyIds ? Object.keys(readyUniverse.familyPartitions!).filter(id => readyUniverse.familyPartitions![id]!.enabled).sort() : undefined,
-    graph,
-    graphViewCoordinator,
-    flashTokens,
-    instanceCount: readyInstances.length,
-    lineage: Object.freeze({
-      generation: readyUniverse.generation,
-      graphHash: readyUniverse.graphHash,
-      catalogHash: readyUniverse.catalogHash,
-      cutoffNumber: readyUniverse.cutoff.number,
-      appliedThroughNumber: readyUniverse.appliedThrough.number,
-      appliedThroughHash: readyUniverse.appliedThrough.hash,
-      sourceCount: readyUniverse.sourceCoverage.length,
-    }),
-    baselineSummary: Object.freeze({
-      generation: baseline.ready.generation,
-      cutoffNumber: baseline.ready.cutoff.number,
-      activeInstanceCount: baseline.activeInstanceKeys.size,
-      observationScanFrom: baseline.observationScanFrom,
-    }),
-  };
-}
-
-/** Validate with the source process's full Family registry before the consumer loads its own Ready. */
-async function validateParentBeforeProjection(): Promise<void> {
-  if (process.env.PRIVATE_KEY || process.env.OWNER_PRIVATE_KEY || process.env.SEARCHER_DRY_RUN !== "1" ||
-      process.env.SEARCHER_BLOCKSCAN_SUBMIT !== "0") throw new Error("parent validation is read-only");
-  const dir = process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR!;
-  const prior = JSON.parse(readFileSync(resolve(dirname(dir), "request.json"), "utf8"));
-  const families = PRODUCTION_FAMILY_ACTIVATIONS.filter(row => row.enabled).map(row => String(row.familyId)).sort();
-  if (JSON.stringify(families) !== JSON.stringify(prior.families)) throw new Error("parent activation receipt changed");
-  const rpcUrl = liveRpcUrl(), provider = new ethers.JsonRpcProvider(rpcUrl);
-  try {
-    const executionIdentity = { executor: ethers.getAddress(process.env.BOTVM_ADDRESS!).toLowerCase(),
-      transactionOrigin: normalizeTransactionOrigin(process.env.BOTVM_OWNER!) };
-    const meta = await initializeReadyProducer({
-      universeRebuildCheckpointPath: process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH!, rpcUrl, startupCandidates: [],
-      executionIdentity, onSimulationFatal: reason => { throw new Error(reason.kind); },
-      blindUseIncumbentReady: false, useReadyGeneration: true, currentHead: await provider.getBlockNumber(),
-    });
-    if (meta.readyFingerprint !== prior.readyFingerprint) throw new Error("parent Ready checkpoint changed");
-    const before = liveContinuationPointer(dir);
-    const state = await new LivePricingContinuationStore(dir, before.identity).read();
-    if (!state) throw new Error("missing parent price data");
-    const cache = new BlockScanSimRejectCache();
-    const runtime = createBlockScanPriceRuntime({ provider, rpcUrl, ...executionIdentity, strictRuntimeRoot: meta.runtimeRoot,
-      blockScanRuntimeAbort: new AbortController(), blockScanCfg: undefined, isPoolSimRejected: () => false, recordPricing: () => {} });
-    await validateLiveContinuationAnchors(state, runtime.blockScanAmountReference, async n => {
-      const b = await provider.getBlock(n); if (!b?.hash) throw new Error("missing parent anchor"); return {hash:b.hash};
-    });
-    const view = (at: typeof state.pricing.pricing) => meta.graphViewCoordinator.build({
-      id: "source-continuation-check", edges: meta.graph, topologyKey: `strict-ready:${meta.lineage.generation}:${meta.lineage.graphHash}`,
-      generation: at.generation, sourceBlock: at.sourceBlock, sourceBlockHash: at.sourceBlockHash });
-    await runtime.currentRuntimeCoordinator.restoreHistoricalBaseline(state.pricing, { graph: view(state.pricing.pricing),
-      rawGraph: view(state.pricing.raw), weth: ADDR.WETH, control: { signal: new AbortController().signal, deadlineAtMs: Date.now()+180000 } });
-    const startup = createBlockScanStartupExecutionPreflight({ ...executionIdentity, simRejects: cache, concurrency: 1,
-      simulateStandalone: Object.assign(async () => { throw new Error("parent restore may not simulate"); },
-        { stats: () => { throw new Error("parent restore has no simulator"); } }) });
-    startup.restoreContinuation(state.startup); cache.restoreContinuation(state.simRejects, meta.graph);
-    if (liveContinuationPointer(dir).digest !== before.digest) throw new Error("parent journal advanced during validation");
-    console.log("[searcher/verified-subset-parent] " + JSON.stringify({ ...before,families,readyFingerprint:meta.readyFingerprint }));
-  } finally { provider.destroy(); }
-}
-
-async function liveSubsetParentProof() {
-  const dir = process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR;
-  const out = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR;
-  if (!dir) return;
-  if (process.env.SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET !== "1" || !out || !isAbsolute(dir) || resolve(dir)===resolve(out))
-    throw new Error("subset handoff requires distinct parent and child journals");
-  if (existsSync(resolve(out,"current.bin"))) return; // The authenticated consumer store owns ordinary resume.
-  const prior = JSON.parse(readFileSync(resolve(dirname(dir),"request.json"),"utf8"));
-  if (!Array.isArray(prior.families) || !prior.families.every((id:unknown) => typeof id === "string") ||
-      !prior.readyFingerprint || new Set(prior.families).size !== prior.families.length) throw new Error("missing parent activation receipt");
-  const enabled = new Set<string>(prior.families);
-  const env: NodeJS.ProcessEnv = { PATH: process.env.PATH, MAINNET_RPC_URL:liveRpcUrl(), BOTVM_ADDRESS:process.env.BOTVM_ADDRESS,
-    BOTVM_OWNER:process.env.BOTVM_OWNER, SEARCHER_TEST_DISABLE_DOTENV:"1", SEARCHER_DRY_RUN:"1", SEARCHER_BLOCKSCAN_SUBMIT:"0",
-    SEARCHER_ENABLE_BACKRUN:"0", SEARCHER_ENABLE_MEMPOOL:"0", SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED:"1",
-    SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR:dir, SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH:process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH,
-    SEARCHER_BLOCKSCAN_LIVE_READY_SUBSET:"1" };
-  for (const row of PRODUCTION_FAMILY_ACTIVATIONS) if (row.envKey) env[row.envKey]=enabled.has(row.familyId)?"1":"0";
-  const {stdout}=await promisify(execFile)(process.execPath,["--max-old-space-size=10000","--import","tsx",
-    fileURLToPath(import.meta.url),"--verify-subset-parent"],{env,timeout:600000,maxBuffer:16*1024*1024});
-  const tag="[searcher/verified-subset-parent] ";
-  const lines=stdout.split("\n").filter(line=>line.startsWith(tag));
-  if (lines.length!==1) throw new Error("full parent journal did not pass its original receiver");
-  return JSON.parse(lines[0]!.slice(tag.length)) as {identity:string;digest:string;families:string[];readyFingerprint:string};
-}
 
 async function main(): Promise<void> {
+  const options = process.argv.slice(2);
+  if (options.length && !(options.length === 1 && options[0]!.startsWith("--blockscan-pricing-source=")) &&
+      !(options.length === 2 && options[0] === "--blockscan-pricing-source")) {
+    throw new Error("unsupported live command arguments");
+  }
+  // Reject malformed/retired CLI modes before doing any network or signer setup.
+  resolveBlockScanPricingSourceMode(options, undefined);
   // Blind acceptance must be enabled by the process supervisor. Letting .env
   // turn it on would make the nominal production process execute audit-only
   // control paths, while loading .env eagerly would also make the default path
@@ -1898,26 +1294,9 @@ async function main(): Promise<void> {
   }
   assertFamilyActivationEnvironment(PRODUCTION_FAMILY_ACTIVATIONS);
   const blindProductionAudit = blindAuditProcessValue === "1";
-  const blindUseIncumbentReadyValue =
-    process.env.SEARCHER_BLIND_USE_INCUMBENT_READY;
-  if (
-    blindUseIncumbentReadyValue !== undefined &&
-    (!blindProductionAudit || blindUseIncumbentReadyValue !== "1")
-  ) {
-    throw new Error(
-      "SEARCHER_BLIND_USE_INCUMBENT_READY=1 is replay-only",
-    );
-  }
-  const blindUseIncumbentReady = blindUseIncumbentReadyValue === "1";
 
   const rpcUrl = liveRpcUrl();
 
-  const subsetPriceMode = liveReadySubsetPriceMode(process.env);
-  if (subsetPriceMode && process.env.SEARCHER_DRY_RUN !== "1" &&
-      (subsetPriceMode !== "resume" || process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR)) {
-    throw new Error("bounded live Ready subset requires a direct journal");
-  }
-  const validatedParent = await liveSubsetParentProof();
   const provider = new ethers.JsonRpcProvider(rpcUrl);
   const config = buildConfig(provider);
   const blockScanActivitySettings = resolveBlockScanActivitySettings(process.env);
@@ -1929,7 +1308,6 @@ async function main(): Promise<void> {
     executor: ethers.getAddress(config.botvmAddress).toLowerCase(),
     transactionOrigin: normalizeTransactionOrigin(config.wallet.address),
   });
-  const useReadyGeneration = resolveReadyGenerationReuse(process.env, config.dryRun);
   const blindForkBotVmFlag = process.env.SEARCHER_BLIND_INSTALL_FORK_BOTVM;
   const blindInstallForkBotVm = forkBotVmInstallationEnabled(
     blindProductionAudit,
@@ -1998,8 +1376,7 @@ async function main(): Promise<void> {
       },
     },
   );
-  const boundedLiveReadyResume = subsetPriceMode === "resume" && !config.dryRun;
-  if (boundedLiveReadyResume) {
+  if (!config.dryRun) {
     assertPendingBoundedLiveSession({
       wallet: executionIdentity.transactionOrigin,
       executor: executionIdentity.executor,
@@ -2133,7 +1510,7 @@ async function main(): Promise<void> {
   const finalSimulationExecutorRuntimeCode = dryRunBotVmCodeOverride
     ? loadBotVmRuntimeCode(executionIdentity.transactionOrigin) : undefined;
   const rawExecutionEntry = rawExecutionEntryEnabled(process.env.SEARCHER_BOTVM_RAW_ENTRY);
-  const blockScanPoolRevertFilter = poolRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_POOL_REVERT_FILTER);
+  const blockScanPoolRevertFilter = poolRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_POOL_REVERT_FILTER ?? "1");
   const chainDiagnosticCode = !finalSimulationExecutorRuntimeCode && enableBlockScan &&
     blockScanFinalSimulationMethod === "eth_simulateV1" && blockScanPoolRevertFilter
     ? loadBotVmRuntimeCode(executionIdentity.transactionOrigin) : undefined;
@@ -2166,11 +1543,12 @@ async function main(): Promise<void> {
       blockScanAnvilPort,
     );
     process.once("exit", () => isolatedState.stop());
-    await isolatedState.start();
-    console.log(
-      `[searcher/live] eager block-scan state backend ready ` +
-        `port=${blockScanAnvilPort}`,
-    );
+    // Node-native amount trials and final simulation never lease a fork.
+    // Keep the worker slots, but only warm a fork for the Anvil simulation method.
+    if (blockScanFinalSimulationMethod === "anvil") {
+      await isolatedState.start();
+      console.log(`[searcher/live] eager block-scan state backend ready port=${blockScanAnvilPort}`);
+    }
     const isolatedPlanner = new TemplatePlanner();
     isolatedPlanner.setProfitTokenValuation(profitTokenValuation);
     isolatedPlanner.setMaxCandidates(maxCandidates);
@@ -2354,7 +1732,7 @@ async function main(): Promise<void> {
       ? undefined
       : Number(process.env.SEARCHER_BLOCKSCAN_SOLVER_INPUTS_MAX_BYTES),
     protectedPaths: [eventContext.path, blockScanRouteEventsPath,
-      process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH ?? ""],
+      process.env.SEARCHER_SQL_LIVE_INPUT_PATH ?? ""],
   }) : undefined;
   if (solverInputRecorder) console.log("[searcher/solver-inputs] enabled private complete execution input recording");
   const blockScanRouteTelemetry =
@@ -2449,7 +1827,7 @@ async function main(): Promise<void> {
   console.log(`[searcher/live] revmPrewarmRouteHops=${config.revmPrewarmRouteHops}`);
   console.log(
     `[searcher/live] stateUpdater=${config.stateUpdaterEnabled ? "enabled" : "disabled"} ` +
-      `pinnedK=${config.statePinnedK} recentK=${config.stateRecentK} ` +
+      `recentK=${config.stateRecentK} ` +
       `maxPools=${config.stateWatchMaxPools}`,
   );
   console.log(
@@ -2457,17 +1835,6 @@ async function main(): Promise<void> {
       `quoteToleranceRawUnits=${config.quoteToleranceRawUnits} ` +
       `quoteProfitFloorBps=${config.quoteProfitFloorBps} ` +
       `finalVerifyFloorBps=${config.finalVerifyFloorBps}`,
-  );
-  console.log(`[searcher/live] pinnedWarmPools=${config.pinnedWarmPoolPath}`);
-  console.log(
-    `[searcher/live] forceIncludePoolIds=${config.forceIncludePoolIdsPath} ` +
-      `merged=${config.poolUniverseForceInclude.length}`,
-  );
-  console.log(
-    `[searcher/live] poolUniverse=${config.poolUniversePath} ` +
-      `topN=${config.poolUniverseTopN} minScore=${config.poolUniverseMinScore} ` +
-      `highSpreadPairQuota=${config.poolUniverseHighSpreadPairQuota} ` +
-      `highSpreadMinFee=${config.poolUniverseHighSpreadMinFee}`,
   );
   console.log(
     `[searcher/live] solverDeadlineMs=${config.solverDeadlineMs} ` +
@@ -2521,170 +1888,42 @@ async function main(): Promise<void> {
     call: async (req) => provider.call(req),
     getLogs: async (req) => provider.send("eth_getLogs", [req]),
   };
-  // Strict startup discovery is the only instance authority. No static or
-  // legacy protocol venue enters the candidate set through token-graph state.
-  const liveRegistry: PoolEntry[] = [];
-  const rawPinnedWarmPools = loadPinnedWarmPools(config.pinnedWarmPoolPath);
-  const rawUniversePools = loadPoolUniverse(config.poolUniversePath, {
-    maxPools: config.poolUniverseTopN,
-    minScore: config.poolUniverseMinScore,
-    forceInclude: config.poolUniverseForceInclude,
-    highSpreadPairQuota: config.poolUniverseHighSpreadPairQuota,
-    highSpreadMinFee: config.poolUniverseHighSpreadMinFee,
-    // Universe provenance is historical input only. Strict attestation below
-    // is the sole admission authority and rewrites identitySource on success.
-    allowUnregisteredIdentitySource: true,
+  // SQL is the production input, not an alternate execution lane. The objects
+  // returned here feed the same head loop, reject cache, solver and final sim.
+  const sqlProducer = await initializeSqlLiveProducer({
+    env: process.env, provider, executionIdentity, currentHead: discoveryToBlock,
+    scheduler: blockScanRethTransportScheduler, expectedHeadHash: startupDexSourceBlockHash, rpcUrl: config.rpcUrl,
+    signal: blockScanRuntimeAbort.signal,
+    configuredRuntimeCode: finalSimulationExecutorRuntimeCode?.code,
   });
-  const rawBlockscanUniverse = loadPoolUniverse(config.poolUniversePath, {
-    maxPools: 0,
-    // Protocol address discovery consumes the complete file-backed DEX token
-    // domain. Arb score ranks swap planning; it is not an identity gate for a
-    // share token that may expose a protocol conversion route.
-    minScore: 0,
-    allowUnregisteredIdentitySource: true,
-  });
-  const rawBlockScanOverrides = loadBlockScanViewOverrides();
-  // P0 strict startup authority: one fixed-cutoff durable run owns the union
-  // of every startup pool set plus plugin-declared event supplements. It
-  // attests each Family+Instance once, persists the exact partition, and
-  // returns only after Graph+catalog+coverage are one readyGeneration.
-  const universeRebuildCheckpointPath =
-    process.env.SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH;
-  if (
-    universeRebuildCheckpointPath === undefined ||
-    universeRebuildCheckpointPath.trim() === ""
-  ) {
-    throw new Error(
-      "strict startup requires SEARCHER_UNIVERSE_REBUILD_CHECKPOINT_PATH",
-    );
-  }
-  const startupCandidates = Object.freeze([
-    ...rawPinnedWarmPools,
-    ...rawUniversePools,
-    ...rawBlockscanUniverse,
-    ...rawBlockScanOverrides,
-  ].map((candidate) => Object.freeze({ ...candidate })));
-  const {
-    runtimeRoot: strictRuntimeRoot, graph: initialReadyGraph, liveFamilyIds, parentFamilyIds, readyFingerprint,
-    graphViewCoordinator: strictReadyGraphViews, flashTokens,
-    instanceCount: readyInstanceCount, lineage: readyUniverse, baselineSummary, selectorMode,
-  } = await initializeReadyProducer({
-    universeRebuildCheckpointPath, rpcUrl: config.rpcUrl, startupCandidates,
-    executionIdentity, onSimulationFatal, blindUseIncumbentReady,
-    useReadyGeneration, currentHead: discoveryToBlock, boundedLiveReadyResume,
-    preparedReady: readPreparedReadySeal(process.env),
-  });
-  // Transition-only pool views remain useful for detector metadata, but no
-  // longer grant identity or Graph admission. readyGeneration is the sole
-  // executable authority.
-  const pinnedIdentity = Object.freeze({
-    accepted: rawPinnedWarmPools,
-    rejected: Object.freeze([]),
-  });
-  const universeIdentity = Object.freeze({
-    accepted: rawUniversePools,
-    rejected: Object.freeze([]),
-  });
-  const blockscanIdentity = Object.freeze({
-    accepted: rawBlockscanUniverse,
-    rejected: Object.freeze([]),
-  });
-  const overrideIdentity = Object.freeze({
-    accepted: rawBlockScanOverrides,
-    rejected: Object.freeze([]),
-  });
-  // F6 Pair B: strict attestation returns a narrower rejected shape; bridge
-  // it back to the legacy RejectedPoolIdentity for the transition consumers.
-  const asLegacyRejections = (
-    rejected: readonly {
-      readonly address: string;
-      readonly adapter: string;
-      readonly reason: string;
-    }[],
-  ): RejectedPoolIdentity[] => rejected.map((entry) => Object.freeze({
-    address: entry.address,
-    adapter: entry.adapter,
-    reason: entry.reason as PoolIdentityFailureReason,
-  }));
-  const pinnedWarmPools = [
-    ...pinnedIdentity.accepted,
-  ] as unknown as PinnedWarmPoolEntry[];
-  const universePools = [...universeIdentity.accepted] as PoolEntry[];
-  const blockscanUniverse = [...blockscanIdentity.accepted] as PoolEntry[];
-  const blockScanOverrides = [...overrideIdentity.accepted] as PoolEntry[];
-  logIdentityRejections("pinned", asLegacyRejections(pinnedIdentity.rejected));
-  logIdentityRejections("universe", asLegacyRejections(universeIdentity.rejected));
-  logIdentityRejections(
-    "blockscan-universe",
-    asLegacyRejections(blockscanIdentity.rejected),
-  );
-  logIdentityRejections(
-    "blockscan-overrides",
-    asLegacyRejections(overrideIdentity.rejected),
-  );
-  // Transition-only pool views are metadata. They cannot add an executable
-  // edge; readyGeneration remains the sole Graph authority.
-  const incumbentPools =
-    mergePoolRegistries(
-      mergePoolRegistries(
-        mergePoolRegistries(liveRegistry, pinnedWarmPools),
-        universePools,
-      ),
-      blockscanUniverse,
-    );
-  const basePools = incumbentPools;
-  const startupBlockscanUniverse = blockscanUniverse;
-  const startupBlockScanOverrides = blockScanOverrides;
+  console.log(`[searcher/live] SQL input dispositions: ${JSON.stringify(sqlProducer.inputSummary)}`);
+  const { runtimeRoot: strictRuntimeRoot, graph, graphViewCoordinator, flashTokens,
+    instanceCount, lineage, baselineSummary } = sqlProducer;
+  const intake = buildSqlStrategyIntakeView(graph, sqlProducer.fingerprint);
   console.log(
-    `[searcher/live] pool registry: ${liveRegistry.length} protocol + ` +
-      `${pinnedWarmPools.length} pinned + ${universePools.length} universe ` +
-      `(forceInclude=${config.poolUniverseForceInclude.length}) + ` +
-      `${blockscanUniverse.length} blockscan metadata + ` +
-  `${basePools.length} total (strict event scan already consumed)`,
-  );
-  const strategyViewOptions = {
-    blockscanMaxPools: Number(process.env.SEARCHER_BLOCKSCAN_VIEW_MAX_POOLS ?? 6000),
-    poolUniverseGeneratedAt: loadPoolUniverseGeneratedAt(config.poolUniversePath),
-  };
-  let strategyViews = buildStrategyViews(
-    basePools,
-    startupBlockscanUniverse,
-    startupBlockScanOverrides,
-    strategyViewOptions,
-  );
-  console.log(
-    `[searcher/live] strategy views: backrun=${strategyViews.backrun.length} ` +
-      `blockscan=${strategyViews.blockscan.length} ` +
-      `view_version=${strategyViews.versions.strategy_view_version} ` +
-      `blockscan_view_hash=${strategyViews.versions.blockscan_view_hash} ` +
+    `[searcher/live] graph intake: targets=${intake.targets.length} logicalPools=${intake.pools.length} ` +
+      `view_version=${intake.version} ` +
       `discovery_to_block=${discoveryToBlock}`,
   );
 
-  // strict-only Graph authority. The persisted ready snapshot was produced
-  // by catalog-issued route handles and Family projectGraph during the same
-  // CAS as cutoff/catalog/coverage. Backrun and blockscan consume this one
-  // immutable generation; raw pool views cannot manufacture an edge.
-  let graph = initialReadyGraph;
-  let blockScanGraph: TokenEdge[] | undefined = enableBlockScan
+  // Backrun and blockscan consume exactly the same issued SQL directions.
+  const blockScanGraph: TokenEdge[] | undefined = enableBlockScan
     ? graph
     : undefined;
   if (enableBlockScan) blockScanPlanner?.setGraph(blockScanGraph ?? []);
   console.log(
-    `[searcher/live] strict ready graph loaded: generation=` +
-      `${readyUniverse.generation} graph_hash=${readyUniverse.graphHash} ` +
+    `[searcher/live] SQL graph loaded: generation=` +
+      `${lineage.generation} graph_hash=${lineage.graphHash} ` +
       `edges=${graph.length} backrun=true blockscan=${enableBlockScan}`,
   );
   console.log(
     `[searcher/live] strict startup coverage restored: ` +
-      `cutoff=${readyUniverse.appliedThroughNumber}:` +
-      `${readyUniverse.appliedThroughHash} ` +
-      `sources=${readyUniverse.sourceCount} ` +
-      `legacy_cache_authority=disabled`,
+      `cutoff=${lineage.appliedThroughNumber}:` +
+      `${lineage.appliedThroughHash} sources=${lineage.sourceCount}`,
   );
   const tokenIndex = buildTokenIndex(graph);
 
-  // Detection admission comes from the strict ready Graph itself. Legacy
-  // pool views cannot nominate a producer-time address absent from Graph.
+  // Detection admission comes from the graph itself, not a pool registry.
   const allPoolMap = new Map<string, string>();
   for (const edge of graph) {
     if (ethers.isAddress(edge.target)) {
@@ -2697,13 +1936,10 @@ async function main(): Promise<void> {
   detector.setSwapObservationBindingResolver(strictRuntimeRoot.resolveSwapObservationBinding);
   planner.setGraph(graph);
 
-  // Funding tokens are a second Ready projection of the same two-day strict
-  // rebuild: funding plugins decode real FlashLoan observations, durable
-  // verified memos retain prior tokens, and current-N funding programs attest
-  // liquidity. No provider history rescan and no graph-token candidate sweep.
+  // The peer SQL funding table is sealed over the same discovery window.
   const fundingTokenUniverseBinding = blindProductionAudit
     ? Object.freeze({
-        enumeratedAtBlock: readyUniverse.cutoffNumber,
+        enumeratedAtBlock: lineage.cutoffNumber,
         tokenCount: flashTokens.length,
         tokenSetSha256: blindProductionAuditHash(flashTokens),
       })
@@ -2736,10 +1972,10 @@ async function main(): Promise<void> {
   let continuationWriter: LivePricingContinuationWriter | undefined;
   const startupExecutionPreflight = blockScanRethTransportScheduler ? createBlockScanStartupExecutionPreflight({ ...executionIdentity,
     simRejects: blockScanSimRejects, concurrency: 32,
-    filterTargetReverts: startupRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_STARTUP_REVERT_FILTER),
+    filterTargetReverts: startupRevertFilterEnabled(process.env.SEARCHER_BLOCKSCAN_STARTUP_REVERT_FILTER ?? "1"),
     simulateStandalone: createStartupNodeSimulation({ rpcUrl: config.rpcUrl, chainId: blockScanChainId,
       ...executionIdentity, executorRuntimeCode: finalSimulationExecutorRuntimeCode,
-      rawExecutionEntry, scheduler: blockScanRethTransportScheduler, requestsPerSecond: 200 }) }) : undefined;
+      rawExecutionEntry, scheduler: blockScanRethTransportScheduler }) }) : undefined;
   const priceRuntime = createBlockScanPriceRuntime({
     provider, rpcUrl: config.rpcUrl, ...executionIdentity, strictRuntimeRoot,
     fixedEffectiveWethInput: blockScanStageSettings.fixedEffectiveWethInput,
@@ -2755,27 +1991,17 @@ async function main(): Promise<void> {
   const { strictSessionFor, blockScanAmountReference } = priceRuntime;
   currentRuntimeCoordinator = priceRuntime.currentRuntimeCoordinator;
 
-  // The ready envelope is the only startup catalog/Graph lineage. Rehydrated
-  // instances are handed directly to StrictProductionRuntimeRoot above; there
-  // is no second lifecycle/publication/CAS or shadow catalog root.
   console.log(
-    "[searcher/live] strict ready catalog loaded: generation=" +
-      readyUniverse.generation +
-      " cutoff=" + readyUniverse.cutoffNumber +
-      " catalog_hash=" + readyUniverse.catalogHash +
-      " instances=" + readyInstanceCount +
+    "[searcher/live] SQL runtime catalog loaded: generation=" +
+      lineage.generation +
+      " cutoff=" + lineage.cutoffNumber +
+      " catalog_hash=" + lineage.catalogHash +
+      " instances=" + instanceCount +
       " edges=" + graph.length,
   );
 
-  // Incremental refresh: scan recent blocks for new pools every N minutes
-  // Audit §5/§6 producer freeze: when a universe-rebuild checkpoint is
-  // configured, the producer starts only after a ready generation exists
-  // at the frozen cutoff; the observed/applied cursors never rewind before
-  // it, and the historical event window is not re-scanned (the ready run
-  // already covered it). No ready generation (or an incomplete run) fails
-  // closed before the producer is created.
   console.log(
-    "[searcher/live] universe rebuild ready generation=" +
+    "[searcher/live] SQL baseline generation=" +
       baselineSummary.generation +
       " cutoff=" + baselineSummary.cutoffNumber +
       " instances=" + baselineSummary.activeInstanceCount +
@@ -2798,22 +2024,11 @@ async function main(): Promise<void> {
   const recentWarmPools = new RecentWarmTracker(
     Number(process.env.SEARCHER_WARM_RECENT_TTL_BLOCKS ?? "12"),
   );
-  const pinnedWarmHops = pinnedWarmHopsFromGraph(graph, pinnedWarmPools);
-  const pinnedWarmTargets = new Set(pinnedWarmHops.map((hop) => hop.target.toLowerCase()));
-  console.log(
-    `[searcher/live] seeded pinned warm hops: ${pinnedWarmHops.length} directions ` +
-      `from ${pinnedWarmPools.length} pools`,
-  );
+  const pinnedWarmTargets = new Set<string>(); // No manual pins in the SQL topology.
 
-  // Between-block warmer: pinned and recent pools have independent quotas so
-  // bluechip backbone pools cannot crowd out newly observed longtail pools.
+  // The between-block warmer uses actually observed routes.
   // If a new block arrives while a hint is in flight, remember the latest block
   // and warm it as soon as the hint finishes instead of dropping the warm event.
-  const warmPinnedK = Number(
-    process.env.SEARCHER_WARM_PINNED_K ??
-      process.env.SEARCHER_WARM_TOP_K ??
-      "0",
-  );
   const warmRecentK = Number(
     process.env.SEARCHER_WARM_RECENT_K ??
       process.env.SEARCHER_WARM_TOP_K ??
@@ -2821,7 +2036,7 @@ async function main(): Promise<void> {
   );
   const warmIdleDelayMs = Number(process.env.SEARCHER_WARM_IDLE_DELAY_MS ?? "1000");
   console.log(
-    `[searcher/live] warm lanes pinnedK=${warmPinnedK} recentK=${warmRecentK} ` +
+    `[searcher/live] warm recentK=${warmRecentK} ` +
       `recentTtlBlocks=${recentWarmPools.ttl} idleDelayMs=${warmIdleDelayMs}`,
   );
   let warming = false;
@@ -2840,15 +2055,13 @@ async function main(): Promise<void> {
       pendingWarmReason = reason;
       return;
     }
-    const pinned = topPinnedWarmHops(pinnedWarmHops, warmPinnedK);
-    const recent = recentWarmPools.top(warmRecentK, blockNumber, pinnedWarmTargets);
-    const hops = [...recent, ...pinned];
+    const hops = recentWarmPools.top(warmRecentK, blockNumber, pinnedWarmTargets);
     if (hops.length === 0) return;
     warming = true;
     pendingWarmBlock = null;
     console.log(
       `[searcher/live] warm block=${blockNumber} reason=${reason} ` +
-        `recent=${recent.length}/${warmRecentK} pinned=${pinned.length}/${warmPinnedK}`,
+        `recent=${hops.length}/${warmRecentK}`,
     );
     void liveBackend
       .warmHotPools(blockNumber, hops)
@@ -2889,7 +2102,7 @@ async function main(): Promise<void> {
   };
   if (
     !blindProductionAudit &&
-    (warmPinnedK > 0 || warmRecentK > 0) &&
+    warmRecentK > 0 &&
     liveBackend.warmHotPools
   ) {
     provider.on("block", (blockNumber: number) => {
@@ -2912,8 +2125,7 @@ async function main(): Promise<void> {
   let activeHintSimulationWork: SourceSimulationWork | undefined;
   let hintGeneration = 0;
   const frozenProducerTopology = Object.freeze({
-    topologyKey:
-      `strict-ready:${readyUniverse.generation}:${readyUniverse.graphHash}`,
+    topologyKey: sqlProducer.topologyKey,
     async observeHeader(blockNumber: number, control?: StateCallControl) {
       return blockScanActivityProvider.observeHeader(blockNumber, async () => {
         const readStartedAtMs = Date.now();
@@ -3055,6 +2267,11 @@ async function main(): Promise<void> {
   const continuePrices = liveContinuationEnabled(process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_ENABLED);
   const continuationCatchupSource = startupCatchupSource(process.env.SEARCHER_BLOCKSCAN_STARTUP_CATCHUP_SOURCE);
   const continuationDirectory = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_DIR;
+  const nativePath=process.env.SEARCHER_SQL_NATIVE_RESUME_REVIEW,nativePin=process.env.SEARCHER_SQL_NATIVE_RESUME_REVIEW_SHA256;
+  if((nativePath!==undefined||nativePin!==undefined)&&(!nativePath||!nativePin||!continuePrices||!continuationDirectory||
+    process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_COMPATIBILITY!==undefined||
+    process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_COMPATIBILITY_SHA256!==undefined||!config.dryRun||config.blockScanSubmit))
+    throw new Error("native SQL resume requires one exclusive pinned proof and non-submitting dry-run");
   if (continuePrices && !continuationDirectory) throw new Error("live continuation directory is required");
   let restoredContinuation = false;
   if (continuationDirectory) {
@@ -3070,119 +2287,61 @@ async function main(): Promise<void> {
       maxInputPathHops: resolveEffectiveInputPathHops(),
       spreadBps: blockScanCfg.minSpreadBps,
       cascade: resolveEffectiveAmountCascade(process.env.SEARCHER_BLOCKSCAN_EFFECTIVE_AMOUNT_CASCADE_ENABLED),
-      ...(liveFamilyIds && { liveFamilyIds, readyFingerprint }),
+      sqlInputFingerprint: sqlProducer.fingerprint,
     };
     const identity = liveContinuationIdentity(continuationContext);
-    const compatibilityPath = process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_COMPATIBILITY;
-    const previousIdentity = continuePrices && compatibilityPath
-      ? compatibleLiveContinuationIdentities(continuationContext, compatibilityPath) : undefined;
-    const store = new LivePricingContinuationStore(continuationDirectory, identity, previousIdentity);
+    const native=nativePath?reviewedNativeSqlResume({manifest:nativePath,releasePin:nativePin!,directory:continuationDirectory,
+      sqlInputSha256:process.env.SEARCHER_SQL_LIVE_INPUT_SHA256,dryOnly:config.dryRun&&!config.blockScanSubmit,context:continuationContext}):undefined;
+    // A continuation can restore only this SQL topology, never a legacy Ready journal.
+    const store = new LivePricingContinuationStore(continuationDirectory, identity, native?.producerIdentities);
     if (!continuePrices) {
       const archived = await store.beginFreshRound();
       console.log(`[searcher/live-continuation] ${JSON.stringify({
         phase: "new-logical-round", previousCheckpointArchived: archived,
       })}`);
     }
-    let restored = continuePrices ? await store.read() : null;
-    const parentDir = process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_DIR;
-    let importedParent = false;
-    const view = (at: {generation:number; sourceBlock:number; sourceBlockHash:string}) => strictReadyGraphViews.build({
+    const restored = continuePrices ? await store.read() : null;
+    native?.checkRead(store,restored);
+    if (continuePrices && !restored) throw new Error('no matching continuation for these SQL tables');
+    const view = (at: {generation:number; sourceBlock:number; sourceBlockHash:string}) => graphViewCoordinator.build({
       id: "live-continuation", edges: graph, topologyKey: frozenProducerTopology.topologyKey,
       generation: at.generation, sourceBlock: at.sourceBlock, sourceBlockHash: at.sourceBlockHash,
     });
-    if (!restored && parentDir && liveFamilyIds && parentFamilyIds) {
-      if (!isAbsolute(parentDir) || resolve(parentDir) === resolve(continuationDirectory)) throw new Error("subset parent must be a separate existing journal");
-      if (!validatedParent || validatedParent.readyFingerprint !== readyFingerprint ||
-          validatedParent.digest !== liveContinuationPointer(parentDir).digest) throw new Error("validated parent journal or Ready changed");
-      const priorFamilies = validatedParent.families;
-      if ([...liveFamilyIds, ...priorFamilies].some(id => !parentFamilyIds.includes(id))) {
-        throw new Error("live Family selection lacks a sealed Ready partition; update Ready first");
-      }
-      const { liveFamilyIds: _selected, readyFingerprint: _parentReady, ...baseContext } = continuationContext;
-      const manifest = process.env.SEARCHER_BLOCKSCAN_LIVE_SUBSET_PARENT_COMPATIBILITY;
-      // Legacy full-Ready journals predate the liveFamilyIds context field.
-      const contexts: unknown[] = [{...baseContext,liveFamilyIds:priorFamilies,readyFingerprint}];
-      if (JSON.stringify(parentFamilyIds) === JSON.stringify(priorFamilies)) contexts.unshift(baseContext);
-      if (!contexts.some(cx => liveContinuationIdentity(cx) === validatedParent.identity ||
-          (manifest && compatibleLiveContinuationIdentities(cx,manifest).includes(validatedParent.identity)))) {
-        throw new Error("unreviewed subset parent identity");
-      }
-      // Accept exactly the same sealed, single-producer chain the full receiver verified.
-      const parent = await new LivePricingContinuationStore(parentDir,validatedParent.identity).read();
-      if (!parent || validatedParent.digest !== liveContinuationPointer(parentDir).digest) throw new Error("parent journal advanced during restore");
-      await validateLiveContinuationAnchors(parent, blockScanAmountReference, number => frozenProducerTopology.observeHeader(number));
-      const previous = parent.pricing.pricing, source = previous.effectiveMids!.source;
-      const control = {signal:blockScanRuntimeAbort.signal,deadlineAtMs:Date.now()+blockScanStartupWarmBudgetMs};
-      const sim = sourceSimulationFactory({source,control});
-      const backend = new PinnedRethQuoteBackend(config.rpcUrl,source.hash,{...control,transportLane:"producer-bulk",
-        scopeLabel:"live Family selection effective pricing",maxBatchSize:64,maxConcurrentBatches:8,retryRpcThrottle:true,
-        allowSingleCallFallback:false,transportScheduler:blockScanRethTransportScheduler,
-        onSourceUnavailable:error=>blockScanRuntimeAbort.abort(error),onRpcThrottle:error=>blockScanRuntimeAbort.abort(error)});
-      try {
-        const sessions = createEffectiveQuoteSessions(requiredEdgeIds => strictSessionFor({purpose:"exact-execution",
-          source,control,fundingAssets:[],requiredEdgeIds,exactCallBackend:backend,simulationTransport:sim.transport}));
-        const ownership = new Map<string,string>();
-        for (const module of [...PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.plugins,...PRODUCTION_STRICT_SHADOW_FAMILY_LOAD.disabledPlugins])
-          for (const action of module.plugin.manifest.ownedActionAdapterIds) ownership.set(action,module.familyId);
-        restored = await reconcileLiveContinuationFamilies({parent,identity,liveFamilies:liveFamilyIds,priorFamilies,
-          owner:edge=>ownership.get(edge.adapterId),
-          graph:view(previous),rawGraph:view(parent.pricing.raw),weth:ADDR.WETH,
-          prepareRaw: async (oldRaw, rawGraph) => {
-            const rawSource = {number:oldRaw.sourceBlock,hash:oldRaw.sourceBlockHash,generation:oldRaw.generation};
-            const oldKeys = new Set(oldRaw.graph.edges.map(blockScanEdgeKey));
-            const requiredEdgeIds = new Set(strictRuntimeRoot.pricingIndex().expectedEdgeKeys.filter(key => !oldKeys.has(key)));
-            const rawSim = sourceSimulationFactory({source:rawSource,control});
-            const rawBackend = new PinnedRethQuoteBackend(config.rpcUrl,rawSource.hash,{...control,transportLane:"producer-bulk",
-              scopeLabel:"live Family selection raw pricing",maxBatchSize:64,maxConcurrentBatches:8,retryRpcThrottle:true,
-              allowSingleCallFallback:false,transportScheduler:blockScanRethTransportScheduler,
-              onSourceUnavailable:error=>blockScanRuntimeAbort.abort(error),onRpcThrottle:error=>blockScanRuntimeAbort.abort(error)});
-            try {
-              const session = await strictSessionFor({purpose:"coarse-pricing",source:rawSource,control,
-                fundingAssets:[],requiredEdgeIds,pricingCallBackend:rawBackend,simulationTransport:rawSim.transport});
-              return reconcileLiveContinuationRawPricing(session,rawGraph,oldRaw);
-            } finally { await Promise.all([rawBackend.closeAndDrain(),rawSim.closeAndDrain()]); }
-          },
-          rebuild:(raw, old, touched, disabled) => buildEffectiveMids({ pricing:raw, quoteGraph:view(previous),
-            previous:old,touchedStateKeys:touched,disabledEdgeIds:disabled,weth:ADDR.WETH,control,concurrency:1024,
-            maxInputPathHops:continuationContext.maxInputPathHops,
-            fixedWethInput:blockScanStageSettings.fixedEffectiveWethInput,gasCostWei:blockScanAmountReference.estimateGasCost(source),
-            enumerationSpreadBps:blockScanCfg.minSpreadBps,cascadeAmountChanges:continuationContext.cascade,
-            prepareQuote:sessions.prepareQuote,quote:async request=>{
-              const simulated = await startupExecutionPreflight.quoteEffective({ ...request, edges: view(previous).edges, control,
-                prepareQuote: sessions.prepareQuote, sessionFor: sessions.sessionFor });
-              if (simulated !== undefined) return simulated;
-              if (request.edge.executionVerification === "startup-simulation") {
-                throw Object.assign(new Error("effective execution simulation unavailable"), { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" });
-              }
-              const quote=await sessions.sessionFor(request.edge).issueExact({...request,executor:executionIdentity.executor,runtimeEvidence:[]});
-              if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
-              return quote;
-            } }) });
-        if (control.signal.aborted) throw control.signal.reason;
-        if (validatedParent.digest !== liveContinuationPointer(parentDir).digest) throw new Error("parent journal advanced during projection");
-        importedParent = true;
-      } finally { await Promise.all([backend.closeAndDrain(),sim.closeAndDrain()]); }
-    }
-    if (liveFamilyIds && !restored && subsetPriceMode !== "fresh") throw new Error("live subset requires a verified price continuation");
     if (restored) {
-      if (importedParent) {
-        for (const at of [restored.pricing.raw, restored.pricing.pricing]) {
-          const actual = await frozenProducerTopology.observeHeader(at.sourceBlock);
-          if (actual.hash.toLowerCase() !== at.sourceBlockHash.toLowerCase()) throw new Error("subset price anchor reorged");
-        }
-      } else {
-        await validateLiveContinuationAnchors(restored, blockScanAmountReference,
-          number => frozenProducerTopology.observeHeader(number));
-      }
+      await validateLiveContinuationAnchors(restored, blockScanAmountReference,
+        number => frozenProducerTopology.observeHeader(number));
       await priceRuntime.currentRuntimeCoordinator.restoreHistoricalBaseline(restored.pricing, {
         graph: view(restored.pricing.pricing), rawGraph: view(restored.pricing.raw), weth: ADDR.WETH,
+        onVerifiedEffectiveRestore:(table,restoredGraph)=>{
+          if(store.ownsAnchoredEffectiveTable(restored,table))
+            bindVerifiedSqlNativePoolRestore(table,restoredGraph.edges,{number:restoredGraph.sourceBlock,
+              hash:restoredGraph.sourceBlockHash,generation:restoredGraph.generation},
+            (edge,variant)=>strictRuntimeRoot.ownsSqlMarketVariant(edge,variant));
+        },
         control: { signal: blockScanRuntimeAbort.signal, deadlineAtMs: Date.now() + blockScanStartupWarmBudgetMs },
       });
       startupExecutionPreflight.restoreContinuation(restored.startup);
       blockScanSimRejects.restoreContinuation(restored.simRejects, graph);
       startupExecutionPreflight.defer(true);
-      if (importedParent) await store.write({ ...restored, pricing: priceRuntime.currentRuntimeCoordinator.exportHistoricalBaseline() });
       restoredContinuation = true;
+      if (native && native.producerIdentities.length >= 2) {
+        if (!config.dryRun || config.blockScanSubmit || (native.currentWriterTailVerified?
+            native.producerIdentity!==identity:native.producerIdentities.includes(identity)) ||
+            restored.identity !== native.producerIdentities[0] || !store.restoredNativePointerSha256()) {
+          throw new Error("mixed native restore lacks a distinct source-bound dry-run consumer");
+        }
+        // Only public identity inputs, explicitly listed to avoid logging future
+        // configuration additions. All writer IDs come from this actual SQL materialization.
+        const c = continuationContext;
+        const publicContext = {chainId:c.chainId,topology:c.topology,activityMode:c.activityMode,
+          executor:c.executor,transactionOrigin:c.transactionOrigin,executorCode:c.executorCode,rawExecutionEntry:c.rawExecutionEntry,
+          fixedWethInput:c.fixedWethInput,maxInputPathHops:c.maxInputPathHops,spreadBps:c.spreadBps,cascade:c.cascade,sqlInputFingerprint:c.sqlInputFingerprint};
+        console.log(`[searcher/live-continuation] ${JSON.stringify({
+          phase:"native-binding-verified",dry:true,trading:false,sqlInputSha256:process.env.SEARCHER_SQL_LIVE_INPUT_SHA256,
+          proofSha256:nativePin, pointerSha256:store.restoredNativePointerSha256(), source:restored.pricing.pricing.effectiveMids!.source,
+          archivedProducers:native.producerIdentities,consumerIdentity:identity,context:publicContext,
+        })}`);
+      }
       console.log(`[searcher/live-continuation] ${JSON.stringify({
         phase: "restored", sourceBlock: restored.pricing.pricing.sourceBlock,
         sourceBlockHash: restored.pricing.pricing.sourceBlockHash, observations: restored.startup.rows.length,
@@ -3415,7 +2574,7 @@ async function main(): Promise<void> {
         startupCacheNamespace([1, Number(blockScanChainId), frozenProducerTopology.topologyKey,
           executionIdentity.executor, executionIdentity.transactionOrigin,
           blockScanStageSettings.fixedEffectiveWethInput?.toString() ?? null,
-          process.env.SEARCHER_BLOCKSCAN_STARTUP_CACHE_NAMESPACE ?? null, ...(liveFamilyIds ? [liveFamilyIds] : [])]))
+          process.env.SEARCHER_BLOCKSCAN_STARTUP_CACHE_NAMESPACE ?? null, sqlProducer.fingerprint]))
       : undefined,
     nMinusOneFallbackEnabled: blockScanNMinusOneFallback,
     nMinusOneStateBudgetMs: blockScanNMinusOneStateBudgetMs,
@@ -3439,6 +2598,15 @@ async function main(): Promise<void> {
     // One refresh set: log identities retain singleton poolIds while the
     // call trace adds contracts reached through top-level or internal calls.
     readBlockSwapTouched: readRuntimeTouched,
+    reportPhysicalTouches({base,target,mode,rawKeys}){
+      const journal=strictRuntimeRoot.resolveBlockTouchedStateKeys.poolTouchCounts?.();
+      if(!journal)return;
+      const summary=mode==="reorg"?{coverage:"unavailable",reason:"two_branches"}:
+        mode==="initial"&&continuationCatchupSource!=="rpc"?{coverage:"unavailable",reason:"indexed_activity"}:
+        journal.summary(base,target,blockScanActivitySettings.mode);
+      console.log(`[searcher/sql-pool-touch-counts] ${JSON.stringify({previousSource:base,source:target,scope:mode,
+        activityMode:blockScanActivitySettings.mode,rawTouchedStateKeys:rawKeys,...summary})}`);
+    },
     currentHeadEvidenceFamilyForEdge(edgeAdapterId) {
       return PRODUCTION_STRICT_FAMILY_DECLARATIONS
         .currentHeadEvidenceFamilyForEdge(
@@ -3469,7 +2637,7 @@ async function main(): Promise<void> {
     currentRuntimeCoordinator: () => currentRuntimeCoordinator,
     flashTokens: () => flashTokens,
     buildGraphView(input) {
-      return strictReadyGraphViews.build({
+      return graphViewCoordinator.build({
         id: input.id,
         topologyKey: input.topologyKey,
         generation: input.generation,
@@ -3495,10 +2663,8 @@ async function main(): Promise<void> {
         poolRevertAttributor: blockScanPoolRevertAttributor,
         onSuccessfulSimulation: (sample) => blockScanAmountReference.recordSimulation(sample),
         strategyVersions: {
-          strategy_view_version:
-            strategyViews.versions.strategy_view_version,
-          blockscan_view_hash:
-            strategyViews.versions.blockscan_view_hash,
+          strategy_view_version: intake.version,
+          blockscan_view_hash: intake.version,
         },
         collectBlindAudit: blindProductionAudit,
       });
@@ -3513,16 +2679,15 @@ async function main(): Promise<void> {
       pendingStateUpdateBlock = blockNumber;
       return;
     }
-    const pinned = topPinnedWarmHops(pinnedWarmHops, config.statePinnedK);
     const recent = recentWarmPools.top(config.stateRecentK, blockNumber, pinnedWarmTargets);
-    const hops = [...recent, ...pinned].slice(0, config.stateWatchMaxPools);
+    const hops = recent.slice(0, config.stateWatchMaxPools);
     if (hops.length === 0) return;
     stateUpdating = true;
     pendingStateUpdateBlock = null;
     console.log(
       `[searcher/live] state update block=${blockNumber} reason=${reason} ` +
         `recent=${recent.length}/${config.stateRecentK} ` +
-        `pinned=${pinned.length}/${config.statePinnedK} watched=${hops.length}`,
+        `watched=${hops.length}`,
     );
     void poolStateUpdater.update(blockNumber, hops)
       .catch((err) =>
@@ -3543,11 +2708,7 @@ async function main(): Promise<void> {
     wsUrl: _blindWsUrl,
     mevShareSseUrl: _blindMevShareSseUrl,
     wallet: blindWallet,
-    pinnedWarmPoolPath: _blindPinnedWarmPoolPath,
-    poolUniversePath: _blindPoolUniversePath,
-    forceIncludePoolIdsPath: _blindForceIncludePoolIdsPath,
     liveFixtureDir: _blindLiveFixtureDir,
-    poolUniverseForceInclude: blindForceIncludePoolIds,
     ...blindPublicConfig
   } = config;
   const blindEffectiveConfig = normalizeBlindArtifactValue({
@@ -3555,12 +2716,7 @@ async function main(): Promise<void> {
     executorAddress: blindWallet.address.toLowerCase(),
     forkBotVmInstallation: blindForkBotVmReceipt,
     fundingTokenUniverse: fundingTokenUniverseBinding,
-    forceInclude: {
-      count: blindForceIncludePoolIds.length,
-      contentSha256: blindProductionAuditHash(
-        [...blindForceIncludePoolIds].sort(),
-      ),
-    },
+    sqlInputFingerprint: sqlProducer.fingerprint,
     runtimeEnvironment: blindProductionAudit
       ? blindResolvedRuntimeEnvironment(process.env)
       : { values: {}, redactedBindings: [] },
@@ -3589,13 +2745,9 @@ async function main(): Promise<void> {
   const blindStaticArtifacts = blindProductionAudit
     ? createBlindProductionStaticArtifacts({
         effectiveConfig: blindEffectiveConfig,
-        productionPools: strategyViews.blockscan,
-        configuredUniverseContentSha256: blindProductionAuditHash(
-          rawBlockscanUniverse.map(poolRegistryKey).sort(),
-        ),
-        universeGeneratedAt: strategyViewOptions.poolUniverseGeneratedAt,
-        selectedUniverse: blockscanUniverse,
-        strategyViewVersion: strategyViews.versions.blockscan_view_hash,
+        pools: intake.pools,
+        sqlInputFingerprint: sqlProducer.fingerprint,
+        strategyViewVersion: intake.version,
         families: PRODUCTION_STRICT_FAMILY_DECLARATIONS.routeFamilies,
       })
     : null;
@@ -3674,7 +2826,7 @@ async function main(): Promise<void> {
       throw new Error("blind production prepare has no block-scan graph");
     }
     const baseGeneration = blockScanRuntimeLoop.nextGeneration();
-    const baseGraph = strictReadyGraphViews.build({
+    const baseGraph = graphViewCoordinator.build({
       id: `blind-base:${hashTokenGraph([...blockScanGraph])}`,
       generation: baseGeneration,
       sourceBlock: control.base.number,
@@ -3938,7 +3090,7 @@ async function main(): Promise<void> {
     return mempoolHints(
       config.wsUrl,
       provider,
-      () => strategyViews.backrun,
+      () => intake.targets,
       counters,
       knownPoolAddrs,
       mempoolIntakeRefresh,
@@ -6811,28 +5963,6 @@ export class RecentWarmTracker {
   }
 }
 
-function topPinnedWarmHops(
-  hops: Array<QuoteRequest & { weight?: number }>,
-  k: number,
-): QuoteRequest[] {
-  if (k <= 0) return [];
-  return [...hops]
-    .sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1))
-    .slice(0, k)
-    .map(({ canonicalEdgeId, instanceKey, executionVariantKey, adapterId, target, tokenIn, tokenOut, amountIn, poolToken0, poolToken1, v4PoolKey }) => ({
-      canonicalEdgeId,
-      instanceKey,
-      executionVariantKey,
-      adapterId,
-      target,
-      tokenIn,
-      tokenOut,
-      amountIn,
-      poolToken0,
-      poolToken1,
-      v4PoolKey,
-    }));
-}
 
 function dedupeRouteHops(
   plans: Array<{
@@ -7077,7 +6207,7 @@ function rebuildSignedRawTx(txHash: string, tx: ethers.TransactionResponse): str
 async function* mempoolHints(
   wsUrl: string,
   provider: ethers.JsonRpcProvider,
-  getPools: () => PoolEntry[],
+  getPools: () => readonly MempoolIntakeAddress[],
   counters: StageCounters,
   liveGraphTargets?: ReadonlySet<string>,
   refreshSignal?: MempoolIntakeRefreshSignal,
@@ -7823,7 +6953,7 @@ class FatalMempoolSubscriptionError extends Error {
 
 let wsRpcId = 1;
 
-export function buildMempoolToAddressFilter(pools: PoolEntry[], routersPath?: string): string[] {
+export function buildMempoolToAddressFilter(pools: readonly MempoolIntakeAddress[], routersPath?: string): string[] {
   const forceRouters = loadForceIncludeRouters(
     routersPath ?? process.env.SEARCHER_FORCE_INCLUDE_ROUTERS_PATH ?? undefined,
   );
@@ -7840,8 +6970,8 @@ export function isMempoolIntakeTarget(
   return startupTargets.has(key) || liveGraphTargets?.has(key) === true;
 }
 
-export function buildMempoolIntakeWithRouters(
-  pools: PoolEntry[],
+export function buildMempoolIntakeWithRouters<T extends MempoolIntakeAddress>(
+  pools: readonly T[],
   forceRouters: readonly string[],
 ): MempoolIntakePlan {
   const hotPoolTopN = Number(process.env.SEARCHER_MEMPOOL_FILTER_TOP_N ?? "200");
@@ -8200,7 +7330,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  (process.argv[2] === "--verify-subset-parent" ? validateParentBeforeProjection().then(() => process.exit(0)) : main()).catch((err) => {
+  main().catch((err) => {
     console.error(`[searcher/live] fatal: ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   });
