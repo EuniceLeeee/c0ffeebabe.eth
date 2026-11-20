@@ -5,6 +5,14 @@ export type BlockTouchedObservation =
   | Omit<Extract<UnifiedObservation, { kind: "log" }>, "source">
   | Omit<Extract<UnifiedObservation, { kind: "call" }>, "source">;
 
+/** A pool's balance can change without an event emitted by the pool. Reuse
+ * exactly the activity reader's fungible transfer shape, not the token emitter. */
+export function blockTransferEndpoints(topics: readonly string[]): string[] {
+  if (topics.length !== 3 || topics[0]?.toLowerCase() !== ERC20_TRANSFER_TOPIC) return [];
+  return topics.slice(1).filter(topic => ADDRESS_TOPIC_RE.test(topic))
+    .map(topic => `0x${topic.slice(-40).toLowerCase()}`);
+}
+
 /** A stable, root/generation-bound interpreter; replace it when its bindings change. */
 export type BlockTouchedStateKeyResolver = ((
   observation: BlockTouchedObservation,
@@ -334,14 +342,7 @@ async function readTouchedBlockActivity(
     // A direct token donation changes a pool's balance headroom without a
     // pool call or Sync. Reuse these already-fetched logs; ERC721 Transfer
     // has four topics and must not be interpreted as an ERC20 balance move.
-    if (log.topics.length === 3 &&
-      log.topics[0]?.toLowerCase() === ERC20_TRANSFER_TOPIC) {
-      for (const topic of [log.topics[1]!, log.topics[2]!]) {
-        if (ADDRESS_TOPIC_RE.test(topic)) {
-          touched.add(`0x${topic.slice(-40).toLowerCase()}`);
-        }
-      }
-    }
+    for (const address of blockTransferEndpoints(log.topics)) touched.add(address);
     if (resolve !== undefined) {
       if (!matches(BYTES_RE, log.data) || (log.transactionHash !== undefined &&
           (!matches(HASH_RE, log.transactionHash) || !pinned!.transactionHashes.includes(log.transactionHash.toLowerCase())))) {

@@ -66,7 +66,7 @@ SELECT COUNT(*) AS block_count, COUNT(DISTINCT number) AS distinct_blocks,
   ARRAY_AGG(block_hash ORDER BY number DESC LIMIT 1)[SAFE_OFFSET(0)] AS head_hash
   ${edges}
 FROM headers ${filter}`;
-  const result = await runWindowQuery(api, ref, location, maxBytes, sql, 1, 'ready_window');
+  const result = await runWindowQuery(api, ref, location, maxBytes, sql, 1, 'ready_window', selection.revision);
   const row = decodeRow(result.page.schema.fields, result.page.rows[0]);
   const fromBlock = Number(row.from_block), toBlock = Number(row.to_block);
   assert(Number.isSafeInteger(fromBlock) && fromBlock > 0 && Number.isSafeInteger(toBlock) &&
