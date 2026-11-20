@@ -40,16 +40,6 @@ export function matchSwapInput(call, assigned, poolLogs, incoming, cfg) {
   return swapSettlement(call, assigned[0], poolLogs, incoming, cfg);
 }
 
-export function ownsDiscrepantInput(call, input, mismatches, prepaidOwner) {
-  const matches = mismatches.filter(m => m.log.idx === input.idx);
-  if (matches.length !== 1) return false;
-  const {node} = matches[0];
-  for (let parent = node.parent; parent; parent = parent.parent) {
-    if (parent.target === call.target && parent.net) return parent === call;
-  }
-  return prepaidOwner(node, input.idx) === call;
-}
-
 export function matchSwapOutput(call, outputs, poolCalls, poolLogs, incoming, incomingLogs, cfg) {
   if (outputs.length !== 1) return;
   const output = outputs[0];

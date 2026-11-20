@@ -1,6 +1,6 @@
 import {bindActionReceipts,mergeReceiptIndices} from './bind-action-receipts.mjs';
 import {bindPoolIdReceipts,poolIdLayouts} from './trace-pool-id.mjs';
-import {matchSwapInput, matchSwapOutput, ownsDiscrepantInput} from './trace-swap-input.mjs';
+import {matchSwapInput, matchSwapOutput} from './trace-swap-input.mjs';
 
 const sharedPools=new Map();
 for (const layout of poolIdLayouts) {
@@ -85,7 +85,8 @@ export function traceCallFlows(frames, logs, cfg) {
     if (!events || events.length !== nodes.length) {
       const party=parties(asset,from,to), candidates=logParties.get(party);
       if (!events && callParties.get(party).length===1 && candidates?.length===1) {
-        groups(discrepancies,to).push({node:nodes[0],log:candidates[0]});
+        if (!discrepancies.has(to)) discrepancies.set(to,new Map());
+        discrepancies.get(to).set(candidates[0],nodes[0]);
         const owner = owningCall(nodes[0].parent, from);
         if (payoutCounts.get(owner)?.get(to) === 1) {
           groups(outputTransfers, owner).push({asset, from, to, amount: BigInt('0x' + w),
@@ -128,26 +129,20 @@ export function traceCallFlows(frames, logs, cfg) {
       continue;
     }
     const byFrame = new Map();
-    const outputProofs = new Map();
     const incoming = incomingLogs.get(target) || [];
-    for (const n of list) {
-      const outputs = outputTransfers.get(n);
-      if (!outputs) continue;
-      const proof = matchSwapOutput(n, outputs, list, targetLogs, incoming, incomingLogs, cfg);
-      if (proof) outputProofs.set(n, proof);
-    }
     const payeeCalls = list.filter(n => possiblePayers.has(n) || [...n.net.values()].some(v => v < 0n));
-    const mismatch=discrepancies.get(target) || [];
+    const mismatch=discrepancies.get(target);
     const prepaid = pending.get(target) || [];
-    const inputProofs = new Map();
+    const bindInput = Boolean(mismatch || (prepaid.length && payeeCalls.length > 1));
+    const proofs = new Map();
     const ownersByReceipt = new Map();
-    if (mismatch.length || (prepaid.length && payeeCalls.length > 1)) {
-      for (const call of payeeCalls) {
-        const proof = outputProofs.get(call) ?? matchSwapInput(call, assigned.get(call) || [], targetLogs, incoming, cfg);
-        if (!proof) continue;
-        inputProofs.set(call, proof);
-        groups(ownersByReceipt, proof.input.idx).push(call);
-      }
+    for (const call of payeeCalls) {
+      const outputs = outputTransfers.get(call);
+      const payout = outputs && matchSwapOutput(call, outputs, list, targetLogs, incoming, incomingLogs, cfg);
+      const proof = payout ?? (bindInput && matchSwapInput(call, assigned.get(call) || [], targetLogs, incoming, cfg));
+      if (!proof) continue;
+      proofs.set(call, proof);
+      if (bindInput) groups(ownersByReceipt, proof.input.idx).push(call);
     }
     function prepaidOwner(node, receiptIndex) {
       // Preorder visits a transfer before its own callbacks; the transfer
@@ -159,7 +154,13 @@ export function traceCallFlows(frames, logs, cfg) {
       const last = payeeCalls[payeeCalls.length - 1];
       const previous = payeeCalls[payeeCalls.length - 2];
       if (last && followsTransfer(last) && (!previous || !followsTransfer(previous))
-          && !inputProofs.has(last)) return last;
+          && !(bindInput && proofs.has(last))) return last;
+    }
+    function ownsDiscrepantInput(call, input) {
+      const node = mismatch?.get(input);
+      if (!node) return false;
+      const owner = owningCall(node.parent, target) ?? prepaidOwner(node, input.idx);
+      return owner === call;
     }
     for (const move of prepaid) {
       const owner = prepaidOwner(move.node, move.index);
@@ -168,12 +169,12 @@ export function traceCallFlows(frames, logs, cfg) {
     for (const n of list) {
       let evidence = 'subtree-net-flow';
       const credits = byFrame.get(n);
-      const payout = outputProofs.get(n);
-      if (payout) {
-        const {input, output, swap} = payout;
+      const proof = proofs.get(n);
+      if (proof?.output) {
+        const {input, output, swap} = proof;
         const funding = [...(assigned.get(n) || []), ...(credits || [])];
         const exactInput = funding.length === 1 && funding[0].to === target && funding[0].index === input.idx;
-        const netInput = !funding.length && ownsDiscrepantInput(n, input, mismatch, prepaidOwner);
+        const netInput = !funding.length && ownsDiscrepantInput(n, input);
         if (exactInput || netInput) {
           emitted.push({selector: n.selector, poolAddress: target, poolId: null, tokenIn: input.emitter,
             tokenOut: output.asset, evidence: netInput ? 'swap-confirmed-net-input-and-output' : 'swap-confirmed-net-output',
@@ -187,20 +188,16 @@ export function traceCallFlows(frames, logs, cfg) {
         if ([...n.net.values()].every(v=>v<=0n)) {
           for (const m of credits) add(n,m,m.amount);
           evidence = 'prepaid-and-subtree-net-flow';
-          const proof = inputProofs.get(n);
           if (proof) {
             n.indices.add(proof.swap.idx);
             evidence = 'swap-confirmed-prepayment';
           }
         }
       }
-      if (mismatch.length && !credits && n.net.size===1) {
-        const proof = inputProofs.get(n);
-        if (proof && ownsDiscrepantInput(n, proof.input, mismatch, prepaidOwner)) {
-          add(n,{asset:proof.input.emitter,index:proof.input.idx},BigInt(proof.input.data));
-          n.indices.add(proof.swap.idx);
-          evidence='swap-confirmed-net-input';
-        }
+      if (!credits && n.net.size===1 && proof && ownsDiscrepantInput(n, proof.input)) {
+        add(n,{asset:proof.input.emitter,index:proof.input.idx},BigInt(proof.input.data));
+        n.indices.add(proof.swap.idx);
+        evidence='swap-confirmed-net-input';
       }
       const positive = [], negative = [];
       for (const [token,delta] of n.net) {

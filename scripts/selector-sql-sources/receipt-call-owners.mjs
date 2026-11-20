@@ -1,3 +1,9 @@
+export function possibleReceiptOwners({slots, first, last}) {
+  const owners = new Set();
+  for (let i=first; i<=last; i++) owners.add(slots[i].owner);
+  return owners;
+}
+
 // Each slot represents execution in one call, between child calls. A caller
 // cannot emit while a child is running. DELEGATECALL and CALLCODE retain the
 // caller's emitting address and logical owner.

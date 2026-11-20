@@ -1,4 +1,4 @@
-import {receiptCallOwners} from './receipt-call-owners.mjs';
+import {receiptCallOwners, possibleReceiptOwners} from './receipt-call-owners.mjs';
 import {callerReceiptEdges} from './caller-receipt-flows.mjs';
 
 // Quantities remain integers in raw token units. Event balances describe the venue;
@@ -99,15 +99,14 @@ function project(call, rules, event, fields, snapshotLog, nodes, movements) {
     if (snapshot[i]) possible.add(snapshot[i]);
     if (!possible.size) boundAssets=false;
     const cash=scoped.filter(m=>incoming ? (m.to===call.target || (payer && m.from===payer))
-      : (m.from===call.target && (!recipient || m.to===recipient)) || (recipient && m.to===recipient));
+      : recipient ? m.to===recipient : m.from===call.target);
     const exact=cash.filter(m=>m.amount===qty);
     // A declared asset (e.g. vault shares) is distinct from funds released for the same amount.
     // Infer an unknown currency only from a single scoped movement with the declared economic role.
     if (!possible.size && exact.length===1) possible.add(exact[0].asset);
     assets[i]=unique(possible);
     if (!assets[i]) return;
-    const actual=cash.filter(m=>m.asset===assets[i] && (incoming ? (payer ? m.from===payer : m.to===call.target)
-      : (recipient ? m.to===recipient : m.from===call.target)));
+    const actual=cash.filter(m=>m.asset===assets[i] && (!incoming || !payer || m.from===payer));
     if (actual.length===1) settled[i]=actual[0];
   }
   if (assets[0]===assets[1]) return;
@@ -172,7 +171,7 @@ function calldataBindings(groups, possibleOwners, rules) {
   const bindings = new Map();
   for (const events of groups.values()) {
     if (events.length<2 || !events.some(e=>possibleOwners.get(e).size>1)) continue;
-    const owners = new Set(), matched = new Set(), proposed = new Map();
+    const owners = new Set(), eventByCall = new Map();
     for (const event of events) {
       const possible = possibleOwners.get(event);
       const topic = event.topics[0];
@@ -186,12 +185,11 @@ function calldataBindings(groups, possibleOwners, rules) {
         if (match) { match=undefined; break; }
         match=call;
       }
-      if (!match || matched.has(match)) break;
-      matched.add(match);
-      proposed.set(event,match);
+      if (!match || eventByCall.has(match)) break;
+      eventByCall.set(match,event);
     }
-    if (proposed.size===events.length && matched.size===owners.size) {
-      for (const [event,call] of proposed) if (possibleOwners.get(event).size>1) bindings.set(event,call);
+    if (eventByCall.size===events.length && eventByCall.size===owners.size) {
+      for (const [call,event] of eventByCall) if (possibleOwners.get(event).size>1) bindings.set(event,call);
     }
   }
   return bindings;
@@ -227,9 +225,8 @@ export function bindActionReceipts(rules, paths, logs, movements, sharedPools, t
   if (!timeline) return edges;
   const possibleOwners = new Map(), groups = new Map();
   const transfers=[];
-  for (const [event,{slots,first,last}] of timeline.placements) {
-    const possible = new Set();
-    for (let i=first; i<=last; i++) possible.add(slots[i].owner);
+  for (const [event,placement] of timeline.placements) {
+    const possible = possibleReceiptOwners(placement);
     if (event.topics[0]===transferTopic) {
       const movement=transferReceipts.get(event);
       if (movement) transfers.push({...movement,owners:possible});

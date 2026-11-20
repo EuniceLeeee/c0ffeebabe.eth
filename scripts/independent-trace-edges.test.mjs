@@ -307,6 +307,22 @@ const receiptConfig = {...cfg, actionReceipts:receiptRules};
 const actionsAt = (frames,logs,target=pool) => traceCallFlows(frames,logs,receiptConfig)
   .filter(row=>row.poolAddress===target && row.evidence==='declared-action-receipt');
 
+test('an absent payer cannot bind a third-party payment in a nested call',()=>{
+  const selector='0x2668dfaa';
+  const frames=payer=>[
+    root(),
+    call('0',payer,pool,selector+word(1)+word(5)+word(1)+word(wallet)),
+    call('0,0',payer,addr(7),'0x',{value:'5'}),
+    move('0,1',tokenB,pool,wallet,3)
+  ];
+  const logs=[
+    receipt(0,tokenB,pool,wallet,3),
+    {idx:1,emitter:pool,topics:[receiptRules[selector].topic],data:'0x'+word(1)+word(5)+word(3)+word(wallet)}
+  ];
+  assert.deepEqual(actionsAt(frames(wallet),logs).map(e=>[e.tokenIn,e.tokenOut]),[[cfg.native,tokenB]]);
+  assert.deepEqual(actionsAt(frames(null),logs),[]);
+});
+
 test('the action event binds mint or deposit to its real selector, payer, owner and units',()=>{
   const assets=15n, shares=4n;
   const deposit='0x6e553f65', mint='0x94bf804d';

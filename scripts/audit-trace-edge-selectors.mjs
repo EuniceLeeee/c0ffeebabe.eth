@@ -22,7 +22,7 @@ if(v.openchain){
   const unknown=[...rows.values()].filter(r=>!r.local);
   for(let i=0;i<unknown.length;i+=25){
     const batch=unknown.slice(i,i+25);
-    const url=new URL('https://api.openchain.xyz/signature-database/v1/lookup');
+    const url=new URL('https://api.4byte.sourcify.dev/signature-database/v1/lookup');
     url.searchParams.set('function',batch.map(r=>r.selector).join(','));
     try {
       const reply=await fetch(url,{signal:AbortSignal.timeout(12000)});

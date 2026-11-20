@@ -1,3 +1,5 @@
+import {possibleReceiptOwners} from './receipt-call-owners.mjs';
+
 // Attribute each endpoint to the nearest action made by that account. An
 // ambiguous receipt blocks every candidate that might include that movement.
 export function callerReceiptEdges(candidates, timeline, transfers, anchors, nativeMoves) {
@@ -33,9 +35,7 @@ export function callerReceiptEdges(candidates, timeline, transfers, anchors, nat
     const placement = placements.get(log);
     if (!placement) continue;
     const anchor = anchored && anchors.get(log);
-    const owners = anchor ? [anchor] : new Set(
-      placement.slots.slice(placement.first, placement.last + 1).map(slot => slot.owner)
-    );
+    const owners = anchor ? [anchor] : possibleReceiptOwners(placement);
     record(owners, move.from, move.asset, -move.amount, move.index);
     record(owners, move.to, move.asset, move.amount, move.index);
   }
