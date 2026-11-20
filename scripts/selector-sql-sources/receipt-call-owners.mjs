@@ -33,44 +33,35 @@ export function receiptCallOwners(nodes, logs, relevantTopics) {
     resume(stack[stack.length-1]?.owner);
   }
 
-  // Non-decreasing placement permits multiple logs in one execution slot.
-  // Greedy prefix/suffix bounds are attainable. Every matching slot between
-  // them can be combined with the earliest prefix and the latest suffix.
-  const first = new Array(logs.length);
-  let lower = 0;
-  for (let i=0; i<logs.length; i++) {
-    const slots = slotsByAddress.get(logs[i].emitter);
-    if (!slots || (i && logs[i].idx <= logs[i-1].idx)) return;
-    const index = lowerBound(slots,lower);
-    if (index === slots.length) return;
-    lower = slots[index].position;
-    first[i] = index;
-  }
-  let upper = position;
-  const placements = new Map();
-  for (let i=logs.length-1; i>=0; i--) {
-    const log = logs[i];
-    const slots = slotsByAddress.get(log.emitter);
-    const last = lowerBound(slots,upper+1)-1;
-    if (last < first[i]) return;
-    upper = slots[last].position;
-    if (relevantTopics.has(log.topics[0])) placements.set(log,{slots,first:first[i],last});
-  }
-  // A set of ABI bindings can be individually plausible and jointly out of
-  // order. Replay the entire receipt order with those extra constraints.
-  function canPlace(bindings) {
+  // Prefix/suffix bounds narrow every receipt when a unique transfer pins
+  // a neighbouring log. Multiple logs can still occupy one execution slot.
+  function locate(bindings, checkOnly=false) {
+    const first = checkOnly ? undefined : new Array(logs.length);
     let lower = 0;
-    for (const log of logs) {
-      const slots = slotsByAddress.get(log.emitter);
-      let i = lowerBound(slots,lower);
-      const owner = bindings.get(log);
-      if (owner) while (i<slots.length && slots[i].owner!==owner) i++;
-      if (i===slots.length) return false;
-      lower = slots[i].position;
+    for (let i=0; i<logs.length; i++) {
+      const log=logs[i], slots=slotsByAddress.get(log.emitter), owner=bindings?.get(log);
+      if (!slots || (i && log.idx<=logs[i-1].idx)) return;
+      let index=lowerBound(slots,lower);
+      if (owner) while (index<slots.length && slots[index].owner!==owner) index++;
+      if (index===slots.length) return;
+      lower=slots[index].position;
+      if (first) first[i]=index;
     }
-    return true;
+    if (checkOnly) return true;
+    let upper=position;
+    const result=new Map();
+    for (let i=logs.length-1; i>=0; i--) {
+      const log=logs[i], slots=slotsByAddress.get(log.emitter), owner=bindings?.get(log);
+      let last=lowerBound(slots,upper+1)-1;
+      if (owner) while (last>=first[i] && slots[last].owner!==owner) last--;
+      if (last<first[i]) return;
+      upper=slots[last].position;
+      if (relevantTopics.has(log.topics[0])) result.set(log,{slots,first:first[i],last});
+    }
+    return result;
   }
-  return {placements,canPlace};
+  const placements=locate();
+  if (placements) return {placements,withBindings:locate,canPlace:bindings=>locate(bindings,true)===true};
 }
 
 function lowerBound(slots, position) {

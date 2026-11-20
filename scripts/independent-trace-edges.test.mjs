@@ -98,10 +98,43 @@ test('unknown calls on a shared manager do not fall back to address-pool edges',
   assert.deepEqual([...new Set([...sql.matchAll(/`([\w.-]+)\x60/g)].map(m=>m[1]))].sort(),
     ['blocks','logs','traces','transactions'].map(n=>'bigquery-public-data.crypto_ethereum.'+n));
 });
-test('a vault deposit and minted shares alone do not create a synthetic conversion',()=>{
+test('one caller pays and receives minted shares; a different beneficiary is not its receipt',()=>{
   const qty=13n, shares=9n, frames=[root(),call('0',wallet,pool,'0x6e553f65'+word(qty)+word(wallet)),
     call('0,0',pool,tokenA,'0x23b872dd'+word(wallet)+word(pool)+word(qty))];
-  assert.deepEqual(run(frames,[receipt(4,tokenA,wallet,pool,qty),receipt(5,pool,cfg.native,wallet,shares)]),[]);
+  const payment=receipt(4,tokenA,wallet,pool,qty);
+  const result=run(frames,[payment,receipt(5,pool,cfg.native,wallet,shares)]);
+  assert.deepEqual(result.map(e=>[e.evidence,e.tokenIn,e.tokenOut,e.amountPayerInRaw,e.amountReceivedOutRaw]),
+    [['caller-receipt-net-flow',tokenA,pool,'13','9']]);
+  assert.deepEqual(run(frames,[payment,receipt(5,pool,cfg.native,router,shares)]),[]);
+});
+
+test('unknown selectors on the same target produce both directions from distinct caller receipts',()=>{
+  const buy='0xaabb0011', sell='0xaabb0022';
+  const frames=[root(),call('0',router,pool,sell),move('0,0',tokenA,pool,router,18),
+    move('1',tokenA,router,wallet,17),call('2',router,pool,buy),
+    call('2,0',pool,tokenA,'0x23b872dd'+word(router)+word(pool)+word(7))];
+  const logs=[receipt(0,pool,router,cfg.native,13),receipt(1,tokenA,pool,router,18),
+    receipt(2,tokenA,router,wallet,17),receipt(3,pool,cfg.native,router,5),receipt(4,tokenA,router,pool,7)];
+  const edges=(f,l)=>run(f,l).map(e=>[e.callPath,e.selector,e.tokenIn,e.tokenOut,e.receiptIndices,
+    e.amountPayerInRaw,e.amountReceivedOutRaw]).sort();
+  assert.deepEqual(edges(frames,logs),[['0',sell,pool,tokenA,'0,1','13','18'],['2',buy,tokenA,pool,'3,4','7','5']]);
+  assert.deepEqual(edges(frames.map(f=>f.path==='0'?{...f,ok:false}:f),logs.slice(2)).map(e=>e[0]),['2']);
+  // Same token could have emitted this payment in either of two sibling calls.
+  const sibling=call('1',router,tokenA,'0x23b872dd'+word(pool)+word(router)+word(18));
+  assert.deepEqual(edges([...frames.slice(0,3),sibling],logs.slice(0,2)),[]);
+});
+test('a nested action by the same caller owns its transfers; three currencies do not imply a pair',()=>{
+  const inner=addr(71), custody=addr(72);
+  const frames=[root(),call('0',router,pool,'0xaaaa0001'),call('0,0',pool,router,'0xaaaa0002'),
+    call('0,0,0',router,inner,'0xaaaa0003'),
+    call('0,0,0,0',inner,tokenA,'0x23b872dd'+word(router)+word(custody)+word(20))];
+  const logs=[receipt(1,tokenA,router,custody,20),receipt(2,inner,cfg.native,router,15)];
+  const rows=(f,l)=>traceCallFlows(f,l,cfg).filter(e=>e.evidence==='caller-receipt-net-flow');
+  assert.deepEqual(rows(frames,logs).map(e=>[e.callPath,e.tokenIn,e.tokenOut]),[['0,0,0',tokenA,inner]]);
+  const third=call('0,0,0,1',inner,tokenB,'0xa9059cbb'+word(router)+word(3));
+  assert.deepEqual(rows([...frames,third],[...logs,receipt(3,tokenB,inner,router,3)]),[]);
+  const nativeInput=frames.map(n=>n.path==='0,0,0'?{...n,value:'1'}:n);
+  assert.deepEqual(rows(nativeInput,logs),[]);
 });
 test('a native refund does not create the reverse direction and ambiguous multi-token inputs stay unresolved',()=>{
   const frames=[root(),call('1',router,pool,swap,{value:'1'}),move('1,0',tokenA,wallet,pool,10),move('1,1',tokenB,pool,wallet,10)];

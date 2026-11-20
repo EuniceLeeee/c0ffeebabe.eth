@@ -77,6 +77,7 @@ export function traceCallFlows(frames, logs, cfg) {
     groups(actions,f.target).push(node);
   }
   const discrepancies=new Map();
+  const transferAnchors=new Map();
   const outputTransfers = new Map();
   for (const [key, nodes] of transfers) {
     const events = transferLogs.get(key);
@@ -94,6 +95,7 @@ export function traceCallFlows(frames, logs, cfg) {
       continue;
     }
     if (nodes.some((n,i) => i > 0 && inside(n.path,nodes[i-1].path))) continue;
+    if (nodes.length===1) transferAnchors.set(events[0],nodes[0]);
     nodes.forEach((node,i) => movements.push({node,...transferReceipts.get(events[i])}));
   }
   const add = (node,move,delta) => {
@@ -211,9 +213,9 @@ export function traceCallFlows(frames, logs, cfg) {
           receiptIndices:[...n.indices].sort((a,b)=>a-b).join(',')});
     }
   }
-  const rules=cfg.actionReceipts;
-  if (!rules) return emitted;
-  const declared=bindActionReceipts(rules,paths,logs,movements,sharedPools,cfg.transferTopic,transferReceipts);
+  const rules=cfg.actionReceipts??{};
+  const emittedPaths=new Set(emitted.map(e=>e.callPath));
+  const declared=bindActionReceipts(rules,paths,logs,movements,sharedPools,cfg.transferTopic,transferReceipts,transferAnchors,emittedPaths);
   if (!declared.size) return emitted;
   // Only ordinary CALL paths have one pair per frame. Shared managers keep
   // their independently keyed logical pools.

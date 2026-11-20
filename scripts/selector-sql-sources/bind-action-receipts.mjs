@@ -1,4 +1,5 @@
 import {receiptCallOwners} from './receipt-call-owners.mjs';
+import {callerReceiptEdges} from './caller-receipt-flows.mjs';
 
 // Quantities remain integers in raw token units. Event balances describe the venue;
 // a recipient amount is recorded only when a unique actual transfer identifies it.
@@ -196,14 +197,23 @@ function calldataBindings(groups, possibleOwners, rules) {
   return bindings;
 }
 
-export function bindActionReceipts(rules, paths, logs, movements, sharedPools, transferTopic, transferReceipts) {
+export function bindActionReceipts(rules, paths, logs, movements, sharedPools, transferTopic, transferReceipts, transferAnchors, emittedPaths) {
   const edges=new Map();
   const nodes = Array.from(paths.values());
   const topics = new Set();
   const byCall = new Map();
+  const nativeMoves=movements.filter(m=>m.index===null);
+  const payers=new Set(), recipients=new Set();
+  for (const moves of [transferReceipts.values(), nativeMoves]) for (const m of moves) {
+    payers.add(m.from); recipients.add(m.to);
+  }
+  const candidates=[];
   for (const call of nodes) {
+    if (!call.selector || sharedPools.has(call.target)) continue;
+    if (!emittedPaths.has(call.path) && payers.has(call.sender) && recipients.has(call.sender))
+      candidates.push(call);
     const rule = rules[call.selector];
-    if (!rule || sharedPools.has(call.target)) continue;
+    if (!rule) continue;
     topics.add(rule.topic);
     if (rule.snapshot) topics.add(rule.snapshot.topic);
     if (rule.transferProof && uint(call.output?.slice(2))) {
@@ -211,6 +221,7 @@ export function bindActionReceipts(rules, paths, logs, movements, sharedPools, t
       topics.add(transferTopic);
     }
   }
+  if (candidates.length) topics.add(transferTopic);
   if (!topics.size || !logs.some(l=>topics.has(l.topics[0]))) return edges;
   const timeline = receiptCallOwners(nodes,logs,topics);
   if (!timeline) return edges;
@@ -264,6 +275,13 @@ export function bindActionReceipts(rules, paths, logs, movements, sharedPools, t
       edge.receiptIndices=mergeReceiptIndices(edge.receiptIndices,paid.receiptIndices);
     }
     if (edge || paid) edges.set(call.path,edge || paid);
+  }
+  // Preserve a stronger receipt decision, including a contradictory or
+  // ambiguous one. Caller flow only fills paths without an applicable proof.
+  const remaining=candidates.filter(call=>!byCall.has(call));
+  if (remaining.length) {
+    for (const edge of callerReceiptEdges(remaining,timeline,transferReceipts,transferAnchors,nativeMoves))
+      edges.set(edge.callPath,edge);
   }
   return edges;
 }
