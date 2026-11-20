@@ -24,7 +24,18 @@ export const flowConfig = {
   transferTopic:'0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef',
 };
 
-export async function renderIndependentTraceEdges(window) {
+// Resolve activation at query generation with the same environment as live.
+async function liveSelectorPredicate() {
+  const {GENERATED_PRODUCTION_FAMILY_ENTRIES} = await import(
+    '../listener/src/searcher/generated/production-family-entries.generated.ts');
+  const selectors = GENERATED_PRODUCTION_FAMILY_ENTRIES.map(entry => entry.module.selectorFamilyModule)
+    .filter(({activation, definition}) => activation.enabled && ['swap', 'protocol'].includes(definition.domain))
+    .map(({definition}) => definition.selector).sort();
+  for (const selector of selectors) assert.match(selector, /^0x[0-9a-f]{8}$/);
+  return selectors.length ? '\nWHERE selector IN (' + selectors.map(s => "'" + s + "'").join(',') + ')' : '\nWHERE FALSE';
+}
+
+export async function renderIndependentTraceEdges(window, {liveSelectorsOnly = false} = {}) {
   const source = renderSelectorTraceSourceSql({window,materialize:true});
   const {build}=createRequire(new URL('../listener/package.json',import.meta.url))('esbuild');
   const bundle=await build({entryPoints:[fileURLToPath(new URL('./selector-sql-sources/trace-call-flows.mjs',import.meta.url))],
@@ -80,15 +91,17 @@ SELECT selector, poolAddress, poolId, tokenIn, tokenOut,
   ARRAY_AGG(DISTINCT evidence ORDER BY evidence) AS evidenceTypes,
   ARRAY_AGG(STRUCT(txHash,selectorTarget,callPath,innerSwapPath,receiptIndices,evidence,amountPoolOutRaw,amountReceivedOutRaw,amountVenueInRaw,amountPayerInRaw,conflictingFlow)
     ORDER BY conflictingFlow.tokenIn IS NULL,txHash,callPath,receiptIndices LIMIT 1)[OFFSET(0)] AS example
-FROM observations
+FROM observations${liveSelectorsOnly ? await liveSelectorPredicate() : ''}
 GROUP BY selector,poolAddress,poolId,tokenIn,tokenOut
 ORDER BY selector,poolAddress,poolId,tokenIn,tokenOut;`;
 }
 
 async function main() {
-  const {values:v} = parseArgs({options:{window:{type:'string'},out:{type:'string'},'sql-only':{type:'boolean'}}});
+  const {values:v} = parseArgs({options:{window:{type:'string'},out:{type:'string'},'sql-only':{type:'boolean'},
+    'live-selectors-only':{type:'boolean',default:false}}});
   const window = v.window ? JSON.parse(readFileSync(v.window)) : ready21Window;
-  const sql = await renderIndependentTraceEdges(window);
+  const liveSelectorsOnly = v['live-selectors-only'];
+  const sql = await renderIndependentTraceEdges(window, {liveSelectorsOnly});
   if (v['sql-only']) { process.stdout.write(sql+'\n'); return; }
   assert(v.out,'Specify --out <output directory>');
   const dir=resolve(v.out);
@@ -116,7 +129,7 @@ async function main() {
   assert(!job.status.errorResult);
   const bytes=JSON.stringify(edges,null,2)+'\n';
   writeFileSync(join(dir,'edges.json'),bytes,{flag:'wx'});
-  const summary={window,jobId,sqlSha256:sha(sql),edgesSha256:sha(bytes),total,
+  const summary={window,jobId,sqlSha256:sha(sql),edgesSha256:sha(bytes),total,liveSelectorsOnly,
     observations:edges.reduce((count,e)=>count+Number(e.observations),0),
     bytesBilled:job.statistics.query.totalBytesBilled,
     elapsedMs:Number(job.statistics.endTime)-Number(job.statistics.startTime)};

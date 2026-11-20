@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {execFileSync} from 'node:child_process';
 import {keccak256} from '../listener/node_modules/ethers/lib.esm/crypto/keccak.js';
 import {Interface} from '../listener/node_modules/ethers/lib.esm/abi/interface.js';
 import {poolIdLayouts} from './selector-sql-sources/trace-pool-id.mjs';
@@ -17,6 +18,28 @@ const root=()=>call('',wallet,router,'0x');
 const move=(path,token,from,to,amount)=>call(path,from,token,'0xa9059cbb'+word(to)+word(amount));
 const receipt=(idx,token,from,to,amount)=>({idx,emitter:token,topics:[cfg.transferTopic,'0x'+word(from),'0x'+word(to)],data:'0x'+word(amount)});
 const run=(frames,logs)=>traceCallFlows(frames,logs,cfg).filter(e=>e.poolAddress===pool);
+
+test('the CLI filters only the final observations using the enabled live conversion selectors', async () => {
+  const {GENERATED_PRODUCTION_FAMILY_ENTRIES: entries} = await import(
+    '../listener/src/searcher/generated/production-family-entries.generated.ts');
+  const modules = entries.map(entry => entry.module.selectorFamilyModule);
+  const env = {...process.env};
+  for (const m of modules) env[m.activation.envKey] = '0';
+  const script = fileURLToPath(new URL('./independent-trace-edges.mjs', import.meta.url));
+  const tsx = new URL('../listener/node_modules/tsx/dist/loader.mjs', import.meta.url).href;
+  const render = (...flags) => execFileSync(process.execPath, ['--import', tsx, script, '--sql-only', ...flags], {env, encoding:'utf8'});
+  const raw = render();
+  const expected = predicate => raw.replace('FROM observations\nGROUP BY', 'FROM observations\n' + predicate + '\nGROUP BY');
+  assert.match(raw, /FROM observations\nGROUP BY/);
+  assert.equal(render('--live-selectors-only'), expected('WHERE FALSE'));
+
+  const selected = ['swap', 'protocol', 'funding', 'credit'].map(domain => modules.find(m => m.definition.domain === domain));
+  for (const m of selected) env[m.activation.envKey] = '1';
+  const selectors = selected.slice(0, 2).map(m => m.definition.selector).sort();
+  assert.equal(render('--live-selectors-only'), expected("WHERE selector IN ('" + selectors.join("','") + "')"));
+  assert.equal(render(), raw);
+});
+
 test('a read does not consume a prepayment; two later payouts cannot claim it by proximity',()=>{
   const frames=[root(),move('0',tokenA,wallet,pool,99),call('2',router,pool,'0x0902f1ac'),
     call('10',router,pool,swap),move('10,0',tokenB,pool,wallet,14),
