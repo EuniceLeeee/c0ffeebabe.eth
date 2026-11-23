@@ -35,7 +35,7 @@ async function liveSelectorPredicate() {
   return selectors.length ? '\nWHERE selector IN (' + selectors.map(s => "'" + s + "'").join(',') + ')' : '\nWHERE FALSE';
 }
 
-export async function renderIndependentTraceEdges(window, {liveSelectorsOnly = false} = {}) {
+export async function renderIndependentTraceEdges(window, {liveSelectorsOnly = false, legacyCoordinates = false} = {}) {
   const source = renderSelectorTraceSourceSql({window,materialize:true});
   const {build}=createRequire(new URL('../listener/package.json',import.meta.url))('esbuild');
   const bundle=await build({entryPoints:[fileURLToPath(new URL('./selector-sql-sources/trace-call-flows.mjs',import.meta.url))],
@@ -66,7 +66,7 @@ ${bundle.outputFiles[0].text}
 return Discovery.traceCallFlows(frames, logs, ${JSON.stringify({...flowConfig,actionReceipts})});
 ''';
 
-WITH observations AS (
+WITH ${legacyCoordinates ? 'observations' : 'observedCalls'} AS (
   SELECT t.tx_hash AS txHash, e.*
   FROM canonical_trace AS t
   CROSS JOIN UNNEST(traceFlows(
@@ -85,11 +85,15 @@ WITH observations AS (
       CROSS JOIN UNNEST([LOWER(l.topics[SAFE_OFFSET(0)]) IN (${topics})]) AS keepBody
       ORDER BY l.log_index)
   )) e WHERE t.receipt_status=1
-)
-SELECT selector, poolAddress, poolId, tokenIn, tokenOut,
+)${legacyCoordinates ? '' : `, observations AS (
+  SELECT o.* REPLACE(IF(poolId IS NULL, poolAddress, selectorTarget) AS poolAddress),
+    o.poolAddress AS observedPoolAddress
+  FROM observedCalls AS o
+)`}
+SELECT selector, poolAddress, poolId, tokenIn, tokenOut,${legacyCoordinates ? '' : '\n  IF(MIN(selectorTarget) = MAX(selectorTarget), MIN(selectorTarget), NULL) AS callTarget,'}
   TRUE AS observedTargetSelector, FALSE AS verified, COUNT(*) AS observations,
   ARRAY_AGG(DISTINCT evidence ORDER BY evidence) AS evidenceTypes,
-  ARRAY_AGG(STRUCT(txHash,selectorTarget,callPath,innerSwapPath,receiptIndices,evidence,amountPoolOutRaw,amountReceivedOutRaw,amountVenueInRaw,amountPayerInRaw,conflictingFlow)
+  ARRAY_AGG(STRUCT(txHash,selectorTarget,${legacyCoordinates ? '' : 'observedPoolAddress,'}callPath,innerSwapPath,receiptIndices,evidence,amountPoolOutRaw,amountReceivedOutRaw,amountVenueInRaw,amountPayerInRaw,conflictingFlow)
     ORDER BY conflictingFlow.tokenIn IS NULL,txHash,callPath,receiptIndices LIMIT 1)[OFFSET(0)] AS example
 FROM observations${liveSelectorsOnly ? await liveSelectorPredicate() : ''}
 GROUP BY selector,poolAddress,poolId,tokenIn,tokenOut

@@ -15,7 +15,7 @@ import {selectorAssetOfferKey} from '../listener/src/searcher/venues/selector-ex
 
 const H=b=>createHash('sha256').update(b).digest('hex'),a=c=>'0x'+c.repeat(40),w=c=>'0x'+c.repeat(64);
 const sel='0x128acb08',pool=a('1'),t0=a('0'),t1=a('b'),weth='0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
-const row=(s={})=>({selector:sel,poolAddress:pool,poolId:null,tokenIn:t0,tokenOut:t1,verified:false,observedTargetSelector:true,observations:'1',
+const row=(s={})=>({selector:sel,poolAddress:pool,callTarget:pool,poolId:null,tokenIn:t0,tokenOut:t1,verified:false,observedTargetSelector:true,observations:'1',
   evidenceTypes:['subtree-net-flow'],example:{txHash:w('c'),callPath:'1,0',selectorTarget:pool,evidence:'subtree-net-flow'},...s});
 const defs=(programs=[])=>new Map([[sel,{programs}],['0x022c0d9f',{programs:[]}]]);
 function old(r,extra={}){const c={chainId:1,selector:r.selector,poolAddress:r.poolAddress,poolId:r.poolId,poolNamespace:null,tokenIn:r.tokenIn,
@@ -54,6 +54,20 @@ test('missing pool/asset IDs, conflicting scopes and different execution target 
   const [r]=projectIndependentRows([outer],[],defs()).rejected;assert.equal(r.poolAddress,pool);assert.equal(r.example.selectorTarget,a('2'));
   assert.equal(r.reason,'example-call-target-differs-from-physical-pool');assert.equal(r.observations,'7');
   assert.throws(()=>projectIndependentRows([row({verified:true})],[],defs()),/evidence/);
+});
+test('shared entry, full pool ID and direction survive projection; legacy address is a lookup alias only',()=>{
+  const selector='0x52bbbe29', vault='0xba12222222228d8ba445958a75a0704d566bf2c8';
+  const definitions=new Map([[selector,{programs:logical}]]),evidence='vault-swap-poolid';
+  const shared=row({selector,poolAddress:vault,callTarget:vault,poolId:pool+'0'.repeat(24),
+    evidenceTypes:[evidence],example:{...row().example,selectorTarget:vault,observedPoolAddress:pool,evidence}});
+  const historical=old({...shared,poolAddress:pool}), canonical=old(shared,{poolNamespace:'opaque'});
+  const projected=projectIndependentRows([shared],[historical,canonical],definitions);
+  assert.deepEqual(projected.accepted,[canonical]);
+  assert.deepEqual(projected.aliases,[{previous:historical.candidateInstanceKey,current:canonical.candidateInstanceKey}]);
+  for(const changed of [{callTarget:null},{callTarget:pool},{example:{...shared.example,selectorTarget:pool}},
+    {evidenceTypes:['subtree-net-flow'],example:{...shared.example,evidence:'subtree-net-flow'}}]){
+    assert.equal(projectIndependentRows([{...shared,...changed}],[],definitions).accepted.length,0);
+  }
 });
 async function fixture() {
   const dir=await mkdtemp(join(tmpdir(),'independent-projection-test-')), rows=[row(),row({tokenIn:t1,tokenOut:t0})];

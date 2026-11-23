@@ -2,6 +2,7 @@ import { EventFragment, FunctionFragment, ZeroAddress, getAddress, type ParamTyp
 import { hashCanonical } from "./canonical-value.js";
 import { familyId, type FamilyId } from "./adapter-family-identifiers.js";
 import { selectorFamilyIdentity } from "./selector-execution-keys.js";
+import { validateDeclarativeValue } from "./declarative-values.js";
 import { assertModuleData } from "./declarative-modules.js";
 
 export type SelectorNativeData = Readonly<Record<string, any>>;
@@ -206,8 +207,11 @@ export function normalizeSelectorNativeExecutionDefinition(raw: unknown): Select
       shape(declared,[],["poolNamespace","candidate","authority"],"state binding");
       if(declared.poolNamespace!==undefined&&(typeof declared.poolNamespace!=="string"||!/^[a-z0-9][a-z0-9:._-]{0,127}$/.test(declared.poolNamespace)))
         throw new Error("selector-native state binding pool namespace");
+      const directions=p.routes?.directions;
+      const derivesDirections=directions?.op==="map"||directions?.op==="flatMap";
+      if(derivesDirections)validateDeclarativeValue(directions,"state binding directions");
       if(!p.binding.flow||!p.execution||p.parameters?.length||p.runtimeEvidence||
-         !Array.isArray(p.routes?.directions)||!p.routes.directions.length||!p.routes.checks?.length)
+         !(Array.isArray(directions)&&directions.length||derivesDirections)||!p.routes?.checks?.length)
         throw new Error("selector-native state binding needs independent reads, explicit execution, and checked directions");
       if(declared.authority!==undefined){
         shape(declared.authority,["version","steps","result"],[],"state binding authority");

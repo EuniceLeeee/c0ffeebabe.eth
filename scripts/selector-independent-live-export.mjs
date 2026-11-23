@@ -14,6 +14,7 @@ import {createGunzip,gzipSync} from 'node:zlib';
 import {sqlDirectionId,loadSqlPriceEdges} from '../listener/src/searcher/sql-edge-price-index.ts';
 import {sealSqlLiveInput} from '../listener/src/searcher/sql-live-input-cli.ts';
 import {loadLiveSqlTables,readSqlFundingRows} from '../listener/src/searcher/sql-live-tables.ts';
+import {poolIdLayouts} from './selector-sql-sources/trace-pool-id.mjs';
 import {assertPinnedFundingWindow} from './selector-live-funding-export.mjs';
 import {GENERATED_PRODUCTION_FAMILY_ENTRIES} from '../listener/src/searcher/generated/production-family-entries.generated.ts';
 
@@ -39,28 +40,40 @@ function windowOf(w){
 }
 
 /** Prior coordinates can preserve an existing public ID, never nominate a new row. */
-function projector(prior,defs){
+function observedSharedEntry(r) {
+  return word(r.poolId) && r.evidenceTypes.length > 0 && r.evidenceTypes.every(evidence =>
+    poolIdLayouts.some(layout => layout.entry === r.selector && layout.emitter === r.example.selectorTarget && layout.evidence === evidence));
+}
+
+function projector(prior,defs,{legacyCoordinates=false}={}){
   const byKey=new Map(),nsByPhysical=new Map(),accepted=[],rejected=[];
   for(const p of prior){
     assert.equal(p.candidateInstanceKey,sqlDirectionId(p),'invalid prior public ID');
     const k=key(p),g=byKey.get(k)??[];g.push(p);byKey.set(k,g);
     if(p.poolId!==null){const k=physical(p),s=nsByPhysical.get(k)??new Set();s.add(p.poolNamespace);nsByPhysical.set(k,s);}
   }
+  const aliases=[];
   let preserved=0,source=0;
   function add(r,rowIndex){
-    source++;const k=key(r);
+    source++;
     const d=defs.get(r.selector);
     assert(d,'SQL output does not match the current enabled swap/protocol selectors');
     assert(r.verified===false&&r.observedTargetSelector===true&&r.example&&word(r.example.txHash)&&addr(r.example.selectorTarget)&&
       typeof r.example.callPath==='string'&&Array.isArray(r.evidenceTypes)&&r.evidenceTypes.includes(r.example.evidence),'missing independent discovery evidence');
-    const priorRows=byKey.get(k)??[],shapes=(d.programs??[]).map(inspectProgram);
+    const observedAddress=legacyCoordinates?r.poolAddress:r.example.observedPoolAddress;
+    const shared=observedSharedEntry(r);
+    const target=legacyCoordinates&&shared?r.example.selectorTarget:r.poolAddress;
+    const canonical={...r,poolAddress:target};
+    const priorRows=byKey.get(key(canonical))??[],shapes=(d.programs??[]).map(inspectProgram);
     const reject=reason=>rejected.push({rowIndex,...sourceRef(r),reason,priorIds:priorRows.map(p=>p.candidateInstanceKey),
       observations:r.observations,example:r.example}); // rowIndex also links to the untouched source row
     if(!addr(r.poolAddress)||r.poolAddress===zero||!addr(r.tokenIn)||!addr(r.tokenOut)||r.tokenIn===r.tokenOut||
       !(r.poolId===null||word(r.poolId)))return reject('invalid-or-unrepresented-pool-or-asset-coordinates');
-    // GROUP BY reduced all observations to one representative witness. It is
-    // evidence about that call, not proof that no direct call ever occurred.
-    if(r.example.selectorTarget!==r.poolAddress)return reject('example-call-target-differs-from-physical-pool');
+    // Legacy shared-pool layouts bound every observation to a single emitter
+    // before grouping. A representative witness alone cannot authorize a redirect.
+    if(r.example.selectorTarget!==target || (!legacyCoordinates && r.callTarget!==target) ||
+       (observedAddress!=null && observedAddress!==target && !shared))
+      return reject('example-call-target-differs-from-physical-pool');
     if(priorRows.length>1)return reject('multiple-prior-public-ids-for-this-upstream-key');
     if(priorRows[0]?.tokenInId!=null||priorRows[0]?.tokenOutId!=null||shapes.some(s=>s.assetId)){
       return reject('upstream-movements-do-not-identify-asset-subtypes');
@@ -72,7 +85,7 @@ function projector(prior,defs){
     if(priorRows.length){poolNamespace=priorRows[0].poolNamespace;}
     else if(r.poolId!==null){
       // Do not create a second coordinate for an already-priced logical pool.
-      const priorNs=nsByPhysical.get(physical(r));
+      const priorNs=nsByPhysical.get(physical(canonical));
       if(priorNs?.size===1)poolNamespace=[...priorNs][0];
       else if(!priorNs&&declarations.size===1)poolNamespace=[...declarations][0];
       else return reject('pool-namespace-not-uniquely-evidenced');
@@ -83,12 +96,19 @@ function projector(prior,defs){
       if(declarations.size&&!declarations.has(poolNamespace))return reject('prior-and-declared-pool-namespace-disagree');
       if(declarations.size!==1)return reject('pool-namespace-not-uniquely-evidenced');
     }
-    const coords={chainId:1,selector:r.selector,poolAddress:r.poolAddress,poolNamespace,poolId:r.poolId,tokenIn:r.tokenIn,tokenInId:null,tokenOut:r.tokenOut,tokenOutId:null};
+    const coords={chainId:1,selector:r.selector,poolAddress:target,poolNamespace,poolId:r.poolId,tokenIn:r.tokenIn,tokenInId:null,tokenOut:r.tokenOut,tokenOutId:null};
     const candidateInstanceKey=sqlDirectionId(coords);
     if(priorRows.length){assert.equal(candidateInstanceKey,priorRows[0].candidateInstanceKey);preserved++;}
+    if(shared && addr(observedAddress) && observedAddress!==target) {
+      const old=byKey.get(key({...r,poolAddress:observedAddress}))??[];
+      for(const p of old) {
+        if(p.tokenInId==null && p.tokenOutId==null && (p.poolNamespace==null || p.poolNamespace===poolNamespace))
+          aliases.push({previous:p.candidateInstanceKey,current:candidateInstanceKey});
+      }
+    }
     accepted.push({candidateInstanceKey,...coords});
   }
-  return {add,finish(){assert.equal(accepted.length+rejected.length,source);return {accepted,rejected,preserved};}};
+  return {add,finish(){assert.equal(accepted.length+rejected.length,source);return {accepted,rejected,preserved,aliases};}};
 }
 export function projectIndependentRows(rows,prior,defs=registry()){
   const p=projector(prior,defs),seen=new Set();
@@ -141,12 +161,15 @@ export async function exportIndependentLive({upstream,upstreamSha256,previous,pr
   // No fallback, no environment-selected alternate generator and no network.
   const {renderIndependentTraceEdges}=await import('./independent-trace-edges.mjs');
   const mb=await pinned(upstream,upstreamSha256),m=JSON.parse(mb),window=windowOf(m.window);
-  const sql=await renderIndependentTraceEdges(m.window,{liveSelectorsOnly:true});
+  let sql=await renderIndependentTraceEdges(m.window,{liveSelectorsOnly:true});
+  const declaredSql=m.filtered?.sqlSha256??m.sqlSha256;
+  const legacyCoordinates=sha(sql)!==declaredSql;
+  if(legacyCoordinates)sql=await renderIndependentTraceEdges(m.window,{liveSelectorsOnly:true,legacyCoordinates});
   const archive=m.format==='independent-discovery-archive/v1';
   if(archive){
     assert(['all','filtered'].includes(m.mode)&&typeof m.edgeFile==='string'&&m.edgeFile.length,'invalid archive format');
     assert.equal(sha(sql),m.filtered.sqlSha256,'archived filter differs from production SQL/activation');
-    assert.equal(sha(await renderIndependentTraceEdges(m.window)),m.fullSqlSha256,'archived full discovery SQL differs');
+    assert.equal(sha(await renderIndependentTraceEdges(m.window,{legacyCoordinates})),m.fullSqlSha256,'archived full discovery SQL differs');
   }else{
     assert.equal(m.liveSelectorsOnly,true,'an actual filtered discovery receipt is required');
     assert.equal(sha(sql),m.sqlSha256,'discovery SQL/registry/activation mismatch');
@@ -167,7 +190,7 @@ export async function exportIndependentLive({upstream,upstreamSha256,previous,pr
   const doc=fb&&JSON.parse(fb);
   if(doc)assertPinnedFundingWindow(m.window,doc);
   const funds=doc&&readSqlFundingRows(doc,window);
-  const defs=registry(),project=projector(prior,defs);
+  const defs=registry(),project=projector(prior,defs,{legacyCoordinates});
   const ah=createHash('sha256'),fh=createHash('sha256');let last='',rawRows=0,source=0,obs=0;
   const rawHash=createHash('sha256'),bytes=createReadStream(raw).compose(new Transform({
     transform(chunk,_encoding,next){rawHash.update(chunk);next(null,chunk);}
@@ -188,15 +211,18 @@ export async function exportIndependentLive({upstream,upstreamSha256,previous,pr
     assert.equal(keySha256,m.keySha256,'archive canonical source keys differ');assert.equal(filteredKeySha256,m.filtered.keySha256,'archive filtered keys differ');
     assert.equal(source,m.filtered.rows,'archive selector count differs');
   }else{assert.equal(obs,m.observations);}
-  const {accepted,rejected,preserved}=project.finish();
+  const {accepted,rejected,preserved,aliases}=project.finish();
+  assert.equal(new Set(accepted.map(r=>r.candidateInstanceKey)).size,accepted.length,'duplicate normalized direction');
+  assert.equal(new Set(aliases.map(r=>r.previous)).size,aliases.length,'ambiguous previous direction alias');
   await mkdir(out,{mode:0o700}); // new directory only; no existing artifact or run is ever overwritten
   await save(out,'upstream-manifest.json',mb);
   const sourceName=archive?'upstream-edges.jsonl.gz':'upstream-edges.json';
   await copyFile(raw,join(out,sourceName),constants.COPYFILE_EXCL);
   assert.equal(await fileSha(join(out,sourceName)),m.edgesSha256,'upstream input changed during packaging');
+  await save(out,'direction-id-aliases.jsonl.gz',gzipSync(aliases.map(json).join('')));
   await save(out,'rejected.jsonl.gz',gzipSync(rejected.map(json).join('')));
   const result={format:'independent-live-projection/v1',upstreamSha256,sourceName,sourceEdgesSha256:m.edgesSha256,sqlSha256:sha(sql),previousSha256,
-    fundingSha256,...window,rawRows,keySha256,filteredKeySha256,source,accepted:accepted.length,rejected:rejected.length,preserved,fundingOffers:funds?.length??null,
+    fundingSha256,...window,rawRows,keySha256,filteredKeySha256,source,previousDirectionAliases:aliases.length,accepted:accepted.length,rejected:rejected.length,preserved,fundingOffers:funds?.length??null,
     rejectionCounts:Object.fromEntries([...new Set(rejected.map(r=>r.reason))].map(k=>[k,rejected.filter(r=>r.reason===k).length]))};
   if(accepted.length){
     const edgeFile='candidate-instances.ndjson.gz',content=gzipSync(accepted.map(json).join(''));

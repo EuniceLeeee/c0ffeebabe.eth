@@ -1,0 +1,86 @@
+{
+  "baselineCommit": "7b62218240afdc71f3b515ea8b2d7b3638b7940a",
+  "archiveReplay": {
+    "fromBlock": 26155910,
+    "toBlock": 26378389,
+    "cutoffHash": "0x62b23cae3b410e09f24910f072a94e2a65b68917a91168dda8648e0d5375c618",
+    "upstreamEdgesSha256": "59486b21926e030d1eb012c24b5a8848f251b000eefbee1c88b5ec1718221367",
+    "previousManifestSha256": "ae0e81940714cab7e1cb26b8ae6878a673e9aab0b415971f2a1f94af28e253e6",
+    "rawRows": 861031,
+    "enabledSelectorRows": 307622,
+    "acceptedBefore": 306534,
+    "acceptedAfter": 307607,
+    "previousAcceptedIdsWithIdenticalCoordinates": 306534,
+    "additionalDirections": 1073,
+    "additionalSelector": "0x52bbbe29",
+    "additionalPoolIds": 413,
+    "rejectedBefore": 1088,
+    "rejectedAfter": 15,
+    "remainingIdenticalPriorIdConflicts": 15,
+    "historicalIdAliases": 1073
+  },
+  "productionBinding": {
+    "sourceBlock": 26378389,
+    "sourceHash": "0x62b23cae3b410e09f24910f072a94e2a65b68917a91168dda8648e0d5375c618",
+    "newDirectionsComparedToExactExportDelta": 1073,
+    "directionsIssuedExactlyOneRuntimeLeg": 1073,
+    "distinctPinnedReadRequests": 1161
+  },
+  "freshBigQuery": {
+    "fromBlock": 26377878,
+    "toBlock": 26378389,
+    "jobId": "independent_edges_700a3b96afdf13ea82b4_1795403653131",
+    "sqlSha256": "700a3b96afdf13ea82b4d363af1597014a55063252825ad243ddfcadff924810",
+    "upstreamEdgesSha256": "f08c7a6f0551580452ce3514b90c7fc8eebb851e36f6340e5ed4caa4f3b4ddf5",
+    "transactions": 168648,
+    "observations": 37562,
+    "enabledDirections": 6782,
+    "vaultSwapDirections": 21,
+    "managerUnlockDirections": 1147,
+    "directionsMatchingObservedCallTarget": 6782,
+    "accepted": 6781,
+    "priorIdConflicts": 1,
+    "bytesBilled": 3827302400,
+    "elapsedMs": 72397
+  },
+  "tests": {
+    "scope": "SQL discovery, export, state binding, execution-leg materialization and logical-pool consumers",
+    "passed": 72,
+    "failed": 0,
+    "selectorJsonCheck": "passed",
+    "selectorNativeTypecheck": "four pre-existing diagnostics reproduced at baseline"
+  },
+  "nodeSimulationSample": {
+    "method": "eth_simulateV1",
+    "runner": "simulateStartupPrefix",
+    "executorCode": "counterfactual",
+    "sourceBlock": 26378389,
+    "simulatedBlock": 26378390,
+    "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+    "amountInRaw": "2000000000000000",
+    "results": [
+      {
+        "poolId": "0x072f14b85add63488ddad88f855fda4a99d6ac9b000200000000000000000027",
+        "tokenOut": "0xc011a73ee8576fb46f5e1c5751ca3b9fe0af2a6f",
+        "gasUsed": "318402",
+        "amountSpent": "2000000000000000",
+        "amountOut": "26327850550775071649"
+      },
+      {
+        "poolId": "0x0b09dea16768f0799065c475be02919503cb2a3500020000000000000000001a",
+        "tokenOut": "0x6b175474e89094c44da98b954eedeac495271d0f",
+        "gasUsed": "225350",
+        "amountSpent": "2000000000000000",
+        "amountOut": "4291348709779131919"
+      },
+      {
+        "poolId": "0x350196326aeaa9b98f1903fb5e8fc2686f85318c000200000000000000000084",
+        "tokenOut": "0x81f8f0bb1cb2a06649e51913a151f0e7ef6fa321",
+        "gasUsed": "228427",
+        "amountSpent": "2000000000000000",
+        "amountOut": "26934926578051192595"
+      }
+    ],
+    "localAnvilControl": "rejected by existing target header verification; not counted"
+  }
+}

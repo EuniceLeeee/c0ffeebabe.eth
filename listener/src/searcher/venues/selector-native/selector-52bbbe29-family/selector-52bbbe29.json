@@ -56,19 +56,7 @@
                   "bindingvaultpool",
                   "getPool(bytes32)",
                   [
-                    {
-                      "op": "at",
-                      "args": [
-                        {
-                          "op": "at",
-                          "args": [
-                            "$args",
-                            0
-                          ]
-                        },
-                        0
-                      ]
-                    }
+                    "$scope.poolId"
                   ]
                 ]
               },
@@ -94,19 +82,7 @@
                   "bindingvaultspecialization",
                   "getPool(bytes32)",
                   [
-                    {
-                      "op": "at",
-                      "args": [
-                        {
-                          "op": "at",
-                          "args": [
-                            "$args",
-                            0
-                          ]
-                        },
-                        0
-                      ]
-                    }
+                    "$scope.poolId"
                   ]
                 ]
               },
@@ -132,19 +108,7 @@
                   "bindingvaulttokens",
                   "getPoolTokens(bytes32)",
                   [
-                    {
-                      "op": "at",
-                      "args": [
-                        {
-                          "op": "at",
-                          "args": [
-                            "$args",
-                            0
-                          ]
-                        },
-                        0
-                      ]
-                    }
+                    "$scope.poolId"
                   ]
                 ]
               },
@@ -351,19 +315,7 @@
           "poolId": {
             "op": "lower",
             "args": [
-              {
-                "op": "at",
-                "args": [
-                  {
-                    "op": "at",
-                    "args": [
-                      "$args",
-                      0
-                    ]
-                  },
-                  0
-                ]
-              }
+              "$scope.poolId"
             ]
           },
           "binding": {
@@ -391,6 +343,9 @@
           }
         }
       ]
+    },
+    "stateBinding": {
+      "poolNamespace": "contract-pool-id"
     }
   },
   "routes": {

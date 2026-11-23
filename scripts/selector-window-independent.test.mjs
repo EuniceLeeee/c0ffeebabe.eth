@@ -56,7 +56,7 @@ test('fresh funding keeps 4/1/3 GiB caps, same-window trace coverage and a separ
  assert.deepEqual(mock.submitted,[4,1,3].map(n=>String(n*2**30)));assert.deepEqual(mock.submitted,mock.estimates);
  assert.equal(fund.rows,1);assert.equal(read(fund.funding).sourceCoverage.activeHashes,'9');
  const x=join(d,'in');mkdirSync(x);const pool='0x'+'12'.repeat(20),tx='0x'+'ee'.repeat(32);
- const rows=[{selector:'0x128acb08',poolAddress:pool,poolId:null,tokenIn:'0x'+'21'.repeat(20),tokenOut:'0x'+'34'.repeat(20),observations:'1',observedTargetSelector:true,verified:false,
+ const rows=[{selector:'0x128acb08',poolAddress:pool,callTarget:pool,poolId:null,tokenIn:'0x'+'21'.repeat(20),tokenOut:'0x'+'34'.repeat(20),observations:'1',observedTargetSelector:true,verified:false,
     evidenceTypes:['subtree-net-flow'],example:{txHash:tx,selectorTarget:pool,callPath:'1',evidence:'subtree-net-flow'}}];
  const mb=join(x,'manifest.json'),msha=put(mb,{window:w,total:1,observations:1,liveSelectorsOnly:true,sqlSha256:sha(await renderIndependentTraceEdges(w,{liveSelectorsOnly:true})),edgesSha256:put(join(x,'edges.json'),rows)});
  const source=['--from-manifest',mb,'--manifest-sha256',msha,'--no-prior'];const full=join(d,'priced-input');

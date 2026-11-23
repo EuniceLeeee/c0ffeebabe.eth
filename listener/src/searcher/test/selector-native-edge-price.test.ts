@@ -65,6 +65,30 @@ test("the Family binds a full manager pool ID, optional native side, and only it
     }
   }
 });
+test("a shared entry issues only the SQL direction proven by its registered pool and assets",async()=>{
+  const {PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG:catalog}=await import("../venues/production-family-composition.js");
+  const definition=normalize(raw("52bbbe29")), vault="0xba12222222228d8ba445958a75a0704d566bf2c8";
+  const poolId=pool+"0001"+"0".repeat(19)+"1", tokens=[usdc,weth,"0x"+"3".repeat(40)];
+  const vaultAbi=new Interface(["function getPool(bytes32) view returns(address,uint8)","function getPoolTokens(bytes32) view returns(address[],uint256[],uint256)"]);
+  const read=async(at:string,data:string)=>{
+    if(at===vault){
+      const tx=vaultAbi.parseTransaction({data});assert.equal(tx!.args[0],poolId);
+      return tx!.name==="getPool"?vaultAbi.encodeFunctionResult("getPool",[pool,1]):
+        vaultAbi.encodeFunctionResult("getPoolTokens",[tokens,[1,2,3],source.number]);
+    }
+    assert.ok(tokens.includes(at));assert.equal(data,sign("decimals()"));return abi.encode(["uint8"],[18]);
+  };
+  const args={definition,catalog,source,executor:"0x"+"1".repeat(40),transactionOrigin:"0x"+"2".repeat(40),read,readCode:async()=> "0x6000"};
+  const edge={chainId:1,selector:definition.selector,poolAddress:vault,poolId,poolNamespace:"contract-pool-id",tokenIn:tokens[2]!,tokenOut:weth};
+  const {alternatives,issues}=await issueSqlFamilyAlternatives({...args,edge});
+  assert.equal(alternatives.length,1,issues.join("; "));
+  assert.deepEqual(alternatives[0]!.instance.routes.map(r=>[r.tokenIn.toLowerCase(),r.tokenOut.toLowerCase()]),[[tokens[2],weth]]);
+  assert.match(alternatives[0]!.program,/^0x01/);
+  assert.equal((await issueSqlFamilyAlternatives({...args,edge:{...edge,tokenIn:"0x"+"9".repeat(40)}})).alternatives.length,0);
+  const wrongPool=async(at:string,data:string)=>at===vault&&data.startsWith(sign("getPool(bytes32)"))
+    ?vaultAbi.encodeFunctionResult("getPool",[tokens[2],1]):read(at,data);
+  assert.equal((await issueSqlFamilyAlternatives({...args,edge,read:wrongPool})).alternatives.length,0);
+});
 function raw(id:string){return JSON.parse(readFileSync(new URL("../venues/selector-native/selector-"+id+"-family/selector-"+id+".json",import.meta.url),"utf8"));}
 function example(id="128acb08"){
   const reads:string[]=[],data=new Map([["token0()","address",usdc],["token1()","address",weth],["fee()","uint24",500],["tickSpacing()","int24",10]]
