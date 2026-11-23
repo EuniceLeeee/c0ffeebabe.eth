@@ -1,16 +1,13 @@
-// Official swap discovery and independently sourced funding. Historical exports below
-// remain importable; none of the legacy swap queries are used by this CLI.
+// Official swap discovery and independently sourced funding.
 import assert from 'node:assert/strict';
 import {existsSync,mkdirSync,writeFileSync,readFileSync} from 'node:fs';
 import {join,resolve,basename} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {parseArgs} from 'node:util';
-import {gzipSync} from 'node:zlib';
 import {googleApi,sha} from './selector-query-client.mjs';
 import {decodeRow} from './bigquery-table.mjs';
 import {openReadyDiscoveryJob} from './ready-bigquery-sql.mjs';
-import {candidateCoordinateFields} from './selector-candidate-instances-sql.mjs';
 import {renderSqlFundingSources} from './selector-funding-sql.mjs';
 import {assertPinnedFundingWindow,assertTraceFundingCoverage,splitSqlFundingRows} from './selector-live-funding-export.mjs';
 import {renderTraceCoverageSql} from './selector-trace-window-sql.mjs';
@@ -30,21 +27,6 @@ export function saveQueryStage(dir,name,value,resuming){
  if(resuming&&existsSync(dest)){assert(readFileSync(dest).equals(bytes),'existing query stage differs: '+name);return;}
  writeFileSync(dest,bytes,{mode:0o600,flag:'wx'});
 }
-export function exportPriceEdges(dir,candidates,window,resuming=false){
- const edges=[...candidates].sort((a,b)=>a.candidateInstanceKey.localeCompare(b.candidateInstanceKey));
- assert.equal(new Set(edges.map(e=>e.candidateInstanceKey)).size,edges.length);
- for(const e of edges){
-   const tuple=candidateCoordinateFields.map(k=>k==='chainId'?String(e[k]):e[k]);
-   assert.equal(e.candidateInstanceKey,'candidate-edge:v1:'+sha(JSON.stringify(tuple)));assert.equal(e.verified,false);
- }
- const wire=Buffer.from(edges.map(e=>JSON.stringify(e)+'\n').join('')),gz=gzipSync(wire,{level:6});
- const edgeFile='candidate-instances.ndjson.gz',fixedManifest='fixed-edge-manifest.json';
- const manifest={format:'ready-fixed-edges/v1',edgeFile,edgeSha256:sha(gz),rows:edges.length,
-   fromBlock:window.fromBlock,toBlock:window.toBlock,cutoffHash:window.headHash};
- saveQueryStage(dir,'edges.json',edges,resuming);saveQueryStage(dir,edgeFile,gz,resuming);saveQueryStage(dir,fixedManifest,manifest,resuming);
- return {fixedManifest,fixedManifestSha256:sha(readFileSync(join(dir,fixedManifest))),sortedNdjsonSha256:sha(wire)};
-}
-
 // Funding has no swap-edge inputs. Same query shapes and billing ceilings as the previous producer.
 export async function runIndependentWindowFunding(dir,window,resuming=false,providedApi){
  const projectId=process.env.SELECTOR_BQ_PROJECT??'eth-token-480803';assert(/^[a-z][a-z0-9-]+$/.test(projectId));

@@ -30,7 +30,24 @@ test('full poolId, compatible previously unqualified keys and new namespaces rem
   const x=row({poolId:w('1')}),y=row({poolId:w('2')});
   const p=projectIndependentRows([x,y],[old(x)],defs(logical));
   assert.deepEqual(p.accepted,[old(x),old(y,{poolNamespace:'opaque'})]);assert.equal(p.preserved,1);
-  assert.deepEqual(projectIndependentRows([x],[old(x),old(x,{poolNamespace:'opaque'})],defs(logical)).rejected[0].priorIds.length,2);
+});
+test('distinct historical IDs block only their direction for address and shared pools', () => {
+  for (const {edge, alternative, programs} of [
+    {edge: row(), alternative: {tokenInId: '17'}, programs: []},
+    {edge: row({poolId: w('1')}), alternative: {poolNamespace: 'contract-pool-id'},
+      programs: [{binding: {stateBinding: {poolNamespace: 'contract-pool-id'}}}]},
+  ]) {
+    const reverse = row({...edge, tokenIn: edge.tokenOut, tokenOut: edge.tokenIn});
+    const previous = [old(edge), old(edge, alternative), old(reverse)];
+    const result = projectIndependentRows([edge, reverse], previous, defs(programs));
+    assert.deepEqual(result.accepted, [old(reverse)]);
+    assert.deepEqual(result.aliases, []);
+    assert.equal(result.rejected.length, 1);
+    const [conflict] = result.rejected;
+    assert.equal(conflict.rowIndex, 0);
+    assert.equal(conflict.reason, 'multiple-prior-public-ids-for-this-upstream-key');
+    assert.deepEqual(conflict.priorIds, previous.slice(0, 2).map(p => p.candidateInstanceKey));
+  }
 });
 test('an exact old ID and the reverse-direction history cannot override the receiving namespace; legacy null stays null',()=>{
   const x=row({poolId:w('a')}),reverse={...x,tokenIn:x.tokenOut,tokenOut:x.tokenIn};

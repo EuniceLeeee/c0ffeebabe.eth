@@ -16,7 +16,7 @@ import {sealSqlLiveInput} from '../listener/src/searcher/sql-live-input-cli.ts';
 import {loadLiveSqlTables,readSqlFundingRows} from '../listener/src/searcher/sql-live-tables.ts';
 import {poolIdLayouts} from './selector-sql-sources/trace-pool-id.mjs';
 import {assertPinnedFundingWindow} from './selector-live-funding-export.mjs';
-import {GENERATED_PRODUCTION_FAMILY_ENTRIES} from '../listener/src/searcher/generated/production-family-entries.generated.ts';
+import {enabledConversionDefinitions} from './selector-live-conversions.mjs';
 
 const sha=data=>createHash('sha256').update(data).digest('hex');
 const json=x=>JSON.stringify(x)+'\n';
@@ -26,8 +26,7 @@ const zero='0x'+'0'.repeat(40);
 const key=r=>JSON.stringify([r.selector,r.poolAddress,r.poolId,r.tokenIn,r.tokenOut]);
 const physical=r=>JSON.stringify([r.selector,r.poolAddress,r.poolId]);
 const sourceRef=x=>({selector:x.selector,poolAddress:x.poolAddress,poolId:x.poolId,tokenIn:x.tokenIn,tokenOut:x.tokenOut});
-const registry=()=>new Map(GENERATED_PRODUCTION_FAMILY_ENTRIES.map(e=>e.module.selectorFamilyModule)
-  .filter(m=>m.activation.enabled&&['swap','protocol'].includes(m.definition.domain)).map(m=>[m.definition.selector,m.definition]));
+const registry = () => new Map(enabledConversionDefinitions().map(definition => [definition.selector, definition]));
 function inspectProgram(p){
   const n=p.binding?.nomination??{}, s=p.binding?.stateBinding??{}, args=p.parameters??[];
   const namespace=[...new Set([n.poolNamespace,s.poolNamespace].filter(Boolean))];

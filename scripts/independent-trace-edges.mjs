@@ -26,11 +26,8 @@ export const flowConfig = {
 
 // Resolve activation at query generation with the same environment as live.
 async function liveSelectorPredicate() {
-  const {GENERATED_PRODUCTION_FAMILY_ENTRIES} = await import(
-    '../listener/src/searcher/generated/production-family-entries.generated.ts');
-  const selectors = GENERATED_PRODUCTION_FAMILY_ENTRIES.map(entry => entry.module.selectorFamilyModule)
-    .filter(({activation, definition}) => activation.enabled && ['swap', 'protocol'].includes(definition.domain))
-    .map(({definition}) => definition.selector).sort();
+  const {enabledConversionDefinitions} = await import('./selector-live-conversions.mjs');
+  const selectors = enabledConversionDefinitions().map(definition => definition.selector).sort();
   for (const selector of selectors) assert.match(selector, /^0x[0-9a-f]{8}$/);
   return selectors.length ? '\nWHERE selector IN (' + selectors.map(s => "'" + s + "'").join(',') + ')' : '\nWHERE FALSE';
 }
