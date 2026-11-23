@@ -66,8 +66,14 @@ test("repeated-instance trial still quotes later hops on the preceding trial sta
   const f = fixture(); f.plan.tokenPath.edges[1].target = f.plan.tokenPath.edges[0].target;
   const selector = createBlockScanSimAmountSelector({ source, executor, async simulate() { return f.result(0n); } });
   await assert.rejects(selector.solve(f.plan, f.state, f.probe, f.opts), SimAmountNoOpportunityError);
-  assert.equal(f.quotes[0].priorQuotes.length, 0); assert.equal(f.quotes[1].priorQuotes.length, 1);
-  assert.equal(f.quotes[1].amountIn, f.quotes[1].priorQuotes[0].amountOut);
+  const first = f.quotes.filter(q => q.edge === f.plan.tokenPath.edges[0]);
+  const later = f.quotes.filter(q => q.edge === f.plan.tokenPath.edges[1]);
+  assert.equal(first.length, 4); assert.equal(later.length, 4);
+  assert(first.every(q => q.priorQuotes.length === 0));
+  for (const q of later) {
+    assert.equal(q.priorQuotes.length, 1);
+    assert.equal(q.amountIn, q.priorQuotes[0].amountOut);
+  }
 });
 
 for (const output of ["zero-output", "one-unit-output"] as const)
@@ -140,7 +146,28 @@ test(`production sim selection classifies ${kind} without quote-profit fallback`
       if (kind === "revert" || kind === "nonpositive") return error instanceof SimAmountNoOpportunityError;
       return error instanceof Error && !(error instanceof SimAmountNoOpportunityError);
     });
-  assert.equal(trials, 1); assert(!published);
+  assert.equal(trials, 4); assert(!published);
+});
+
+for (const transport of ["returned", "thrown"] as const)
+test("a genuine " + transport + " sibling RPC fault survives P cancellation", async () => {
+  const f = fixture(), fault = new Error("independent provider error");
+  let start!: () => void;
+  const launched = new Promise<void>(resolve => { start = resolve; });
+  const selector = createBlockScanSimAmountSelector({ source, executor, async simulate(plan, control) {
+    if (plan.flashAmount === 10n) {
+      await launched;
+      return { ...f.result(0n), failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: Error("seed") } };
+    }
+    if (plan.flashAmount === 100n) {
+      start();
+      if (!control.signal.aborted) await new Promise<void>(done => control.signal.addEventListener("abort", () => done(), { once: true }));
+      if (transport === "thrown") throw fault;
+      return { ...f.result(0n), failure: { kind: "rpc", code: 429, cause: fault } };
+    }
+    return f.result(1n);
+  } });
+  await assert.rejects(selector.solve(f.plan, f.state, f.probe, f.opts), error => error === fault);
 });
 
 test("quote failure logs the failing hop input without changing rejection or circuit scope", async () => {
@@ -161,8 +188,8 @@ test("quote failure logs the failing hop input without changing rejection or cir
     return true;
   });
   const failures = events.filter(e => e.type === "sim_amount_failure");
-  assert.equal(failures.length, 1);
-  const logged = failures[0];
+  assert.deepEqual(failures.map(e => e.amount).sort(), ["10", "100", "1000", "10000"]);
+  const logged = failures.find(e => e.amount === "10");
   assert.equal(logged.amount, "10");
   assert.equal(logged.sourceBlock, source.number);
   assert.equal(logged.sourceBlockHash, source.hash);
@@ -310,6 +337,33 @@ test("route preparation is once per solve, never shared across concurrent solves
   assert.equal(builds, 6, "later solve prepares again even with identical route/source");
 });
 
+test("callback-dependent coarse points wait without taking slots from another route's seed", async () => {
+  const f = fixture(), runTrial = createTrialLimiter(2);
+  f.session.buildRuntimeAmountLeg = ({ edge }: any) => ({
+    actionAdapterId: "fixture-owned",
+    program: ethers.hexlify(new RuntimeAmountProgram().constant(1, 1n).bytes()),
+    settlement: edge === f.plan.tokenPath.edges[0]
+      ? { quoteOutput: true, directOutput: true } : { deferredInput: addr("2") },
+  });
+  let seeds = 0, release!: () => void;
+  const hold = new Promise<void>(resolve => { release = resolve; });
+  const selector = createBlockScanSimAmountSelector({ source, executor, runTrial, async simulate(plan) {
+    if (plan.flashAmount === 10n) { seeds++; await hold; }
+    return f.result(5n);
+  } });
+  const solving = Promise.all([
+    selector.solve(f.plan, f.state, f.probe, f.opts),
+    selector.solve(f.plan, f.state, f.probe, f.opts),
+  ]);
+  try {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(seeds, 2, "both independent seeds can run while larger amounts await the callback decision");
+  } finally {
+    release();
+    await solving;
+  }
+});
+
 for (const outcome of ["revert", "nonpositive"] as const)
 test(`seed callback ${outcome} selects funded trials for this solve, including larger profitable callbacks`, async () => {
   const f = fixture(), calls: Array<[bigint, boolean]> = [], buildCounts = new Map<string, number>();
@@ -324,8 +378,11 @@ test(`seed callback ${outcome} selects funded trials for this solve, including l
   const selector = createBlockScanSimAmountSelector({ source, executor, record: event => events.push(event), async simulate(plan) {
     const deferred = typeof plan.root.params.settlementProgram === "string";
     calls.push([plan.flashAmount, deferred]);
-    if (deferred && plan.flashAmount === 10n && rejectSeed) return { ...f.result(0n),
-      ...(outcome === "revert" ? { failure: { kind: "revert" as const, code: "TRANSACTION_REVERTED", cause: Error("seed revert") } } : {}) };
+    if (deferred && plan.flashAmount === 10n && rejectSeed) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      return { ...f.result(0n),
+        ...(outcome === "revert" ? { failure: { kind: "revert" as const, code: "TRANSACTION_REVERTED", cause: Error("seed revert") } } : {}) };
+    }
     return f.result(deferred ? 20n : 5n);
   } });
   await selector.solve(f.plan, f.state, f.probe, f.opts);

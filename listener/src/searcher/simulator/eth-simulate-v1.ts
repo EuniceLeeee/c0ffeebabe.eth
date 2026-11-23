@@ -49,6 +49,8 @@ function observerCode(profitToken: string, executor: string): string {
 }
 
 type Context = {
+  /** Only the live amount search requests an in-process execution receipt. */
+  captureAmountEvidence?: boolean;
   onSimulationTiming?: (timing: SimulationPhaseTiming) => void;
   source: CanonicalSource;
   header: BlockScanObservedHeader;
@@ -95,6 +97,28 @@ export type EthSimulateV1ExecutionInput = DeepReadonly<ReturnType<typeof prepare
 export type EthSimulateV1SimulationResult = SimulationResult & {
   readonly counterfactualExecutorCode?: { readonly address: string; readonly keccak256: string };
 };
+
+// Only the real next-block amount execution path mints these weak identity keys.
+// An EV consumer may read the pinned fee evidence; only the issuing simulator
+// instance may reuse the complete result instead of executing a finalist.
+const amountEvidence = new WeakMap<SimulationResult, {
+  issuer: EthSimulateV1Simulator; input: EthSimulateV1ExecutionInput; amount: bigint; result: EthSimulateV1SimulationResult;
+}>();
+
+/** Historical/pinned pricing evidence, NOT a fresh canonical head check. The
+ * success decoder already checked the RPC response against these wire overrides. */
+export function ethSimulateV1AmountFeeBasis(result: SimulationResult | undefined, source: CanonicalSource) {
+  const proof = result !== undefined ? amountEvidence.get(result) : undefined;
+  if (!proof || !source || typeof source.hash !== "string") return null;
+  const { input } = proof;
+  if (source.number !== input.source.number || source.generation !== input.source.generation ||
+      source.hash.toLowerCase() !== input.source.hash.toLowerCase()) return null;
+  const header = input.sourceHeader;
+  const target = input.simulateParams[0].blockStateCalls[0].blockOverrides;
+  return Object.freeze({ parent: Object.freeze({ number: input.source.number, hash: input.source.hash, timestamp: Number(header.timestamp),
+    baseFeePerGas: BigInt(header.baseFeePerGas), gasUsed: BigInt(header.gasUsed), gasLimit: BigInt(header.gasLimit) }),
+    targetBlock: Number(BigInt(target.number)), targetBaseFeePerGas: BigInt(target.baseFeePerGas) });
+}
 
 /** Pure preparation from an already compiled script: no quote, compilation, I/O
  * or deadline dependency. Every nested object is owned by the frozen snapshot. */
@@ -342,7 +366,7 @@ export class EthSimulateV1Simulator {
     }
   }
 
-  async simulate(plan: ResolvedPlan, context: Context): Promise<EthSimulateV1SimulationResult> {
+  #preparePlanInput(plan: ResolvedPlan, context: Context, priorDiagnosticKey?: string) {
     const { source, header, signal, deadlineAtMs } = context;
     targetContext(source, header);
     if (!Number.isSafeInteger(deadlineAtMs) || !signal || !ADDRESS.test(plan.profitToken)) {
@@ -363,13 +387,55 @@ export class EthSimulateV1Simulator {
       ...(this.executorRuntimeCode === undefined ? {} : { executorRuntimeCode: this.executorRuntimeCode }),
       ...(this.chainExecutorRuntimeCode ? { chainExecutorRuntimeCode: this.chainExecutorRuntimeCode } : {}),
       ...((this.executorRuntimeCode && supportsHopDiagnostics(this.executorRuntimeCode.code)) || this.chainExecutorRuntimeCode
-        ? { diagnosticKey: `0x${randomBytes(32).toString("hex")}` } : {}) });
+        ? { diagnosticKey: priorDiagnosticKey ?? `0x${randomBytes(32).toString("hex")}` } : {}) });
     reportPhase(context, { phase: "prepare", wallMs: performance.now() - prepareStart });
-    return this.simulateExecutionInput(input, { signal, deadlineAtMs, onSimulationTiming: context.onSimulationTiming });
+    return input;
+  }
+
+  async simulate(plan: ResolvedPlan, context: Context): Promise<EthSimulateV1SimulationResult> {
+    const { captureAmountEvidence, signal, deadlineAtMs, onSimulationTiming } = context;
+    const amount = plan.flashAmount;
+    const input = this.#preparePlanInput(plan, context);
+    const result = await this.#executeInput(input, { signal, deadlineAtMs, onSimulationTiming });
+    if (captureAmountEvidence !== true || signal.aborted || Date.now() >= deadlineAtMs ||
+        !(amount > 0n && result.success && !result.failure && result.netProfit > 0n &&
+          result.grossProfit === result.netProfit && result.gasUsed > 0n &&
+          result.profitToken === input.profitToken && result.scriptHex === input.scriptHex && result.calldata === input.calldata)) return result;
+    // Successful evidence is scalar-only. In particular no revert callback,
+    // failure object or mutable side channel can escape into final evidence.
+    const measured = Object.freeze({ success: true, profitToken: result.profitToken,
+      grossProfit: result.grossProfit, netProfit: result.netProfit, gasUsed: result.gasUsed,
+      scriptHex: input.scriptHex, calldata: input.calldata, ...(result.counterfactualExecutorCode
+        ? { counterfactualExecutorCode: Object.freeze({ ...result.counterfactualExecutorCode }) } : {}) });
+    amountEvidence.set(measured, { issuer: this, input, amount, result: measured });
+    return measured;
+  }
+
+  /** Proves the same whole transaction already ran, not that the head is
+   * still current. S5's generation and the post-simulation tip check remain;
+   * approved submissions are addressed only to the original target block. */
+  reuseAmountSimulation(plan: ResolvedPlan, context: Context, measured: SimulationResult): SimulationResult | null {
+    const proof = amountEvidence.get(measured);
+    if (!proof || proof.issuer !== this || proof.amount !== plan.flashAmount || proof.result.netProfit !== plan.netProfit ||
+        proof.result.profitToken !== plan.profitToken) return null;
+    // Rebuild from the *current* plan, actor, source, header, code and entry.
+    // The diagnostic nonce is part of the exact executed state override: retain
+    // that opaque value only; compare the entire resulting request unchanged.
+    const request = this.#preparePlanInput(plan, context,
+      "diagnosticKey" in proof.input ? proof.input.diagnosticKey : undefined);
+    if (!isDeepStrictEqual(proof.input, request)) return null;
+    if (context.signal.aborted) throw new StateCallAbortedError("final simulation signal aborted", "signal");
+    if (Date.now() >= context.deadlineAtMs) throw new StateCallAbortedError("final simulation deadline aborted", "deadline");
+    return proof.result;
   }
 
   /** Read-only diagnostic replay. Production still owns the latest-head gate. */
   async simulateExecutionInput(input: EthSimulateV1ExecutionInput,
+    control: { signal: AbortSignal; deadlineAtMs: number; onSimulationTiming?: Context["onSimulationTiming"] }): Promise<EthSimulateV1SimulationResult> {
+    return this.#executeInput(input, control);
+  }
+
+  async #executeInput(input: EthSimulateV1ExecutionInput,
     control: { signal: AbortSignal; deadlineAtMs: number; onSimulationTiming?: Context["onSimulationTiming"] }): Promise<EthSimulateV1SimulationResult> {
     const validationStart = performance.now();
     const saved = validateEthSimulateV1ExecutionInput(input);

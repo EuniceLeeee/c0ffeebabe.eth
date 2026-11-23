@@ -5,7 +5,7 @@ import { test } from "node:test";
 import ts from "typescript";
 import { ethers } from "ethers";
 import { parseBlockScanObservedHeader } from "../blockscan-observed-header.js";
-import { resolveBlockScanFinalSimulationMethod, requireFinalSimulationHeader } from "../blockscan-final-simulation-method.js";
+import { resolveBlockScanFinalSimulationMethod, requireFinalSimulationHeader, runBlockScanFinalWithAmountEvidence } from "../blockscan-final-simulation-method.js";
 import { createFinalSimulationWorkRuntime } from "../final-simulation-work-runtime.js";
 import { executeFinalSimulationWork } from "../adapter-work-intent.js";
 
@@ -124,7 +124,8 @@ for (const direct of [false, true]) for (const nMinusOne of [false, true]) {
     const scope = {
       directFinalSimulation: direct ? directBackend : undefined,
       blockScanFinalSimulationWorkers: direct ? [] : [worker],
-      createFinalSimulationWorkRuntime, requireFinalSimulationHeader, sourceHeader: header,
+      createFinalSimulationWorkRuntime, requireFinalSimulationHeader, runBlockScanFinalWithAmountEvidence, sourceHeader: header,
+      directFinalFresh: 0, directFinalReused: 0,
       blockScanWorkerRunner: { async simulate(input: any) {
         assert(!direct, "direct method must not execute through an Anvil worker");
         assert.equal(input.resource, worker); executions++; return result;
@@ -143,6 +144,8 @@ for (const direct of [false, true]) for (const nMinusOne of [false, true]) {
       const actual = await executeFinalSimulationWork({ intent: { stage: "fork-final-sim", source, generation: 2, resolvedPlan: plan }, runtime });
       assert.equal(actual, result);
       assert.equal(directCalls, direct ? 1 : 0);
+      assert.equal(scope.directFinalFresh, direct ? 1 : 0);
+      assert.equal(scope.directFinalReused, 0);
       assert.equal(executions, direct ? 0 : 1);
       assert.equal(forkCalls, !direct && nMinusOne ? 1 : 0);
       assert.equal(waits, !direct && !nMinusOne ? 1 : 0);

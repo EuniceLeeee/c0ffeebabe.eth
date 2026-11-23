@@ -848,7 +848,12 @@ async function trustedOriginMatchesRealSimulatorSend(): Promise<void> {
   assert.equal(constructors.length, 4);
   assert(constructors.every(call => call.includes("executionIdentity.executor") &&
     call.includes("executionIdentity.transactionOrigin")));
-  assert.match(main, /new RevmLiveBackend\(\s*revmSimClient,\s*executionIdentity.executor,\s*executionIdentity.transactionOrigin/);
+  // The formal stateless S5 backend (also the only amount receipt issuer) must
+  // use exactly the executor and transaction origin used to quote this plan.
+  assert.match(main, /directFinalSimulation:[^\n]*\n\s*\? Object.assign\(new EthSimulateV1Simulator\(config.rpcUrl,\s*executionIdentity\.executor,\s*executionIdentity\.transactionOrigin,/);
+  for (const call of main.match(/new RevmLiveBackend\([^)]*\)/g) ?? []) {
+    assert.match(call, /new RevmLiveBackend\(\s*revmSimClient,\s*executionIdentity\.executor,\s*executionIdentity\.transactionOrigin/);
+  }
   assert.match(main, /createStrictCentralAdapterRuntime\(\{[\s\S]*?\.\.\.executionIdentity,/);
 }
 

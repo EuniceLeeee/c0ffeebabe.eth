@@ -29,7 +29,7 @@ export async function searchSimAmounts<T>(input: {
   onTrial?: (trial: SimAmountTrial<T>) => void;
 }) {
   const tries = input.gssMaxTries ?? 8;
-  const concurrency = input.concurrency ?? 3;
+  const concurrency = input.concurrency ?? 4;
   if (input.p <= 0n || input.maxInput < input.p || !Number.isSafeInteger(input.deadlineAtMs) ||
       !Number.isInteger(tries) || (tries !== 0 && tries < 2) || tries > 1000 ||
       !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) {
@@ -37,6 +37,7 @@ export async function searchSimAmounts<T>(input: {
   }
   const controller = new AbortController();
   const deadlineError = new Error("sim amount search deadline");
+  const rejectedSeed = new Error("sim amount search seed is nonpositive");
   const externalAbort = () => controller.abort(input.signal?.reason ?? new Error("sim amount search cancelled"));
   if (input.signal?.aborted) externalAbort();
   input.signal?.addEventListener("abort", externalAbort, { once: true });
@@ -52,6 +53,7 @@ export async function searchSimAmounts<T>(input: {
   const memo = new Map<bigint, Promise<AmountSimulation<T>>>();
   // Nonpositive executions need not be ordered: only profitable amounts refine.
   const score = (result: AmountSimulation<T>) => result.success && result.profit > 0n ? result.profit : 0n;
+  let seedPassed = false;
   let best: SimAmountTrial<T> | null = null;
   const evaluate = (amount: bigint, phase: SimAmountTrial<T>["phase"]): Promise<AmountSimulation<T>> => {
     check();
@@ -68,19 +70,25 @@ export async function searchSimAmounts<T>(input: {
       if (score(result) > 0n && (best === null || score(result) > score(best.result) ||
           (score(result) === score(best.result) && amount < best.amount))) best = trial;
       input.onTrial?.(trial);
+      if (phase === "p") {
+        seedPassed = score(result) > 0n;
+        // The other coarse requests are speculative. A failed seed still
+        // admits no candidates, but owned work must settle before returning.
+        if (!seedPassed) controller.abort(rejectedSeed);
+      }
       return result;
     })();
     memo.set(amount, work);
     return work;
   };
-  const batch = async (amounts: bigint[], phase: SimAmountTrial<T>["phase"]) => {
+  const batch = async (amounts: bigint[], phase: "coarse" | "refine") => {
     for (let i = 0; i < amounts.length; i += concurrency) {
       check();
       const pending: Promise<AmountSimulation<T>>[] = [];
       let launchFailure: unknown;
       try {
         for (const amount of amounts.slice(i, i + concurrency)) {
-          const work = evaluate(amount, phase);
+          const work = evaluate(amount, phase === "coarse" && amount === input.p ? "p" : phase);
           pending.push(work);
           // Establish ownership before the next launch can synchronously abort.
           void work.catch(error => controller.abort(error));
@@ -98,36 +106,36 @@ export async function searchSimAmounts<T>(input: {
   let status: "complete" | "p-nonpositive" | "deadline" = "complete";
   let bracket: { lo: bigint; hi: bigint } | null = null;
   try {
-    const first = await evaluate(input.p, "p");
-    if (score(first) <= 0n) status = "p-nonpositive";
-    else {
-      const grid = [...new Set([10n, 100n, 1000n].map(x => input.p * x > cap ? cap : input.p * x))]
-        .filter(x => x !== input.p);
-      await batch(grid, "coarse");
-      const winner = best as SimAmountTrial<T> | null;
-      if (winner && tries > 0) {
-        const lo = winner.amount / 10n > input.p ? winner.amount / 10n : input.p;
-        const hi = winner.amount * 10n < cap ? winner.amount * 10n : cap;
-        bracket = { lo, hi };
-        if (lo < hi) {
-          // Same production golden-section helper. Warm its independent first
-          // pair in parallel; its subsequent reads consume the per-search memo.
-          await batch([...new Set([hi - (hi - lo) * 618n / 1000n, lo + (hi - lo) * 618n / 1000n])], "refine");
-          await goldenSectionMaximize(lo, hi, async amount => score(await evaluate(amount, "refine")), {
-            maxTries: tries, shouldStop: () => controller.signal.aborted || Date.now() >= input.deadlineAtMs,
-          });
-          check();
-        }
+    const grid = [...new Set([1n, 10n, 100n, 1000n].map(x => input.p * x > cap ? cap : input.p * x))];
+    await batch(grid, "coarse");
+    check();
+    const winner = best as SimAmountTrial<T> | null;
+    if (winner && tries > 0) {
+      const lo = winner.amount / 10n > input.p ? winner.amount / 10n : input.p;
+      const hi = winner.amount * 10n < cap ? winner.amount * 10n : cap;
+      bracket = { lo, hi };
+      if (lo < hi) {
+        // Same production golden-section helper. Warm its independent first
+        // pair in parallel; its subsequent reads consume the per-search memo.
+        await batch([...new Set([hi - (hi - lo) * 618n / 1000n, lo + (hi - lo) * 618n / 1000n])], "refine");
+        await goldenSectionMaximize(lo, hi, async amount => score(await evaluate(amount, "refine")), {
+          maxTries: tries, shouldStop: () => controller.signal.aborted || Date.now() >= input.deadlineAtMs,
+        });
+        check();
       }
     }
   } catch (error) {
-    if (error === deadlineError && !input.signal?.aborted) status = "deadline";
+    if (error === rejectedSeed) {
+      input.signal?.throwIfAborted();
+      status = "p-nonpositive";
+    }
+    else if (error === deadlineError && !input.signal?.aborted) status = "deadline";
     else throw error;
   } finally {
     clearTimeout(timer);
     input.signal?.removeEventListener("abort", externalAbort);
   }
-  const candidates = trials.filter(trial => score(trial.result) > 0n).sort((a, b) =>
+  const candidates = trials.filter(trial => seedPassed && score(trial.result) > 0n).sort((a, b) =>
     score(a.result) === score(b.result) ? (a.amount < b.amount ? -1 : a.amount > b.amount ? 1 : 0)
       : score(a.result) > score(b.result) ? -1 : 1);
   return { status, complete: status !== "deadline", best: candidates[0] ?? null,

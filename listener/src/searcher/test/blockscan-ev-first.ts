@@ -14,7 +14,7 @@ const address = "0x" + "1".repeat(40), hash = "0x" + "2".repeat(64);
 function fixture(mode: "positive-ev" | "positive-gross-profit" = "positive-gross-profit") {
   const controller = new AbortController(), deadlineAtMs = Date.now() + 5000;
   let head = 100, simulations = 0, sequence = 0, routerThrows = false;
-  const sent: Array<{ profitMode?: string; bribeWei?: bigint }> = [];
+  const sent: Array<{ profitMode?: string; bribeWei?: bigint; targetBlock: number }> = [];
   const rejected = new BlockScanSimRejectCache(), coordinator = new SubmissionCoordinator();
   const preference = new SubmissionPreference<BlockScanAtomicResult>({ signal: controller.signal, deadlineAtMs });
   const runtime = createFinalSimulationWorkRuntime<null, ResolvedPlan, SimulationResult>({
@@ -78,6 +78,21 @@ test("gross mode alone defers then sends the original 99%-gross bid without re-s
   } finally { f.close(); }
 });
 
+test("a gross fallback flushed after its block can only be offered to the original target", async () => {
+  const f = fixture();
+  try {
+    assert((await f.run(50n)).deferredSubmission);
+    f.setHead(101);
+    const decisions: string[] = [];
+    await f.preference.flush((_e, r) => decisions.push(r.decision));
+    assert.deepEqual(decisions, ["bundle_submitted_unaccepted"]);
+    assert.deepEqual(f.sent.map(b => b.targetBlock), [101]);
+    await assert.rejects(f.preference.flush(() => {}), /already settled/);
+    assert.equal(f.sent.length, 1, "another flush cannot offer the expired candidate for the next block");
+    assert.equal(f.simulations(), 1);
+  } finally { f.close(); }
+});
+
 test("an indeterminate positive-EV submission cannot enable a lossy fallback", async () => {
   const f = fixture();
   try {
@@ -98,11 +113,10 @@ test("plain positive-EV mode rejects a loss and never defers a gross submission"
   } finally { f.close(); }
 });
 
-for (const mutation of ["head", "abort", "revert"] as const) test(`deferred gross submission rechecks ${mutation}`, async () => {
+for (const mutation of ["abort", "revert"] as const) test(`deferred gross submission rechecks ${mutation}`, async () => {
   const f = fixture();
   try {
     await f.run(50n);
-    if (mutation === "head") f.setHead(101);
     if (mutation === "abort") f.controller.abort(new Error("new head"));
     if (mutation === "revert") f.rejected.record(blockScanRouteId([]), {
       success: false, failure: { kind: "revert", code: "TRANSACTION_REVERTED", cause: null },
@@ -111,6 +125,6 @@ for (const mutation of ["head", "abort", "revert"] as const) test(`deferred gros
     const flush = f.preference.flush((_e, r) => decisions.push(r.decision));
     if (mutation === "abort") await assert.rejects(flush, /new head/); else await flush;
     assert.equal(f.sent.length, 0); assert.equal(f.simulations(), 1);
-    assert.deepEqual(decisions, [mutation === "head" ? "blockscan_stale_state" : mutation === "revert" ? "sim_revert_seen_this_live" : "gross_profit_fallback_cancelled"]);
+    assert.deepEqual(decisions, [mutation === "revert" ? "sim_revert_seen_this_live" : "gross_profit_fallback_cancelled"]);
   } finally { f.close(); }
 });

@@ -116,7 +116,7 @@ import {
 import type { BlockScanObservedHeader } from "./blockscan-observed-header.js";
 import { collectStartupActivity, type ActivityRangeControl } from "./blockscan-startup-catchup.js";
 import type { VerifiedReorgActivity } from "./blockscan-reorg-activity.js";
-import { requireFinalSimulationHeader, type BlockScanDirectFinalSimulation } from "./blockscan-final-simulation-method.js";
+import { requireFinalSimulationHeader, runBlockScanFinalWithAmountEvidence, type BlockScanDirectFinalSimulation } from "./blockscan-final-simulation-method.js";
 
 type BlockScanSourceHeader = CanonicalHeader & Partial<Pick<BlockScanObservedHeader,
   "transactionHashes" | "passiveTouchedAddresses" | "timestamp" | "baseFeePerGas" | "gasUsed" | "gasLimit">>;
@@ -2503,6 +2503,8 @@ export class BlockScanRuntimeLoop {
     let solverQuoteMs = 0;
     let solverPlanBuildMs = 0;
     let solverPlans = 0;
+    let directFinalReused = 0;
+    let directFinalFresh = 0;
     let solverQuoteWorkers = 0;
     let solverAmountPoints = 0;
     let solverHopExactCalls = 0;
@@ -2623,6 +2625,7 @@ export class BlockScanRuntimeLoop {
           passWorkerStartedAtMs - passStartedAtMs,
         ),
         stage_timing_model: "ordered_solver_final_sim_overlap",
+        direct_final_execution: { reused_amount_results: directFinalReused, fresh_simulator_calls: directFinalFresh },
         first_solver_started_at_ms: firstSolverStartedAtMs,
         first_ev_finished_at_ms: firstEvFinishedAtMs,
         state_preparation_detail: {
@@ -4346,7 +4349,7 @@ export class BlockScanRuntimeLoop {
             // This capability is stateless: each request starts at the same
             // source. Do not create a different backend/environment for sizing.
             return directFinalSimulation.simulate(plan, {
-              source: exactSource, header: requireFinalSimulationHeader(sourceHeader), ...control,
+              source: exactSource, header: requireFinalSimulationHeader(sourceHeader), ...control, captureAmountEvidence: true,
             });
           }
           const worker = amountWorkers.pop();
@@ -4620,11 +4623,11 @@ export class BlockScanRuntimeLoop {
             if (input.resource === null) {
               assertFinalSimulationSource(input.generation, input.source);
               if (!directFinalSimulation) throw new Error("missing direct final simulation method");
-              return directFinalSimulation.simulate(input.resolvedPlan, {
-                source: input.source,
-                header: requireFinalSimulationHeader(sourceHeader),
-                deadlineAtMs: input.schedule.deadlineAtMs,
-                signal: input.signal,
+              return runBlockScanFinalWithAmountEvidence({
+                simulator: directFinalSimulation, plan: input.resolvedPlan,
+                context: { source: input.source, header: requireFinalSimulationHeader(sourceHeader),
+                  deadlineAtMs: input.schedule.deadlineAtMs, signal: input.signal },
+                onDisposition: value => { if (value === "reused") directFinalReused++; else directFinalFresh++; },
               });
             }
             if (useNMinusOneFallback || replayPricing) {

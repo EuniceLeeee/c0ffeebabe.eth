@@ -2,6 +2,8 @@ import type { BlockScanObservedHeader } from "./blockscan-observed-header.js";
 import type { CanonicalSource } from "./venues/adapter-request-program.js";
 import type { ResolvedPlan } from "./solver/solver.js";
 import type { SimulationResult } from "./simulator/botvm-simulator.js";
+import { selectedBlockScanAmountSimulation } from "./simulator/blockscan-sim-amount-selector.js";
+import { StateCallAbortedError } from "../shared/state/state-backend.js";
 
 export type BlockScanFinalSimulationMethod = "anvil" | "eth_simulateV1";
 
@@ -14,15 +16,41 @@ export function resolveBlockScanFinalSimulationMethod(
   throw new Error("SEARCHER_BLOCKSCAN_FINAL_SIM_METHOD must be anvil or eth_simulateV1");
 }
 
+interface DirectSimulationContext {
+  readonly source: CanonicalSource;
+  readonly header: BlockScanObservedHeader;
+  readonly signal: AbortSignal;
+  readonly deadlineAtMs: number;
+  readonly captureAmountEvidence?: boolean;
+}
+
 /** A stateless execution capability; the existing S5 runtime owns its slots. */
 export interface BlockScanDirectFinalSimulation {
   readonly concurrency: number;
-  simulate(plan: ResolvedPlan, context: {
-    readonly source: CanonicalSource;
-    readonly header: BlockScanObservedHeader;
-    readonly signal: AbortSignal;
-    readonly deadlineAtMs: number;
-  }): Promise<SimulationResult>;
+  simulate(plan: ResolvedPlan, context: DirectSimulationContext): Promise<SimulationResult>;
+  /** Only the issuer can validate the measured result against a freshly prepared request. */
+  reuseAmountSimulation?(plan: ResolvedPlan, context: DirectSimulationContext, measured: SimulationResult): SimulationResult | null;
+}
+
+/** Called inside the ordinary S5 runner: entry/exit generation, plan commitment,
+ * canonical-head, EV and submission gates are shared by reuse and fresh execution. */
+export async function runBlockScanFinalWithAmountEvidence({ simulator, plan, context, onDisposition }: {
+  simulator: BlockScanDirectFinalSimulation;
+  plan: ResolvedPlan;
+  context: DirectSimulationContext;
+  onDisposition?: (value: "reused" | "fresh") => void;
+}): Promise<SimulationResult> {
+  const checkActive = () => {
+    context.signal.throwIfAborted();
+    if (!Number.isSafeInteger(context.deadlineAtMs) || Date.now() >= context.deadlineAtMs)
+      throw new StateCallAbortedError("final simulation deadline aborted", "deadline");
+  };
+  checkActive();
+  const measured = selectedBlockScanAmountSimulation(plan);
+  const verified = measured && simulator.reuseAmountSimulation?.(plan, context, measured);
+  checkActive();
+  try { onDisposition?.(verified ? "reused" : "fresh"); } catch { /* Timing only. */ }
+  return verified ?? simulator.simulate(plan, context);
 }
 
 /** Older test/replay header readers may omit execution context: do not invent it. */

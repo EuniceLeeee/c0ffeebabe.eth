@@ -34,7 +34,7 @@ test("nonpositive P stops and does not hand off a plan", async () => {
   let count = 0;
   const solver = createSimAmountSelector({ async evaluate() { count++; return { success: false, reason: "reverted" }; } });
   await assert.rejects(solver.solve(plan, {} as any, {} as any, options), /no positive executable/);
-  assert.equal(count, 1);
+  assert.equal(count, 4); // Speculation does not bypass the seed's rejection.
 });
 
 test("shared limiter drains active work and cancels queued work without dispatch", async () => {
@@ -56,7 +56,8 @@ test("ordinary Blockscan live installs sim selection; compatibility callers and 
   const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8");
   assert.match(loop, /this\.deps\.amountSelectorFactory\(\{ source: exactSource, workerIndex,/);
   assert.match(main, /amountSelectorFactory: createBlockScanLiveAmountSelectorFactory\(/);
-  assert.match(main, /return \(\{ source, workerIndex, simulate \}\) => createBlockScanSimAmountSelector\(/);
+  assert.match(main, /return \(\{ source, workerIndex, simulate, effectiveMids \}\) =>/);
+  assert.match(main, /createBlockScanSimAmountSelector\(\{/);
   assert.match(main, /const solver = new AnvilSolver\(\)/);
   assert.match(main, /block-scan amount selection=sim/);
   assert.match(main, /main\(\)\.catch/);

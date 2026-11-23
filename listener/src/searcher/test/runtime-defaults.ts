@@ -372,20 +372,22 @@ const postSimulationFenceAt = atomicSource.indexOf(
 // Historical source-block diagnostics also record executed success; the live
 // positive-profit branch must still fence its source before success and the
 // final EV decision; speculative EV preparation runs concurrently with sim.
-const liveSuccessfulSimBranchAt = atomicSource.indexOf("if (sim.success && sim.netProfit > 0n)");
-const finalSimSucceededAt = atomicSource.indexOf(
-  'finalSimStatus = "succeeded"',
-  liveSuccessfulSimBranchAt,
-);
+const profitableSimAt = atomicSource.indexOf("const profitableSim = sim.success && sim.netProfit > 0n;");
+const liveValuationAt = atomicSource.indexOf("evaluate(sim.netProfit, sim.gasUsed, readDecisionHead)", profitableSimAt);
+const canonicalDistanceAt = atomicSource.indexOf("latestAfterSim.number !== sourceBlock", liveValuationAt);
+const canonicalHashAt = atomicSource.indexOf("latestAfterSim.hash !== sourceBlockHash.toLowerCase()", canonicalDistanceAt);
+const staleDropAt = atomicSource.indexOf('return finish("blockscan_stale_after_sim")', canonicalHashAt);
+const finalSimSucceededAt = atomicSource.indexOf('finalSimStatus = "succeeded"', profitableSimAt);
 const evDecisionAt = atomicSource.indexOf("const selected = selectBlockScanProfitEvaluation(evaluatedEv,");
 assert(
   atomicStart >= 0 &&
     simulationAt >= 0 &&
-    simulationAt < liveSuccessfulSimBranchAt &&
-    liveSuccessfulSimBranchAt < postSimulationFenceAt &&
-    postSimulationFenceAt < finalSimSucceededAt &&
-    finalSimSucceededAt < evDecisionAt &&
-    atomicSource.slice(postSimulationFenceAt, finalSimSucceededAt).includes('return finish("blockscan_stale_after_sim")'),
+    simulationAt < postSimulationFenceAt &&
+    postSimulationFenceAt < profitableSimAt &&
+    profitableSimAt < liveValuationAt &&
+    liveValuationAt < canonicalDistanceAt && canonicalDistanceAt < canonicalHashAt &&
+    canonicalHashAt < staleDropAt && staleDropAt < finalSimSucceededAt &&
+    finalSimSucceededAt < evDecisionAt,
   "post-simulation block/hash fence must reject a stale source before success and EV selection",
 );
 console.log("[runtime-defaults] final-sim head/hash fence ordering: PASS");

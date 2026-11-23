@@ -47,7 +47,7 @@ export function createSimAmountSelector(input: {
       });
       const start = performance.now();
       const search = await searchSimAmounts({ p, maxInput: plan.maxFlashAmount,
-        deadlineAtMs, signal: opts.signal, gssMaxTries: opts.gssMaxTries ?? 8, concurrency: 3,
+        deadlineAtMs, signal: opts.signal, gssMaxTries: opts.gssMaxTries ?? 8,
         evaluate: async (amount, control) => {
           if (opts.timing) opts.timing.amountPoints++;
           return input.evaluate(plan, amount, state, probe, opts, control);

@@ -27,6 +27,14 @@ export function publishedSolverVariant(snapshot:EffectiveMidSnapshot|undefined,s
   return id;
 }
 
+// A ranked plan is a new object (its profit was measured). Keep its original
+// whole-transaction result by identity; a copied plan or JSON cannot claim it.
+// This association is not execution authority: the issuing backend checks it at S5.
+const selectedAmountResults = new WeakMap<ResolvedPlan, SimulationResult>();
+export function selectedBlockScanAmountSimulation(plan: ResolvedPlan): SimulationResult | undefined {
+  return selectedAmountResults.get(plan);
+}
+
 const historicalTrials=new WeakMap<ResolvedPlan,{source:CanonicalSource;scriptHex:string;amount:bigint;net:bigint;token:string}>();
 /** Only the amount evaluator below writes this proof, after a real funded
  * positive trial. Historical receipt hashes and quote marks are not inputs. */
@@ -64,12 +72,19 @@ export function createBlockScanSimAmountSelector(input: {
     callbackRejectedAtSeed: boolean;
     hintTrial: boolean;
   }>();
+  const seedTrials = new WeakMap<object, {
+    needsSeed: Promise<boolean>;
+    result: Promise<AmountSimulation<ResolvedPlan>>;
+  }>();
   return createSimAmountSelector({
     record: input.record,
     evaluate(plan, amount, state, probe, opts, control) {
       const run = input.runTrial ?? (async (_control: TrialControl, work: () => Promise<AmountSimulation<ResolvedPlan>>) => work());
-      const queuedAt = performance.now();
-      return run(control, async () => {
+      const isSeed = plan.opportunity.kind === "block-scan-arb" &&
+        amount === plan.opportunity.searchSeed.searchCenter;
+      let reportPreparation: ((needsSeed: boolean) => void) | undefined;
+      const runTrial = (queuedAt = performance.now()) =>
+        run(control, async (): Promise<AmountSimulation<ResolvedPlan>> => {
         const queueMs = performance.now() - queuedAt;
         const session = opts.strictSession!;
         if (plan.opportunity.kind !== "block-scan-arb" ||
@@ -115,6 +130,7 @@ export function createBlockScanSimAmountSelector(input: {
                 }) };
             routes.set(opts, prepared);
           }
+          reportPreparation?.(prepared.settlement !== null);
           const runtimeLegs = prepared.legs;
           const settlement = prepared.callbackRejectedAtSeed ? null
             : prepared.settlement?.(amount, plan.opportunity.targetNetProfit ?? 1n) ?? null;
@@ -157,32 +173,32 @@ export function createBlockScanSimAmountSelector(input: {
               onSimulationTiming: input.record ? timing => input.record!({ type: "sim_amount_phase", ...identity,
                 settlementMode: action === null ? "deferred-input" : "funded", ...timing }) : undefined }); }
             finally { if (opts.timing) opts.timing.simMs += performance.now() - simStart; }
+            // Draining a speculative sibling must not turn a real RPC/source
+            // failure into this route's P rejection. A returned provider fault
+            // has the same authority as the same fault thrown by simulate().
+            if (sim.profitToken.toLowerCase() !== candidate.profitToken.toLowerCase()) {
+              throw new Error("sim amount selector profit token mismatch");
+            }
+            if (sim.success && sim.failure) throw new Error("inconsistent amount simulation result");
+            const executionRevert = sim.failure?.kind === "revert" && sim.failure.code === "TRANSACTION_REVERTED";
+            if (!sim.success && !executionRevert && (sim.failure || sim.netProfit > 0n)) {
+              throw sim.failure?.cause ?? new Error("non-economic amount simulation failure");
+            }
             control.signal.throwIfAborted();
             input.record?.({ type: "sim_amount_execution", mode: runtimeLegs ? "runtime-actual" : "quoted",
               ...identity, fundingActionId: action?.actionAdapterId ?? null, fundingId: action?.fundingId ?? null, settlementMode: action === null ? "deferred-input" : "funded",
               amount: amount.toString(), success: sim.success, gasUsed: sim.gasUsed.toString(),
               grossProfit: sim.grossProfit.toString(), netProfit: sim.netProfit.toString(),
               failureKind: sim.failure?.kind ?? null, failureCode: sim.failure?.code ?? null });
-            if (sim.profitToken.toLowerCase() !== candidate.profitToken.toLowerCase()) {
-              throw new Error("sim amount selector profit token mismatch");
-            }
             if (!sim.success) {
-              if ((sim.failure?.kind === "revert" && sim.failure.code === "TRANSACTION_REVERTED") ||
-                  (!sim.failure && sim.netProfit <= 0n)) {
-                // searchSimAmounts awaits p before starting coarse/refine trials.
-                // This is a per-solve funding policy, not a proof that all larger
-                // amounts would revert. Keep their search through verified funding.
-                if (action === null && amount === plan.opportunity.searchSeed.searchCenter) {
-                  prepared.callbackRejectedAtSeed = true;
-                  input.record?.({ type: "sim_amount_funding_policy", ...identity,
-                    mode: "funded", reason: sim.failure ? "seed-callback-reverted" : "seed-callback-nonpositive" });
-                }
-                continue;
+              // A callback funding choice at P belongs only to this solve.
+              if (action === null && isSeed) {
+                prepared.callbackRejectedAtSeed = true;
+                input.record?.({ type: "sim_amount_funding_policy", ...identity,
+                  mode: "funded", reason: executionRevert ? "seed-callback-reverted" : "seed-callback-nonpositive" });
               }
-              // Preserve infrastructure identity: never score RPC/source faults as zero.
-              throw sim.failure?.cause ?? new Error("non-economic amount simulation failure");
+              continue;
             }
-            if (sim.failure) throw new Error("inconsistent amount simulation result");
             if (sim.netProfit > 0n && (!best.success || sim.netProfit > best.profit)) {
               const value={ ...candidate, netProfit: sim.netProfit };
               if(prepared.hintTrial){
@@ -190,6 +206,7 @@ export function createBlockScanSimAmountSelector(input: {
                 historicalTrials.set(value,{source:Object.freeze({...input.source}),scriptHex:sim.scriptHex.toLowerCase(),
                   amount:value.flashAmount,net:sim.netProfit,token:sim.profitToken.toLowerCase()});
               }
+              selectedAmountResults.set(value, sim);
               best = { success: true, profit: sim.netProfit, value };
             }
             // The existing funded construction remains available when the
@@ -223,6 +240,25 @@ export function createBlockScanSimAmountSelector(input: {
           throw error;
         }
       });
+      if (isSeed) {
+        const needsSeed = new Promise<boolean>(resolve => { reportPreparation = resolve; });
+        const result = runTrial();
+        seedTrials.set(opts, { needsSeed, result });
+        void result.then(() => reportPreparation?.(true), () => reportPreparation?.(true));
+        return result;
+      }
+      return (async () => {
+        const seed = seedTrials.get(opts);
+        if (!seed) throw new Error("sim amount selection lacks its seed trial");
+        // Only a deferred-payment funding choice requires the seed result.
+        // Wait outside the shared limiter so unrelated routes can progress.
+        if (await seed.needsSeed) {
+          const result = await seed.result;
+          control.signal.throwIfAborted();
+          if (!result.success || result.profit <= 0n) return { success: false, reason: "nonpositive-seed" };
+        }
+        return runTrial();
+      })();
     },
   });
 }

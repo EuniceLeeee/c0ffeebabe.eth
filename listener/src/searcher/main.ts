@@ -186,8 +186,8 @@ import {
   type LocalVictimApplyResult,
 } from "./solver/victim-apply.js";
 import { BotVMSimulator } from "./simulator/botvm-simulator.js";
-import { EthSimulateV1Simulator, buildEthSimulateV1ExecutionInput } from "./simulator/eth-simulate-v1.js";
-import { createBlockScanSimAmountSelector } from "./simulator/blockscan-sim-amount-selector.js";
+import { EthSimulateV1Simulator, buildEthSimulateV1ExecutionInput, ethSimulateV1AmountFeeBasis } from "./simulator/eth-simulate-v1.js";
+import { createBlockScanSimAmountSelector, selectedBlockScanAmountSimulation } from "./simulator/blockscan-sim-amount-selector.js";
 import { createTrialLimiter, SimAmountNoOpportunityError } from "./simulator/sim-amount-selector.js";
 import { resolveBlockScanFinalSimulationMethod } from "./blockscan-final-simulation-method.js";
 import {
@@ -4910,6 +4910,7 @@ export interface BlockScanFinalSimEvTelemetry {
   readonly remainingEVWaitMs: number;
   readonly canonicalCheckMs: number;
   readonly initialHeaderReused: boolean;
+  readonly simulationFeeBasisUsed: boolean;
   readonly oraclePrefetched: boolean;
   readonly finalCanonicalCheckPerformed: boolean;
 }
@@ -4976,6 +4977,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
   let evPreparedAt: number | null = null;
   let canonicalCheckMs = 0;
   let initialHeaderReused = false;
+  let simulationFeeBasisUsed = false;
   let oraclePrefetched = false;
   let finalCanonicalCheckPerformed = false;
   let finalSimStatus: BlockScanAtomicResult["finalSimStatus"] = "not-run";
@@ -5126,7 +5128,9 @@ export async function maybeSubmitBlockScanAtomic(params: {
   }
 
   const targetOffset = params.historicalExecutionMode === "source-block" ? 0 : 1;
-  let targetBlock = sourceBlock + targetOffset;
+  // A pass may only offer the child it simulated. The target also stays
+  // unchanged in drop events so missed-block analysis names the original slot.
+  const targetBlock = sourceBlock + targetOffset;
   const handleAtomicError = (err: unknown): BlockScanAtomicResult => {
     if (err instanceof RevmFatalError) throw err;
     if (signal.aborted) throw signal.reason ?? err;
@@ -5168,26 +5172,28 @@ export async function maybeSubmitBlockScanAtomic(params: {
     }
   };
   try {
-    const latestAtVerify = await awaitBlockScanDeadline(
-      readUncachedLatestBlock(provider, params.historicalReadOnly ? sourceBlock : "latest"),
-      passDeadlineAtMs,
-      "source-head verification",
-      undefined,
-      signal,
-    );
-    const currentHead = latestAtVerify.number;
-    targetBlock = Math.max(sourceBlock, currentHead) + targetOffset;
-    const canonicalSourceBlockHash = latestAtVerify.hash;
-    if (
-      currentHead !== sourceBlock ||
-      canonicalSourceBlockHash !== sourceBlockHash.toLowerCase()
-    ) {
-      const error =
-        `stale source block ${sourceBlock} head=${currentHead} ` +
-        `forkHash=${sourceBlockHash} canonicalHash=${canonicalSourceBlockHash ?? "missing"}`;
-      console.log(`[searcher/blockscan] block=${sourceBlock} stale source ring=${ring}: ${error}`);
-      drop(targetBlock, "final_verify", "blockscan_stale_state", error);
-      return finish("blockscan_stale_state");
+    // A measured fee basis names the pinned parent; it is not a tip observation.
+    // With it, check the real tip once *after* S5/valuation, before any result
+    // can authorize EV, mark a route reverted, or be used for submission.
+    const feeBasis = !params.historicalReadOnly && (config.evGate || config.bribeAllAboveGas || profitTokenValuation.source !== undefined)
+      ? ethSimulateV1AmountFeeBasis(selectedBlockScanAmountSimulation(resolved),
+        { number: sourceBlock, hash: sourceBlockHash, generation: sourceGeneration }) : null;
+    let feeParent: EvBlockObservation | undefined;
+    if (feeBasis) {
+      feeParent = feeBasis.parent;
+      simulationFeeBasisUsed = true;
+    } else {
+      const head = await awaitBlockScanDeadline(
+        readUncachedLatestBlock(provider, params.historicalReadOnly ? sourceBlock : "latest"),
+        passDeadlineAtMs, "source-head verification", undefined, signal,
+      );
+      if (head.number !== sourceBlock || head.hash !== sourceBlockHash.toLowerCase()) {
+        const error = `stale source block ${sourceBlock} head=${head.number} forkHash=${sourceBlockHash} canonicalHash=${head.hash}`;
+        console.log(`[searcher/blockscan] block=${sourceBlock} stale source ring=${ring}: ${error}`);
+        drop(targetBlock, "final_verify", "blockscan_stale_state", error);
+        return finish("blockscan_stale_state");
+      }
+      feeParent = head.feeObservation;
     }
     if (simRejects.has(routeId) || opp.seedEdges.some(edge => simRejects.hasPool(edge))) {
       drop(targetBlock, "final_verify", "sim_revert_seen_this_live");
@@ -5222,7 +5228,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
       sourceBlock,
       sourceBlockHash,
       feeEnvironment: params.historicalExecutionMode === "source-block" ? { mode: "source-block", sourceBlockHash } : undefined,
-      initialParent: latestAtVerify.feeObservation,
+      initialParent: feeParent,
       checkActive: checkEvActive,
       onReadError: (error) => {
         if (error instanceof RevmFatalError || error instanceof BlockScanPassDeadlineError) throw error;
@@ -5296,33 +5302,40 @@ export async function maybeSubmitBlockScanAtomic(params: {
         standingPosition: opp.leavesStandingPosition,
       };
     }
-    if (sim.success && sim.netProfit > 0n) {
+    let latestAfterSim: Awaited<ReturnType<typeof readUncachedLatestBlock>> | undefined;
+    const readDecisionHead = async () => {
+      const started = performance.now();
+      try {
+        signal.throwIfAborted();
+        latestAfterSim = await ownEvRead(
+          readUncachedLatestBlock(provider, params.historicalReadOnly ? sourceBlock : "latest"),
+          "post-simulation and EV source-head verification",
+        );
+        signal.throwIfAborted();
+        finalCanonicalCheckPerformed = true;
+        return latestAfterSim;
+      } finally { canonicalCheckMs += Math.max(0, performance.now() - started); }
+    };
+    const profitableSim = sim.success && sim.netProfit > 0n;
+    if (profitableSim) {
       if (preparationResult.status === "rejected") throw preparationResult.reason;
-      let latestAfterSim: Awaited<ReturnType<typeof readUncachedLatestBlock>> | undefined;
       // Preserve post-simulation EV wall time when preparation is the slower
       // sibling: its remaining join wait must not disappear from stage totals.
       timing.evStartedAtMs = timing.finalSimFinishedAtMs ?? Date.now();
       evStartedAt = simFinishedAt ?? performance.now();
-      evaluatedEv = await preparationResult.value.evaluate(sim.netProfit, sim.gasUsed, async () => {
-        checkEvActive();
-        const started = performance.now();
-        try {
-          latestAfterSim = await ownEvRead(
-            readUncachedLatestBlock(provider, params.historicalReadOnly ? sourceBlock : "latest"),
-            "post-simulation and EV source-head verification",
-          );
-          finalCanonicalCheckPerformed = true;
-          // Only number/hash are needed for the final canonical comparison.
-          // Fee evidence came from the pre-simulation source header/fallback.
-          return Object.freeze({ number: latestAfterSim.number, hash: latestAfterSim.hash });
-        } finally { canonicalCheckMs += Math.max(0, performance.now() - started); }
-      }).finally(() => { evPreparedAt = performance.now(); });
-      if (latestAfterSim === undefined) throw new Error("prepared EV omitted final canonical verification");
+      evaluatedEv = await preparationResult.value.evaluate(sim.netProfit, sim.gasUsed, readDecisionHead)
+        .finally(() => { evPreparedAt = performance.now(); });
+    } else if (feeBasis) {
+      // The exact transaction can change and S5 can return a fresh revert.
+      // Never pollute the P filter (or attribute the failure) from a stale block.
+      await readDecisionHead();
+    }
+    if (profitableSim || feeBasis) {
+      if (!latestAfterSim) throw new Error("missing post-simulation head verification");
       if (
         latestAfterSim.number !== sourceBlock ||
         latestAfterSim.hash !== sourceBlockHash.toLowerCase()
       ) {
-        targetBlock = Math.max(sourceBlock, latestAfterSim.number) + targetOffset;
         const error =
           `source advanced during final simulation or EV preparation ` +
           `${sourceBlock}/${sourceBlockHash} -> ` +
@@ -5340,6 +5353,22 @@ export async function maybeSubmitBlockScanAtomic(params: {
         );
         return finish("blockscan_stale_after_sim");
       }
+      if (feeBasis) {
+        const parent = latestAfterSim.feeObservation, pinned = feeBasis.parent;
+        // The target fee in simulateV1 is a block override, not a receipt from
+        // the future. Verify its inputs on the genuine canonical read we owe
+        // anyway; a partial/malformed or contradictory header is not proof.
+        if (!parent || parent.timestamp !== pinned.timestamp || parent.baseFeePerGas !== pinned.baseFeePerGas ||
+            parent.gasUsed !== pinned.gasUsed || parent.gasLimit !== pinned.gasLimit ||
+            feeBasis.targetBlock !== targetBlock || (evaluatedEv && (!evaluatedEv.feeStateAvailable ||
+              evaluatedEv.maxBaseFeePerGas !== feeBasis.targetBaseFeePerGas))) {
+          const reason = "blockscan_sim_fee_mismatch";
+          drop(targetBlock, "final_verify", reason, "simulated fee basis disagrees with canonical source or EV target");
+          return finish(reason);
+        }
+      }
+    }
+    if (profitableSim) {
       finalSimStatus = "succeeded";
       // Record before EV can reject a gas-expensive but successfully executed
       // route. Reuse the source/hash check above; no extra RPC for sizing.
@@ -5597,27 +5626,9 @@ export async function maybeSubmitBlockScanAtomic(params: {
           drop(targetBlock, "submit_gate", "sim_revert_seen_this_live");
           return finish("sim_revert_seen_this_live");
         }
-        const latestAtSubmit = await awaitBlockScanDeadline(
-          readUncachedLatestBlock(provider),
-          passDeadlineAtMs,
-          "pre-submit source-head verification",
-          undefined,
-          signal,
-        );
-        const submitHead = latestAtSubmit.number;
-        const submitHeadHash = latestAtSubmit.hash;
-        if (
-          submitHead !== sourceBlock ||
-          submitHeadHash !== sourceBlockHash.toLowerCase()
-        ) {
-          targetBlock = Math.max(sourceBlock, submitHead) + 1;
-          const error =
-            `stale source block ${sourceBlock} head=${submitHead} ` +
-            `forkHash=${sourceBlockHash} canonicalHash=${submitHeadHash}`;
-          console.log(`[searcher/blockscan] block=${sourceBlock} stale before submit ring=${ring}: ${error}`);
-          drop(targetBlock, "submit_gate", "blockscan_stale_state", error);
-          return finish("blockscan_stale_state");
-        }
+        // EV already verified the canonical parent after final execution.
+        // Offer only its original target, with no additional latest RPC:
+        // if the builder misses that slot, this bundle expires there.
 
         const decision = submissionCoordinator.offer({
           strategy: "block-scan",
@@ -5737,7 +5748,7 @@ export async function maybeSubmitBlockScanAtomic(params: {
         overlapMs: simStartedAt === null || simFinishedAt === null || prepFinishedAt === null ? 0
           : Math.max(0, Math.min(simFinishedAt, prepFinishedAt) - Math.max(simStartedAt, prepStartedAt)),
         remainingEVWaitMs: simFinishedAt === null ? 0 : Math.max(0, end - simFinishedAt),
-        canonicalCheckMs, initialHeaderReused, oraclePrefetched, finalCanonicalCheckPerformed,
+        canonicalCheckMs, initialHeaderReused, simulationFeeBasisUsed, oraclePrefetched, finalCanonicalCheckPerformed,
       });
       try { console.log(`[searcher/final-sim-ev-pipeline] ${JSON.stringify(event)}`); } catch { /* Observation only. */ }
       try { params.onFinalSimEvTelemetry?.(event); } catch { /* Observation only. */ }

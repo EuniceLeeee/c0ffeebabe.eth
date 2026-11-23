@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { searchSimAmounts } from "../simulator/sim-amount-search.js";
 
 const options = () => ({ p: 10n, maxInput: 10000n, deadlineAtMs: Date.now() + 5000 });
-test("P then 10/100/1000P and eight refine points, scored only by actual profit", async () => {
+test("four coarse points and eight refine points, scored only by actual profit", async () => {
   const seen: bigint[] = [];
   const result = await searchSimAmounts({ ...options(), evaluate: async amount => {
     seen.push(amount);
@@ -14,12 +14,49 @@ test("P then 10/100/1000P and eight refine points, scored only by actual profit"
   assert.equal(new Set(seen).size, seen.length); assert(result.best && result.best.amount > 100n && result.best.amount < 1000n);
   assert.deepEqual(result.bracket, { lo: 100n, hi: 10000n });
 });
-test("nonpositive P or reverted P stops; no quote-profit fallback", async () => {
+test("failed P rejects even when other coarse amounts already returned positive", async () => {
   for (const first of [{ success: true as const, profit: 0n, value: 1 }, { success: false as const, reason: "revert" }]) {
     let calls = 0;
-    const result = await searchSimAmounts({ ...options(), evaluate: async () => { calls++; return first; } });
-    assert.equal(calls, 1); assert.equal(result.status, "p-nonpositive"); assert.equal(result.best, null);
+    const result = await searchSimAmounts({ ...options(), evaluate: async amount => {
+      calls++;
+      if (amount !== 10n) return { success: true, profit: 42n, value: 2 };
+      await new Promise<void>(resolve => setImmediate(resolve));
+      return first;
+    } });
+    assert.equal(calls, 4); assert.equal(result.status, "p-nonpositive"); assert.equal(result.best, null);
+    assert.deepEqual(result.candidates, []); assert.equal(result.bracket, null);
   }
+});
+test("all four coarse points launch before P settles; only the first two refine points overlap", { timeout: 8000 }, async () => {
+  const issued: bigint[] = [];
+  const waits = new Map<bigint, () => void>();
+  const release = () => { for (const done of waits.values()) done(); waits.clear(); };
+  const advance = () => new Promise<void>(resolve => setImmediate(resolve));
+  const job = searchSimAmounts({ ...options(), evaluate: async amount => {
+    issued.push(amount);
+    await new Promise<void>(resolve => waits.set(amount, resolve));
+    return { success: true, profit: 2000000n - (amount - 600n) ** 2n, value: amount };
+  } });
+  assert.deepEqual(issued, [10n, 100n, 1000n, 10000n]);
+  release(); await advance();
+  assert.equal(waits.size, 2);
+  release(); await advance();
+  for (let i = 0; i < 6; i++) {
+    assert.equal(waits.size, 1);
+    release(); await advance();
+  }
+  const result = await job;
+  assert.equal(result.status, "complete"); assert.equal(issued.length, 12);
+});
+test("speculative successes cannot escape a deadline with unresolved P", async () => {
+  const result = await searchSimAmounts({ ...options(), deadlineAtMs: Date.now() + 25, evaluate: async (amount, control) => {
+    if (amount !== 10n) return { success: true, profit: 99n, value: amount };
+    await new Promise<void>(resolve => control.signal.addEventListener("abort", () => resolve(), { once: true }));
+    throw control.signal.reason;
+  } });
+  assert.equal(result.status, "deadline");
+  assert.equal(result.best, null);
+  assert.equal(result.trials.length, 3);
 });
 test("funding cap clips and deduplicates coarse amounts; no refine when disabled", async () => {
   const amounts: bigint[] = [];
