@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "balanceRead": {"selector": "0x70a08231"},
+  "transfer": {
+    "topic": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+    "methods": {
+      "0xa9059cbb": { "size": 2, "from": "caller", "to": "arg0", "amount": "arg1" },
+      "0x23b872dd": { "size": 3, "from": "arg0", "to": "arg1", "amount": "arg2" }
+    }
+  },
+  "evidenceOnly": ["0xa9059cbb", "0x23b872dd", "0x095ea7b3", "0x70a08231", "0x91dd7346", "0xfa461e33"],
+  "events": {
+    "issue": { "topic": "0xdcbc1c05240f31ff3ad067ef1ee35ce4997762752e3a095284754544f4c709d7", "parties": ["caller", "arg1"], "directions": [
+      { "token": "foreign", "from": "caller", "to": "pool", "amountIndex": 0, "anchor": "transferCall" },
+      { "token": "pool", "from": "zero", "to": "arg1", "amountIndex": 1, "anchor": "action" }
+    ] },
+    "retire": { "topic": "0xfbde797d201c681b91056529119e0b02407c7bb96a4a2c75c01fc9667232c8db", "parties": ["caller", "arg1", "arg2"], "directions": [
+      { "token": "pool", "from": "arg2", "to": "zero", "amountIndex": 1, "anchor": "action" },
+      { "token": "foreign", "from": "pool", "to": "arg1", "amountIndex": 0, "anchor": "transferCall" }
+    ] }
+  },
+  "actions": {
+    "0x6e553f65": { "identity": "address", "event": "issue",  "calldataWords": 2, "amounts": ["arg0", "ret0"] },
+    "0x94bf804d": { "identity": "address", "event": "issue",  "calldataWords": 2, "amounts": ["ret0", "arg0"] },
+    "0xb460af94": { "identity": "address", "event": "retire", "calldataWords": 3, "amounts": ["arg0", "ret0"] },
+    "0xba087652": { "identity": "address", "event": "retire", "calldataWords": 3, "amounts": ["ret0", "arg0"] }
+  }
+}

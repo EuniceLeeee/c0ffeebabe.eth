@@ -1,6 +1,9 @@
 import {bindActionReceipts,mergeReceiptIndices} from './bind-action-receipts.mjs';
 import {bindPoolIdReceipts,poolIdLayouts} from './trace-pool-id.mjs';
 import {matchSwapInput, matchSwapOutput} from './trace-swap-input.mjs';
+import {balanceActionEdges} from './trace-action-balance.mjs';
+import {resolveActionClaims} from './action-claims.mjs';
+import {contradictedTransfer,rejectedReceiptEvidence,screenRejectedPayments} from './contradicted-transfer.mjs';
 
 const sharedPools=new Map();
 for (const layout of poolIdLayouts) {
@@ -24,7 +27,7 @@ export function traceCallFlows(frames, logs, cfg) {
   const paths = new Map(), actions = new Map(), emitted = [], logsByEmitter = new Map();
   const incomingLogs=new Map(), callParties=new Map(), logParties=new Map();
   const payoutCounts = new Map();
-  const possiblePayers = new Set();
+  const possiblePayers = new Set(),rejectedTransfers=new Set();
   function owningCall(node, target) {
     for (let n = node; n; n = n.parent) {
       if (n.net && n.target === target) return n;
@@ -54,6 +57,7 @@ export function traceCallFlows(frames, logs, cfg) {
     if (f.input.length < 10) continue;
     const selector = f.input.slice(0,10);
     if (selector === '0xa9059cbb' || selector === '0x23b872dd') {
+      if(contradictedTransfer(f.output))rejectedTransfers.add(node);
       const direct = selector === '0xa9059cbb';
       const from = direct ? f.sender : address(word(f.input,0)), to = address(word(f.input,direct ? 0 : 1));
       const w = word(f.input,direct ? 1 : 2);
@@ -84,7 +88,7 @@ export function traceCallFlows(frames, logs, cfg) {
     const [asset,from,to,w] = key.split('/');
     if (!events || events.length !== nodes.length) {
       const party=parties(asset,from,to), candidates=logParties.get(party);
-      if (!events && callParties.get(party).length===1 && candidates?.length===1) {
+      if (!events && !rejectedTransfers.has(nodes[0]) && callParties.get(party).length===1 && candidates?.length===1) {
         if (!discrepancies.has(to)) discrepancies.set(to,new Map());
         discrepancies.get(to).set(candidates[0],nodes[0]);
         const owner = owningCall(nodes[0].parent, from);
@@ -96,12 +100,15 @@ export function traceCallFlows(frames, logs, cfg) {
       continue;
     }
     if (nodes.some((n,i) => i > 0 && inside(n.path,nodes[i-1].path))) continue;
-    if (nodes.length===1) transferAnchors.set(events[0],nodes[0]);
-    nodes.forEach((node,i) => movements.push({node,...transferReceipts.get(events[i])}));
+    if (nodes.length===1 && !rejectedTransfers.has(nodes[0])) transferAnchors.set(events[0],nodes[0]);
+    nodes.forEach((node,i) => {if(!rejectedTransfers.has(node))movements.push({node,...transferReceipts.get(events[i])});});
   }
   const add = (node,move,delta) => {
     node.net.set(move.asset,(node.net.get(move.asset) || 0n) + delta);
-    if (move.index !== null) node.indices.add(move.index);
+    if (move.index != null) {
+      node.indices.add(move.index);
+      (node.receiptSides??=[]).push({side:delta>0n?'in':'out',asset:move.asset,logIndex:move.index});
+    } else if(move.node) (node.receiptSides??=[]).push({side:delta>0n?'in':'out',asset:move.asset,valuePath:move.node.path});
   };
   const pending = new Map();
   const assigned = new Map();
@@ -125,7 +132,9 @@ export function traceCallFlows(frames, logs, cfg) {
     const targetLogs=logsByEmitter.get(target) || [];
     const layouts=sharedPools.get(target);
     if (layouts) {
-      emitted.push(...bindPoolIdReceipts(layouts,list,targetLogs));
+      emitted.push(...bindPoolIdReceipts(layouts,list,targetLogs,{
+        paths,logs,movements,transferReceipts,transferAnchors,proofs:cfg.settlementProofs,native:cfg.native
+      }));
       continue;
     }
     const byFrame = new Map();
@@ -179,6 +188,7 @@ export function traceCallFlows(frames, logs, cfg) {
           emitted.push({selector: n.selector, poolAddress: target, poolId: null, tokenIn: input.emitter,
             tokenOut: output.asset, evidence: netInput ? 'swap-confirmed-net-input-and-output' : 'swap-confirmed-net-output',
             callPath: n.path, selectorTarget: target, innerSwapPath: null,
+            venuePayments:true,settlementClaims:[{side:'in',logIndex:input.idx,asset:input.emitter},{side:'out',logIndex:output.index,asset:output.asset}],
             receiptIndices: [input.idx, output.index, swap.idx].sort((a,b) => a-b).join(','),
             amountPoolOutRaw: String(output.amount), amountReceivedOutRaw: String(output.received)});
         }
@@ -206,6 +216,7 @@ export function traceCallFlows(frames, logs, cfg) {
       }
       if (positive.length === 1 && negative.length === 1)
         emitted.push({selector:n.selector,poolAddress:target,poolId:null,tokenIn:positive[0],tokenOut:negative[0],
+          venuePayments:true,settlementClaims:(n.receiptSides??[]).filter(c=>c.asset===(c.side==='in'?positive[0]:negative[0])),
           evidence,callPath:n.path,selectorTarget:target,innerSwapPath:null,
           receiptIndices:[...n.indices].sort((a,b)=>a-b).join(',')});
     }
@@ -213,7 +224,13 @@ export function traceCallFlows(frames, logs, cfg) {
   const rules=cfg.actionReceipts??{};
   const emittedPaths=new Set(emitted.map(e=>e.callPath));
   const declared=bindActionReceipts(rules,paths,logs,movements,sharedPools,cfg.transferTopic,transferReceipts,transferAnchors,emittedPaths);
-  if (!declared.size) return emitted;
+  // Recover missing observations only. Do not overwrite existing quantities
+  // or re-admit an action another receipt contract explicitly found ambiguous.
+  const balanced=cfg.balanceActions
+    ? balanceActionEdges(cfg.balanceActions,paths,logsByEmitter,movements,transferReceipts,sharedPools,new Set([...emittedPaths,...declared.keys()]))
+    : [];
+  const finish=rows=>resolveActionClaims(screenRejectedPayments(rows,rejectedReceiptEvidence(rejectedTransfers,paths,logs,cfg.transferTopic)));
+  if (!declared.size) return finish(balanced.length ? emitted.concat(balanced) : emitted);
   // Only ordinary CALL paths have one pair per frame. Shared managers keep
   // their independently keyed logical pools.
   const result=emitted.filter(flow=>{
@@ -232,9 +249,15 @@ export function traceCallFlows(frames, logs, cfg) {
     flow.amountPayerInRaw??=edge.amountPayerInRaw;
     flow.amountPoolOutRaw??=edge.amountPoolOutRaw;
     flow.amountReceivedOutRaw??=edge.amountReceivedOutRaw;
+    if(edge.independentDirection)flow.independentDirection=true;
+    if(edge.decodedVenueDirection)flow.decodedVenueDirection=true;
+    if(edge.settlementClaims?.length){
+      flow.settlementClaims=(flow.settlementClaims??[]).concat(edge.settlementClaims);
+      flow.independentDirection=flow.independentDirection||edge.independentDirection;
+    }
     flow.receiptIndices=mergeReceiptIndices(flow.receiptIndices,edge.receiptIndices);
     return true;
   });
   for (const edge of declared.values()) if (edge) result.push(edge);
-  return result;
+  return finish(balanced.length ? result.concat(balanced) : result);
 }

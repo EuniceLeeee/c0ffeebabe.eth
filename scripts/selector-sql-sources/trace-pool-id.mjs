@@ -4,6 +4,7 @@ import {keccak_256} from '../../listener/node_modules/@noble/hashes/esm/sha3.js'
 import {hexToBytes,bytesToHex} from '../../listener/node_modules/@noble/hashes/esm/utils.js';
 import {canonicalSwapTopics,decodeCanonicalSwap} from './canonical-swap-decode.mjs';
 import {v4MainnetManager} from './v4-history.mjs';
+import {partitionActionEvidence,reconcileCounterpartyReturn,reconcileDeferredGroup} from './trace-action-settlement.mjs';
 
 const word=(input,i)=>input.slice(10+64*i,74+64*i);
 const address=w=>/^0{24}[0-9a-f]{40}$/.test(w)?'0x'+w.slice(24):null;
@@ -43,6 +44,7 @@ function vaultBatchSteps({input}) {
 const v4Swap = {
     emitter:v4MainnetManager, entry:'0x48c89491', action:'0xf3cd914c',
     topic:canonicalSwapTopics.v4, evidence:'trace-signed-swap-poolkey',
+    settlementEvidence:'action-return-reconciled-settlement',
     call({input,sender,target}){
       if(input.length<650 || (input.length-10)%64) return;
       const c0=address(word(input,0)),c1=address(word(input,1)),fee=word(input,2),spacing=word(input,3),flag=word(input,5);
@@ -51,11 +53,16 @@ const v4Swap = {
       if(parseInt(fee,16)>1e6 && parseInt(fee,16)!==0x800000) return;
       const poolId='0x'+bytesToHex(keccak_256(hexToBytes(input.slice(10,330))));
       const forward=flag.endsWith('1');
-      return {poolId,poolAddress:target,tokenIn:forward?c0:c1,tokenOut:forward?c1:c0,roles:[sender,forward]};
+      return {poolId,poolAddress:target,tokenIn:forward?c0:c1,tokenOut:forward?c1:c0,assets:[c0,c1],roles:[sender,forward]};
     },
     roles(log){
       const swap=decodeCanonicalSwap(canonicalSwapTopics,log.emitter,log.topics,log.data);
       if(swap?.decodeStatus==='decoded') return ['0x'+log.topics[2].slice(-40),swap.direction==='asset0-in'];
+    },
+    identityOnly(log) {
+      if (!/^0x0{128}/.test(log.data)) return;
+      const swap=decodeCanonicalSwap(canonicalSwapTopics,log.emitter,log.topics,log.data);
+      if (swap?.decodeStatus==='uninterpretable') return '0x'+log.topics[2].slice(-40);
     },
 };
 
@@ -126,7 +133,62 @@ function bindOrderedSteps(layouts, calls, logs, topic) {
   return events.length === edges.length ? edges : [];
 }
 
-export function bindPoolIdReceipts(layouts, calls, logs) {
+// For events carrying identity only, align ALL manager actions and events in
+// execution order. Never take the first matching receipt across sibling pools.
+// An existing signed-event edge remains authoritative and is not duplicated.
+function bindSettledActions(layout,calls,logs,context,published) {
+  const rule=context?.proofs?.[layout.action];
+  if(!rule || rule.entrySelector!==layout.entry || !layout.identityOnly) return [];
+  const events=logs.filter(l=>l.emitter===layout.emitter && l.topics[0]===layout.topic);
+  if(!events.some(l=>layout.identityOnly(l))) return [];
+  const steps=calls.filter(n=>n.target===layout.emitter && n.selector===layout.action);
+  if(steps.length!==events.length || steps.some((n,i)=>i && n.order<=steps[i-1].order)) return [];
+  const batches=partitionActionEvidence(steps,context,new Map(events.map((e,i)=>[e,steps[i]])));
+  const pending=[], claims=new Map(), unproven=new Map();
+  for (const [i,n] of steps.entries()) {
+    const event=events[i], proof=layout.call(n), batch=batches.get(n);
+    if (!batch || batch.nested || !proof || proof.poolId!==event.topics[1]) return [];
+    const actor=layout.identityOnly(event);
+    if(!actor) {
+      const roles=layout.roles(event);
+      if(!roles || !proof.roles.every((r,j)=>r===roles[j])) return [];
+      continue;
+    }
+    if(actor!==n.sender) return [];
+    let entry=n.parent;
+    while(entry && !(entry.target===layout.emitter && entry.selector===layout.entry)) entry=entry.parent;
+    if(!entry || published.has(n.path)) continue;
+    const validated=reconcileCounterpartyReturn(n,rule,proof.assets,proof.roles[1],batch,context.native);
+    if(!validated) {
+      if(rule.batch) {
+        if(!unproven.has(entry)) unproven.set(entry,[]);
+        unproven.get(entry).push({n,entry,proof,event,batch});
+      }
+      continue;
+    }
+    for(const k of validated.residualIndices) claims.set(k,(claims.get(k)??0)+1);
+    const edge=edgeFor(n,entry,proof,layout,event);
+    edge.evidence=layout.settlementEvidence;
+    edge.receiptIndices=[...validated.receiptIndices,event.idx].sort((a,b)=>a-b).join(',');
+    pending.push({edge,residualIndices:validated.residualIndices});
+  }
+  const result=pending.filter(p=>p.residualIndices.every(k=>claims.get(k)===1)).map(p=>p.edge);
+  for (const members of unproven.values()) {
+    const batch=reconcileDeferredGroup(members,rule,context);
+    if(!batch) continue;
+    for (let i=0;i<members.length;i++) {
+      const {n,entry,proof,event}=members[i], edge=edgeFor(n,entry,proof,layout,event);
+      edge.evidence=layout.settlementEvidence;
+      // Cash corroborates the WHOLE entry; never repeat it per action. Each
+      // member still owns its own signed return/identity log and inner path.
+      if(i===0) edge.receiptIndices=[...batch.receiptIndices,event.idx].sort((a,b)=>a-b).join(',');
+      result.push(edge);
+    }
+  }
+  return result;
+}
+
+export function bindPoolIdReceipts(layouts, calls, logs, context) {
   const groups=new Map(), edges=[];
   function group(topic,poolId,roles){
     const key=JSON.stringify([topic,poolId,...roles]);
@@ -163,6 +225,10 @@ export function bindPoolIdReceipts(layouts, calls, logs) {
     matches.sort((a,b)=>a.call.order-b.call.order);
     if(matches.some(({call},i)=>i>0 && (call===matches[i-1].call || matches[i-1].call.path==='' || call.path.startsWith(matches[i-1].call.path+',')))) continue;
     matches.forEach(({call,entry,proof,layout},i)=>edges.push(edgeFor(call,entry,proof,layout,events[i])));
+  }
+  if(context?.proofs) {
+    const published=new Set(edges.map(edge=>edge.innerSwapPath??edge.callPath));
+    for(const layout of layouts) edges.push(...bindSettledActions(layout,calls,logs,context,published));
   }
   return edges;
 }

@@ -1,7 +1,57 @@
-export function possibleReceiptOwners({slots, first, last}) {
-  const owners = new Set();
-  for (let i=first; i<=last; i++) owners.add(slots[i].owner);
-  return owners;
+const indexes=new WeakMap();
+function indexFor(slots){
+  let idx=indexes.get(slots);if(idx)return idx;
+  const previous=new Int32Array(slots.length),positions=new Map();
+  for(let i=0;i<slots.length;i++){
+    const n=slots[i].owner,v=positions.get(n);
+    if(v===undefined){previous[i]=-1;positions.set(n,i);}
+    else if(typeof v==='number'){previous[i]=v;positions.set(n,[v,i]);}
+    else{previous[i]=v[v.length-1];v.push(i);}
+  }
+  idx={previous,positions};indexes.set(slots,idx);return idx;
+}
+function firstAtOrAfter(list,n){let l=0,r=list.length;while(l<r){const m=(l+r)>>>1;if(list[m]<n)l=m+1;else r=m;}return l;}
+
+// A Set-compatible read-only view: all receipts at one emitter share one
+// sparse occurrence index. Even a million possible receipt/call pairs are
+// represented by one range per receipt. Iteration keeps first-seen order.
+class OwnerRange{
+  constructor(range){this.range=range;}
+  *[Symbol.iterator](){const {slots,first,last,only}=this.range;
+    if(only){yield only;return;}
+    if(first===last){yield slots[first].owner;return;}
+    const {previous}=indexFor(slots);
+    for(let i=first;i<=last;i++)if(previous[i]<first)yield slots[i].owner;
+  }
+  get size(){const r=this.range;
+    if(r.only||r.first===r.last)return 1;
+    if(r.ownerCount==null){let n=0;for(const _ of this)n++;r.ownerCount=n;}
+    return r.ownerCount;
+  }
+  has(n){const {slots,first,last,only}=this.range;if(only)return only===n;
+    if(first===last)return slots[first].owner===n;
+    const v=indexFor(slots).positions.get(n);
+    if(typeof v==='number')return first<=v&&v<=last;
+    if(!v)return false;
+    const i=firstAtOrAfter(v,first);return i<v.length&&v[i]<=last;
+  }
+}
+export function possibleReceiptOwners(range){return new OwnerRange(range);}
+
+// locate emits ranges in reverse receipt order. For each emitter BOTH ends
+// are non-increasing, so counting distinct owners in all ranges uses one
+// sliding window. Later size checks are O(1), with O(total slots) live state.
+function countRanges(placements){
+  const windows=new Map();
+  for(const r of placements.values()){
+    if(r.only||r.first===r.last)continue;
+    const slots=r.slots;let w=windows.get(slots);
+    if(!w){w={counts:new Map(),first:slots.length,last:-1};windows.set(slots,w);}
+    if(r.last<w.first){w.counts.clear();w.first=r.last+1;}
+    else for(let i=w.last;i>r.last;i--){const o=slots[i].owner,n=w.counts.get(o)-1;if(n)w.counts.set(o,n);else w.counts.delete(o);}
+    for(let i=w.first-1;i>=r.first;i--){const o=slots[i].owner;w.counts.set(o,(w.counts.get(o)||0)+1);}
+    r.ownerCount=w.counts.size;w.first=r.first;w.last=r.last;
+  }
 }
 
 // Each slot represents execution in one call, between child calls. A caller
@@ -62,12 +112,32 @@ export function receiptCallOwners(nodes, logs, relevantTopics) {
       if (owner) while (last>=first[i] && slots[last].owner!==owner) last--;
       if (last<first[i]) return;
       upper=slots[last].position;
-      if (relevantTopics.has(log.topics[0])) result.set(log,{slots,first:first[i],last});
+      if (relevantTopics.has(log.topics[0])) {
+        // The bound caller can yield to another call to the same contract and
+        // resume. Interior slots are NOT all the bound owner just because the
+        // two endpoints are. Preserve original EVM positions for other logs.
+        result.set(log,{slots,first:first[i],last,...(owner?{only:owner}:{})});
+      }
     }
+    countRanges(result);
     return result;
   }
-  const placements=locate();
-  if (placements) return {placements,withBindings:locate,canPlace:bindings=>locate(bindings,true)===true};
+  function view(pins,placements) {
+    function combine(more) {
+      const all=new Map(pins);
+      for(const [l,n] of more) {
+        if(all.has(l)&&all.get(l)!==n)return;
+        all.set(l,n);
+      }
+      return all;
+    }
+    return {placements,
+      withBindings:more=>{const all=combine(more);if(all)return locate(all);},
+      canPlace:more=>{const all=combine(more);return !!all&&locate(all,true)===true;},
+      constrain:more=>{const all=combine(more),next=all&&locate(all);if(next)return view(all,next);}
+    };
+  }
+  const placements=locate();if(placements)return view(new Map(),placements);
 }
 
 function lowerBound(slots, position) {

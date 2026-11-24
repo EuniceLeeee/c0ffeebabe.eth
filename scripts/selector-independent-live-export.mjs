@@ -41,7 +41,8 @@ function windowOf(w){
 /** Prior coordinates can preserve an existing public ID, never nominate a new row. */
 function observedSharedEntry(r) {
   return word(r.poolId) && r.evidenceTypes.length > 0 && r.evidenceTypes.every(evidence =>
-    poolIdLayouts.some(layout => layout.entry === r.selector && layout.emitter === r.example.selectorTarget && layout.evidence === evidence));
+    poolIdLayouts.some(layout => layout.entry === r.selector && layout.emitter === r.example.selectorTarget &&
+      typeof evidence==='string' && (layout.evidence === evidence || layout.settlementEvidence === evidence)));
 }
 
 function projector(prior,defs,{legacyCoordinates=false}={}){

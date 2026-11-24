@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "innerAction": {
+    "signature": "swap((address,address,uint24,int24,address),(bool,int256,uint160),bytes)",
+    "mode": "counterparty-net",
+    "returnBits": 128,
+    "counterpartyArg": 4,
+    "amountSign": "caller",
+    "batch": {
+      "callback": "unlockCallback(bytes)",
+      "pay": "settle()",
+      "take": "take(address,address,uint256)"
+    }
+  }
+}

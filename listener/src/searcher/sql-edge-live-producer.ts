@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { isEnabledSqlExecutionLeg } from "./sql-execution-selectors.js";
 import { getAddress } from "ethers";
 import { buildFamilyRouteGraphView } from "./adapter-family-graph-runtime.js";
 import type { TokenEdge } from "./planner/token-graph.js";
@@ -28,7 +29,7 @@ assert.equal(sqlSelectorModules.size,GENERATED_PRODUCTION_FAMILY_ENTRIES.length,
  * only where ALL issued recipes agree; the literal SQL id is never re-derived. */
 function sqlGraphDirection(sql:SqlPriceEdge, alternatives:readonly TokenEdge[]):TokenEdge {
   const id=sql.candidateInstanceKey,m=sqlSelectorModules.get(sql.selector);
-  assert(m?.activation.enabled,"SQL row is not an enabled selector");
+  assert(m && isEnabledSqlExecutionLeg(m),"SQL row is not an enabled execution leg");
   assert.equal(id,sqlDirectionId(sql),"SQL leg ID differs from pool, asset or direction");
   const {domain,ownedActionAdapterIds}=m.plugin.manifest;
   assert((domain==="swap"||domain==="protocol")&&ownedActionAdapterIds.length===1,"SQL direction lacks a unique conversion action owner");
@@ -136,7 +137,7 @@ export function buildSqlEdgeLiveProducer(input: {
   let disabled=0,notConversion=0;
   for(const sql of edges){
     const id=sql.candidateInstanceKey,m=sqlSelectorModules.get(sql.selector);
-    if(!m||!m.activation.enabled||(m.definition.domain!=="swap"&&m.definition.domain!=="protocol")){
+    if(!m||!isEnabledSqlExecutionLeg(m)){
       assert(unavailableKeys.has(id),"inactive SQL direction acquired an executable recipe");
       if(m&&!m.activation.enabled)disabled++;else notConversion++;
       continue;

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { isEnabledSqlExecutionLeg } from "./sql-execution-selectors.js";
 import { getAddress, keccak256 } from "ethers";
 import { loadBotVmRuntimeCode } from "../shared/executor/botvm-executor.js";
 import { loadLiveSqlTables } from "./sql-live-tables.js";
@@ -76,7 +77,7 @@ export async function initializeSqlLiveProducer(input:{
           let routes:SqlLiveMaterializedRoute[]=[],reason:string|undefined;
           if(!m) reason="unregistered conversion selector";
           else if(!m.activation.enabled) reason="selector is disabled";
-          else if(m.definition.domain!=="swap" && m.definition.domain!=="protocol") reason="selector is not a conversion";
+          else if(!isEnabledSqlExecutionLeg(m)) reason="selector has no independent conversion program";
           else {
             const r=await issueSqlFamilyAlternatives({catalog,definition:m.definition,edge,source,...executionIdentity,signal:active,read,readCode});
             routes=r.alternatives.map(({instance,routeKey,programKey})=>({sqlEdgeKey,instance,routeKey,programKey}));
@@ -84,7 +85,7 @@ export async function initializeSqlLiveProducer(input:{
           }
           rows[i]={routes,...(reason===undefined?{}:{unavailable:{sqlEdgeKey,reason}})};
           completed++;
-          if(m?.activation.enabled && (m.definition.domain==="swap"||m.definition.domain==="protocol"))enabledDirections++;
+          if(m && isEnabledSqlExecutionLeg(m))enabledDirections++;
           if(routes.length){boundDirections++;privateRecipes+=routes.length;}
           if(completed%256===0)report("progress");
         }

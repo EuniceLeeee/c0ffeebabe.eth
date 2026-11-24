@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "transferTopic":"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+  "payments":{
+    "0xa9059cbb":{"words":2,"payer":"caller","payee":0,"amount":1},
+    "0x23b872dd":{"words":3,"payer":0,"payee":1,"amount":2}
+  },
+  "balanceRead":{"selector":"0x70a08231","words":1,"account":0},
+  "actions":{
+    "0x022c0d9f":{"identity":"direct","event":"0xd78ad95fa46c994b6551d0da85fc275fe613ce37657fb8d5e3d130840159d822","eventWords":4,
+      "headWords":4,"bytesArg":3,"recipient":2,"eventAmounts":{"inputs":[0,1],"outputs":[2,3]},
+      "assertOutputArgs":[0,1],"emptyReturn":true,"permitAdjacentPrepayment":true,"requirePairBalanceAssets":true},
+    "0x128acb08":{"identity":"direct","event":"0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67","eventWords":5,
+      "headWords":5,"bytesArg":4,"recipient":0,"eventAmounts":{"signed":[0,1]},
+      "assertSignedReturn":[0,1],"directionBool":1,"signedLimit":2,"sqrtPriceLimit":3,"requireMeasuredInput":true},
+    "0x48c89491":{"identity":"shared"},
+    "0xf3cd914c":{"identity":"shared"}
+  }
+}

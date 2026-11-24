@@ -1,5 +1,7 @@
 import {receiptCallOwners, possibleReceiptOwners} from './receipt-call-owners.mjs';
+import {matchingPaymentStream,receiptComponents} from './payment-stream.mjs';
 import {callerReceiptEdges} from './caller-receipt-flows.mjs';
+import {actionAssetIdentity,provedCounterMovement,confirmedPaymentOwner} from './action-asset-identity.mjs';
 
 // Quantities remain integers in raw token units. Event balances describe the venue;
 // a recipient amount is recorded only when a unique actual transfer identifies it.
@@ -70,7 +72,7 @@ function snapshotAssets(call, rule, snapshot, reads, event) {
   return candidates[0] && candidates[1] && candidates[0]!==candidates[1] ? candidates : [];
 }
 
-function project(call, rules, event, fields, snapshotLog, nodes, movements) {
+function project(call, rules, event, fields, snapshotLog, nodes, movements, identityContext) {
   const rule=rules[call.selector];
   const deltas=rule.deltas.map(terms=>terms.reduce((n,term)=>n+(term[0]==='-' ? -fields[term.slice(1)] : fields[term]),0n));
   if (rule.reverseWhenFalse && fields[rule.reverseWhenFalse]===0n) deltas.reverse();
@@ -83,7 +85,7 @@ function project(call, rules, event, fields, snapshotLog, nodes, movements) {
   const snapshot=snapshotAssets(call,rule,snapshotLog,reads,event);
   const scoped=movements.filter(m=>belongsToAction(m.node,call,rules));
   const assets=[];
-  const settled=[];
+  const settled=[],identityIndices=[],inferred=[],claims=[];
   let boundAssets=true;
   for (const [i,source] of rule.assets.entries()) {
     const incoming=i===input;
@@ -97,22 +99,38 @@ function project(call, rules, event, fields, snapshotLog, nodes, movements) {
       }
     }
     if (snapshot[i]) possible.add(snapshot[i]);
-    if (!possible.size) boundAssets=false;
     const cash=scoped.filter(m=>incoming ? (m.to===call.target || (payer && m.from===payer))
       : recipient ? m.to===recipient : m.from===call.target);
     const exact=cash.filter(m=>m.amount===qty);
+    let identityOnly=false;
+    if (source.startsWith('0x') && (!exact.length || (possible.size&&!exact.some(m=>possible.has(m.asset))))) {
+      const proof=actionAssetIdentity(call,nodes,identityContext,{incoming,qty,payer,recipient});
+      if(proof){
+        if(possible.size&&!possible.has(proof.asset))return {assetIdentityConflict:true};
+        identityOnly=!possible.has(proof.asset);
+        if(identityOnly)claims.push({side:incoming?'in':'out',asset:proof.asset,logIndex:proof.creditIndex});
+        possible.add(proof.asset);identityIndices.push(...proof.indices);
+      }
+    }
+    if (!possible.size) boundAssets=false;
     // A declared asset (e.g. vault shares) is distinct from funds released for the same amount.
     // Infer an unknown currency only from a single scoped movement with the declared economic role.
-    if (!possible.size && exact.length===1) possible.add(exact[0].asset);
+    if (!possible.size && exact.length===1) {possible.add(exact[0].asset);inferred[i]=exact[0];}
     assets[i]=unique(possible);
     if (!assets[i]) return;
     const actual=cash.filter(m=>m.asset===assets[i] && (!incoming || !payer || m.from===payer));
-    if (actual.length===1) settled[i]=actual[0];
+    if (!identityOnly && actual.length===1) settled[i]=actual[0];
+  }
+  if(claims.length)for(const [i,m] of inferred.entries()){
+    if(!m)continue;
+    if(!provedCounterMovement(m,call,nodes,identityContext,{incoming:i===input,payer,recipient}))return;
+    if(m.index!=null)claims.push({side:i===input?'in':'out',asset:m.asset,logIndex:m.index});
   }
   if (assets[0]===assets[1]) return;
   return {selector:call.selector,poolAddress:call.target,poolId:null,boundAssets,tokenIn:assets[input],tokenOut:assets[output],
     callPath:call.path,selectorTarget:call.target,innerSwapPath:null,evidence:'declared-action-receipt',
-    receiptIndices:[...new Set([event.idx,...(snapshot.length ? [snapshotLog.idx] : []),...settled.flatMap(m=>m?.index==null?[]:[m.index])])].sort((a,b)=>a-b).join(','),
+    ...(claims.length?{settlementClaims:claims,venuePayments:true}:boundAssets?{independentDirection:true}:{}),
+    receiptIndices:[...new Set([event.idx,...identityIndices,...claims.map(c=>c.logIndex),...(snapshot.length ? [snapshotLog.idx] : []),...settled.flatMap(m=>m?.index==null?[]:[m.index])])].sort((a,b)=>a-b).join(','),
     amountVenueInRaw:String(deltas[input]),amountPoolOutRaw:String(-deltas[output]),
     amountReceivedOutRaw:recipient && settled[output] ? String(settled[output].amount) : null,
     amountPayerInRaw:payer && settled[input] ? String(settled[input].amount) : null};
@@ -120,7 +138,7 @@ function project(call, rules, event, fields, snapshotLog, nodes, movements) {
 
 // Two actual movements, in input/output order. An ambiguous movement counts as
 // a competitor even when only one of its possible owners is inside this action.
-function transferProof(call, rule, event, fields, transfers, rules) {
+function transferProof(call, rule, event, fields, transfers, rules, nodes, logs, transferTopic) {
   const requested=operandValue(call,rule.equals[rule.inputAmount],false);
   const returned=uint(call.output?.slice(2));
   if (!requested || !returned || (event && !fields)) return;
@@ -158,10 +176,74 @@ function transferProof(call, rule, event, fields, transfers, rules) {
   if (input.asset===output.asset) return;
   const indices=[input.index,output.index];
   if (event) indices.push(event.idx);
+  // A forwarder can be msg.sender while the event names the economic user.
+  // This does not relax project()'s caller equality. For precedence over an
+  // ancestor's wallet net, require the action's OWN unique event, both settled
+  // sides, and all explicit calldata fields. A differing reported sender must
+  // itself be an explicitly named address AND an observed payer/beneficiary.
+  const equalities=Object.entries(rule.equals);
+  const explicitParty=new Set();
+  const matchesExplicit=call.valid && event && fields && equalities.every(([name,op])=>{
+    if(op==='caller')return true;
+    const v=fields[name];
+    if(v!==operandValue(call,op,typeof v==='string'))return false;
+    if(typeof v==='string' && v!==zero && (v===input.from||v===output.to))explicitParty.add(v);
+    return true;
+  });
+  const verifiedEvent=matchesExplicit && equalities.every(([name,op])=>op!=='caller'||fields[name]===call.sender||explicitParty.has(fields[name]));
+  // Decode the venue's own conversion, not an ancestor's wallet net. One
+  // side is this venue's own mint/burn (including its delegate); the other
+  // must touch the venue directly or be independently measured by the venue.
+  const self=rule.transferProof.findIndex(s=>s.token==='self'), ext=1-self;
+  let venueDirection=false;
+  if(matchesExplicit && self!==-1 && rule.transferProof[ext].token==='external' &&
+    settled[self].owners.size===1 && settled[self].owners.has(call)){
+    const m=settled[ext],side=rule.transferProof[ext],incoming=ext===0;
+    const direct=incoming?m.to===call.target:m.from===call.target;
+    // A forwarder need not be the economic sender. Accept that difference
+    // only if the event *declares this role on this side* and the actual
+    // counterparty is the venue. A matching amount alone proves no role.
+    const roles=equalities.every(([name,op])=>op!=='caller'||fields[name]===call.sender||
+      (direct && (incoming?side.from:side.to)===name && fields[name]===(incoming?m.from:m.to)));
+    const owner=roles&&confirmedPaymentOwner(m);
+    venueDirection=!!owner && (direct || venueMeasuredSide(call,m,incoming,owner,nodes,logs,transferTopic));
+    if(venueDirection){
+      // The declaration, not a same-sized payment, owns currency identity.
+      // In particular the caller/forwarder mismatch can bypass project().
+      const getters=rule.assets.filter(s=>s.startsWith('0x'));
+      if(getters.length!==1||!rule.assets.includes('self'))venueDirection=false;
+      else if(nodes.some(n=>n.ok && n.parent?.valid && n.kind==='staticcall' &&
+        n.target===call.target && n.input===getters[0] && belongsToAction(n,call,rules) &&
+        addr(n.output?.slice(2))!==m.asset))return {assetIdentityConflict:true};
+    }
+  }
   return {selector:call.selector,poolAddress:call.target,poolId:null,tokenIn:input.asset,tokenOut:output.asset,
     callPath:call.path,selectorTarget:call.target,innerSwapPath:null,evidence:'declared-settlement-transfers',boundAssets:true,
+    ...(verifiedEvent||venueDirection?{venuePayments:true}:{}), ...(venueDirection?{decodedVenueDirection:true}:{}),
+    settlementClaims:[{side:'in',logIndex:input.index,asset:input.asset},{side:'out',logIndex:output.index,asset:output.asset}],
     receiptIndices:indices.sort((a,b)=>a-b).join(','),amountPayerInRaw:String(input.amount),amountReceivedOutRaw:String(output.amount),
     amountVenueInRaw:null,amountPoolOutRaw:null};
+}
+
+// Forward settlement can pay the beneficiary from a child venue. The child's
+// transfer alone cannot identify the parent's asset. Require the parent itself
+// to have checked the exact beneficiary balance before AND after that payment.
+function venueMeasuredSide(call,m,incoming,owner,nodes,logs,transferTopic){
+  const holder=incoming?m.from:m.to;
+  if(!owner || owner.target!==m.asset || !inside(owner.path,call.path))return false;
+  const q='0x70a08231'+'0'.repeat(24)+holder.slice(2);
+  const reads=[];
+  for(const n of nodes){
+    if(n.kind!=='staticcall'||!n.ok||n.sender!==call.target||n.target!==m.asset||n.input!==q)continue;
+    let ctx=n.parent;
+    while(ctx?.valid && (ctx.kind==='delegatecall'||ctx.kind==='callcode'))ctx=ctx.parent;
+    if(ctx===call)reads.push(n);
+  }
+  if(reads.length!==2 || reads[0].order>=owner.order || reads[1].order<=owner.order)return false;
+  const [before,after]=reads.map(n=>uint(n.output?.slice(2)));
+  if(before===undefined||after===undefined||after-before!==(incoming?-m.amount:m.amount))return false;
+  return !logs.some(l=>l.idx!==m.index && l.emitter===m.asset && l.topics[0]===transferTopic &&
+    l.topics.slice(1,3).some(t=>addr(t?.slice(2))===holder));
 }
 
 // When order alone leaves several calls, calldata may settle a whole stream:
@@ -171,29 +253,32 @@ function calldataBindings(groups, possibleOwners, rules) {
   const bindings = new Map();
   for (const events of groups.values()) {
     if (events.length<2 || !events.some(e=>possibleOwners.get(e).size>1)) continue;
-    const owners = new Set(), eventByCall = new Map();
-    for (const event of events) {
-      const possible = possibleOwners.get(event);
-      const topic = event.topics[0];
-      let match;
-      for (const call of possible) {
-        owners.add(call);
-        const rule = rules[call.selector];
-        if (rule?.topic!==topic) { match=undefined; break; }
-        const fields = decode(event,rule);
-        if (!fields || !matchesFields(call,fields,rule.equals)) continue;
-        if (match) { match=undefined; break; }
-        match=call;
+    // A genuinely disjoint later invocation on the same address cannot
+    // invalidate an earlier closed stream. Partition by *all* possible
+    // owners, including unknown calls, before looking at decoded fields.
+    const pieces=receiptComponents(events.map(e=>({e,owners:possibleOwners.get(e)})));
+    for(const {items,owners} of pieces){
+      const members=items.map(x=>x.e);
+      if(members.length<2 || members.length!==owners.length||owners.some(n=>rules[n.selector]?.topic!==members[0].topics[0]))continue;
+      const byCall=new Map();
+      for(const e of members){
+        const possible=possibleOwners.get(e),decoded=new Map();let match,ambiguous=false;
+        // Unknown calls, callback dispatches, or malformed declared events
+        // cannot be eliminated by a signature/amount mismatch alone.
+        for(const c of possible){const rule=rules[c.selector];if(!decoded.has(rule))decoded.set(rule,decode(e,rule));
+          const fs=decoded.get(rule);if(fs&&matchesFields(c,fs,rule.equals)){
+            if(match){ambiguous=true;break;}match=c;
+          }}
+        if(ambiguous||!match||byCall.has(match))break;
+        byCall.set(match,e);
       }
-      if (!match || eventByCall.has(match)) break;
-      eventByCall.set(match,event);
-    }
-    if (eventByCall.size===events.length && eventByCall.size===owners.size) {
-      for (const [call,event] of eventByCall) if (possibleOwners.get(event).size>1) bindings.set(event,call);
+      if(byCall.size!==members.length)continue;
+      for(const [c,e] of byCall)if(possibleOwners.get(e).size>1)bindings.set(e,c);
     }
   }
   return bindings;
 }
+
 
 export function bindActionReceipts(rules, paths, logs, movements, sharedPools, transferTopic, transferReceipts, transferAnchors, emittedPaths) {
   const edges=new Map();
@@ -212,7 +297,7 @@ export function bindActionReceipts(rules, paths, logs, movements, sharedPools, t
       candidates.push(call);
     const rule = rules[call.selector];
     if (!rule) continue;
-    topics.add(rule.topic);
+    topics.add(rule.topic);topics.add(transferTopic);
     if (rule.snapshot) topics.add(rule.snapshot.topic);
     if (rule.transferProof && uint(call.output?.slice(2))) {
       byCall.set(call,new Map());
@@ -221,25 +306,37 @@ export function bindActionReceipts(rules, paths, logs, movements, sharedPools, t
   }
   if (candidates.length) topics.add(transferTopic);
   if (!topics.size || !logs.some(l=>topics.has(l.topics[0]))) return edges;
-  const timeline = receiptCallOwners(nodes,logs,topics);
+  let timeline = receiptCallOwners(nodes,logs,topics);
   if (!timeline) return edges;
-  const possibleOwners = new Map(), groups = new Map();
-  const transfers=[];
-  for (const [event,placement] of timeline.placements) {
-    const possible = possibleReceiptOwners(placement);
-    if (event.topics[0]===transferTopic) {
-      const movement=transferReceipts.get(event);
-      if (movement) transfers.push({...movement,owners:possible});
-      continue;
+  let possibleOwners, groups;
+  function indexOwners() {
+    possibleOwners=new Map();groups=new Map();
+    for(const [event,placement] of timeline.placements){
+      if(event.topics[0]===transferTopic)continue;
+      possibleOwners.set(event,possibleReceiptOwners(placement));
+      const k=event.emitter+'/'+event.topics[0];if(!groups.has(k))groups.set(k,[]);
+      groups.get(k).push(event);
     }
-    possibleOwners.set(event,possible);
-    const key = event.emitter+'/'+event.topics[0];
-    if (!groups.has(key)) groups.set(key,[]);
-    groups.get(key).push(event);
   }
-  const hints = calldataBindings(groups,possibleOwners,rules);
-  if (hints.size && timeline.canPlace(hints)) {
-    for (const [event,owner] of hints) possibleOwners.set(event,new Set([owner]));
+  const paymentHints=matchingPaymentStream(timeline,transferTopic);
+  if(paymentHints.size)timeline=timeline.constrain(paymentHints)??timeline;
+  indexOwners();
+  const hints=calldataBindings(groups,possibleOwners,rules);
+  if(hints.size){
+    const constrained=timeline.constrain(hints);
+    if(constrained){timeline=constrained;indexOwners();}
+  }
+  const transfers=[];
+  const provenTransferAnchors=new Map();
+  for (const [event,placement] of timeline.placements) {
+    if (event.topics[0]===transferTopic) {
+      const possible=possibleReceiptOwners(placement),movement=transferReceipts.get(event);
+      if (movement) transfers.push({...movement,owners:possible});
+      // A unique amount in the transaction is not proof that an earlier or
+      // later unknown call at this token address did not emit the receipt.
+      const anchor=transferAnchors.get(event);
+      if(anchor&&possible.size===1&&possible.has(anchor))provenTransferAnchors.set(event,anchor);
+    }
   }
 
   // Keep cardinality per call and topic. An ambiguous or duplicate event
@@ -259,16 +356,25 @@ export function bindActionReceipts(rules, paths, logs, movements, sharedPools, t
     const event = owned.get(rule.topic);
     const fields = event && decode(event,rule);
     const edge = fields && matchesFields(call,fields,rule.equals)
-      && project(call,rules,event,fields,owned.get(rule.snapshot?.topic),nodes,movements);
-    const paid = rule.transferProof && transferProof(call,rule,event,fields,transfers,rules);
+      && project(call,rules,event,fields,owned.get(rule.snapshot?.topic),nodes,movements,
+        {timeline,transferReceipts,transferAnchors:provenTransferAnchors,logs});
+    if(edge?.assetIdentityConflict){edges.set(call.path,null);continue;}
+    const paid = rule.transferProof && transferProof(call,rule,event,fields,transfers,rules,nodes,logs,transferTopic);
+    if(paid?.assetIdentityConflict){edges.set(call.path,null);continue;}
     if (edge && paid) {
       if (edge.tokenIn!==paid.tokenIn || edge.tokenOut!==paid.tokenOut) {
         edges.set(call.path,null);
         continue;
       }
       edge.boundAssets=true;
+      // This is the declared venue action, with its own matching economic
+      // event AND both settled sides. The caller-only fallback has no such
+      // claim on the same receipts.
+      edge.venuePayments=true;
+      if(paid.decodedVenueDirection)edge.decodedVenueDirection=true;
       edge.amountPayerInRaw=paid.amountPayerInRaw;
       edge.amountReceivedOutRaw=paid.amountReceivedOutRaw;
+      edge.settlementClaims=paid.settlementClaims;
       edge.receiptIndices=mergeReceiptIndices(edge.receiptIndices,paid.receiptIndices);
     }
     if (edge || paid) edges.set(call.path,edge || paid);
@@ -277,7 +383,7 @@ export function bindActionReceipts(rules, paths, logs, movements, sharedPools, t
   // ambiguous one. Caller flow only fills paths without an applicable proof.
   const remaining=candidates.filter(call=>!byCall.has(call));
   if (remaining.length) {
-    for (const edge of callerReceiptEdges(remaining,timeline,transferReceipts,transferAnchors,nativeMoves))
+    for (const edge of callerReceiptEdges(remaining,timeline,transferReceipts,provenTransferAnchors,nativeMoves))
       edges.set(edge.callPath,edge);
   }
   return edges;

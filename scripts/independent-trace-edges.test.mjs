@@ -33,7 +33,14 @@ test('the CLI filters only the final observations using the enabled live convers
   assert.match(raw, /FROM observations\nGROUP BY/);
   assert.equal(render('--live-selectors-only'), expected('WHERE FALSE'));
 
-  const selected = ['swap', 'protocol', 'funding', 'credit'].map(domain => modules.find(m => m.definition.domain === domain));
+  const selected = ['swap', 'protocol', 'funding', 'credit'].map(domain => modules.find(m => m.definition.domain === domain &&
+    (!['swap','protocol'].includes(domain) || m.definition.programs.length > 0)));
+  // Observation-only selectors may be registered and enabled alongside executable entries.
+  for (const selector of ['0x91dd7346', '0xfa461e33']) {
+    const callback=modules.find(m=>m.definition.selector===selector);
+    assert.equal(callback.definition.programs.length,0); env[callback.activation.envKey]='1';
+  }
+  assert.equal(render('--live-selectors-only'), expected('WHERE FALSE'));
   for (const m of selected) env[m.activation.envKey] = '1';
   const selectors = selected.slice(0, 2).map(m => m.definition.selector).sort();
   assert.equal(render('--live-selectors-only'), expected("WHERE selector IN ('" + selectors.join("','") + "')"));

@@ -24,7 +24,7 @@ async function makeFiles(){
   const dir=await mkdtemp(join(tmpdir(),"sql-raw-input-"));
   const off=[...sqlSelectorModules.values()].find(m=>!m.activation.enabled && m.definition.domain==="swap")!;
   const records=[["0x128acb08",weth,usdc],["0x128acb08",usdc,weth],["0x01020304",weth,usdc],
-    [off.definition.selector,weth,usdc],["0x128acb08",weth,usdc,"31"]].map(([selector,tokenIn,tokenOut,id])=>{
+    [off.definition.selector,weth,usdc],["0x128acb08",weth,usdc,"31"],["0x91dd7346",weth,usdc]].map(([selector,tokenIn,tokenOut,id])=>{
     const coords=["1",selector,pool,null,null,tokenIn,id??null,tokenOut,null];
     return {candidateInstanceKey:"candidate-edge:v1:"+hash(JSON.stringify(coords)),chainId:1,selector,poolAddress:pool,poolId:null,poolNamespace:null,
       tokenIn,tokenOut,tokenInId:id??null,tokenOutId:null};
@@ -59,7 +59,7 @@ test("old Ready is not a source and cannot trigger RPC",async()=>{
 });
 test("only a digest-bound pair of raw SQL inputs can be sealed; no price or paid-row fallback",async()=>{
   const {out,receipt,manifest,meta,funding,fund,dir}=await makeFiles();
-  assert.equal((await loadLiveSqlTables(out,receipt.sha256)).edges.length,5);
+  assert.equal((await loadLiveSqlTables(out,receipt.sha256)).edges.length,6);
   await assert.rejects(sealSqlLiveInput({out,manifest,funding}),/EEXIST/);
   const raw=JSON.parse(await readFile(out,"utf8"));
   for(const bad of [{...raw,format:"sql-live-input/v1"},{...raw,pricesDir:"prior"},{...raw,swaps:{...raw.swaps,pricesDir:"prior"}},
@@ -96,11 +96,11 @@ test("raw edges reach the real issuer using canonical batched getters/code, not 
   const r=await initializeSqlLiveProducer(input);
   assert.deepEqual(headers.map(x=>x[0]),["0x65","0x66","0x65","0x66"]);
   assert.equal(r.lineage.cutoffNumber,102);assert.equal(r.lineage.appliedThroughHash,head);
-  assert.deepEqual(r.inputSummary,{rows:5,enabledDirections:3,boundDirections:2,issuedLegs:3,privateRecipes:4,disabled:1,notConversion:1,unboundDirections:1,
-    reasons:{"unregistered conversion selector":1,"selector is disabled":1,"state nomination for token-id settlement has no token-id balance witness":1}});
+  assert.deepEqual(r.inputSummary,{rows:6,enabledDirections:3,boundDirections:2,issuedLegs:3,privateRecipes:4,disabled:1,notConversion:2,unboundDirections:1,
+    reasons:{"unregistered conversion selector":1,"selector is disabled":1,"selector has no independent conversion program":1,"state nomination for token-id settlement has no token-id balance witness":1}});
   const visible=[0,1,4].map(i=>records[i]!.candidateInstanceKey);
   assert.deepEqual(r.graph.map(e=>e.canonicalEdgeId),visible,"only public SQL keys enter graph incl. unbound, not recipe ids");
-  assert.deepEqual(r.unavailable.map(e=>e.sqlEdgeKey),[2,3,4].map(i=>records[i]!.candidateInstanceKey));
+  assert.deepEqual(r.unavailable.map(e=>e.sqlEdgeKey),[2,3,4,5].map(i=>records[i]!.candidateInstanceKey));
   assert.equal(r.graphViewCoordinator.build({id:"head",generation:103,sourceBlock:103,sourceBlockHash:cutoff,topologyKey:r.topologyKey,edges:r.graph}).scannerEdgeCount,3);
   const calls=wires.flat().filter(q=>q.method==="eth_call");
   assert.equal(calls.length,4);assert(wires.some(batch=>batch.length>1));assert.equal(new Set(calls.map(x=>x.params[0].data)).size,4);

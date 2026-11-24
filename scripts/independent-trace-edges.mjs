@@ -11,6 +11,7 @@ import {renderSelectorTraceSourceSql} from './selector-trace-source-sql.mjs';
 import {createRequire} from 'node:module';
 import {poolIdLayouts} from './selector-sql-sources/trace-pool-id.mjs';
 import {compileActionReceipts} from './selector-sql-sources/compile-action-receipts.mjs';
+import {compileSettlementEvidence} from './selector-sql-sources/compile-settlement-evidence.mjs';
 import {canonicalSwapTopics} from './selector-sql-sources/canonical-swap-decode.mjs';
 
 export const ready21Window = {
@@ -39,15 +40,23 @@ export async function renderIndependentTraceEdges(window, {liveSelectorsOnly = f
     bundle:true,platform:'browser',target:'es2020',format:'iife',globalName:'Discovery',minify:true,legalComments:'none',write:false});
   const quoted=values=>values.map(v=>"'"+v+"'").join(',');
   const poolCalls=poolIdLayouts.map(l=>"(f.to_address='"+l.emitter+"' AND LEFT(f.input,10)='"+l.action+"')").join(' OR ');
-  const actionReceipts=compileActionReceipts(fileURLToPath(new URL('../',import.meta.url)));
+  const root=fileURLToPath(new URL('../',import.meta.url));
+  const actionReceipts=compileActionReceipts(root);
+  const {balanceActions,settlementProofs}=compileSettlementEvidence(root);
   const layouts=Object.values(actionReceipts);
-  const actionTopics=[...new Set(layouts.map(r=>r.topic))];
+  const actionTopics=[...new Set([...layouts.map(r=>r.topic),...Object.values(balanceActions).map(r=>r.topic)])];
   const getters=[...new Set(layouts.flatMap(r=>[...r.assets,r.snapshot?.read]).filter(s=>s?.startsWith('0x')))];
+  const addressGetterMethods=quoted([...new Set(layouts.flatMap(r=>r.assets).filter(s=>s.startsWith('0x')))]);
   const readMethods=quoted(getters), actionMethods=quoted(Object.keys(actionReceipts));
   const outputMethods=quoted([...new Set([...getters,
+    ...Object.keys(settlementProofs),
     ...Object.keys(actionReceipts).filter(selector=>actionReceipts[selector].transferProof)])]);
   const argIndices=layouts.flatMap(r=>Object.values(r.equals)).flatMap(ref=>/^arg(\d+)/.exec(ref)?.[1] ?? []);
   const actionPrefix=10 + 64*(1+Math.max(-1,...argIndices.map(Number)));
+  const balanceInputs=Object.entries(balanceActions).map(([s,r])=>
+    "WHEN LEFT(f.input,10)='"+s+"' THEN LEFT(f.input,"+Math.max(10+64*(1+r.recipientArg),actionReceipts[s]?actionPrefix:10)+")").join('\n        ');
+  const settlementInputs=[...new Set(Object.values(settlementProofs).map(p=>p.batch?.take).filter(Boolean))]
+    .map(s=>"WHEN LEFT(f.input,10)='"+s+"' THEN LEFT(f.input,202)").join('\n        ');
   const topics=quoted([...new Set([flowConfig.transferTopic, flowConfig.amountSwapTopic,...poolIdLayouts.map(l=>l.topic),
     ...actionTopics,...layouts.map(r=>r.snapshot?.topic).filter(Boolean)])]);
   return `${source};
@@ -60,7 +69,7 @@ CREATE TEMP FUNCTION traceFlows(
   conflictingFlow STRUCT<tokenIn STRING,tokenOut STRING,evidence STRING,receiptIndices STRING>>>
 LANGUAGE js AS r'''
 ${bundle.outputFiles[0].text}
-return Discovery.traceCallFlows(frames, logs, ${JSON.stringify({...flowConfig,actionReceipts})});
+return Discovery.traceCallFlows(frames, logs, ${JSON.stringify({...flowConfig,actionReceipts,balanceActions,settlementProofs})});
 ''';
 
 WITH ${legacyCoordinates ? 'observations' : 'observedCalls'} AS (
@@ -70,11 +79,17 @@ WITH ${legacyCoordinates ? 'observations' : 'observedCalls'} AS (
     ARRAY(SELECT AS STRUCT f.trace_address, f.status=1, IF(f.trace_type='call',f.call_type,f.trace_type),
       f.from_address, f.to_address,
       CASE WHEN ${poolCalls} THEN f.input
+        ${settlementInputs}
+        ${balanceInputs}
         WHEN LEFT(f.input,10) IN (${actionMethods}) THEN LEFT(f.input,${actionPrefix})
         WHEN LEFT(f.input,10) IN (${readMethods}) THEN LEFT(f.input,75)
-        WHEN LEFT(f.input,10) IN ('0xa9059cbb','0x23b872dd','${flowConfig.amountSwapSelector}') THEN LEFT(f.input,202)
+        WHEN LEFT(f.input,10) IN ('0xa9059cbb','0x23b872dd') THEN LEFT(f.input,203)
+        WHEN LEFT(f.input,10)='${flowConfig.amountSwapSelector}' THEN LEFT(f.input,202)
         ELSE LEFT(f.input,10) END, f.value,
-      IF(LEFT(f.input,10) IN (${outputMethods}),LEFT(f.output,67),NULL)
+      CASE WHEN f.input IN (${addressGetterMethods}) AND f.call_type='staticcall'
+        AND REGEXP_CONTAINS(f.output,r'^0x0{24}[0-9a-f]{40}(?:00)*$') THEN LEFT(f.output,66)
+        WHEN LEFT(f.input,10) IN ('0xa9059cbb','0x23b872dd',${outputMethods}) THEN LEFT(f.output,67)
+        ELSE NULL END
       FROM UNNEST(t.traces) f WITH OFFSET AS ord ORDER BY ord),
     ARRAY(SELECT AS STRUCT CAST(l.log_index AS FLOAT64), l.log_address,
         IF(keepBody,l.topics,ARRAY<STRING>[]), IF(keepBody,l.data,NULL)

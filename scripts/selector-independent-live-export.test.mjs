@@ -110,19 +110,19 @@ test('filtered JSON + independent funding are sealed/read by the native loader; 
   await assert.rejects(exportIndependentLive(args),/EEXIST/);
 });
 test('full archival JSONL stream requires congruent raw AND filtered hashes; swaps-only cannot produce live input',async()=>{
-  const f=await fixture(),rows=[row({selector:'0x00000000'}),...f.rows];
+  const f=await fixture(),rows=[row({selector:'0x00000000'}),...f.rows,row({selector:'0x91dd7346'})];
   const tsv=r=>[r.selector,r.poolAddress,r.poolId??'',r.tokenIn,r.tokenOut].join('\t')+'\n';
   const edgesSha256=await f.put('archive.gz',gzipSync(rows.map(r=>JSON.stringify(r)+'\n').join('')));
-  const m={format:'independent-discovery-archive/v1',window,mode:'all',edgeFile:'archive.gz',edgesSha256,total:3,
+  const m={format:'independent-discovery-archive/v1',window,mode:'all',edgeFile:'archive.gz',edgesSha256,total:4,
     keySha256:H(rows.map(tsv).join('')),fullSqlSha256:H(await renderIndependentTraceEdges(window)),
     filtered:{rows:2,sqlSha256:f.manifest.sqlSha256,keySha256:H(f.rows.map(tsv).join(''))}};
   const args={upstream:f.args.upstream,noPrior:true,swapsOnly:true,out:f.args.out};
   let upstreamSha256=await f.put('manifest.json',JSON.stringify({...m,filtered:{...m.filtered,keySha256:'0'.repeat(64)}}));
   await assert.rejects(exportIndependentLive({...args,upstreamSha256}),/filtered keys/);
   upstreamSha256=await f.put('manifest.json',JSON.stringify(m));
-  const result=await exportIndependentLive({...args,upstreamSha256});assert.equal(result.rawRows,3);assert.equal(result.source,2);
+  const result=await exportIndependentLive({...args,upstreamSha256});assert.equal(result.rawRows,4);assert.equal(result.source,2);
   await assert.rejects(access(join(args.out,'sql-live-input.json')));assert.equal(result.inputSha256,undefined);
-  assert.equal(gunzipSync(await readFile(join(args.out,'upstream-edges.jsonl.gz'))).toString().trim().split('\n').length,3);
+  assert.equal(gunzipSync(await readFile(join(args.out,'upstream-edges.jsonl.gz'))).toString().trim().split('\n').length,4);
 });
 test('mismatched SQL, incorrect mode, replaced edge file or credentialless funding substitution are rejected',async()=>{
   const f=await fixture();
