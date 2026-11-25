@@ -16,6 +16,10 @@ const obj = (value: unknown): Record<string, unknown> | undefined => value !== n
 const addrEqual = (a: unknown, b: unknown) => typeof a === 'string' && /^0x[\da-f]{40}$/i.test(a) && typeof b === 'string' && a.toLowerCase() === b.toLowerCase();
 function requireBinding(ok: unknown, reason: string): asserts ok { if (!ok) throw new Error('SQL live route binding: ' + reason); }
 
+export class MissingSqlPricingPoolOwner extends Error {
+  constructor(){super("SQL live route binding: Family has no declared pricing-pool owner");}
+}
+
 /** Match a funded SQL price to an already-issued selector Family route. These are two
  * independent inputs: the SQL row supplies no authority, and the caller cannot mint a
  * route by making an object in the shape of a descriptor or a runtime handle. */
@@ -43,10 +47,6 @@ export function assertSqlLiveRouteBinding(input: {
     identity.resources === undefined && addrEqual(resource.target, edge.poolAddress) &&
     (resource.poolId ?? null) === (edge.poolId ?? null) &&
     (edge.poolNamespace == null || edge.poolNamespace === resource.poolNamespace), 'physical pool differs or is composite');
-  const pools = family.plugin.routes.pricingPools?.(args);
-  requireBinding(pools?.length === 1 && addrEqual(pools[0]!.poolAddress, edge.poolAddress) &&
-    (pools[0]!.poolId ?? null) === (edge.poolId ?? null) &&
-    (pools[0]!.poolNamespace ?? null) === (resource.poolNamespace ?? null), 'pricing-pool ownership differs');
   for (const [token, side, address, assetId, scopeId] of [
     [edge.tokenIn, route.executionAssets?.input, route.tokenIn, edge.tokenInId, scope.tokenInId],
     [edge.tokenOut, route.executionAssets?.output, route.tokenOut, edge.tokenOutId, scope.tokenOutId],
@@ -54,5 +54,10 @@ export function assertSqlLiveRouteBinding(input: {
     requireBinding(side === 'native' ? addrEqual(token, ZeroAddress) : !addrEqual(token, ZeroAddress) && addrEqual(token, address), 'asset or direction differs');
     requireBinding((assetId ?? null) === (scopeId ?? null), 'token identifier differs');
   }
+  const pools = family.plugin.routes.pricingPools?.(args);
+  if(!pools?.length)throw new MissingSqlPricingPoolOwner();
+  requireBinding(pools.length === 1 && addrEqual(pools[0]!.poolAddress, edge.poolAddress) &&
+    (pools[0]!.poolId ?? null) === (edge.poolId ?? null) &&
+    (pools[0]!.poolNamespace ?? null) === (resource.poolNamespace ?? null), 'pricing-pool ownership differs');
   return handle;
 }

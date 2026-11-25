@@ -17,6 +17,7 @@ import {loadLiveSqlTables,readSqlFundingRows} from '../listener/src/searcher/sql
 import {poolIdLayouts} from './selector-sql-sources/trace-pool-id.mjs';
 import {assertPinnedFundingWindow} from './selector-live-funding-export.mjs';
 import {enabledConversionDefinitions} from './selector-live-conversions.mjs';
+import {compileSqlExecutionParamPlan} from './selector-execution-param-plan.mjs';
 
 const sha=data=>createHash('sha256').update(data).digest('hex');
 const json=x=>JSON.stringify(x)+'\n';
@@ -106,9 +107,46 @@ function projector(prior,defs,{legacyCoordinates=false}={}){
           aliases.push({previous:p.candidateInstanceKey,current:candidateInstanceKey});
       }
     }
-    accepted.push({candidateInstanceKey,...coords});
+    const annotations=r.paramConsensus===undefined?{}:
+      {executionParamEvidence:parseSqlExecutionParamEvidence(r,d)};
+    accepted.push({candidateInstanceKey,...coords,...annotations});
   }
   return {add,finish(){assert.equal(accepted.length+rejected.length,source);return {accepted,rejected,preserved,aliases};}};
+}
+// These are historical witnesses, never authority to send a call. SQL
+// equality is over the entire recipe set, not the first transaction sampled.
+const executionContracts=new WeakMap();
+function parseSqlExecutionParamEvidence(r,definition){
+  const consensus=r.paramConsensus;
+  assert(['uniform','nonuniform','not-declared'].includes(consensus),'invalid execution evidence consensus');
+  if(consensus!=='uniform'){
+    assert(r.executionParams==null,'nonuniform parameter evidence carries a winning value');
+    return {consensus};
+  }
+  assert(typeof r.executionParams==='string'&&r.executionParams.length<=65536,'missing or oversized execution evidence');
+  const p=JSON.parse(r.executionParams);
+  let contract=executionContracts.get(definition);
+  if(!contract){
+    contract={digest:sha(JSON.stringify(definition)),recipes:compileSqlExecutionParamPlan(definition).recipes.map(recipe=>
+      new Map(recipe.requirements.map(f=>[f.key,f.sources.map(s=>s.kind)])))};
+    executionContracts.set(definition,contract);
+  }
+  assert.equal(p.definitionSha256,contract.digest,'execution JSON differs from the one used by SQL');
+  assert(Array.isArray(p.recipes)&&p.recipes.length===definition.programs.length,'execution recipe count differs');
+  for(const [i,x] of p.recipes.entries()){
+    assert(x.index===i&&Array.isArray(x.observed)&&Array.isArray(x.missing),'invalid execution evidence recipe');
+    const keys=new Set();
+    for(const v of x.observed){
+      assert(['argument','pool-id-tuple','direction-asset'].includes(v.kind)&&['string','boolean'].includes(typeof v.value),'illegal historical parameter source/value');
+      assert(typeof v.key==='string'&&v.key.length&&!keys.has(v.key),'duplicate observed parameter');keys.add(v.key);
+      const allowed=contract.recipes[i]?.get(v.key);
+      assert(allowed?.includes(v.kind)&&!allowed.includes('fixed')&&!allowed.includes('runtime'),'trace cannot replace JSON or runtime parameters');
+    }
+    for(const k of x.missing){assert(typeof k==='string'&&k.length&&!keys.has(k)&&contract.recipes[i]?.has(k),'ambiguous parameter disposition');keys.add(k);}
+  }
+  const e=r.example;
+  assert(word(e.txHash)&&typeof e.callPath==='string','execution evidence lacks a transaction and call path');
+  return {consensus,...p,txHash:e.txHash,callPath:e.callPath,innerSwapPath:e.innerSwapPath??null};
 }
 export function projectIndependentRows(rows,prior,defs=registry()){
   const p=projector(prior,defs),seen=new Set();
@@ -161,15 +199,21 @@ export async function exportIndependentLive({upstream,upstreamSha256,previous,pr
   // No fallback, no environment-selected alternate generator and no network.
   const {renderIndependentTraceEdges}=await import('./independent-trace-edges.mjs');
   const mb=await pinned(upstream,upstreamSha256),m=JSON.parse(mb),window=windowOf(m.window);
-  let sql=await renderIndependentTraceEdges(m.window,{liveSelectorsOnly:true});
+  const fixedSource=m.sourceSnapshotAt===undefined?undefined:{snapshotAt:m.sourceSnapshotAt};
   const declaredSql=m.filtered?.sqlSha256??m.sqlSha256;
-  const legacyCoordinates=sha(sql)!==declaredSql;
-  if(legacyCoordinates)sql=await renderIndependentTraceEdges(m.window,{liveSelectorsOnly:true,legacyCoordinates});
+  // Offline re-open of old sealed receipts only. Never use an alternate
+  // query or follow-up RPC to upgrade evidence that wasn't in that receipt.
+  let sql,legacyCoordinates=false,executionParams=false;
+  for(const [params,legacy] of [[!!fixedSource,false],[false,false],[false,true]].filter((v,i,a)=>a.findIndex(x=>x[0]===v[0]&&x[1]===v[1])===i)){
+    const candidate=await renderIndependentTraceEdges(m.window,{liveSelectorsOnly:true,executionParams:params,legacyCoordinates:legacy,fixedSource});
+    if(sha(candidate)===declaredSql){sql=candidate;executionParams=params;legacyCoordinates=legacy;break;}
+  }
+  assert(sql,'discovery SQL/registry/activation mismatch');
   const archive=m.format==='independent-discovery-archive/v1';
   if(archive){
     assert(['all','filtered'].includes(m.mode)&&typeof m.edgeFile==='string'&&m.edgeFile.length,'invalid archive format');
     assert.equal(sha(sql),m.filtered.sqlSha256,'archived filter differs from production SQL/activation');
-    assert.equal(sha(await renderIndependentTraceEdges(m.window,{legacyCoordinates})),m.fullSqlSha256,'archived full discovery SQL differs');
+    assert.equal(sha(await renderIndependentTraceEdges(m.window,{legacyCoordinates,executionParams,fixedSource})),m.fullSqlSha256,'archived full discovery SQL differs');
   }else{
     assert.equal(m.liveSelectorsOnly,true,'an actual filtered discovery receipt is required');
     assert.equal(sha(sql),m.sqlSha256,'discovery SQL/registry/activation mismatch');
@@ -188,7 +232,10 @@ export async function exportIndependentLive({upstream,upstreamSha256,previous,pr
   assert(swapsOnly?(!funding&&!fundingSha256):(funding&&fundingSha256),'supply original funding or explicitly select swaps-only');
   const fb=swapsOnly?null:await pinned(funding,fundingSha256);
   const doc=fb&&JSON.parse(fb);
-  if(doc)assertPinnedFundingWindow(m.window,doc);
+  if(doc){
+    assertPinnedFundingWindow(m.window,doc);
+    assert.equal(doc.sourceSnapshotAt,m.sourceSnapshotAt,'funding and discovery trace snapshots differ');
+  }
   const funds=doc&&readSqlFundingRows(doc,window);
   const defs=registry(),project=projector(prior,defs,{legacyCoordinates});
   const ah=createHash('sha256'),fh=createHash('sha256');let last='',rawRows=0,source=0,obs=0;
@@ -200,6 +247,7 @@ export async function exportIndependentLive({upstream,upstreamSha256,previous,pr
     const tsv=[r.selector,r.poolAddress,r.poolId??'',r.tokenIn,r.tokenOut].join('\t')+'\n';
     assert(tsv>last,'duplicate/unsorted upstream discovery keys');last=tsv;ah.update(tsv);rawRows++;
     if(archive&&m.mode==='all'&&!defs.has(r.selector))continue;
+    if(executionParams)assert(Object.hasOwn(r,'paramConsensus')&&Object.hasOwn(r,'executionParams'),'declared execution projection missing from SQL row');
     fh.update(tsv);source++;
     const count=Number(r.observations);assert(Number.isSafeInteger(count)&&count>0);obs+=count;
     project.add(r,rawRows-1);
@@ -222,6 +270,7 @@ export async function exportIndependentLive({upstream,upstreamSha256,previous,pr
   await save(out,'direction-id-aliases.jsonl.gz',gzipSync(aliases.map(json).join('')));
   await save(out,'rejected.jsonl.gz',gzipSync(rejected.map(json).join('')));
   const result={format:'independent-live-projection/v1',upstreamSha256,sourceName,sourceEdgesSha256:m.edgesSha256,sqlSha256:sha(sql),previousSha256,
+    ...(fixedSource?{sourceSnapshotAt:fixedSource.snapshotAt}:{}),
     fundingSha256,...window,rawRows,keySha256,filteredKeySha256,source,previousDirectionAliases:aliases.length,accepted:accepted.length,rejected:rejected.length,preserved,fundingOffers:funds?.length??null,
     rejectionCounts:Object.fromEntries([...new Set(rejected.map(r=>r.reason))].map(k=>[k,rejected.filter(r=>r.reason===k).length]))};
   if(accepted.length){

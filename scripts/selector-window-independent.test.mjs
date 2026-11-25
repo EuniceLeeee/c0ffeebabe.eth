@@ -9,6 +9,7 @@ import {fileURLToPath} from 'node:url';
 import {Interface,FunctionFragment} from '../listener/node_modules/ethers/lib.esm/index.js';
 import {renderIndependentTraceEdges,ready21Window} from './independent-trace-edges.mjs';
 import {runIndependentWindowFunding} from './selector-window.mjs';
+import {HISTORY,RAW_FIELDS,historyDescription} from './selector-trace-store.mjs';
 import {assertPinnedFundingWindow} from './selector-live-funding-export.mjs';
 import {loadLiveSqlTables} from '../listener/src/searcher/sql-live-tables.ts';
 import {selectorFundingInstanceKey} from '../listener/src/searcher/venues/selector-native-funding-definition.ts';
@@ -37,31 +38,41 @@ function fundRow(w){
   input:iface.encodeFunctionData(selector,[asset,2,'0x']),callback:FunctionFragment.from('function onMorphoFlashLoan(uint256,bytes)').selector,
   block_number:w.toBlock,block_hash:w.headHash,tx_hash:'0x'+'61'.repeat(32),transaction_index:0,trace_address:'',callback_path:'0',observations:1};
 }
+const snapshotAt='2026-11-24T02:00:00.000001Z';
 function fakeJobApi(w,offers,over=false){
- const submitted=[],estimates=[],jobs=new Map(),coverage={transactions:w.transactions,distinctTx:w.transactions,activeHashes:String(w.toBlock-w.fromBlock+1),firstBlock:String(w.fromBlock),lastBlock:String(w.toBlock),head:w.headHash,missingTraces:'0'};
+ const submitted=[],estimates=[],jobs=new Map(),coverage={transactions:w.transactions,distinctTx:w.transactions,activeHashes:String(w.toBlock-w.fromBlock+1),firstBlock:String(w.fromBlock),lastBlock:String(w.toBlock),head:w.headHash,missingTraces:'0',emptyBlocks:'0',firstTime:w.firstTime,lastTime:w.lastTime,invalid:'0',snapshotAt};
+ const schema={fields:RAW_FIELDS.split(',').map(name=>({name}))};
+ const meta={type:'TABLE',location:'US',schema,numRows:w.transactions,etag:'fixture-etag'};
+ meta.description=historyDescription(meta,{format:'ethereum-history-coverage/v2',table:HISTORY,schemaSha256:sha(JSON.stringify(schema)),window:w,empty:[],jobId:'tested'});
  return {submitted,estimates,api:async(raw,o={})=>{const u=new URL(raw);const name=u.pathname.split('/').at(-1);
+  if(u.pathname.includes('/datasets/Ready/tables/'))return meta;
   if(o.method==='POST'){const x=JSON.parse(o.body),q=x.configuration.query;
    if(x.configuration.dryRun){estimates.push(q.maximumBytesBilled);return {statistics:{query:{totalBytesProcessed:over?String(5*2**30):'100'}}};}
-   const id=x.jobReference.jobId;assert(!jobs.has(id));submitted.push(q.maximumBytesBilled);const kind=id.includes('_funding-frames_')?'frames':id.includes('_funding-coverage_')?'coverage':id.includes('_funding_')?'offers':null;
-   assert(kind,'no retired discovery stage');jobs.set(id,{kind,job:{jobReference:x.jobReference,configuration:{query:{...q,destinationTable:{projectId:x.jobReference.projectId,datasetId:'_tmp',tableId:kind}}},status:{state:'DONE'},statistics:{query:{totalBytesBilled:'10',cacheHit:false}}}});return jobs.get(id).job;}
+   const id=x.jobReference.jobId;assert(!jobs.has(id));const kind=id.startsWith('trace_store_coverage_')?'coverage':id.includes('_funding_')?'offers':null;
+   assert(kind,'no retired discovery stage');assert(q.query.includes(HISTORY)&&!q.query.includes('bigquery-public-data'));
+   if(kind==='offers'){assert(q.query.includes('FOR SYSTEM_TIME AS OF'));submitted.push(q.maximumBytesBilled);}
+   jobs.set(id,{kind,job:{jobReference:x.jobReference,configuration:{query:{...q,destinationTable:{projectId:x.jobReference.projectId,datasetId:'_tmp',tableId:kind}}},status:{state:'DONE'},statistics:{query:{totalBytesBilled:'10',cacheHit:false}}}});return jobs.get(id).job;}
   if(u.pathname.includes('/jobs/'))return jobs.get(name)?.job??null;
   assert(u.pathname.includes('/queries/'));if(u.searchParams.get('maxResults')==='0')return {jobComplete:true,rows:[]};
   const v=jobs.get(name).kind==='coverage'?[coverage]:offers.map(r=>({body:JSON.stringify(r)}));
   return {jobComplete:true,totalRows:String(v.length),schema:{fields:Object.keys(v[0]).map(name=>({name,type:'STRING'}))},rows:v.map(row=>({f:Object.values(row).map(v=>({v}))}))};
  }};
 }
-test('fresh funding keeps 4/1/3 GiB caps, same-window trace coverage and a separately reusable input for offline CLI',async()=>{
+test('funding queries the fixed snapshot and seals only with same-snapshot edges',async()=>{
  const d=dir(),f=join(d,'fund');mkdirSync(f);const mock=fakeJobApi(w,[fundRow(w)]);
  const fund=await runIndependentWindowFunding(f,w,false,mock.api);
- assert.deepEqual(mock.submitted,[4,1,3].map(n=>String(n*2**30)));assert.deepEqual(mock.submitted,mock.estimates);
+ assert.deepEqual(mock.submitted,[String(3*2**30)]);assert.deepEqual(mock.submitted,mock.estimates);
  assert.equal(fund.rows,1);assert.equal(read(fund.funding).sourceCoverage.activeHashes,'9');
  const x=join(d,'in');mkdirSync(x);const pool='0x'+'12'.repeat(20),tx='0x'+'ee'.repeat(32);
  const rows=[{selector:'0x128acb08',poolAddress:pool,callTarget:pool,poolId:null,tokenIn:'0x'+'21'.repeat(20),tokenOut:'0x'+'34'.repeat(20),observations:'1',observedTargetSelector:true,verified:false,
-    evidenceTypes:['subtree-net-flow'],example:{txHash:tx,selectorTarget:pool,callPath:'1',evidence:'subtree-net-flow'}}];
- const mb=join(x,'manifest.json'),msha=put(mb,{window:w,total:1,observations:1,liveSelectorsOnly:true,sqlSha256:sha(await renderIndependentTraceEdges(w,{liveSelectorsOnly:true})),edgesSha256:put(join(x,'edges.json'),rows)});
+    evidenceTypes:['subtree-net-flow'],paramConsensus:'nonuniform',executionParams:null,example:{txHash:tx,selectorTarget:pool,callPath:'1',evidence:'subtree-net-flow'}}];
+ const mb=join(x,'manifest.json'),msha=put(mb,{window:w,sourceSnapshotAt:snapshotAt,total:1,observations:1,liveSelectorsOnly:true,sqlSha256:sha(await renderIndependentTraceEdges(w,{liveSelectorsOnly:true,fixedSource:{snapshotAt}})),edgesSha256:put(join(x,'edges.json'),rows)});
  const source=['--from-manifest',mb,'--manifest-sha256',msha,'--no-prior'];const full=join(d,'priced-input');
  const result=JSON.parse(ok(...source,'--funding',fund.funding,'--funding-sha256',fund.fundingSha256,'--out',full));
  assert.equal(result.accepted,1);const loaded=await loadLiveSqlTables(join(full,'sql-live-input.json'),result.inputSha256);assert.equal(loaded.edges.length,1);assert.equal(loaded.fundingAssets.length,1);
+ assert.deepEqual(loaded.edges[0].executionParamEvidence,{consensus:'nonuniform'});
+ const other=join(d,'different-snapshot.json'),otherSha=put(other,{...read(fund.funding),sourceSnapshotAt:'2026-11-24T02:00:00.000002Z'});
+ assert.match(runner(...source,'--funding',other,'--funding-sha256',otherSha,'--out',join(d,'different')).stderr,/snapshots differ/);
  const only=join(d,'swaps-only');assert.equal(JSON.parse(ok(...source,'--swaps-only','--out',only)).accepted,1);assert(!existsSync(join(only,'sql-live-input.json')));
  const mismatch=join(d,'wrong-window.json');put(mismatch,{...w,fromBlock:w.fromBlock-1});
  assert.match(runner(...source,'--window',mismatch,'--swaps-only','--out',join(d,'wrong')).stderr,/window mismatch/);

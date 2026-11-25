@@ -1,4 +1,5 @@
 import { classifyDeclarativeBytecodeGetter } from "./declarative-bytecode.js";
+import { decodeDeclaredGetter } from "./declarative-verified-getter-decode.js";
 import { encodePackedByteSlices } from "./declarative-byte-layout.js";
 import { executorFromObservedSimulation, decodeDeclarativeExecutionSimulationReceipt } from "./declarative-simulation.js";
 import { AbiCoder, Interface, getAddress, getCreate2Address, keccak256, solidityPackedKeccak256, ZeroAddress } from "ethers";
@@ -203,7 +204,7 @@ export function compileDeclarativeValues(
         });
         return out;
       }
-      case "decodeAll": return abi[e(0)].decodeFunctionResult(e(1), e(2));
+      case "decodeAll": return decodeDeclaredGetter(abi[e(0)], e(1), e(2));
       case "program": { const name = e(0); if (!Object.prototype.hasOwnProperty.call(doc.programs ?? {}, name)) throw new Error("unknown declaration program"); return runInternal(doc.programs![name], { ...env, ...e(1) }); }
       case "get": { const obj = e(0), key = String(e(1)); if (forbidden.has(key)) throw new Error("forbidden lookup"); return obj?.[key]; }
       case "defined": return e(0) !== undefined && e(0) !== null;
@@ -265,7 +266,7 @@ export function compileDeclarativeValues(
       case "result": return env.results.find((r: AdapterRequestResult) => r.id === e(0));
       case "returned": return returnedResult(env.results, e(0));
       case "code": return requireRuntimeCode(env.results, e(0));
-      case "decode": return abi[e(0)].decodeFunctionResult(e(1), e(2))[e(3) ?? 0];
+      case "decode": return decodeDeclaredGetter(abi[e(0)], e(1), e(2))[e(3) ?? 0];
       case "encode": return abi[e(0)].encodeFunctionData(e(1), e(2) ?? []);
       case "shape": { const r = env.results.find((r: AdapterRequestResult) => r.id === e(0)); return !r?.ok ? "missing" : r.completion === "returned" ? "returned" : "reverted"; }
       case "wordSurface": {

@@ -33,8 +33,22 @@ async function liveSelectorPredicate() {
   return selectors.length ? '\nWHERE selector IN (' + selectors.map(s => "'" + s + "'").join(',') + ')' : '\nWHERE FALSE';
 }
 
-export async function renderIndependentTraceEdges(window, {liveSelectorsOnly = false, legacyCoordinates = false} = {}) {
-  const source = renderSelectorTraceSourceSql({window,materialize:true});
+export async function renderIndependentTraceEdges(window, options = {}) {
+  const {renderDirectSqlEdges} = await import('./selector-direct-f3-sql.mjs');
+  return renderDirectSqlEdges(window, options, flowConfig, liveSelectorPredicate);
+}
+
+// Research only. No production CLI / live projection selects this renderer.
+export async function renderExperimentalTraceEdges(window, {liveSelectorsOnly = false, legacyCoordinates = false, fixedSource} = {}) {
+  // Old query bytes are still needed to attest archived receipts offline.
+  // A paid invocation always supplies a coverage-checked fixed source.
+  let preamble='', canonicalCte='';
+  if(fixedSource===undefined)preamble=renderSelectorTraceSourceSql({window,materialize:true})+';\n';
+  else {
+    assert(typeof fixedSource?.snapshotAt==='string'&&fixedSource.snapshotAt,'fixed trace snapshot required');
+    const {fixedTraceRead}=await import('./selector-trace-store.mjs');
+    canonicalCte='canonical_trace AS (\n'+fixedTraceRead(window,fixedSource.snapshotAt)+'\n), ';
+  }
   const {build}=createRequire(new URL('../listener/package.json',import.meta.url))('esbuild');
   const bundle=await build({entryPoints:[fileURLToPath(new URL('./selector-sql-sources/trace-call-flows.mjs',import.meta.url))],
     bundle:true,platform:'browser',target:'es2020',format:'iife',globalName:'Discovery',minify:true,legalComments:'none',write:false});
@@ -59,8 +73,7 @@ export async function renderIndependentTraceEdges(window, {liveSelectorsOnly = f
     .map(s=>"WHEN LEFT(f.input,10)='"+s+"' THEN LEFT(f.input,202)").join('\n        ');
   const topics=quoted([...new Set([flowConfig.transferTopic, flowConfig.amountSwapTopic,...poolIdLayouts.map(l=>l.topic),
     ...actionTopics,...layouts.map(r=>r.snapshot?.topic).filter(Boolean)])]);
-  return `${source};
-CREATE TEMP FUNCTION traceFlows(
+  return `${preamble}CREATE TEMP FUNCTION traceFlows(
   frames ARRAY<STRUCT<path STRING, ok BOOL, kind STRING, sender STRING, target STRING, input STRING, value STRING, output STRING>>,
   logs ARRAY<STRUCT<idx FLOAT64, emitter STRING, topics ARRAY<STRING>, data STRING>>
 ) RETURNS ARRAY<STRUCT<selector STRING, poolAddress STRING, poolId STRING, tokenIn STRING, tokenOut STRING,
@@ -72,7 +85,7 @@ ${bundle.outputFiles[0].text}
 return Discovery.traceCallFlows(frames, logs, ${JSON.stringify({...flowConfig,actionReceipts,balanceActions,settlementProofs})});
 ''';
 
-WITH ${legacyCoordinates ? 'observations' : 'observedCalls'} AS (
+WITH ${canonicalCte}${legacyCoordinates ? 'observations' : 'observedCalls'} AS (
   SELECT t.tx_hash AS txHash, e.*
   FROM canonical_trace AS t
   CROSS JOIN UNNEST(traceFlows(
@@ -114,21 +127,30 @@ ORDER BY selector,poolAddress,poolId,tokenIn,tokenOut;`;
 
 async function main() {
   const {values:v} = parseArgs({options:{window:{type:'string'},out:{type:'string'},'sql-only':{type:'boolean'},
-    'live-selectors-only':{type:'boolean',default:false}}});
+    'live-selectors-only':{type:'boolean',default:false},'snapshot-at':{type:'string'},'max-bytes':{type:'string'}}});
   const window = v.window ? JSON.parse(readFileSync(v.window)) : ready21Window;
-  const liveSelectorsOnly = v['live-selectors-only'];
-  const sql = await renderIndependentTraceEdges(window, {liveSelectorsOnly});
-  if (v['sql-only']) { process.stdout.write(sql+'\n'); return; }
+  const liveSelectorsOnly = v['live-selectors-only'], asOf=v['snapshot-at'];
+  const maximumBytesBilled=v['max-bytes']??String(16*2**30);
+  assert(/^[1-9][0-9]{0,18}$/.test(maximumBytesBilled)&&BigInt(maximumBytesBilled)<=9223372036854775807n,'invalid positive --max-bytes ceiling');
+  if (v['sql-only']) {
+    const fixedSource=asOf===undefined?undefined:{snapshotAt:asOf};
+    process.stdout.write(await renderIndependentTraceEdges(window,{liveSelectorsOnly,fixedSource})+'\n');return;
+  }
   assert(v.out,'Specify --out <output directory>');
   const dir=resolve(v.out);
-  mkdirSync(dir,{recursive:true});
-  writeFileSync(join(dir,'query.sql'),sql,{flag:'wx'});
   const projectId=process.env.SELECTOR_BQ_PROJECT??'eth-token-480803', location='US';
   assert(/^[a-z][a-z0-9-]+$/.test(projectId));
+  const {fixedTraceRead,pinTraceWindow}=await import('./selector-trace-store.mjs');
+  if(asOf!==undefined)fixedTraceRead(window,asOf); // reject malformed explicit pins before touching credentials
+  const api=googleApi();
+  const pinned=await pinTraceWindow(window,{api,asOf,cap:BigInt(maximumBytesBilled)});
+  assert(pinned?.snapshotAt&&pinned.coverage,'independent discovery requires proven fixed trace coverage');
+  const sql=await renderIndependentTraceEdges(window,{liveSelectorsOnly,fixedSource:pinned});
+  mkdirSync(dir,{recursive:true});
+  writeFileSync(join(dir,'query.sql'),sql,{flag:'wx'});
   const jobId='independent_edges_'+sha(sql).slice(0,20)+'_'+Date.now();
   console.error(jobId);
-  const api=googleApi();
-  const query={query:sql,useLegacySql:false,maximumBytesBilled:String(16*2**30)};
+  const query={query:sql,useLegacySql:false,maximumBytesBilled};
   const read=await openReadyDiscoveryJob(api,{projectId},{location,query,jobId},[],{waitForCompletion:true});
   const edges=[];
   let token,total;
@@ -145,7 +167,7 @@ async function main() {
   assert(!job.status.errorResult);
   const bytes=JSON.stringify(edges,null,2)+'\n';
   writeFileSync(join(dir,'edges.json'),bytes,{flag:'wx'});
-  const summary={window,jobId,sqlSha256:sha(sql),edgesSha256:sha(bytes),total,liveSelectorsOnly,
+  const summary={window,sourceSnapshotAt:pinned.snapshotAt,sourceCoverage:pinned.coverage,sourceCoverageJobId:pinned.jobId,jobId,maximumBytesBilled,sqlSha256:sha(sql),edgesSha256:sha(bytes),total,liveSelectorsOnly,
     observations:edges.reduce((count,e)=>count+Number(e.observations),0),
     bytesBilled:job.statistics.query.totalBytesBilled,
     elapsedMs:Number(job.statistics.endTime)-Number(job.statistics.startTime)};

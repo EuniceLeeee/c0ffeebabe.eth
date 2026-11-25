@@ -92,7 +92,7 @@ test("genuine catalog-issued directions reach the production pricing index; cros
   const actual=buildSqlEdgeLiveProducer(args);
   assert.equal(actual.graph.length,edges.length);
   assert.deepEqual(actual.inputSummary,{rows:edges.length,enabledDirections:edges.length,boundDirections:edges.length,issuedLegs:edges.length,
-    privateRecipes:edges.length,disabled:0,notConversion:0,unboundDirections:0,reasons:{}});
+    privateRecipes:edges.length,trialDirections:0,disabled:0,notConversion:0,unboundDirections:0,reasons:{}});
   const id=actual.graph[0]!.canonicalEdgeId!;
   assert.equal(id,edges[0]!.candidateInstanceKey);
   assert(actual.runtimeRoot.pricingIndex().stateKeyByEdgeKey.has(id));

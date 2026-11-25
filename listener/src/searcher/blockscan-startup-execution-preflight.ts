@@ -18,6 +18,12 @@ import { startupPriceRevert } from "./startup-prefix-failure.js";
 import type { StartupPrefixReceipt } from "./simulator/startup-prefix-program.js";
 
 export type StartupExecutionPreflight = ReturnType<typeof createBlockScanStartupExecutionPreflight>;
+/** This narrow capability builds unsigned price simulation input. It is not a
+ * StrictProductionRuntimeSession and must never reach Solver or submission. */
+export type StartupQuoteLegSession = Pick<StrictProductionRuntimeSession,
+  "buildRuntimeAmountLeg"|"executionVariantIds"|"confirmExecutionVariant"> & {
+  hasUnresolvedVariants?(edge:TokenEdge):boolean;
+};
 export type StartupPrefixObservation = Readonly<Record<string, unknown>>;
 export interface StartupEffectiveQuote {
   readonly source: CanonicalSource;
@@ -108,7 +114,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
       edge: TokenEdge; amountIn: bigint; source: CanonicalSource; reference: EffectiveAmountReference;
       maxInputPathHops: number; edges: readonly TokenEdge[]; control: AdapterWorkControl;
       prepareQuote(ids: ReadonlySet<string>): Promise<void>;
-      sessionFor(edge: TokenEdge): StrictProductionRuntimeSession;
+      sessionFor(edge: TokenEdge): StartupQuoteLegSession;
     }): Promise<StartupEffectiveQuote | undefined> {
       const maxInputPathHops = effectiveInputPathHops(work.maxInputPathHops);
       usePolicy(maxInputPathHops);
@@ -161,10 +167,9 @@ export function createBlockScanStartupExecutionPreflight(input: {
       const rootAmount = reference.path[0]?.amountIn ?? work.amountIn;
       const targetIndex = selected.length - 1;
       const session = work.sessionFor(edge);
-      const variants = session.executionVariantIds?.(edge) ?? [undefined];
       let usedVariant:string|undefined, uncompiled = false, uncertainRevert = false;
       let result:Awaited<ReturnType<StartupNodeSimulation>>|undefined;
-      for (const variantId of variants) {
+      for (const variantId of session.executionVariantIds?.(edge) ?? [undefined]) {
         open();
         const targetLeg = compile(edge,variantId);
         if (!targetLeg) {uncompiled = true;continue;}
@@ -177,6 +182,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
         if(result.kind==="success" || (result.failure && result.failure.hop!==targetIndex)) break;
         if(!result.failure) uncertainRevert = true;
       }
+      uncompiled ||= session.hasUnresolvedVariants?.(edge)===true;
       if(!result) return undefined;
       const stage = result.kind === "success" ? "none" : result.failure === undefined ? "unattributed"
         : result.failure.hop < 0 ? "funding" : result.failure.hop === targetIndex ? "target" : "prefix";
@@ -238,7 +244,7 @@ export function createBlockScanStartupExecutionPreflight(input: {
     async run(work: {
       effective: EffectiveMidSnapshot; edges: readonly TokenEdge[]; control: AdapterWorkControl;
       prepareQuote(ids: ReadonlySet<string>): Promise<void>;
-      sessionFor(edge: TokenEdge): StrictProductionRuntimeSession;
+      sessionFor(edge: TokenEdge): StartupQuoteLegSession;
     }): Promise<boolean> {
       const maxInputPathHops = effectiveInputPathHops(work.effective.maxInputPathHops);
       usePolicy(maxInputPathHops);
@@ -428,7 +434,8 @@ export function createBlockScanStartupExecutionPreflight(input: {
                 }
                 // A replay of the stored receipt tests that exact private
                 // encoding, not its siblings. Do not poison the public ID.
-                const replayScope=stage==="target" && (work.sessionFor(graph.get(row.edgeId)!).executionVariantIds?.(graph.get(row.edgeId)!)?.length??1)>1
+                const replayEdge=graph.get(row.edgeId)!,replaySession=work.sessionFor(replayEdge);
+                const replayScope=stage==="target" && ((replaySession.executionVariantIds?.(replayEdge)?.length??1)>1||replaySession.hasUnresolvedVariants?.(replayEdge))
                   ? "target-encoding-only" : stage;
                 const observation = record(row, { status: result.kind, failureStage: replayScope, failedHop: result.failure?.hop ?? null,
                   failedEdgeId: result.failure && result.failure.hop >= 0 ? rows[result.failure.hop]?.edgeId ?? null : null,

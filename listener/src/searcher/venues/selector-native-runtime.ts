@@ -267,7 +267,10 @@ export function createSelectorNativeRuntime(definition:SelectorNativeExecutionDe
    {...base,version:1,call,...(program.payment?.kind==='approval'?{approval:{token:'$route.tokenIn',spender:payment,mode:'exact-clear',verifyAllowance:true}}:{})}) as DeclarativeConversionExecution;
  }
  function entryTarget(env:Data,candidate:SelectorNativeBindingCandidate):void {
-  const matches=new Set<string>(),decl=execution(candidate),signature=FunctionFragment.from(definition.signature).format('sighash');
+  assertExecutionEntry(env,execution(candidate),candidate.target);
+ }
+ function assertExecutionEntry(env:Data,decl:DeclarativeConversionExecution,target:string):void {
+  const matches=new Set<string>(),signature=FunctionFragment.from(definition.signature).format('sighash');
   const context={...env,recipient:env.executor,minAmountOut:1n,directSettlement:false,externalRecipient:false,fundedSettlement:true,deferredSettlement:false};
   function visit(v:any):void {if(!v||typeof v!=='object')return;if(Array.isArray(v)){v.forEach(visit);return;}if(v.op){visit(values.evaluate(v,context));return;}
    if(v.when!==undefined&&values.evaluate(v.when,context)!==true)return;
@@ -275,7 +278,7 @@ export function createSelectorNativeRuntime(definition:SelectorNativeExecutionDe
    for(const[field,child]of Object.entries(v))if(!['preflight','quoteOutput','callback','settlement','effects'].includes(field)&&v.static!==true)visit(child);
   }
   visit(decl.version===1?{call:decl.call}:{steps:decl.steps});
-  if(matches.size!==1||!same([...matches][0]!,candidate.target))throw new Error('observed execution entry target/signature differs from parameter program');
+  if(matches.size!==1||!same([...matches][0]!,target))throw new Error('observed execution entry target/signature differs from parameter program');
  }
  const requirements:RequestRequirements={transports:['effect-delta-simulation',...(program.ethCall?['eth-call' as const]:[])],caller:'executor',
   ...(program.ethCall?{completions:['return-data' as const]}:{}),effects:[...new Set(['return-data','revert-data','token-delta','native-delta',...(program.receiptChecks?.observe??[]),...(program.receiptChecks?.totalSupplies!==undefined?['total-supply-delta']:[])])] as any};
@@ -306,7 +309,7 @@ export function createSelectorNativeRuntime(definition:SelectorNativeExecutionDe
    return {available:true,amountOut:output,matchesSimulation:output===amountOut};
   }catch{return {available:false};}
  }
- return {key,lineage,actionId,program,values,resources,signed,requirements,environment,step,verify,execution,
+ return {key,lineage,actionId,program,values,resources,signed,requirements,environment,step,verify,execution,assertExecutionEntry,
   requiredReadRounds:(flow?.stepIds.length??0)+(stateAuthority?.stepIds.length??0)+(instanceReads?1:0)+1,simulation,decodeSimulation,ethCall,decodeEthCall,
   dependencies(input:Data):readonly string[]{if(program.dependencies===undefined)return [];const rows=values.evaluate(program.dependencies,environment(input));if(!Array.isArray(rows))throw new Error('execution dependencies must be addresses');return rows.map((row:any)=>getAddress(row).toLowerCase());},
   buildRuntimeLeg(input:Data){return buildDeclarativeRuntimeLeg(execution(input.candidate),environment(input),values,options);},

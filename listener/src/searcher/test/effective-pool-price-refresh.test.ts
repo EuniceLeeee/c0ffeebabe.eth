@@ -4,6 +4,7 @@ import {buildEffectiveMids,effectiveAmountReferences,effectiveHistoricalRankingH
  bindVerifiedSqlNativePoolRestore,withEffectiveRowColumns,exportEffectiveMidReplayState,restoreEffectiveMidReplayState,type EffectiveMidSnapshot,type EffectivePricingInput} from '../blockscan-effective-mid.js';
 import {createBlockScanStartupExecutionPreflight} from '../blockscan-startup-execution-preflight.js';
 import {BlockScanSimRejectCache} from '../blockscan-sim-reject-cache.js';import type {TokenEdge} from '../planner/token-graph.js';
+import {assertSqlSelectorSamplePrices} from '../sql-selector-startup-check.js';
 import type {StrictProductionRuntimeSession} from '../strict-production-runtime-session.js';import type {StartupNodeInvocation,StartupNodeSimulation} from '../blockscan-startup-node-simulation.js';
 const w=ADDR.WETH.toLowerCase(),edge=(id:string,tokenIn:string,tokenOut:string):TokenEdge=>Object.freeze({canonicalEdgeId:id as TokenEdge['canonicalEdgeId'],instanceKey:id,
   tokenIn,tokenOut,target:id,adapterId:'fixture',slotKind:'swap',edgeKind:'swap',leavesStandingPosition:false,executionVerification:'startup-simulation'});
@@ -20,10 +21,11 @@ function harness(fault?:(programs:string[],number:number)=>number|undefined,code
  },{stats:()=>({requests:ss.length,retries:0,simulations:ss.length,headers:1,maxCuIn1000Ms:1})}) as StartupNodeSimulation;
  const pre=createBlockScanStartupExecutionPreflight({executor:`0x${'1'.repeat(40)}`,transactionOrigin:`0x${'2'.repeat(40)}`,simRejects:new BlockScanSimRejectCache(),concurrency:1,simulateStandalone:sim});
  const sessionFor=()=>({executionVariantIds:(e:TokenEdge)=>['v'+ids(e)],confirmExecutionVariant(){},buildRuntimeAmountLeg:({edge:e}:{edge:TokenEdge})=>({program:codes?.get(ids(e))??(e===h1?'0x01':e===h2?'0x02':'0x03')})}) as unknown as StrictProductionRuntimeSession;
- const opt=(n:number,prev?:EffectiveMidSnapshot,choose?:string[],disabled:string[]=[],cascade=false,edges:readonly TokenEdge[]=graph)=>{
+ const opt=(n:number,prev?:EffectiveMidSnapshot,choose?:string[],disabled:string[]=[],cascade=false,edges:readonly TokenEdge[]=graph,
+   requireFreshEdgeIds?:ReadonlySet<string>,touchedStateKeys:ReadonlySet<string>=new Set(edges.map(ids)))=>{
  const at={number:n,hash:`0x${n.toString(16).padStart(64,'0')}`,generation:n-99},pricing:EffectivePricingInput={sourceBlock:n,sourceBlockHash:at.hash,generation:at.generation,
   graph:{edges},mids:new Map(),coverage:{resolvedEdgeKeys:[]},pricingStateKeyByEdgeKey:new Map(edges.map(e=>[ids(e),ids(e)]))};
- return buildEffectiveMids({pricing,previous:prev,touchedStateKeys:prev?new Set(edges.map(ids)):undefined,cascadeAmountChanges:cascade,
+ return buildEffectiveMids({pricing,previous:prev,touchedStateKeys:prev?touchedStateKeys:undefined,cascadeAmountChanges:cascade,requireFreshEdgeIds,
  ...(choose?{poolPriceRefreshPlan:{shouldRefresh:(e,variant)=>{if(n===101&&e!==remote)assert.equal(variant,'v'+ids(e));return choose.includes(ids(e));}}}:{}),
  weth:w,fixedWethInput:100n,maxInputPathHops:4,gasCostWei:null,enumerationSpreadBps:0,concurrency:1,control:{},disabledEdgeIds:new Set(disabled),
  quote:async q=>{calls.push(ids(q.edge));const r=await pre.quoteEffective({...q,edges,prepareQuote:async()=>{},sessionFor});assert(r);return omit?{...r,inputReference:undefined}:r;}});};
@@ -51,6 +53,20 @@ test('cold, raw restore, foreign graph and cascade retain generic behavior; newl
 });
 
 const owns=(e:TokenEdge,v:string)=>v==='v'+ids(e);
+test('first resumed sample replay: only the chosen untouched leg and its embedded prefix, then normal reuse',async()=>{
+ for(const plan of [true,false]){
+  const h=harness(),prior=await h.build(100),disk=structuredClone(prior);
+  restoreEffectiveMidReplayState(disk,structuredClone(exportEffectiveMidReplayState(prior)),graph,w);
+  if(plan)assert.equal(bindVerifiedSqlNativePoolRestore(disk,graph,disk.source,owns),3);
+  h.calls.length=0;h.ss.length=0;
+  const sample={selector:'0x12345678',edgeId:ids(t),poolAddress:t.target,poolId:null,tokenIn:t.tokenIn,tokenOut:t.tokenOut,variantIds:['v'+ids(t)]};
+  const now=await h.build(101,disk,plan?[]:undefined,[],false,graph,new Set([ids(t)]),new Set());
+  assert.deepEqual(h.calls,[ids(t)]);assert.deepEqual(h.ss,[['0x01','0x03']]);
+  assert.equal(now.rows.get(ids(t))!.amountIn,500n);assertSqlSelectorSamplePrices([sample],now,graph);
+  h.calls.length=0;await h.build(102,now,plan?[]:undefined,[],false,graph,undefined,new Set());
+  assert.deepEqual(h.calls,[]);
+ }
+});
 test('verified A-prefix failure tries an existing B-prefix for the same touched target, never A/B as standalone quotes',async()=>{
  const h=harness(programs=>programs[0]==='0x01'?0:undefined),p=await h.build(100);h.calls.length=0;h.ss.length=0;
  const n=await h.build(101,p,['market']);assert.deepEqual(h.calls,['market','market']);assert.deepEqual(h.ss,[['0x01','0x03'],['0x02','0x03']]);

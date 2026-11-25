@@ -935,12 +935,37 @@ async function adaptiveRetryTests(): Promise<void> {
   const limited = { code: 429, message: "Your app has exceeded its compute units per second capacity" };
   const results = (items: Array<Record<string, unknown>>) => items.map(item =>
     ({ jsonrpc: "2.0", id: item.id, result: RESULT }));
-  await pendingCase("failed batch backs off while eight fresh batches retain the shared eight-permit cap", async ({state,backend,release}) => {
+  await pendingCase("only clean complete bulk responses repay a reduced generation", async ({state,backend}) => {
+    const scheduler = new RethTransportScheduler({capacity:4,producerReserved:1,retryDelayMs:1});
+    const load=await scheduler.run("producer-bulk",new AbortController().signal,async l=>l.load!);
+    load.bulkQuotes!.failed(load.bulkQuotes!.limits(load.limits(4,4),4,4),limited);
+    const b=backend({transportScheduler:scheduler,transportLane:"producer-bulk",maxBatchSize:4,maxConcurrentBatches:4});
+    let id=0;
+    const pair=()=>Promise.allSettled([0,1].map(()=>b.call({to:OK_A,data:"0x"+(++id).toString(16).padStart(4,"0")})));
+    const cap=()=>scheduler.snapshot().bulkQuoteCapacity;
+    state.replyBatch=items=>({status:200,body:results(items)});
+    await pair();check.equal(cap(),2);
+    for(const fault of ["duplicate","unknown","omitted","revert","wrong version","null error","invalid data"]){
+      state.replyBatch=items=>{
+        const [a,c]=results(items);
+        return {status:200,body:fault==="duplicate"?[a,a]:fault==="unknown"?[a,{...c,id:999999}]:
+          fault==="omitted"?[a]:fault==="revert"?[a,{id:c!.id,error:{code:3,message:"execution reverted"}}]:
+          fault==="wrong version"?[a,{...c,jsonrpc:"1.0"}]:fault==="null error"?[a,{...c,error:null}]:[a,{...c,result:"not bytes"}]};
+      };
+      await pair();check.equal(cap(),2,fault+" must neither reduce pressure nor repay a success");
+    }
+    state.replyBatch=items=>({status:200,body:results(items)});await pair();
+    check.equal(scheduler.snapshot().bulkQuoteEpoch,2,"two clean envelopes advanced one recovery generation");
+  });
+  await pendingCase("partial 429 backs off only its item; new bulk scopes share a reduced cap and clean responses recover gradually", async ({state,backend,release}) => {
     const scheduler = new RethTransportScheduler({capacity:8,producerReserved:1,retryDelayMs:500});
     const b=backend({transportScheduler:scheduler,transportLane:"producer-bulk",retryRpcThrottle:true,
       maxBatchSize:8,maxConcurrentBatches:8,deadlineAtMs:Date.now()+10_000});
-    state.replyBatch=items=>({status:200,body: (items[0]!.params as any[])[0].data.startsWith("0xaa") && items.length>=4
-      ? items.map(item=>({id:item.id,error:limited})) : results(items)});
+    let initial = true;
+    state.replyBatch=items=>{
+      const body = initial ? items.map((item,i)=>i===0?{id:item.id,error:limited}:{id:item.id,result:RESULT}) : results(items);
+      initial=false; return {status:200,body};
+    };
     const original=Promise.all(Array.from({length:8},(_,i)=>b.call({to:OK_A,data:`0xaa${i.toString(16).padStart(2,"0")}`})));
     void original.catch(()=>{});
     await until(()=>b.stats().throttleRetries===1,"original batch in backoff");
@@ -949,22 +974,21 @@ async function adaptiveRetryTests(): Promise<void> {
     await nextTurn();
     check.equal(drained,false,"drain must include locally cooling pending work");
     state.pauseResponses=true;
-    const fresh=Promise.all(Array.from({length:64},(_,i)=>b.call({to:OK_B,data:`0xbb${i.toString(16).padStart(2,"0")}`})));
+    const other=backend({transportScheduler:scheduler,transportLane:"producer-bulk",retryRpcThrottle:true,
+      maxBatchSize:8,maxConcurrentBatches:8,deadlineAtMs:Date.now()+10_000});
+    const fresh=Promise.all(Array.from({length:32},(_,i)=>(i%2?b:other).call({to:OK_B,data:`0xbb${i.toString(16).padStart(2,"0")}`})));
     void fresh.catch(()=>{});
-    await until(()=>state.heldResponses.length===8,"eight fresh physical batches during failed batch cooldown");
-    check.equal(scheduler.snapshot().activeTotal,8);
-    check.equal(state.maxActiveBatches,8);
-    check.deepEqual(state.batches.slice(1).map(items=>items.length),Array(8).fill(8));
-    check.equal(b.stats().currentConcurrentBatchLimit,8);
+    await until(()=>state.heldResponses.length===4,"both scopes share four physical slots during failed batch cooldown");
+    check.equal(scheduler.snapshot().activeTotal,4);
+    check.equal(state.maxActiveBatches,4);
+    check.deepEqual(state.batches.slice(1).map(items=>items.length),Array(4).fill(4));
+    check.equal(b.stats().currentConcurrentBatchLimit,4);
     state.pauseResponses=false;release();await fresh;
-    await nextTurn();state.maxActiveBatches=0;state.holdResponses=true;
+    await nextTurn();
     check.deepEqual(await original,Array(8).fill(RESULT));await draining;await b.drain();
-    check.ok(state.maxActiveBatches<=2,"split retries exceeded their local reduced concurrency");
-    const retries=state.batches.slice(9);
-    check.deepEqual(retries.map(items=>items.length),[4,4,2,2,2,2]);
-    for(const item of state.batches[0]!) check.equal(retries.flat().filter(x=>JSON.stringify(x)===JSON.stringify(item)).length,2);
-    check.equal(b.stats().currentBatchSizeLimit,8);
-    check.equal(b.stats().peakInFlightBatches,8);
+    const retries=state.batches.slice(1).flat().filter(item=>(item.params as any[])[0].data.startsWith("0xaa"));
+    check.deepEqual(retries,[state.batches[0]![0]],"the seven successful siblings never replay");
+    check.ok(b.stats().currentBatchSizeLimit>4 && b.stats().currentBatchSizeLimit<8);
     check.equal(scheduler.snapshot().activeTotal,0);
     check.equal(state.singles.length,0);
   });
@@ -1159,6 +1183,43 @@ async function adaptiveRetryTests(): Promise<void> {
       check.equal(b.stats().throttleRetries, 0);
       check.equal(b.stats().timeoutRetries, 0);
       check.equal(scheduler.snapshot().reductionVersion, 0);
+    });
+  }
+}
+
+async function pinnedInternalReadTests(): Promise<void> {
+  for (const method of ["eth_getCode","eth_call"]) {
+    for (const envelope of [false,true]) await pendingCase(`internal RPC failure: ${method} whole=${envelope}`,async ({state,backend})=>{
+      const scheduler=new RethTransportScheduler({capacity:4,producerReserved:1,retryDelayMs:1});
+      const b=backend({transportScheduler:scheduler,transportLane:"producer-bulk",retryRpcThrottle:true,
+        maxBatchSize:4,maxConcurrentBatches:4});
+      const error={code:envelope?-32603:-32000,message:"Internal error"};
+      state.replyBatch=items=>({status:200,body:envelope && state.batches.length===1?
+        {jsonrpc:"2.0",id:null,error}:items.map((item,i)=>({jsonrpc:"2.0",id:item.id,
+          ...(state.batches.length===1 && i===1?{error}:{result:RESULT})}))});
+      const read=(to:string)=>method==="eth_call"?b.call({to,data:"0xab"}):b.getCode(to);
+      check.deepEqual(await Promise.all([read(OK_A),read(OK_B)]),[RESULT,RESULT]);
+      check.equal(b.stats().internalReadRetries,1);
+      check.equal(b.stats().throttleRetries,0);
+      check.equal(b.stats().timeoutRetries,0);
+      check.deepEqual(state.batches.slice(1).flat(),envelope?state.batches[0]:[state.batches[0]![1]]);
+      check.equal(state.singles.length,0);await b.closeAndDrain();
+    });
+  }
+  for(const shape of ["exhaust","whole-exhaust","revert","data","unknown","no-opt","exact-lane"]) {
+    await pendingCase(`internal RPC terminal/revert boundaries: ${shape}`,async ({state,backend})=>{
+      const b=backend({transportScheduler:new RethTransportScheduler({capacity:2,producerReserved:1,retryDelayMs:1,maxRetriesAtOne:2}),
+        transportLane:shape==="exact-lane"?"exact":"producer-bulk",retryRpcThrottle:shape!=="no-opt",allowSingleCallFallback:true,
+        maxBatchSize:1,maxConcurrentBatches:1});
+      const error={code:shape==="revert"?3:shape==="unknown"?-32602:-32000,message:"Internal error",
+        ...(shape==="data"?{data:"0x"}:{})};
+      state.replyBatch=items=>({status:200,body:shape==="whole-exhaust"?{jsonrpc:"2.0",id:null,error}:
+        items.map(item=>({jsonrpc:"2.0",id:item.id,error}))});
+      await check.rejects(b.call({to:OK_A,data:"0x01"}),(e:any)=> e.code===error.code && e.message===error.message);
+      const retries=shape.endsWith("exhaust")?2:0;
+      check.equal(b.stats().internalReadRetries,retries);check.equal(state.batches.length,1+retries);
+      check.equal(state.singles.length,0);check.equal(b.callCached({to:OK_A,data:"0x01"}),undefined);
+      await b.closeAndDrain();
     });
   }
 }
@@ -1963,6 +2024,7 @@ async function run(): Promise<void> {
     await pendingCallTests();
     await retryWakeLivenessTests();
     await adaptiveRetryTests();
+    await pinnedInternalReadTests();
     await sharedTimeoutTests();
     await latencyDiagnosticTests();
   } finally {

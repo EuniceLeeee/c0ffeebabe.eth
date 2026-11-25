@@ -5,7 +5,7 @@ import {mkdtemp,readFile,writeFile} from "node:fs/promises";
 import {createServer} from "node:http";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {AbiCoder,FunctionFragment,Interface,id} from "ethers";
+import {AbiCoder,FunctionFragment,Interface,JsonRpcProvider,id} from "ethers";
 import {loadBotVmRuntimeCode} from "../../shared/executor/botvm-executor.js";
 import {initializeSqlLiveProducer} from "../sql-live-intake.js";
 import {sqlSelectorModules} from "../sql-edge-live-producer.js";
@@ -14,6 +14,14 @@ import {loadLiveSqlTables} from "../sql-live-tables.js";
 import {RethTransportScheduler} from "../reth-transport-scheduler.js";
 import {selectorFundingInstanceKey} from "../venues/selector-native-funding-definition.js";
 import {selectorAssetOfferKey} from "../venues/selector-execution-keys.js";
+import {compileSqlExecutionParamPlan} from "../venues/selector-native-execution-param-plan.js";
+import {isEnabledSqlExecutionLeg} from "../sql-execution-selectors.js";
+import {sqlSelectorRepresentatives,assertSqlSelectorSamplePrices} from "../sql-selector-startup-check.js";
+import {createBlockScanPriceRuntime,resolveBlockScanCoreConfig} from "../main.js";
+import {createBlockScanStartupExecutionPreflight} from "../blockscan-startup-execution-preflight.js";
+import {BlockScanSimRejectCache} from "../blockscan-sim-reject-cache.js";
+import type {StartupNodeSimulation,StartupNodeInvocation} from "../blockscan-startup-node-simulation.js";
+import type {SqlPriceEdge} from "../sql-edge-price-index.js";
 
 const addr=(n:string)=>"0x"+n.repeat(40), hash=(s:string)=>createHash("sha256").update(s).digest("hex");
 const identity={executor:addr("1"),transactionOrigin:addr("2")}, cutoff="0x"+"ab".repeat(32), head="0x"+"bc".repeat(32);
@@ -23,11 +31,16 @@ const args={currentHead:102,expectedHeadHash:head,rpcUrl:"http://127.0.0.1:1",ex
 async function makeFiles(){
   const dir=await mkdtemp(join(tmpdir(),"sql-raw-input-"));
   const off=[...sqlSelectorModules.values()].find(m=>!m.activation.enabled && m.definition.domain==="swap")!;
+  const m=sqlSelectorModules.get("0x128acb08")!;assert(isEnabledSqlExecutionLeg(m));
+  const ev={consensus:"uniform",definitionSha256:hash(JSON.stringify(m.definition)),txHash:head,callPath:"",innerSwapPath:null,
+    recipes:compileSqlExecutionParamPlan(m.definition).recipes.map(({index,requirements})=>({index,missing:[],observed:requirements.flatMap(r=>
+      r.sources.some(s=>s.kind==="direction-asset")?[{key:r.key,kind:"direction-asset",value:r.key==="descriptor.token0"?usdc:weth}]:[])}))};
   const records=[["0x128acb08",weth,usdc],["0x128acb08",usdc,weth],["0x01020304",weth,usdc],
-    [off.definition.selector,weth,usdc],["0x128acb08",weth,usdc,"31"],["0x91dd7346",weth,usdc]].map(([selector,tokenIn,tokenOut,id])=>{
-    const coords=["1",selector,pool,null,null,tokenIn,id??null,tokenOut,null];
-    return {candidateInstanceKey:"candidate-edge:v1:"+hash(JSON.stringify(coords)),chainId:1,selector,poolAddress:pool,poolId:null,poolNamespace:null,
-      tokenIn,tokenOut,tokenInId:id??null,tokenOutId:null};
+    [off.definition.selector,weth,usdc],["0x128acb08",weth,usdc,"31"],["0x91dd7346",weth,usdc]].map(([selector,tokenIn,tokenOut,id],i)=>{
+    const poolAddress=i===1?addr("4"):pool;
+    const coords=["1",selector,poolAddress,null,null,tokenIn,id??null,tokenOut,null];
+    return {candidateInstanceKey:"candidate-edge:v1:"+hash(JSON.stringify(coords)),chainId:1,selector,poolAddress,poolId:null,poolNamespace:null,
+      tokenIn,tokenOut,tokenInId:id??null,tokenOutId:null,...(i<2?{executionParamEvidence:ev}:{})};
   });
   const body=records.map(r=>JSON.stringify(r)).join("\n")+"\n";await writeFile(join(dir,"rows"),body);
   const manifest=join(dir,"m.json"),funding=join(dir,"f.json"),out=join(dir,"seal.json");
@@ -72,19 +85,20 @@ test("only a digest-bound pair of raw SQL inputs can be sealed; no price or paid
   await writeFile(manifest,JSON.stringify({...meta,edgeSha256:"e".repeat(64)}));
   await assert.rejects(loadLiveSqlTables(out,receipt.sha256),/content differs/);
 });
-test("raw edges reach the real issuer using canonical batched getters/code, not simulated or pre-priced rows",async t=>{
+test("SQL startup uses no Family getters, samples ordinary funded prices; only selection calls the pinned issuer",async t=>{
   const {env,records}=await makeFiles(), blob=loadBotVmRuntimeCode(identity.transactionOrigin).code;
+  const sample=sqlSelectorRepresentatives(records as SqlPriceEdge[])[0]!,other=records.slice(0,2).find(e=>e.poolAddress!==sample.poolAddress)!;
   const abi=AbiCoder.defaultAbiCoder(),field=new Map([["token0()","address",usdc],["token1()","address",weth],["fee()","uint24",500],["tickSpacing()","int24",10]]
     .map(([s,type,value])=>[id(String(s)).slice(0,10),abi.encode([String(type)],[value])]));
-  let broken=false; const wires:any[][]=[];
+  let selectedAllowed=false; const wires:any[][]=[];
   const server=createServer(async(req,res)=>{
     const chunks=[];for await(const chunk of req)chunks.push(chunk);
     const batch=JSON.parse(Buffer.concat(chunks).toString("utf8"));wires.push(batch);
     const rows=batch.map((q:any)=>{
       assert.deepEqual(q.params[1],{blockHash:head,requireCanonical:true});
       if(q.method==="eth_getCode")return {id:q.id,jsonrpc:"2.0",result:"0x6000"};
-      assert.equal(q.method,"eth_call");assert.equal(q.params[0].to,pool);assert(field.has(q.params[0].data));
-      return broken?{id:q.id,jsonrpc:"2.0",error:{code:-32999,message:"provider outage"}}:{id:q.id,jsonrpc:"2.0",result:field.get(q.params[0].data)};
+      assert.equal(q.method,"eth_call");assert(selectedAllowed&&q.params[0].to===other.poolAddress);assert(field.has(q.params[0].data));
+      return {id:q.id,jsonrpc:"2.0",result:field.get(q.params[0].data)};
     });
     res.writeHead(200,{"content-type":"application/json"});res.end(JSON.stringify(rows));
   });
@@ -96,16 +110,48 @@ test("raw edges reach the real issuer using canonical batched getters/code, not 
   const r=await initializeSqlLiveProducer(input);
   assert.deepEqual(headers.map(x=>x[0]),["0x65","0x66","0x65","0x66"]);
   assert.equal(r.lineage.cutoffNumber,102);assert.equal(r.lineage.appliedThroughHash,head);
-  assert.deepEqual(r.inputSummary,{rows:6,enabledDirections:3,boundDirections:2,issuedLegs:3,privateRecipes:4,disabled:1,notConversion:2,unboundDirections:1,
-    reasons:{"unregistered conversion selector":1,"selector is disabled":1,"selector has no independent conversion program":1,"state nomination for token-id settlement has no token-id balance witness":1}});
+  assert.equal(r.inputSummary.trialDirections,2);assert.equal(r.inputSummary.boundDirections,0);
+  assert.equal(r.inputSummary.privateRecipes,0);assert.equal(r.sqlSelectorSamples.length,1);
+  assert.equal(r.sqlSelectorSamples[0]!.edgeId,sample.candidateInstanceKey);assert.equal(wires.length,0);
+  const state={number:102,hash:head,generation:102},before=wires.length;
+  const trial=r.trials.atSource(other.candidateInstanceKey,state);
+  assert(trial.programs.size>0);assert.equal(wires.length,before);
+  // Exercise the actual coarse root -> public graph -> effective forward-P
+  // builder -> receipt publication. Only the unsigned simulation transport is
+  // deterministic here; this is not a claim of mainnet receipt/price parity.
+  const invocations:StartupNodeInvocation[]=[],p=2000000000000000n;
+  const simulate=Object.assign(async(q:StartupNodeInvocation)=>{
+    invocations.push(q);assert.equal(q.amount,p);
+    const receipts=[{hop:-1,amountIn:p,amountOut:p,amountSpent:p}];let n=p;
+    for(const [hop,leg] of q.legs.entries()){assert.match(leg.program,/^0x01/);
+      receipts.push({hop,amountIn:n,amountOut:n*2n,amountSpent:n});n*=2n;}
+    return {kind:"success" as const,receipts,returnData:"0x",gasUsed:1n,targetBlock:q.source.number+1,scriptHash:head,
+      inputFundingMode:"native-prefix" as const,simulationMs:1,nodeQueueMs:0};
+  },{stats:()=>({requests:invocations.length,retries:0,simulations:invocations.length,headers:1,maxCuIn1000Ms:1})}) as StartupNodeSimulation;
+  const {currentRuntimeCoordinator,strictSessionFor}=createBlockScanPriceRuntime({provider:new JsonRpcProvider(rpcUrl),rpcUrl,...identity,
+    strictRuntimeRoot:r.runtimeRoot,blockScanRuntimeAbort:new AbortController(),blockScanCfg:resolveBlockScanCoreConfig({}),
+    fixedEffectiveWethInput:p,sqlStartupTrials:r.trials,isPoolSimRejected:()=>false,recordPricing:()=>{},
+    selectedAuthority:async request=>{assert(selectedAllowed,"quote attempted to mint a trading capability");return r.selectedAuthority(request);},
+    checkStartupPrices:(snap,es)=>assertSqlSelectorSamplePrices(r.sqlSelectorSamples,snap,es),
+    startupExecutionPreflight:createBlockScanStartupExecutionPreflight({...identity,simRejects:new BlockScanSimRejectCache(),
+      simulateStandalone:simulate,concurrency:2})});
+  const graph=r.graphViewCoordinator.build({id:"price-test",generation:103,sourceBlock:103,sourceBlockHash:cutoff,topologyKey:r.topologyKey,edges:r.graph});
+  const published=await currentRuntimeCoordinator.prepareCoarsePricing({graph,deadlineAtMs:Date.now()+30000,
+    pricingCallBackend:{call:async()=>assert.fail("unexpected coarse getter")}});
+  for(const e of records.slice(0,2))assert.equal(published.snapshot?.effectiveMids?.rows.get(e.candidateInstanceKey)?.status,"quoted");
+  assert.deepEqual(invocations.map(q=>q.legs.length),[1,2]);assert.equal(wires.length,before);
   const visible=[0,1,4].map(i=>records[i]!.candidateInstanceKey);
   assert.deepEqual(r.graph.map(e=>e.canonicalEdgeId),visible,"only public SQL keys enter graph incl. unbound, not recipe ids");
   assert.deepEqual(r.unavailable.map(e=>e.sqlEdgeKey),[2,3,4,5].map(i=>records[i]!.candidateInstanceKey));
   assert.equal(r.graphViewCoordinator.build({id:"head",generation:103,sourceBlock:103,sourceBlockHash:cutoff,topologyKey:r.topologyKey,edges:r.graph}).scannerEdgeCount,3);
-  const calls=wires.flat().filter(q=>q.method==="eth_call");
-  assert.equal(calls.length,4);assert(wires.some(batch=>batch.length>1));assert.equal(new Set(calls.map(x=>x.params[0].data)).size,4);
-  const codes=wires.flat().filter(q=>q.method==="eth_getCode");assert(codes.length>0);assert.equal(codes.length,new Set(codes.map(q=>q.params[0])).size);
+  assert.equal(wires.length,0,"neither planning nor startup price publication may query a Family issuer");
+  selectedAllowed=true;
+  const selected=await strictSessionFor({source:state,purpose:"exact-execution",requiredEdgeIds:new Set([other.candidateInstanceKey]),fundingAssets:[]});
+  const legEdge=r.graph.find(e=>e.canonicalEdgeId===other.candidateInstanceKey)!;
+  const [paidId,expected]=[...trial.programs][0]!;
+  assert.equal(selected.buildRuntimeAmountLeg({edge:legEdge,variantId:paidId,executor:identity.executor,runtimeEvidence:[]})?.program,expected.program,
+    "selected execution must independently reissue the exact paid trial program");
+  assert(wires.slice(before).flat().some(q=>q.method==="eth_call"&&q.params[0].to===other.poolAddress));
   await assert.rejects(initializeSqlLiveProducer({...input,env:{...env,SEARCHER_BLOCKSCAN_SUBMIT:"1"}}),/override is dry-run only/);
   await assert.rejects(initializeSqlLiveProducer({...input,provider:chain([],true)}),/source is not canonical/);
-  broken=true;await assert.rejects(initializeSqlLiveProducer(input),/provider outage/);
 });

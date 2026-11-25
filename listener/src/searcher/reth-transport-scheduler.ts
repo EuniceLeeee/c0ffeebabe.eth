@@ -32,6 +32,9 @@ export interface RethTransportAttempt {
   readonly batchSize: number;
   readonly concurrency: number;
   readonly batch?: RethTransportRetryBatch;
+  /** Captured immediately before dispatch, never inferred from completion order. */
+  readonly bulkEpoch?: number;
+  readonly bulkRecovering?: boolean;
 }
 
 /** Shared only by the failed envelope and its split retries, never by a scope. */
@@ -40,6 +43,9 @@ export interface RethTransportRetryBatch {
   level: number;
   notBeforeMs: number;
   delayMs: number;
+  /** A failed bulk envelope must not grow again if unrelated fresh traffic recovers. */
+  maxSize?: number;
+  maxConcurrency?: number;
 }
 
 export interface RethTransportRetryState {
@@ -56,6 +62,12 @@ export interface RethTransportLoad {
   retry(error: unknown, items: readonly RethTransportRetryState[], attempt: RethTransportAttempt): boolean;
   /** Effective per-batch retry budget at concurrency 1, so logs can report the real denominator. */
   readonly maxRetriesAtOne?: number;
+  /** Only bulk pricing envelopes participate; other callers retain batch-local recovery. */
+  readonly bulkQuotes?: {
+    limits(local: RethTransportAttempt, size: number, concurrency: number): RethTransportAttempt;
+    failed(attempt: RethTransportAttempt, error: unknown): void;
+    healthy(attempt: RethTransportAttempt): void;
+  };
 }
 
 /** No message matching: a logical deadline/revert is not a socket timeout. */
@@ -100,6 +112,14 @@ function emptyLaneCounts(): Record<RethTransportLane, number> {
 export class RethTransportScheduler {
   private startupCompleted = false;
   private readonly load: RethTransportLoad;
+  private readonly bulkLoad: RethTransportLoad;
+  private bulkEpoch = 0;
+  private bulkFraction = 1;
+  private bulkHealthy = 0;
+
+  private bulkLimit(n: number): number {
+    return Math.max(1, Math.floor(n * this.bulkFraction + 1e-9));
+  }
   private activeTotal = 0;
   private readonly activeByLane = emptyLaneCounts();
   private readonly queues: Record<
@@ -167,8 +187,8 @@ export class RethTransportScheduler {
       limits: (batchSize: number, concurrency: number, items: readonly RethTransportRetryState[] = []) => {
         const batch = items[0]?.transportRetryBatch;
         const reduce = (n: number) => Math.max(1, Math.floor(n / 2 ** (batch?.level ?? 0)));
-        return Object.freeze({version: batch?.version ?? 0, batchSize: reduce(batchSize),
-          concurrency: this.capacity === 1 ? 1 : reduce(concurrency), ...(batch ? {batch} : {})});
+        return Object.freeze({version: batch?.version ?? 0, batchSize: Math.min(reduce(batchSize),batch?.maxSize ?? Infinity),
+          concurrency: this.capacity === 1 ? 1 : Math.min(reduce(concurrency),batch?.maxConcurrency ?? Infinity), ...(batch ? {batch} : {})});
       },
       retryDelayMs: (items: readonly RethTransportRetryState[] = []) => items[0]?.transportRetryBatch?.delayMs ?? 0,
       retry: (error: unknown, items: readonly RethTransportRetryState[], attempt: RethTransportAttempt) => {
@@ -181,10 +201,15 @@ export class RethTransportScheduler {
         // In-flight split siblings from one tier lower their own group once.
         if (attempt.version === batch.version) {
           batch.version++;
-          // With one request already in flight, lower the failed payload,
-          // not unrelated fresh envelopes: 64 -> 16 -> 4 -> 1 on HTTP/RPC 429.
+          // At concurrency one, this failed group's payload can reduce further
+          // than the independent policy for fresh envelopes: 64 -> 16 -> 4 -> 1.
           // Socket timeouts retain their existing halving ladder.
-          batch.level += attempt.concurrency === 1 && !isRethTransportTimeout(error) && isRpcThrottleError(error) ? 2 : 1;
+          const step = attempt.concurrency === 1 && !isRethTransportTimeout(error) && isRpcThrottleError(error) ? 2 : 1;
+          batch.level += step;
+          if (attempt.bulkEpoch !== undefined) {
+            batch.maxSize = Math.max(1, Math.floor(attempt.batchSize / 2 ** step));
+            batch.maxConcurrency = Math.max(1, Math.floor(attempt.concurrency / 2 ** step));
+          }
         }
         const atFloor = attempt.concurrency === 1 &&
           (attempt.batchSize === 1 || items.length === 1);
@@ -208,6 +233,32 @@ export class RethTransportScheduler {
         return !exhausted;
       },
     });
+    const bulkQuotes: NonNullable<RethTransportLoad["bulkQuotes"]> = {
+      limits: (local, size, concurrency) => ({...local,
+        batchSize: Math.min(local.batchSize, this.bulkLimit(size)),
+        concurrency: Math.min(local.concurrency, this.bulkLimit(concurrency)),
+        bulkEpoch: this.bulkEpoch, bulkRecovering: this.bulkFraction < 1}),
+      failed: (attempt, error) => {
+        if (attempt.bulkEpoch !== this.bulkEpoch || isRpcQuotaExhaustedError(error) ||
+            (!isRethTransportTimeout(error) && !isRpcThrottleError(error))) return;
+        this.bulkEpoch++;
+        // At the physical floor discard stale successes but don't build up a recovery debt.
+        if (attempt.batchSize > 1 || attempt.concurrency > 1 || this.bulkLimit(this.capacity) > 1)
+          this.bulkFraction /= 2;
+        this.bulkHealthy = 0;
+      },
+      healthy: attempt => {
+        if (this.bulkFraction >= 1 || attempt.bulkEpoch !== this.bulkEpoch) return;
+        // One clean wave buys at most one physical slot. Stale, partial and malformed
+        // envelopes never vote. At least two envelopes are needed even at the floor.
+        if (++this.bulkHealthy < Math.max(2, this.bulkLimit(this.capacity))) return;
+        this.bulkEpoch++;
+        this.bulkHealthy = 0;
+        this.bulkFraction = Math.min(1, this.bulkFraction + 1 / Math.max(8,this.capacity));
+        this.drain();
+      },
+    };
+    this.bulkLoad = Object.freeze({...this.load,bulkQuotes:Object.freeze(bulkQuotes)});
   }
 
   /** Call after startup-owned work drains, before dispatching the first steady head. */
@@ -242,7 +293,7 @@ export class RethTransportScheduler {
       }),
       activeTotal: this.activeTotal,
       activeByLane: Object.freeze({ ...this.activeByLane }),
-      load: this.load,
+      load: lane === "producer-bulk" ? this.bulkLoad : this.load,
     });
 
     try {
@@ -261,6 +312,8 @@ export class RethTransportScheduler {
     producerReserved: number;
     reductionVersion: number;
     reductionLevel: number;
+    bulkQuoteEpoch: number;
+    bulkQuoteCapacity: number;
   }> {
     return Object.freeze({
       activeTotal: this.activeTotal,
@@ -269,6 +322,8 @@ export class RethTransportScheduler {
       // Compatibility diagnostics: there is no run-wide reduction anymore.
       reductionVersion: 0,
       reductionLevel: 0,
+      bulkQuoteEpoch: this.bulkEpoch,
+      bulkQuoteCapacity: this.bulkLimit(this.capacity),
       activeByLane: Object.freeze({ ...this.activeByLane }),
       queuedByLane: Object.freeze({
         "producer-critical": this.queues["producer-critical"].length,
@@ -322,6 +377,7 @@ export class RethTransportScheduler {
 
   private canAdmit(lane: RethTransportLane): boolean {
     if (this.activeTotal >= this.capacity) return false;
+    if (lane === "producer-bulk" && this.activeByLane[lane] >= this.bulkLimit(this.capacity)) return false;
     // A one-permit diagnostic/live configuration still serves every lane.
     // drain() keeps producer priority, without reserving the sole idle slot
     // forever and deadlocking Exact or discovery.

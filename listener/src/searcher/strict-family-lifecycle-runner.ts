@@ -28,12 +28,15 @@ export async function runStrictFamilyLifecycle(input: {
   readonly source: CanonicalSource;
   readonly observations: readonly UnifiedObservation[];
   readonly runtime: CentralAdapterRuntime;
+  /** Restrict work to one already-matched catalog pattern. A caller cannot
+   * introduce a match, variant, or observation by naming a pattern. */
+  readonly matchedPatternId?: string;
 }): Promise<AdapterFamilyPublication> {
   const family = input.catalog.forFamily(input.familyId);
   const matches: FamilyLifecycleMatch[] = [];
   for (const observation of input.observations) {
     for (const match of input.catalog.matches(observation)) {
-      if (match.familyId !== input.familyId) continue;
+      if (match.familyId !== input.familyId || input.matchedPatternId!==undefined&&match.patternId!==input.matchedPatternId) continue;
       matches.push(Object.freeze({
         matchedPatternId: match.patternId,
         observation,

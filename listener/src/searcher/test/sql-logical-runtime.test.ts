@@ -4,6 +4,7 @@ import {Interface} from "ethers";
 import {GENERATED_PRODUCTION_FAMILY_ENTRIES as catalogEntries} from "../generated/production-family-entries.generated.js";
 import {PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog} from "../venues/production-family-composition.js";
 import {issueSqlFamilyAlternatives} from "../venues/selector-native-sql-live-materializer.js";
+import {sqlTrialVariantId} from "../sql-trial-variant.js";
 import {buildSqlEdgeLiveProducer} from "../sql-edge-live-producer.js";
 import {sqlDirectionId} from "../sql-edge-price-index.js";
 import {createStrictCentralAdapterRuntime} from "../strict-central-adapter-runtime.js";
@@ -24,7 +25,7 @@ test("a SQL route owns several source-local encodings, not several prices; unbou
   const read=async(target:string,data:string)=>{assert.equal(target,edge.poolAddress);const f=abi.parseTransaction({data})!.fragment;
     return abi.encodeFunctionResult(f,[values[f.name]]);};
   const definition=catalogEntries.map(e=>e.module.selectorFamilyModule.definition).find(d=>d.selector===edge.selector)!;
-  const alts=await issueSqlFamilyAlternatives({definition,catalog,edge,source,executor,transactionOrigin,read,readCode:async()=>"0x6000"});
+  const alts=await issueSqlFamilyAlternatives({definition,catalog,edge,source,executor,transactionOrigin,read,readCode:async()=>"0x6000",matchPriceTrial:true});
   assert.equal(alts.alternatives.length,2,alts.issues.join("; "));
   const funding=catalog.listAll().find(f=>f.plugin.manifest.domain==="funding")!.plugin.manifest;
   const publisher=buildSqlEdgeLiveProducer({edges:[edge,unresolved,sibling],source,currentHead:42,swapTableSha256:"a".repeat(64),
@@ -55,6 +56,12 @@ test("a SQL route owns several source-local encodings, not several prices; unbou
   const ids=session.executionVariantIds(leg);assert.equal(ids.length,2);
   assert.equal(session.buildRuntimeAmountLeg(args),null,"unproven ambiguous route must not pick a recipe");
   const compiled=ids.map(variantId=>session.buildRuntimeAmountLeg({...args,variantId})!.program);assert.notEqual(compiled[0],compiled[1]);
+  for(const a of alts.alternatives){
+    const variantId=sqlTrialVariantId(a.programKey,a.program);
+    assert.equal(session.buildRuntimeAmountLeg({...args,variantId})?.program,a.program);
+    assert.throws(()=>session.buildRuntimeAmountLeg({...args,variantId:sqlTrialVariantId(a.programKey,"0x6001")}),/no bound private/);
+    assert.throws(()=>session.buildRuntimeAmountLeg({...args,edge:missing,variantId}),/no bound private/);
+  }
   assert.deepEqual(session.executionVariantIds(missing),[]);assert.equal(session.buildRuntimeAmountLeg({...args,edge:missing}),null);
   assert.equal(session.currentPricingForEdge(missing)?.status,"unresolved");
   assert.throws(()=>session.buildRuntimeAmountLeg({...args,edge:missing,variantId:ids[0]}),/no bound private/);

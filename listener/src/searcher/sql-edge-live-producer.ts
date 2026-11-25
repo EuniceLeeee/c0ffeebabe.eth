@@ -13,6 +13,7 @@ import { productionPoolLogScopes } from "./venues/production-pool-log-scopes.js"
 import { settlementAssetRankingActors } from "./venues/settlement-asset-ranking-activity.js";
 import { PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog } from "./venues/production-family-composition.js";
 import { assertSqlLiveRouteBinding } from "./venues/selector-native-sql-live-binding.js";
+import { issuedSqlTrialVariant } from "./venues/selector-native-sql-live-materializer.js";
 import { GENERATED_PRODUCTION_FAMILY_ENTRIES } from "./generated/production-family-entries.generated.js";
 import { selectorExecutionResourceKey } from "./venues/selector-execution-keys.js";
 import type { CanonicalEdgeId } from "./venues/blockscan-state-capability.js";
@@ -27,13 +28,15 @@ assert.equal(sqlSelectorModules.size,GENERATED_PRODUCTION_FAMILY_ENTRIES.length,
 /** A registered conversion has one public identity before any recipe is considered.
  * Token graph settlement aliases (e.g. a native-currency boundary) are allowed
  * only where ALL issued recipes agree; the literal SQL id is never re-derived. */
-function sqlGraphDirection(sql:SqlPriceEdge, alternatives:readonly TokenEdge[]):TokenEdge {
+export type SqlTrialGraphMetadata=Pick<TokenEdge,"tokenIn"|"tokenOut"|"slotKind"|"protocolAction"|"stateResourceKey">;
+export type SqlTrialMarket={readonly graph:SqlTrialGraphMetadata;readonly variants:ReadonlyMap<string,"on-touch"|"each-block">};
+function sqlGraphDirection(sql:SqlPriceEdge, alternatives:readonly TokenEdge[],trial?:SqlTrialGraphMetadata):TokenEdge {
   const id=sql.candidateInstanceKey,m=sqlSelectorModules.get(sql.selector);
   assert(m && isEnabledSqlExecutionLeg(m),"SQL row is not an enabled execution leg");
   assert.equal(id,sqlDirectionId(sql),"SQL leg ID differs from pool, asset or direction");
   const {domain,ownedActionAdapterIds}=m.plugin.manifest;
   assert((domain==="swap"||domain==="protocol")&&ownedActionAdapterIds.length===1,"SQL direction lacks a unique conversion action owner");
-  const adapterId=ownedActionAdapterIds[0]!, exemplar=alternatives[0];
+  const adapterId=ownedActionAdapterIds[0]!, exemplar=alternatives[0]??trial;
   const tokenIn=exemplar?.tokenIn??sql.tokenIn,tokenOut=exemplar?.tokenOut??sql.tokenOut;
   const slotKind=exemplar?.slotKind??domain,protocolAction=exemplar?.protocolAction;
   const stateResourceKey=exemplar?.stateResourceKey??selectorExecutionResourceKey({chainId:sql.chainId,target:sql.poolAddress,
@@ -70,6 +73,7 @@ export function buildSqlEdgeLiveProducer(input: {
   readonly currentHead: number;
   readonly materialized: readonly SqlLiveMaterializedRoute[];
   readonly unavailable: readonly {readonly sqlEdgeKey:string; readonly reason:string}[];
+  readonly trialMarkets?:ReadonlyMap<string,SqlTrialMarket>;
 }) {
   const { source,edges,swapTableSha256,fundingAssets,fundingTableSha256,materialized,unavailable } = input;
   assert(Number.isSafeInteger(input.currentHead) && input.currentHead >= source.number, "SQL topology is ahead of the current source");
@@ -109,9 +113,13 @@ export function buildSqlEdgeLiveProducer(input: {
     assert(!owned.has(routeKey), "one live route cannot stand in for multiple SQL edges");
     owned.set(routeKey,{key:sqlEdgeKey,programKey});
   }
-  assert(seenKeys.size+unavailableKeys.size===edges.length,"SQL directions missing a binding or disposition");
+  const trials=input.trialMarkets??new Map<string,SqlTrialMarket>();
+  for(const [id,entry] of trials)assert(inputEdges.has(id)&&!seenKeys.has(id)&&!unavailableKeys.has(id)&&entry.variants.size>0,
+    "SQL trial price candidate is foreign, empty, duplicated or already admitted");
+  assert(seenKeys.size+unavailableKeys.size+trials.size===edges.length,"SQL directions missing a binding or disposition");
   const bySql = new Map<string, TokenEdge[]>();
   const byCanonical = new Map<string,string>();
+  const paidAliases = new Map<string,ReadonlyMap<string,string>>();
   for (const [instance, owned] of sqlByRoute) {
     const family = catalog.forFamily(instance.familyId);
     const projected = buildFamilyRouteGraphView({routes: instance.routes.map((route, index) => ({
@@ -128,6 +136,11 @@ export function buildSqlEdgeLiveProducer(input: {
       assert(!edge.leavesStandingPosition && edge.executionVerification === "startup-simulation", "SQL direction lacks funded execution policy");
       assert(catalog.ownerOfAction(edge.adapterId) === family.plugin.manifest.familyId, "SQL action ownership changed");
       const alternatives=bySql.get(key)??[]; alternatives.push(edge); bySql.set(key,alternatives); byCanonical.set(edge.canonicalEdgeId,key);
+      const alias=issuedSqlTrialVariant(instance,handle.routeKey,binding.programKey);
+      if(alias){
+        const aliases=new Map(paidAliases.get(key));assert(!aliases.has(alias),"ambiguous issued encoding for SQL price receipt");
+        aliases.set(alias,edge.canonicalEdgeId);paidAliases.set(key,aliases);
+      }
     }
   }
   assert.equal(byCanonical.size,materialized.length,"SQL projection lost issued routes");
@@ -143,7 +156,7 @@ export function buildSqlEdgeLiveProducer(input: {
       continue;
     }
     const recipes=Object.freeze((bySql.get(id)??[]).sort((a,b)=>a.canonicalEdgeId!<b.canonicalEdgeId!?-1:1));
-    logicalRoutes.set(id,recipes);graph.push(sqlGraphDirection(sql,recipes));
+    logicalRoutes.set(id,recipes);graph.push(sqlGraphDirection(sql,recipes,trials.get(id)?.graph));
   }
   assert(graph.length===edges.length-disabled-notConversion,"SQL graph does not conserve enabled directions");
   assert(graph.length>0,"SQL swap table has no enabled conversion direction");
@@ -153,16 +166,17 @@ export function buildSqlEdgeLiveProducer(input: {
     ...[...familyOwners].sort().map(familyId => ({familyId,sourceId:"swap:"+swapTableSha256})),
     ...[...new Set(fundingAssets.map(f => f.familyId))].sort().map(familyId => ({familyId,sourceId:"funding:"+fundingTableSha256})),
   ];
-  const fingerprint = hashCanonical(["sql-edge-live/v3", source.number, source.hash, graphHash, catalog.catalogHash,
+  const fingerprint = hashCanonical([trials.size?"sql-edge-live/direct-trial-v1":"sql-edge-live/v3", source.number, source.hash, graphHash, catalog.catalogHash,
     swapTableSha256,fundingTableSha256,[...fundingBindings].sort(),
     [...byCanonical].sort(([a],[b]) => a.localeCompare(b))]);
   const runtimeRoot = new StrictProductionRuntimeRoot({catalog,poolLogScopes:productionPoolLogScopes(),historicalAssetLogActors:settlementAssetRankingActors,
-    readySource:source,readyGraph:graph,readyInstances:[...instances.values()],readyFundingAssets:fundingAssets,logicalRoutes});
+    readySource:source,readyGraph:graph,readyInstances:[...instances.values()],readyFundingAssets:fundingAssets,logicalRoutes,paidAliases,
+    ...(trials.size?{sqlTrialMarkets:new Map([...trials].map(([id,m])=>[id,m.variants]))}:{})});
   const graphViewCoordinator = new StrictReadyGraphViewCoordinator({catalog,publicationKind:"sql-edges",
     ready:{generation:source.generation,graphHash,catalogHash:catalog.catalogHash,sourceCoverage},edges:graph});
   return { runtimeRoot, graph, graphViewCoordinator, fingerprint,
-    inputSummary:{rows:edges.length,enabledDirections:graph.length,boundDirections:seenKeys.size,issuedLegs:graph.length,
-      privateRecipes:materialized.length,disabled,notConversion,unboundDirections:graph.length-seenKeys.size,reasons:Object.fromEntries(causes)},
+    inputSummary:{rows:edges.length,enabledDirections:graph.length,boundDirections:seenKeys.size,issuedLegs:seenKeys.size,
+      privateRecipes:materialized.length,trialDirections:trials.size,disabled,notConversion,unboundDirections:graph.length-seenKeys.size,reasons:Object.fromEntries(causes)},
     topologyKey:`sql-edges:${source.generation}:${graphHash}`,
     flashTokens:Object.freeze([...new Set(fundingAssets.map(f=>getAddress(f.asset).toLowerCase()))].sort()),
     selectorMode:true,instanceCount:graph.length,

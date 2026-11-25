@@ -205,6 +205,14 @@ export function effectiveRowAmountReference(row: EffectiveMidRow): EffectiveAmou
   return rowAmountReferences.get(row);
 }
 
+/** Is this exact published row backed by its producer's verified SIM? A fresh
+ * startup cannot use a deserialized proof in place of a local simulation. */
+export function effectiveOwnsLocalExecutionReceipt(snapshot:EffectiveMidSnapshot,row:EffectiveMidRow):boolean {
+  const proof=row.executionVerification;
+  return !!proof&&snapshot.rows.get(row.edgeId)===row&&amountReferenceState.get(snapshot)?.verifiedExecutions.has(proof.receiptHash)===true&&
+    issuedRankingReceipts.has(proof);
+}
+
 const executionReceiptFields = (row: EffectiveMidRow) => [row.edgeId, row.instanceKey,
   row.tokenIn, row.tokenOut, row.amountIn, row.amountSpent, row.amountOut,
   row.quotedAt && [row.quotedAt.number, row.quotedAt.hash.toLowerCase(), row.quotedAt.generation]];
@@ -656,6 +664,9 @@ export async function buildEffectiveMids(input: {
     readonly isCleanOnTouchReceipt:(edge:TokenEdge,stateKey:string,variantId:string)=>boolean;
   };
   readonly poolPriceRefreshPlan?: {readonly shouldRefresh:(edge:TokenEdge,priorVerifiedVariantId?:string)=>boolean};
+  /** Quote these exact public directions using the ordinary funded execution
+   * path even when otherwise reusable. Does not touch their pool or siblings. */
+  readonly requireFreshEdgeIds?:ReadonlySet<string>;
   /** A complete, forward-only activity union, before the coordinator adds static each-block
    * policies. For logical routes only, a verified funded receipt may identify an on-touch
    * private encoding despite another encoding adding the same public key every block. */
@@ -922,7 +933,7 @@ export async function buildEffectiveMids(input: {
           previousState!.verifiedExecutions.has(proof.receiptHash)&&rowAmountReferences.has(prior);
         if(verified)requestedOrigins!.set(edgeId,prior);
         const existing=old?.edge===edge?old:undefined;
-        if(poolPlan.shouldRefresh(edge,verified?proof!.variantId:existing?.hint.variantId))poolDirty.add(index);
+        if(input.requireFreshEdgeIds?.has(edgeId)||poolPlan.shouldRefresh(edge,verified?proof!.variantId:existing?.hint.variantId))poolDirty.add(index);
         else {
           poolClean.add(index);
           if(existing)rankingCandidates.set(index,existing);
@@ -935,6 +946,7 @@ export async function buildEffectiveMids(input: {
         }
         continue;
       }
+      if (input.requireFreshEdgeIds?.has(edgeId)) continue; // normal forward funding; never reuse a price/ranking hint
       if (prior && (prior.status === "quoted" || (previous!.complete && prior.status !== "cancelled")) && prior.edgeId === edgeId &&
           prior.instanceKey === edgeInstanceKey(edge) &&
           prior.tokenIn === edge.tokenIn.toLowerCase() && prior.tokenOut === edge.tokenOut.toLowerCase() &&
@@ -1005,7 +1017,7 @@ export async function buildEffectiveMids(input: {
     const demanded=new Set<string>();
     for(const [i,w] of work.entries()){
       const t=w.edge.tokenIn.toLowerCase();
-      if(t!==weth&&enabled(i)&&!reusable.has(i)&&!rankingCandidates.has(i)&&input.touchedStateKeys!.has(stateKeyFor(w.edgeId,w.edge)))
+      if(t!==weth&&enabled(i)&&!reusable.has(i)&&!rankingCandidates.has(i)&&(input.requireFreshEdgeIds?.has(w.edgeId)||input.touchedStateKeys!.has(stateKeyFor(w.edgeId,w.edge))))
         demanded.add(t);
     }
     if(demanded.size){

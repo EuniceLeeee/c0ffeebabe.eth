@@ -248,7 +248,8 @@ class LogicalRouteIndex {
   // An execution *hint*, not a receipt. Only reconstructed current-source
   // handles may use it; the next independent funded simulation is mandatory.
   readonly preferred = new Map<string, string>();
-  constructor(graph:readonly TokenEdge[], alternatives:ReadonlyMap<string,readonly TokenEdge[]>) {
+  readonly paidAliases=new Map<string,ReadonlyMap<string,string>>();
+  constructor(graph:readonly TokenEdge[], alternatives:ReadonlyMap<string,readonly TokenEdge[]>,aliases?:ReadonlyMap<string,ReadonlyMap<string,string>>) {
     if(graph.length!==alternatives.size)throw Error("incomplete logical route ownership");
     for(const e of graph){
       const id=requiredCanonicalEdgeId(e), candidates=alternatives.get(id);
@@ -264,6 +265,11 @@ class LogicalRouteIndex {
         this.owner.set(pid,e);this.privateGraph.push(p);
       }
       this.recipes.set(id,Object.freeze(ordered));
+    }
+    for(const [id,items] of aliases??[]){
+      const edge=this.publicEdges.get(id);if(!edge)throw Error("foreign SQL payment recipe owner");
+      for(const [alias,pid] of items)if(this.owner.get(pid)!==edge||this.owner.has(alias))throw Error("SQL payment recipe escaped its issued direction");
+      this.paidAliases.set(id,new Map(items));
     }
   }
   checked(e:TokenEdge) {
@@ -345,6 +351,8 @@ export class StrictProductionRuntimeRoot {
   readonly #poolLegs: PoolLegRefreshIndex;
   readonly #sqlPricePools=new Map<string,string>();
   readonly #periodicPrivate = new Set<string>();
+  /** Ranking freshness only. No entry here may reach #bindings or #resolve. */
+  readonly #trialMarkets:ReadonlyMap<string,ReadonlyMap<string,"on-touch"|"each-block">>;
   readonly #poolLogScopes?: PoolLogScopes;
   readonly #mutationIndexesByDependency: ReadonlyMap<string, readonly CompiledMutationIndex[]>;
   readonly #passiveStateKeysByDependency: ReadonlyMap<string, ReadonlySet<string>>;
@@ -358,6 +366,8 @@ export class StrictProductionRuntimeRoot {
     readonly readySource: CanonicalSource;
     readonly readyGraph: readonly TokenEdge[];
     readonly logicalRoutes?: ReadonlyMap<string,readonly TokenEdge[]>;
+    readonly sqlTrialMarkets?: ReadonlyMap<string,ReadonlyMap<string,"on-touch"|"each-block">>;
+    readonly paidAliases?: ReadonlyMap<string,ReadonlyMap<string,string>>;
     readonly poolLogScopes?: PoolLogScopes;
     readonly historicalAssetLogActors?:NonNullable<BlockTouchedStateKeyResolver["rankAssetActors"]>;
     readonly readyInstances: readonly PreparedFamilyInstance[];
@@ -366,8 +376,12 @@ export class StrictProductionRuntimeRoot {
     assertCanonicalSource(input.readySource);
     const readyEdgeBindings = new Map<CanonicalEdgeId, string>();
     this.#assetRankActors=input.historicalAssetLogActors;
-    const logical=this.#logical=input.logicalRoutes?new LogicalRouteIndex(input.readyGraph,input.logicalRoutes):undefined;
+    const logical=this.#logical=input.logicalRoutes?new LogicalRouteIndex(input.readyGraph,input.logicalRoutes,input.paidAliases):undefined;
     const physicalGraph=logical?.privateGraph??input.readyGraph;
+    this.#trialMarkets=input.sqlTrialMarkets??new Map();
+    for(const [id,variants] of this.#trialMarkets)
+      if(!logical?.publicEdges.has(id)||logical.recipes.get(id)?.length||!variants.size)
+        throw Error("SQL trial market must be a public price-only direction");
     for (const edge of physicalGraph) {
       const edgeId = requiredCanonicalEdgeId(edge);
       if (readyEdgeBindings.has(edgeId)) {
@@ -519,7 +533,10 @@ export class StrictProductionRuntimeRoot {
       instanceIndexesByStateKey,
       perBlockRefreshStateKeys: Object.freeze([...perBlockRefreshStateKeys]),
     });
-    this.#publishedIndex=logical?.pricing(this.#pricingIndex,input.catalog)??this.#pricingIndex;
+    const published=logical?.pricing(this.#pricingIndex,input.catalog)??this.#pricingIndex;
+    const trialForced=[...this.#trialMarkets].filter(([,v])=>[...v.values()].some(p=>p==="each-block")).map(([id])=>id);
+    this.#publishedIndex=trialForced.length?Object.freeze({...published,
+      perBlockRefreshStateKeys:Object.freeze([...new Set([...published.perBlockRefreshStateKeys,...trialForced])].sort())}):published;
     if(logical){
       for(const [id,e] of logical.publicEdges){
         if(!e.stateResourceKey||this.#publishedIndex.stateKeyByEdgeKey.get(id)!==id)
@@ -1019,7 +1036,7 @@ export class StrictProductionRuntimeRoot {
   /** Membership in the startup SQL table, not proof a variant executed. */
   ownsSqlMarketVariant(edge:TokenEdge,variant:string):boolean {
     const id=edge.canonicalEdgeId, logical=this.#logical, owner=id&&logical?.publicEdges.get(id);
-    return !!owner && logical!.owner.get(variant)===owner && (owner===edge ||
+    return !!owner && (logical!.owner.get(variant)===owner||this.#trialMarkets.get(id!)?.has(variant)===true) && (owner===edge ||
       (edgeBindingFingerprint(owner)===edgeBindingFingerprint(edge) &&
        blockScanEdgeMetadataFingerprint(owner)===blockScanEdgeMetadataFingerprint(edge)));
   }
@@ -1034,6 +1051,11 @@ export class StrictProductionRuntimeRoot {
       if(!id||!owned||!key||(owned!==edge&&(edgeBindingFingerprint(owned)!==edgeBindingFingerprint(edge)||
         blockScanEdgeMetadataFingerprint(owned)!==blockScanEdgeMetadataFingerprint(edge))))return "unverified";
       if(scope.touchedPoolKey(key))return "pool";
+      const trial=this.#trialMarkets.get(id);
+      if(trial){
+        if(verifiedVariant===undefined)return [...trial.values()].every(p=>p==="each-block")?"per-block":undefined;
+        const policy=trial.get(verifiedVariant);return !policy?"unverified":policy==="each-block"?"per-block":undefined;
+      }
       const recipes=logical.recipes.get(id)!;
       if(verifiedVariant!==undefined&&logical.owner.get(verifiedVariant)!==owned)return "unverified";
       // A dormant every-block alternative isn't a request to refresh the
@@ -1852,8 +1874,8 @@ export class StrictProductionRuntimeSession {
   }
   confirmExecutionVariant(edge:TokenEdge,variantId:string):void {
     this.#runtime.generationFence.assertCurrent(this.source.generation,this.source);
-    this.#resolve(edge,variantId);
-    this.#logical?.preferred.set(requiredCanonicalEdgeId(edge),variantId);
+    const binding=this.#resolve(edge,variantId);
+    this.#logical?.preferred.set(requiredCanonicalEdgeId(edge),binding.edge.canonicalEdgeId);
   }
   #selected(edge:TokenEdge):string|undefined {
     if(!this.#logical)return requiredCanonicalEdgeId(edge);
@@ -1864,7 +1886,7 @@ export class StrictProductionRuntimeSession {
     const edgeId = requiredCanonicalEdgeId(edge);
     if(this.#logical){
       this.#logical.checked(edge);
-      const selected=variantId??this.#selected(edge);
+      const selected=variantId===undefined?this.#selected(edge):this.#logical.paidAliases.get(edgeId)?.get(variantId)??variantId;
       if(!selected||this.#logical.owner.get(selected)!==this.#logical.publicEdges.get(edgeId))throw Error("no bound private encoding for logical edge");
       const b=this.#bindings.get(selected as CanonicalEdgeId);
       if(!b)throw Error("current session has no issued encoding for logical edge");

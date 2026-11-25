@@ -12,12 +12,32 @@ import {sqlDirectionId} from '../listener/src/searcher/sql-edge-price-index.ts';
 import {loadLiveSqlTables} from '../listener/src/searcher/sql-live-tables.ts';
 import {selectorFundingInstanceKey} from '../listener/src/searcher/venues/selector-native-funding-definition.ts';
 import {selectorAssetOfferKey} from '../listener/src/searcher/venues/selector-execution-keys.ts';
+import {enabledConversionDefinitions} from './selector-live-conversions.mjs';
+import {compileSqlExecutionParamPlan} from './selector-execution-param-plan.mjs';
 
 const H=b=>createHash('sha256').update(b).digest('hex'),a=c=>'0x'+c.repeat(40),w=c=>'0x'+c.repeat(64);
 const sel='0x128acb08',pool=a('1'),t0=a('0'),t1=a('b'),weth='0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
 const row=(s={})=>({selector:sel,poolAddress:pool,callTarget:pool,poolId:null,tokenIn:t0,tokenOut:t1,verified:false,observedTargetSelector:true,observations:'1',
   evidenceTypes:['subtree-net-flow'],example:{txHash:w('c'),callPath:'1,0',selectorTarget:pool,evidence:'subtree-net-flow'},...s});
 const defs=(programs=[])=>new Map([[sel,{programs}],['0x022c0d9f',{programs:[]}]]);
+test('uniform execution evidence keeps the original direction ID and cannot overwrite JSON policy or runtime amounts',()=>{
+ const d=enabledConversionDefinitions().find(x=>x.selector===sel),registry=new Map([[sel,d]]);
+ const plan=compileSqlExecutionParamPlan(d);
+ const observed=plan.recipes.map(recipe=>{
+   const field=recipe.requirements.find(q=>q.sources.some(s=>s.kind==='direction-asset'));assert(field);
+   return {index:recipe.index,observed:[{key:field.key,kind:'direction-asset',value:t1}],missing:[]};
+ });
+ const p={definitionSha256:H(JSON.stringify(d)),recipes:observed};
+ const project=(payload,consensus='uniform')=>projectIndependentRows([row({paramConsensus:consensus,executionParams:JSON.stringify(payload)})],[],registry);
+ const plain=projectIndependentRows([row()],[],registry).accepted[0],mapped=project(p).accepted[0];
+ assert.equal(plain.candidateInstanceKey,mapped.candidateInstanceKey);assert.deepEqual(mapped.executionParamEvidence.recipes,p.recipes);
+ assert.throws(()=>project(p,'nonuniform'),/winning value/);
+ assert.throws(()=>project({...p,definitionSha256:'f'.repeat(64)}),/execution JSON/);
+ for(const k of ['amountIn','maxBorrow']){
+   const forged=structuredClone(p);forged.recipes[0].observed=[{key:k,kind:'argument',value:'100'}];
+   assert.throws(()=>project(forged),/trace cannot replace/);
+ }
+});
 function old(r,extra={}){const c={chainId:1,selector:r.selector,poolAddress:r.poolAddress,poolId:r.poolId,poolNamespace:null,tokenIn:r.tokenIn,
   tokenInId:null,tokenOut:r.tokenOut,tokenOutId:null,...extra};return {candidateInstanceKey:sqlDirectionId(c),...c};}
 const logical=[{binding:{stateBinding:{poolNamespace:'opaque'},nomination:{poolNamespace:'opaque'}}}];

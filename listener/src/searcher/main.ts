@@ -1,4 +1,6 @@
 import { initializeSqlLiveProducer } from "./sql-live-intake.js";
+import { startupPriceSessions, type SqlStartupPriceTrials } from "./sql-startup-price-sessions.js";
+import {assertSqlSelectorSamplePrices} from "./sql-selector-startup-check.js";
 import { NodeStrictClient } from "./simulator/node-strict-client.js";
 import { createNodeFundingCache } from "./simulator/node-input-funding.js";
 import { readFileSync } from "node:fs";
@@ -915,6 +917,10 @@ export function createBlockScanPriceRuntime(input: {
   executor: string;
   transactionOrigin: string;
   strictRuntimeRoot: StrictProductionRuntimeRoot;
+  sqlStartupTrials?:SqlStartupPriceTrials;
+  checkStartupPrices?:(effective:EffectiveMidSnapshot,edges:readonly TokenEdge[])=>void;
+  requireFreshStartupDirections?:()=>ReadonlySet<string>|undefined;
+  selectedAuthority?:(req:{source:CanonicalSource;requiredEdgeIds:ReadonlySet<string>;control?:AdapterWorkControl})=>Promise<StrictProductionRuntimeRoot|undefined>;
   blockScanRuntimeAbort: AbortController;
   blockScanRethTransportScheduler?: RethTransportScheduler;
   blockScanCfg: BlockScanCoreConfig | undefined;
@@ -1046,7 +1052,12 @@ export function createBlockScanPriceRuntime(input: {
         : { transportScheduler: blockScanRethTransportScheduler }),
     });
     const createStartedAtMs = Date.now();
-    const created = strictRuntimeRoot.createSession({
+    // Only a scoped execution request may ask the issuer to bind SQL
+    // candidates. Raw pricing/funding and table membership carry no authority.
+    const selectRoot=(request.purpose==="exact-execution"||request.purpose==="source-n-runtime")&&request.requiredEdgeIds?.size&&input.selectedAuthority
+      ? input.selectedAuthority({source,requiredEdgeIds:request.requiredEdgeIds,control:request.control})
+      : undefined;
+    const created = Promise.resolve(selectRoot).then(root=>(root??strictRuntimeRoot).createSession({
       source,
       runtime,
       fundingAssets,
@@ -1058,7 +1069,7 @@ export function createBlockScanPriceRuntime(input: {
       ...(request.requiredEdgeIds === undefined
         ? {}
         : { requiredEdgeIds: request.requiredEdgeIds }),
-    }).then((session) => {
+    })).then((session) => {
       console.log(
         `[searcher/strict-session-timing] ${JSON.stringify({
           purpose: request.purpose,
@@ -1142,10 +1153,11 @@ export function createBlockScanPriceRuntime(input: {
           transportScheduler: blockScanRethTransportScheduler },
       ) : undefined;
       try {
-        const sessions = createEffectiveQuoteSessions(requiredEdgeIds =>
+        const strictQuotes = createEffectiveQuoteSessions(requiredEdgeIds =>
           strictSessionFor({ purpose: "exact-execution", source, simulationTransport,
             control: effectiveControl, fundingAssets: [], requiredEdgeIds,
             exactCallBackend: pricingBackend ?? ownedBackend! }));
+        const sessions = startupPriceSessions({strict:strictQuotes,trials:input.sqlStartupTrials,source,executor:input.executor});
         const maxInputPathHops = resolveEffectiveInputPathHops();
         console.log(`[searcher/effective-mid-start] sourceBlock=${source.number} samplingSource=effective-forward maxInputPathHops=${maxInputPathHops} cascadeAmountChanges=${cascadeAmountChanges}`);
         // Count attempts in this build (including same-source rebuilds); these are
@@ -1156,6 +1168,7 @@ export function createBlockScanPriceRuntime(input: {
           fixedWethInput: input.fixedEffectiveWethInput,
           cascadeAmountChanges,
           previous, touchedStateKeys, disabledEdgeIds: disabledEdgeIds(),
+          requireFreshEdgeIds:previous&&previous===reuse?.previous?input.requireFreshStartupDirections?.():undefined,
           ...(() => {
             const observed = reuse?.actualTouchedBeforeForcedRefresh;
             if (!observed || !previous || previous !== reuse.previous || touchedStateKeys !== reuse.touchedStateKeys) return {};
@@ -1182,7 +1195,6 @@ export function createBlockScanPriceRuntime(input: {
               quoteAttempts++;
               const id=request.edge.canonicalEdgeId;if(id)attemptedLegs.add(id);else unkeyedAttempts++;
             }catch{attemptsComplete=false;}
-            const session = sessions.sessionFor(request.edge);
             const startedAtMs = Date.now();
             let status = "failed";
             try {
@@ -1199,7 +1211,7 @@ export function createBlockScanPriceRuntime(input: {
               if (request.edge.executionVerification === "startup-simulation") {
                 throw Object.assign(new Error("effective execution simulation unavailable"), { code: "CHAIN_AMOUNT_QUOTE_UNAVAILABLE" });
               }
-              const quote = await session.issueExact({ ...request,
+              const quote = await strictQuotes.sessionFor(request.edge).issueExact({ ...request,
                 executor: config.botvmAddress, runtimeEvidence: [] });
               if (!("amountIn" in quote)) throw new Error("effective quote lacks an input amount");
               status = "returned";
@@ -1231,6 +1243,7 @@ export function createBlockScanPriceRuntime(input: {
           effective = await build(effective, new Set());
           effectiveBuildWallMs += effective.wallMs;
         }
+        if(effective.complete)input.checkStartupPrices?.(effective,quoteEdges);
         reportOptionalEffectiveCounts(()=>({
           sourceBlock: source.number, sourceBlockHash: source.hash, generation: source.generation,
           samplingSource: "effective-forward", maxInputPathHops: effective.maxInputPathHops, reference: effective.reference,
@@ -1976,14 +1989,38 @@ async function main(): Promise<void> {
     simulateStandalone: createStartupNodeSimulation({ rpcUrl: config.rpcUrl, chainId: blockScanChainId,
       ...executionIdentity, executorRuntimeCode: finalSimulationExecutorRuntimeCode,
       rawExecutionEntry, scheduler: blockScanRethTransportScheduler }) }) : undefined;
+  let samplePricesPublished=false,lastSampleReportSource="",restoredContinuation=false;
+  const sampleIds=new Set(sqlProducer.sqlSelectorSamples.map(s=>s.edgeId));
+  const sampleChecked=new WeakSet<EffectiveMidSnapshot>();
+  const checkFirstPrices=(effective:EffectiveMidSnapshot,edges:readonly TokenEdge[])=>{
+    if(samplePricesPublished||sampleChecked.has(effective))return;
+    const {number,hash,generation}=effective.source,sourceKey=number+":"+hash+":"+generation;
+    try{assertSqlSelectorSamplePrices(sqlProducer.sqlSelectorSamples,effective,edges,record=>{
+      // The same table may be checked before and after derived columns are attached.
+      if(record.status==="stopped"||lastSampleReportSource!==sourceKey)console.log("[searcher/sql-selector-simulation] "+JSON.stringify(record));
+    });sampleChecked.add(effective);lastSampleReportSource=sourceKey;}
+    catch(e){const error=e instanceof Error?e:new Error("SQL selector sample price check failed");requestRuntimeStop.fail(error);throw error;}
+  };
   const priceRuntime = createBlockScanPriceRuntime({
     provider, rpcUrl: config.rpcUrl, ...executionIdentity, strictRuntimeRoot,
+    sqlStartupTrials:sqlProducer.trials,selectedAuthority:req=>{
+      if(!samplePricesPublished)throw Error("SQL execution blocked until the selector sample price table is published");
+      return sqlProducer.selectedAuthority(req);
+    },
+    checkStartupPrices:checkFirstPrices,
+    requireFreshStartupDirections:()=>restoredContinuation&&!samplePricesPublished?sampleIds:undefined,
     fixedEffectiveWethInput: blockScanStageSettings.fixedEffectiveWethInput,
     blockScanRuntimeAbort, blockScanRethTransportScheduler, blockScanCfg,
     recordPricing: publication => {
       // Price history belongs to the baseline + native-delta journal, not a
       // second worker which clones and diffs the complete effective table.
-      if (publication.snapshot.effectiveMids?.complete) continuationWriter?.capture();
+      if (publication.snapshot.effectiveMids?.complete) {
+        if(!samplePricesPublished){
+          checkFirstPrices(publication.snapshot.effectiveMids,publication.snapshot.graph.edges);
+          samplePricesPublished=true;
+        }
+        continuationWriter?.capture();
+      }
     },
     isPoolSimRejected: edge => blockScanSimRejects.hasPool(edge),
     startupExecutionPreflight,
@@ -2273,7 +2310,6 @@ async function main(): Promise<void> {
     process.env.SEARCHER_BLOCKSCAN_LIVE_CONTINUATION_COMPATIBILITY_SHA256!==undefined||!config.dryRun||config.blockScanSubmit))
     throw new Error("native SQL resume requires one exclusive pinned proof and non-submitting dry-run");
   if (continuePrices && !continuationDirectory) throw new Error("live continuation directory is required");
-  let restoredContinuation = false;
   if (continuationDirectory) {
     if (!enableBlockScan || blindProductionAudit || blockScanNMinusOneFallback || !blockScanCfg || !startupExecutionPreflight) {
       throw new Error("live continuation supports ordinary source-N blockscan only");
@@ -2476,10 +2512,11 @@ async function main(): Promise<void> {
           ...control, maxBatchSize: 64, maxConcurrentBatches: 8, transportLane: "producer-bulk",
           retryRpcThrottle: true, allowSingleCallFallback: false, transportScheduler: blockScanRethTransportScheduler,
         });
-        const sessions = createEffectiveQuoteSessions(requiredEdgeIds => strictSessionFor({
+        const strictQuotes = createEffectiveQuoteSessions(requiredEdgeIds => strictSessionFor({
           purpose: "exact-execution", source: effective.source, control,
           fundingAssets: [], requiredEdgeIds, exactCallBackend: backend,
         }));
+        const sessions=startupPriceSessions({strict:strictQuotes,trials:sqlProducer.trials,source:effective.source,executor:executionIdentity.executor});
         console.log(`[searcher/live-continuation] ${JSON.stringify({
           phase: "revalidating-startup", sourceBlock: pricing.sourceBlock, trading: false,
         })}`);
@@ -3982,6 +4019,7 @@ async function processOpportunities(
     const strictSession = await ctx.strictSessionFor({
       purpose: "source-n-runtime",
       source: simulationSource,
+      requiredEdgeIds:new Set(plans.flatMap(plan=>plan.tokenPath.edges.map(blockScanEdgeKey))),
       simulationTransport: ctx.simulationWork.transportFor(simulationSource, ctx.sourceControl),
       control: { signal: ctx.sourceControl.signal, deadlineAtMs: oppDeadlineAtMs },
       fundingAssets: ctx.fundingAssets,

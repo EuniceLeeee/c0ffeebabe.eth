@@ -17,7 +17,14 @@ export interface SqlPriceEdge {
   readonly tokenInId: string | null;
   readonly tokenOut: string;
   readonly tokenOutId: string | null;
+  /** Optional historical inputs from the pinned SQL artifact. Not a price,
+   * signed program or permission to supersede Family-configured values. */
+  readonly executionParamEvidence?: SqlExecutionParamEvidence;
 }
+type ParamRecipe=Readonly<{index:number;observed:readonly Readonly<{key:string;kind:'argument'|'pool-id-tuple'|'direction-asset';value:string|boolean}>[];missing:readonly string[]}>;
+type SqlExecutionParamEvidence=Readonly<{consensus:'nonuniform'|'not-declared'}>|Readonly<{
+  consensus:'uniform';definitionSha256:string;recipes:readonly ParamRecipe[];txHash:string;callPath:string;innerSwapPath:string|null
+}>;
 export interface SqlPriceLogicalTouch {
   readonly poolAddress: string;
   readonly poolId: string;
@@ -38,6 +45,26 @@ function record(x: unknown): Record<string, unknown> {
   if (typeof x !== "object" || x === null || Array.isArray(x)) throw Error("invalid SQL input record");
   return x as Record<string, unknown>;
 }
+function paramEvidence(x:unknown):SqlExecutionParamEvidence {
+  const e=record(x);
+  if(e.consensus==='nonuniform'||e.consensus==='not-declared'){
+    if(Object.keys(e).length!==1)throw Error('ambiguous SQL execution evidence');
+    return Object.freeze({consensus:e.consensus});
+  }
+  const path=(s:unknown):s is string=>typeof s==='string'&&s.length<=4096&&/^(?:|(?:0|[1-9]\d*)(?:,(?:0|[1-9]\d*))*)$/.test(s);
+  if(e.consensus!=='uniform'||!isHash(e.definitionSha256)||!Array.isArray(e.recipes)||e.recipes.length>256||
+    typeof e.txHash!=='string'||!/^0x[0-9a-f]{64}$/.test(e.txHash)||!path(e.callPath)||!(e.innerSwapPath===null||path(e.innerSwapPath)))throw Error('invalid SQL execution evidence');
+  const recipes=e.recipes.map((r:unknown,index:number)=>{
+    const row=record(r);if(row.index!==index||!Array.isArray(row.observed)||!Array.isArray(row.missing)||
+      row.observed.length+row.missing.length>1024)throw Error('invalid SQL recipe parameters');
+    const ks=new Set<string>(),key=(k:unknown)=>{if(typeof k!=='string'||!k||k.length>1024||ks.has(k))throw Error('invalid SQL parameter key');ks.add(k);return k;};
+    const observed=row.observed.map((raw:unknown)=>{const v=record(raw);if(!(v.kind==='argument'||v.kind==='pool-id-tuple'||v.kind==='direction-asset')||
+      (typeof v.value!=='boolean'&&!(typeof v.value==='string'&&v.value.length<=1024)))throw Error('invalid observed execution parameter');
+      return Object.freeze({key:key(v.key),kind:v.kind,value:v.value});});
+    return Object.freeze({index,observed:Object.freeze(observed),missing:Object.freeze(row.missing.map(key))});
+  });
+  return Object.freeze({consensus:'uniform',definitionSha256:e.definitionSha256,recipes:Object.freeze(recipes),txHash:e.txHash,callPath:e.callPath,innerSwapPath:e.innerSwapPath});
+}
 
 /** BigQuery TO_JSON_STRING of this ordered, nullable tuple is the sole public leg id. */
 export function sqlDirectionId(edge: Omit<SqlPriceEdge,"candidateInstanceKey">):string {
@@ -54,7 +81,8 @@ function parseEdge(x: unknown): SqlPriceEdge {
   // Match BigQuery TO_JSON_STRING([CAST(chainId AS STRING), ...]); never
   // reconstruct an adapter/Ready key from these coordinates.
   if (candidateInstanceKey !== sqlDirectionId({chainId,selector,poolAddress,poolNamespace,poolId,tokenIn,tokenInId,tokenOut,tokenOutId})) throw Error("SQL candidate instance key mismatch");
-  return {candidateInstanceKey: candidateInstanceKey as string, chainId, selector, poolAddress, poolNamespace, poolId, tokenIn, tokenInId, tokenOut, tokenOutId};
+  const extra=Object.hasOwn(record(x),'executionParamEvidence')?{executionParamEvidence:paramEvidence(record(x).executionParamEvidence)}:{};
+  return {candidateInstanceKey: candidateInstanceKey as string, chainId, selector, poolAddress, poolNamespace, poolId, tokenIn, tokenInId, tokenOut, tokenOutId,...extra};
 }
 
 /** Offline artifact integrity only. No Ready/admission, Family lookup or RPC. */

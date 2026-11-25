@@ -7,8 +7,9 @@ import {GENERATED_PRODUCTION_FAMILY_ENTRIES as entries} from '../listener/src/se
 
 // The same Family ABI decoder is bundled into BigQuery and called at intake.
 // SQL owns the successful committed frame; it never exports an amount as a loan limit.
-export async function renderSqlFundingSources(table,dir=resolve('listener')){
+export async function renderSqlFundingSources(table,dir=resolve('listener'),{traceRead}={}){
   assert(/^[a-z][a-z0-9-]+\.[\w]+\.[\w]+$/.test(table));
+  if(traceRead!==undefined)assert(typeof traceRead==='string'&&traceRead.startsWith('SELECT tx_hash,')&&!traceRead.includes(';'));
   const defs=entries.map(e=>e.module.selectorFamilyModule)
     .filter(m=>m.activation.enabled&&m.definition.domain==='funding').map(m=>m.definition);
   assert(defs.length&&new Set(defs.map(d=>d.selector)).size===defs.length);
@@ -55,7 +56,7 @@ WITH rules AS (SELECT * FROM UNNEST([${rules.map(r=>"STRUCT('"+r.selector+"' AS 
 txs AS (
  SELECT block_number,block_hash,tx_hash,transaction_index,traces,
    ARRAY(SELECT p.trace_address FROM UNNEST(traces) p WHERE p.status IS DISTINCT FROM 1) failed
- FROM \`${table}\` WHERE receipt_status=1
+ FROM ${traceRead===undefined?'\x60'+table+'\x60':'('+traceRead+')'} WHERE receipt_status=1
 ), calls AS (
  SELECT t.block_number,t.block_hash,t.tx_hash,t.transaction_index,f.trace_address,f.from_address,f.to_address,f.input,SUBSTR(f.input,1,10) sig
  FROM txs t CROSS JOIN UNNEST(t.traces) f

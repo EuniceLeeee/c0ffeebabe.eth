@@ -1,4 +1,5 @@
-// Official swap discovery and independently sourced funding.
+// Official swap discovery and independently sourced funding. Historical exports below
+// remain importable; none of the legacy swap queries are used by this CLI.
 import assert from 'node:assert/strict';
 import {existsSync,mkdirSync,writeFileSync,readFileSync} from 'node:fs';
 import {join,resolve,basename} from 'node:path';
@@ -10,8 +11,8 @@ import {decodeRow} from './bigquery-table.mjs';
 import {openReadyDiscoveryJob} from './ready-bigquery-sql.mjs';
 import {renderSqlFundingSources} from './selector-funding-sql.mjs';
 import {assertPinnedFundingWindow,assertTraceFundingCoverage,splitSqlFundingRows} from './selector-live-funding-export.mjs';
-import {renderTraceCoverageSql} from './selector-trace-window-sql.mjs';
 import {renderSelectorTraceSourceSql} from './selector-trace-source-sql.mjs';
+import {HISTORY,fixedTraceRead,pinTraceWindow} from './selector-trace-store.mjs';
 
 const root=fileURLToPath(new URL('../',import.meta.url)),gib=2**30;
 export const ready21=Object.freeze({fromBlock:26377878,toBlock:26378389,transactions:'168648',
@@ -28,30 +29,37 @@ export function saveQueryStage(dir,name,value,resuming){
  writeFileSync(dest,bytes,{mode:0o600,flag:'wx'});
 }
 // Funding has no swap-edge inputs. Same query shapes and billing ceilings as the previous producer.
-export async function runIndependentWindowFunding(dir,window,resuming=false,providedApi){
+export async function runIndependentWindowFunding(dir,window,resuming=false,providedApi,{asOf,maxBytes=String(3*gib)}={}){
  const projectId=process.env.SELECTOR_BQ_PROJECT??'eth-token-480803';assert(/^[a-z][a-z0-9-]+$/.test(projectId));
  const ref={projectId},location='US',jobs={};
- const scope={kind:'selector-window-funding/v1',projectId,location,dirName:basename(dir)};
+ assert(/^\d+$/.test(maxBytes)&&BigInt(maxBytes)>0n&&BigInt(maxBytes)<=BigInt(Number.MAX_SAFE_INTEGER));
+ const scope={kind:'selector-window-funding/v2',projectId,location,dirName:basename(dir),maxBytes};
  const save=(f,x)=>saveQueryStage(dir,f,x,resuming);
  if(resuming)assert(existsSync(join(dir,'funding-scope.json')),'resume original independent funding directory only');
  save('funding-scope.json',scope);
  save('window.json',window);
  const api=providedApi??googleApi();
- async function stage(name,sql,limitGiB){
+ const pinfile=join(dir,'source-pin.json');
+ const oldPin=resuming&&existsSync(pinfile)?JSON.parse(readFileSync(pinfile,'utf8')):undefined;
+ if(oldPin&&asOf!==undefined)assert.equal(asOf,oldPin.snapshotAt,'funding resume snapshot differs');
+ const proved=await pinTraceWindow(window,{api,asOf:oldPin?.snapshotAt??asOf,cap:BigInt(maxBytes)});
+ if(oldPin){assert.equal(proved.snapshotAt,oldPin.snapshotAt);assert.deepEqual(proved.coverage,oldPin.coverage);}
+ const pin=oldPin??proved;save('source-pin.json',pin);
+ async function stage(name,sql){
    const sqlSha256=sha(sql),jobId='sel512_'+name+'_'+sha(basename(dir)+sqlSha256).slice(0,24);
-   const query={query:sql,useLegacySql:false,useQueryCache:true,maximumBytesBilled:String(limitGiB*gib)};
+   const capBytes=Number(maxBytes),query={query:sql,useLegacySql:false,useQueryCache:true,maximumBytesBilled:maxBytes};
    save(name+'.sql',sql);const jobsUrl='https://bigquery.googleapis.com/bigquery/v2/projects/'+projectId+'/jobs';
    const req=name+'-request.json',reqfile=join(dir,req);let estimate;
    if(resuming&&existsSync(reqfile)){
      const old=JSON.parse(readFileSync(reqfile,'utf8'));assert.equal(old.sqlSha256,sqlSha256);assert.equal(old.jobId,jobId);
-     assert.equal(old.capBytes,limitGiB*gib);estimate=old.estimate;
+     assert.equal(old.capBytes,capBytes);estimate=old.estimate;
    }else{
      const dry=await api(jobsUrl,{method:'POST',timeoutMs:150000,maxAttempts:1,headers:{'Content-Type':'application/json'},body:JSON.stringify({
        jobReference:{projectId,location},configuration:{dryRun:true,query}})});
      estimate=Number(dry.statistics?.query?.totalBytesProcessed);
    }
-   assert(Number.isSafeInteger(estimate)&&estimate>=0&&estimate<=limitGiB*gib,'estimate over cap: '+name+' '+estimate);
-   save(req,{jobId,sqlSha256,capBytes:limitGiB*gib,estimate});
+   assert(Number.isSafeInteger(estimate)&&estimate>=0&&estimate<=capBytes,'estimate over cap: '+name+' '+estimate);
+   save(req,{jobId,sqlSha256,capBytes,estimate});
    console.error(name+': '+jobId+' ('+estimate+' estimated bytes)');
    const read=await openReadyDiscoveryJob(api,ref,{jobId,location,query},[],{waitForCompletion:true});
    // Staging server-side tables only needs the completion signal. In
@@ -68,26 +76,25 @@ export async function runIndependentWindowFunding(dir,window,resuming=false,prov
      for(const r of p.rows??[])all.push(decodeRow(p.schema.fields,r));token=p.pageToken;}while(token);
    assert.equal(all.length,count);return all;
  }
- const fundingFrames=await stage('funding-frames',renderSelectorTraceSourceSql({window}),4);
- const fundingCoverage=await rows(await stage('funding-coverage',renderTraceCoverageSql(fundingFrames.table),1));
- assert.equal(fundingCoverage.length,1);assertTraceFundingCoverage(window,fundingCoverage[0],window.toBlock-window.fromBlock+1);
- const funds=await stage('funding',await renderSqlFundingSources(fundingFrames.table,join(root,'listener')),3);
+ assertTraceFundingCoverage(window,pin.coverage,window.toBlock-window.fromBlock+1);
+ const funds=await stage('funding',await renderSqlFundingSources(HISTORY,join(root,'listener'),{traceRead:fixedTraceRead(window,pin.snapshotAt)}));
  const {rows:fundingRows,failures}=splitSqlFundingRows((await rows(funds)).map(x=>JSON.parse(x.body)),window);
  const funding={format:'sql-live-funding/v1',chainId:1,window,rows:fundingRows,failures,
-   sourceJob:jobs['funding-frames'].jobId,coverageJob:jobs['funding-coverage'].jobId,
-   sourceCoverage:fundingCoverage[0],queryJob:jobs.funding.jobId,querySha256:jobs.funding.sqlSha256};
+   sourceSnapshotAt:pin.snapshotAt,coverageJob:pin.jobId,sourceTable:HISTORY,
+   sourceCoverage:pin.coverage,queryJob:jobs.funding.jobId,querySha256:jobs.funding.sqlSha256};
  save('funding.json',funding);
 
- return {funding:join(dir,'funding.json'),fundingSha256:sha(readFileSync(join(dir,'funding.json'))),rows:fundingRows.length};
+ return {funding:join(dir,'funding.json'),fundingSha256:sha(readFileSync(join(dir,'funding.json'))),rows:fundingRows.length,sourceSnapshotAt:pin.snapshotAt};
 }
 
 const help=[
  'selector-window.mjs --sql-only [--window pinned.json | --preset ready21] [--live-selectors-only]',
  '  Print only the official independent discovery SQL; no credentials, network or file writes.',
  'selector-window.mjs --out NEWDIR [--window pinned.json | --preset ready21] [--live-selectors-only]',
- '  Fresh discovery only (BigQuery; original 16 GiB per-job cap). Full selector discovery by default.',
+ '  Discover from the managed history table (default 16 GiB cap, optional --max-bytes). No public trace fallback.',
  'selector-window.mjs --funding-only --out NEWDIR [--window pinned.json | --preset ready21]',
- '  Generate the independent funding.json for that same window (4/1/3 GiB stage caps).',
+ '  Generate funding.json from the managed history table (default 3 GiB cap, optional --max-bytes).',
+ '  Use --snapshot-at to reuse the discovery snapshot, or supply this funding artifact to paired generation.',
  '  For a partial funding job use --funding-only --resume DIR; reopen only identical pinned stages.',
  'selector-window.mjs --from-manifest MANIFEST --manifest-sha256 SHA --previous PREVIOUS-FIXED-MANIFEST',
  '  --previous-sha256 SHA --funding SAME-WINDOW-FUNDING --funding-sha256 SHA --out NEWDIR [--window pinned.json]',
@@ -105,7 +112,7 @@ function readPinned(file,expect,label){
  const b=readFileSync(resolve(file));assert.equal(sha(b),expect,label+' digest mismatch');return JSON.parse(b);
 }
 async function main(){
- const keys=['preset','out','window','resume','from-manifest','manifest-sha256','previous','previous-sha256','funding','funding-sha256'];
+ const keys=['preset','out','window','resume','from-manifest','manifest-sha256','previous','previous-sha256','funding','funding-sha256','snapshot-at','max-bytes'];
  const flags=['help','sql-only','live-selectors-only','swaps-only','funding-only','no-prior'];
  const {values:v}=parseArgs({options:Object.fromEntries([...keys.map(k=>[k,{type:'string'}]),...flags.map(k=>[k,{type:'boolean'}])])});
  if(v.help){console.log(help);return;}
@@ -125,15 +132,17 @@ async function main(){
  assert.equal(window.chainId,1,'a pinned mainnet window is required');
  renderSelectorTraceSourceSql({window}); // validates all canonical interval/time/count/hash pins without IO
  if(offline)sameWindow(window,receipt.window);
- if(v['sql-only']){process.stdout.write(await renderIndependentTraceEdges(window,{liveSelectorsOnly:!!v['live-selectors-only']})+'\n');return;}
+ if(v['sql-only']){process.stdout.write(await renderIndependentTraceEdges(window,{liveSelectorsOnly:!!v['live-selectors-only'],fixedSource:v['snapshot-at']?{snapshotAt:v['snapshot-at']}:undefined})+'\n');return;}
+ assert(!offline||(!v['snapshot-at']&&!v['max-bytes']),'offline mode uses its receipt pins, not CLI overrides');
  assert(out||fundingResume,'specify --out NEWDIR (no implicit paid discovery)');
  if(out)assert(!existsSync(out),'refusing existing output directory');
  if(v['funding-only']){
    const dir=fundingResume??out;
    if(resuming){assert(!existsSync(join(dir,'funding.json')),'funding job already completed');sameWindow(window,JSON.parse(readFileSync(join(dir,'window.json'),'utf8')));}
    else mkdirSync(dir,{mode:0o700});
-   console.log(JSON.stringify(await runIndependentWindowFunding(dir,window,resuming)));return;
+   console.log(JSON.stringify(await runIndependentWindowFunding(dir,window,resuming,undefined,{asOf:v['snapshot-at'],maxBytes:v['max-bytes']})));return;
  }
+ let asOf=v['snapshot-at'];
  if(prepare){
    if(v['no-prior'])assert(!v.previous&&!v['previous-sha256'],'--no-prior excludes previous-coordinate arguments');
    else {
@@ -146,6 +155,11 @@ async function main(){
    else {
      const funding=readPinned(v.funding,v['funding-sha256'],'funding');
      assertPinnedFundingWindow(window,funding);
+     if(!offline){
+       assert(funding.sourceSnapshotAt,'paired generation needs funding from the fixed history; regenerate funding, not public traces');
+       if(asOf!==undefined)assert.equal(asOf,funding.sourceSnapshotAt);
+       asOf=funding.sourceSnapshotAt;
+     }
      const {readSqlFundingRows}=await import('../listener/src/searcher/sql-live-tables.ts');
      readSqlFundingRows(funding,{fromBlock:window.fromBlock,toBlock:window.toBlock,cutoffHash:window.headHash});
    }
@@ -157,6 +171,8 @@ async function main(){
    if(prepare){mkdirSync(discovery,{mode:0o700});dest=join(out,'live-input');}
    saveQueryStage(discovery,'window.json',window,false);const argv=[join(root,'scripts','independent-trace-edges.mjs'),'--window',join(discovery,'window.json'),'--out',discovery];
    if(prepare||v['live-selectors-only'])argv.push('--live-selectors-only');
+   if(asOf!==undefined)argv.push('--snapshot-at',asOf);
+   if(v['max-bytes']!==undefined)argv.push('--max-bytes',v['max-bytes']);
    const child=spawnSync(process.execPath,['--import',join(root,'listener','node_modules','tsx','dist','loader.mjs'),...argv],{cwd:root,stdio:'inherit'});
    if(child.error)throw child.error;assert.equal(child.status,0,'independent discovery failed; no live input sealed');
    if(!prepare)return;

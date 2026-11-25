@@ -173,8 +173,40 @@ async function run(): Promise<void> {
     check.equal(scheduler.completeStartup(), false);
     check.deepEqual(limits(), tier, "lifecycle notification cannot reset a failed batch's retry budget");
     const successor = await scheduler.run("producer-critical", new AbortController().signal, async lease => lease.load!);
-    check.equal(successor, load);
+    check.equal(successor.retry, load.retry, "batch-local retry authority remains shared");
+    check.equal(successor.bulkQuotes, undefined);
     check.deepEqual(successor.limits(initial.batchSize, initial.concurrency), {version:0, ...initial});
+  }
+  {
+    const s = new RethTransportScheduler({capacity:20,producerReserved:2,retryDelayMs:1});
+    const signal = new AbortController().signal;
+    const load = await s.run("producer-bulk",signal,async l=>l.load!);
+    const pressure = load.bulkQuotes!;
+    const shape = () => pressure.limits(load.limits(32,20),32,20);
+    const original = shape(), timeout = new StateCallAbortedError("physical wire timeout","timeout");
+    for (const e of [new StateCallAbortedError("deadline","deadline"),new StateCallAbortedError("cancel","signal"),
+      Object.assign(new Error("execution reverted: throttle"),{code:3}),Object.assign(new Error("monthly quota exhausted"),{code:429})])
+      pressure.failed(original,e);
+    check.equal(s.snapshot().bulkQuoteEpoch,0);
+    for(let i=0;i<20;i++)pressure.failed(original,timeout);
+    const reduced=shape();
+    check.deepEqual([reduced.batchSize,reduced.concurrency,s.snapshot().bulkQuoteCapacity],[16,10,10]);
+    check.equal(s.snapshot().bulkQuoteEpoch,1);
+    const gate=deferred<void>(),jobs=Array.from({length:20},()=>s.run("producer-bulk",signal,()=>gate.promise));
+    await new Promise(resolve=>setImmediate(resolve));
+    check.equal(s.snapshot().activeByLane["producer-bulk"],10);
+    await Promise.all((["exact","producer-critical"] as const).map(lane=>s.run(lane,signal,async l=>{
+      check.equal(l.load!.bulkQuotes,undefined);
+    })));
+    for(let n=0;n<30;n++) pressure.healthy(original);
+    for(let n=0;n<9;n++) pressure.healthy(reduced);
+    check.equal(shape().concurrency,10,"old successes do not repay a failure and partial waves do not recover");
+    pressure.healthy(reduced);
+    check.deepEqual([shape().batchSize,shape().concurrency,s.snapshot().activeByLane["producer-bulk"]],[17,11,11]);
+    gate.resolve();await Promise.all(jobs);
+    for(let n=0;n<250;n++)pressure.healthy(shape());
+    check.deepEqual([shape().batchSize,shape().concurrency,s.snapshot().bulkQuoteCapacity],[32,20,20]);
+    console.log("[reth-transport-scheduler] aggregate producer-bulk pressure, stale siblings and bounded recovery: PASS");
   }
   {
     const scheduler = new RethTransportScheduler({ capacity: 8, producerReserved: 4, retryDelayMs: 5 });

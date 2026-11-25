@@ -125,6 +125,7 @@ export class PinnedRethQuoteBackend
   private throttleRetries = 0;
   private timeoutRetries = 0;
   private connectionResetRetries = 0;
+  private internalReadRetries = 0;
   private readonly transportLane: "producer-critical" | "producer-bulk" | "exact";
   private criticalBackend?: PinnedRethQuoteBackend;
   /** Parent of a critical-call view. Identity stays structural: a view
@@ -632,6 +633,7 @@ export class PinnedRethQuoteBackend
     throttleRetries: number;
     timeoutRetries: number;
     connectionResetRetries: number;
+    internalReadRetries: number;
     totalCalls: number;
     memoHits: number;
     batchesSent: number;
@@ -673,6 +675,7 @@ export class PinnedRethQuoteBackend
       throttleRetries: this.throttleRetries,
       timeoutRetries: this.timeoutRetries,
       connectionResetRetries: this.connectionResetRetries,
+      internalReadRetries: this.internalReadRetries,
       totalCalls: this.totalCalls,
       memoHits: this.memoHits,
       batchesSent: this.batchesSent,
@@ -773,11 +776,12 @@ export class PinnedRethQuoteBackend
     // from fragmenting into many half-filled HTTP batches while preserving a
     // zero-delay flush for the final partial batch.
     let freshItems = 0;
+    const batchSizeLimit = this.currentBatchSizeLimit;
     for (const pending of this.pending) {
       if (!pending.settled && pending.kind === item.kind && !pending.transportRetryBatch) freshItems++;
-      if (freshItems >= this.currentBatchSizeLimit) break;
+      if (freshItems >= batchSizeLimit) break;
     }
-    if (freshItems >= this.currentBatchSizeLimit) this.pump();
+    if (freshItems >= batchSizeLimit) this.pump();
     else this.scheduleFlush();
   }
 
@@ -855,7 +859,14 @@ export class PinnedRethQuoteBackend
   }
 
   private get currentConcurrentBatchLimit(): number {
-    return this.transportLoad?.limits(this.maxBatchSize, this.maxConcurrentBatches).concurrency ?? this.maxConcurrentBatches;
+    return this.transportLimits()?.concurrency ?? this.maxConcurrentBatches;
+  }
+
+  private transportLimits(items?: readonly RethTransportRetryState[]): RethTransportAttempt | undefined {
+    const load = this.transportLoad;
+    if (!load) return;
+    const local = load.limits(this.maxBatchSize, this.maxConcurrentBatches, items);
+    return load.bulkQuotes?.limits(local,this.maxBatchSize,this.maxConcurrentBatches) ?? local;
   }
 
   private localScheduler(): RethTransportScheduler {
@@ -865,7 +876,7 @@ export class PinnedRethQuoteBackend
   }
 
   private get currentBatchSizeLimit(): number {
-    return this.transportLoad?.limits(this.maxBatchSize, this.maxConcurrentBatches).batchSize ?? this.maxBatchSize;
+    return this.transportLimits()?.batchSize ?? this.maxBatchSize;
   }
 
   private retryTransport(error: unknown, items: readonly RethTransportRetryState[], attempt: RethTransportAttempt): boolean {
@@ -875,11 +886,13 @@ export class PinnedRethQuoteBackend
     if (!this.transportLoad?.retry(error, items, attempt)) return false;
     if (isRethTransportTimeout(error)) this.timeoutRetries++;
     else if (error instanceof PinnedReadConnectionReset) this.connectionResetRetries++;
+    else if (error instanceof PinnedRpcInternalReadError) this.internalReadRetries++;
     else this.throttleRetries++;
     const marker = isRethTransportTimeout(error) ? "transport-timeout-retry"
-      : error instanceof PinnedReadConnectionReset ? "transport-read-reset-retry code=ECONNRESET" : "rpc-throttle-retry status=429";
+      : error instanceof PinnedReadConnectionReset ? "transport-read-reset-retry code=ECONNRESET"
+      : error instanceof PinnedRpcInternalReadError ? `rpc-internal-read-retry code=${error.code}` : "rpc-throttle-retry status=429";
     const atOne = Math.max(...items.map(item => item.transportRetriesAtOne ?? 0));
-    const next = this.transportLoad.limits(this.maxBatchSize, this.maxConcurrentBatches, items);
+    const next = this.transportLimits(items)!;
     console.warn(`[pinned-reth-quote-backend] ${marker} concurrency=${attempt.concurrency}->${next.concurrency} retry_at_one=${atOne}/${this.transportLoad.maxRetriesAtOne ?? 3} delay_ms=${this.transportLoad.retryDelayMs(items)} items=${items.length} retry_scope=batch batch_size=${next.batchSize}`);
     return true;
   }
@@ -906,19 +919,19 @@ export class PinnedRethQuoteBackend
       this.inFlightBatches < concurrencyLimit
     ) {
       const now = Date.now();
-      // Skip cooling or locally saturated retries: fresh work retains its
-      // configured limit, while every physical request still shares permits.
+      // Cooling retries don't block fresh work. Fresh pricing is sized by
+      // shared bulk pressure; a retry additionally keeps its own local ceiling.
       const firstIndex = this.pending.findIndex(item => {
         if (item.settled) return true;
         const group = item.transportRetryBatch;
-        const limits = this.transportLoad?.limits(this.maxBatchSize, this.maxConcurrentBatches, [item]);
+        const limits = group ? this.transportLimits([item]) : undefined;
         return !group || (group.notBeforeMs <= now &&
           (this.activeRetryBatches.get(group) ?? 0) < limits!.concurrency);
       });
       if (firstIndex < 0) break;
       const first = this.pending[firstIndex]!;
       const group = first.transportRetryBatch;
-      const limits = this.transportLoad?.limits(this.maxBatchSize, this.maxConcurrentBatches, [first]);
+      const limits = this.transportLimits([first]);
       const batchSize = limits?.batchSize ?? this.maxBatchSize;
       const batch: PendingQuoteItem[] = [];
       for (let i = firstIndex; i < this.pending.length && batch.length < batchSize;) {
@@ -987,7 +1000,7 @@ export class PinnedRethQuoteBackend
       const next = this.pending.reduce((time, item) => {
         const group = item.transportRetryBatch;
         if (item.settled || !group) return time;
-        const limits = this.transportLoad!.limits(this.maxBatchSize, this.maxConcurrentBatches, [item]);
+        const limits = this.transportLimits([item])!;
         // Active completion wakes saturated groups. Otherwise retain even a
         // cooldown that elapsed since the eligibility check above: dropping it
         // would leave pending work with neither an active batch nor a wakeup.
@@ -1053,7 +1066,7 @@ export class PinnedRethQuoteBackend
       if (this.options.deadlineAtMs !== undefined && Date.now() >= this.options.deadlineAtMs) {
         throw new StateCallAbortedError("scope absolute deadline reached", "deadline");
       }
-      const attempt = lease.load.limits(this.maxBatchSize, this.maxConcurrentBatches, items);
+      const attempt = this.transportLimits(items)!;
       const wire = new AbortController();
       const onAbort = (): void => wire.abort(signal.reason);
       signal.addEventListener("abort", onAbort, { once: true });
@@ -1090,6 +1103,8 @@ export class PinnedRethQuoteBackend
       } catch (error) {
         if (error instanceof QueuedTransportRetry) throw error;
         if (signal.aborted) throw signal.reason;
+        if (!this.closed && (this.options.deadlineAtMs === undefined || Date.now() < this.options.deadlineAtMs))
+          lease.load.bulkQuotes?.failed(attempt,error);
         if (retry?.(error, attempt)) throw new QueuedTransportRetry();
         if (error instanceof Error) this.abortForRpcFailure(error);
         throw error;
@@ -1183,8 +1198,8 @@ export class PinnedRethQuoteBackend
     try {
       if (controller.signal.aborted) throw controller.signal.reason;
       response = await this.runTransport(controller.signal, async (wireSignal, attempt, lease) => {
-        // Only split siblings can change this envelope's local retry tier
-        // while it waits for a shared permit. Never send abandoned items.
+        // A sibling can reduce a retry's tier, or another pricing scope can
+        // reduce fresh limits while this envelope waits. Repack before wire I/O.
         if (items.some(item => item.settled) || items.length > attempt.batchSize || scheduledLimit > attempt.concurrency ||
             (attempt.batch?.notBeforeMs ?? 0) > Date.now()) {
           this.pending.unshift(...items.filter(item => !item.settled));
@@ -1252,25 +1267,66 @@ export class PinnedRethQuoteBackend
         }
         // Inspect before releasing the shared permit or settling any sibling.
         // Otherwise the scheduler can dispatch queued RPCs on the dead source.
+        const retryInternal = this.options.retryRpcThrottle && this.transportLane === "producer-bulk" &&
+          (method === "eth_getCode" || method === "eth_call") &&
+          response.statusCode >= 200 && response.statusCode < 300;
+        const internalFailure = (raw: unknown, id: number | null, valid: boolean): PinnedRpcInternalReadError | undefined => {
+          const r = raw as { code?: unknown; message?: unknown; data?: unknown } | null;
+          if (!r || typeof r.message !== "string" || !/^internal(?: server| json-rpc)? error[.!]?$/i.test(r.message.trim())) return;
+          const retryable = valid && (r.code === -32000 || r.code === -32603) && r.data == null;
+          if (wireStartedAtMs !== undefined) try {
+            console.warn("[searcher/pinned-rpc-read-error] " + JSON.stringify({ batchId, method, rpcId:id,
+              code:Number.isSafeInteger(r.code)?r.code:null, hasData:r.data!=null, retryable }));
+          } catch { /* diagnostics must not change outcomes */ }
+          return retryable ? new PinnedRpcInternalReadError(r.message, r.code as number) : undefined;
+        };
+        if (retryInternal && response.body && !Array.isArray(response.body)) {
+          const envelope = response.body as {jsonrpc?: unknown; id?: unknown; error?: unknown};
+          const failure = internalFailure(envelope.error, null,
+            envelope.jsonrpc === "2.0" && envelope.id === null && !Object.hasOwn(envelope,"result"));
+          if (failure) throw failure; // whole batch rejected: retry all still-live items at the same pin
+        }
         if (response.statusCode >= 200 && response.statusCode < 300 && Array.isArray(response.body)) {
           const throttled = new Map<PendingQuoteItem, Error>();
+          const internal = new Map<PendingQuoteItem, PinnedRpcInternalReadError>();
+          // Only inspect success IDs while recovering. A 200 with a partial error,
+          // a duplicate, missing or unknown ID is not a clean physical envelope.
+          const cleanIds = attempt.bulkRecovering && response.body.length === items.length
+            ? new Set<number>() : undefined;
           for (const entry of response.body) {
             if (!entry || typeof entry !== "object") continue;
-            const record = entry as { id?: unknown; error?: unknown };
+            const record = entry as { jsonrpc?: unknown; id?: unknown; error?: unknown; result?: unknown };
             const item = typeof record.id === "number" ? byId.get(record.id) : undefined;
+            if (cleanIds && item && record.jsonrpc === "2.0" && !Object.hasOwn(record,"error") &&
+                isCleanBulkQuoteResult(item,record.result))
+              cleanIds.add(item.id);
             if (item && record.error != null) {
               const error = rpcItemError({ to: item.req.to }, record.error);
+              const transient = retryInternal ? internalFailure(record.error, item.id,
+                record.jsonrpc === "2.0" && !Object.hasOwn(record,"result") &&
+                response.body.filter(other => other?.id===item.id).length===1) : undefined;
               if (this.options.retryRpcThrottle && isRpcThrottleError(error) && !isRpcQuotaExhaustedError(error)) {
                 throttled.set(item, error);
+              } else if (transient) {
+                internal.set(item, transient);
               } else this.abortForRpcFailure(error);
             }
           }
           if (throttled.size) {
             const error = throttled.values().next().value!;
+            if (!wireSignal.aborted && !this.closed &&
+                Array.from(throttled.keys()).some(item => !item.settled && !this.callControlError(item.control,item.req.to)))
+              lease.load?.bulkQuotes?.failed(attempt,error);
             // An abandoned recoverable item needs neither retry nor fatal
             // escalation. Source/quota errors were still inspected above.
             if (this.queueTransportRetry([...throttled.keys()], error, attempt) === "refused") this.abortForRpcFailure(error);
             for (const item of throttled.keys()) retryIds.add(item.id);
+          } else if (!internal.size && cleanIds?.size === items.length && !wireSignal.aborted && !this.closed &&
+              items.every(item=>!item.settled && !this.callControlError(item.control,item.req.to))) {
+            lease.load?.bulkQuotes?.healthy(attempt);
+          }
+          if (internal.size && this.queueTransportRetry([...internal.keys()], internal.values().next().value!, attempt) === "queued") {
+            for (const item of internal.keys()) retryIds.add(item.id);
           }
         }
         return response;
@@ -1293,7 +1349,8 @@ export class PinnedRethQuoteBackend
         return;
       }
       this.batchFailures++;
-      if (isRethTransportTimeout(transportError) || transportError instanceof PinnedReadConnectionReset) {
+      if (isRethTransportTimeout(transportError) || transportError instanceof PinnedReadConnectionReset ||
+          transportError instanceof PinnedRpcInternalReadError) {
         for (const item of items) this.rejectItem(item, transportError);
         return; // Exhaustion must not manufacture single-call retries.
       }
@@ -2266,6 +2323,20 @@ function sha256CacheFile(path: string): string {
 }
 
 class QueuedTransportRetry extends Error {}
+/** Health votes only; never alter a JSON-RPC result or change its delivery. */
+function isCleanBulkQuoteResult(item: PendingQuoteItem, result: unknown): boolean {
+  if (item.kind !== "eth_simulateV1") return ethers.isHexString(result,true);
+  const requests = (item.simulation as {blockStateCalls?: {calls?: unknown[]}[]} | undefined)?.blockStateCalls;
+  return Array.isArray(requests) && Array.isArray(result) && requests.length > 0 && requests.length === result.length &&
+    requests.every((r,i) => Array.isArray(r.calls) && Array.isArray(result[i]?.calls) && r.calls.length > 0 &&
+      r.calls.length === result[i].calls.length && result[i].calls.every((c: {status?: unknown; returnData?: unknown} | null) =>
+        (c?.status === "0x1" || c?.status === 1) && ethers.isHexString(c.returnData,true)));
+}
+// A JSON-RPC provider failure, not an EVM revert or an HTTP timeout. Never
+// classify by caller-supplied exception text; inspect the original wire fields.
+class PinnedRpcInternalReadError extends RethTransientReadError {
+  constructor(message: string, readonly code: number) { super(message); }
+}
 class PinnedReadConnectionReset extends RethTransientReadError {
   readonly code = "ECONNRESET";
   constructor(cause: Error) { super("source-pinned read connection reset (ECONNRESET)", { cause }); }
