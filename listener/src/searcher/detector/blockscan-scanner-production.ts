@@ -70,6 +70,30 @@ export interface AtomicBlockScanPricingValidationTiming {
 
 const screenQuoteCache = new WeakMap<object, WeakMap<TokenEdge, ResolvedBlockScanQuote>>();
 const buildIncrementalScreenEthView = createIncrementalBlockScanEthViewBuilder();
+const scannerEdgeMetaCache = new WeakMap<readonly TokenEdge[], readonly {
+  readonly edge: TokenEdge;
+  readonly id: string;
+  readonly tokenIn: string;
+  readonly startupSim: boolean;
+  readonly scannerConsumes: boolean;
+}[]>();
+
+function getScannerEdgeMeta(edges: readonly TokenEdge[]) {
+  const frozen = Object.isFrozen(edges);
+  if (frozen) {
+    const hit = scannerEdgeMetaCache.get(edges);
+    if (hit) return hit;
+  }
+  const built = edges.map(edge => ({
+    edge,
+    id: blockScanEdgeKey(edge),
+    tokenIn: edge.tokenIn.toLowerCase(),
+    startupSim: edge.executionVerification === "startup-simulation",
+    scannerConsumes: scannerConsumesEdge(edge),
+  }));
+  if (frozen && edges.every(e => Object.isFrozen(e))) scannerEdgeMetaCache.set(edges, built);
+  return built;
+}
 
 /** Private to opportunity screening: never write into the shared current quote map. */
 export function createBlockScanHistoricalScreen(effective:EffectiveMidSnapshot|undefined,
@@ -78,43 +102,56 @@ export function createBlockScanHistoricalScreen(effective:EffectiveMidSnapshot|u
   const hinted=new Set<string>();
   const startAmounts=new Map<string,bigint>();
   const references=effective&&effectiveAmountReferences(effective);
-  if(effective?.complete) for(const edge of edges){
-    const id=blockScanEdgeKey(edge);
-    if(current.has(id)||edge.executionVerification!=="startup-simulation")continue;
-    const hint=effectiveHistoricalRankingHint(effective,edge);if(!hint)continue;
-    let quote:ResolvedBlockScanQuote|undefined;
-    if(Object.isFrozen(hint)&&Object.isFrozen(edge)){
-      let byEdge=screenQuoteCache.get(hint);
-      quote=byEdge?.get(edge);
-      if(!quote){
+  if(effective?.complete) {
+    const meta = getScannerEdgeMeta(edges);
+    const validRefTokens = new Map<string, bigint | null>();
+    const resolveRefStart = (tokenIn: string): bigint | null => {
+      const cached = validRefTokens.get(tokenIn);
+      if (cached !== undefined) return cached;
+      const ref = references?.get(tokenIn);
+      let out: bigint | null = null;
+      if (ref && ref.amountIn > 0n && (ref.path.length
+          ? ref.path.at(-1)!.tokenOut === tokenIn && ref.path.at(-1)!.amountOut === ref.amountIn &&
+            ref.path.every(row => {
+              const q = current.get(row.edgeId), live = effective.rows.get(row.edgeId);
+              return live && q && live.tokenIn === row.tokenIn && live.tokenOut === row.tokenOut &&
+                live.quotedAt?.number === effective.source.number && live.quotedAt.generation === effective.source.generation &&
+                live.quotedAt.hash.toLowerCase() === effective.source.hash.toLowerCase() &&
+                row.quotedAt?.number === effective.source.number && row.quotedAt.generation === effective.source.generation &&
+                row.quotedAt.hash.toLowerCase() === effective.source.hash.toLowerCase() &&
+                q.quoteAmountIn === row.amountIn && q.quoteAmountOut === row.amountOut;
+            })
+          : ref.amountIn === effective.referenceWethInput)) {
+        out = ref.amountIn;
+      }
+      validRefTokens.set(tokenIn, out);
+      return out;
+    };
+    for (let i = 0; i < meta.length; i++) {
+      const { edge, id, tokenIn, startupSim } = meta[i]!;
+      if(!startupSim || current.has(id))continue;
+      const hint=effectiveHistoricalRankingHint(effective,edge);if(!hint)continue;
+      let quote:ResolvedBlockScanQuote|undefined;
+      if(Object.isFrozen(hint)&&Object.isFrozen(edge)){
+        let byEdge=screenQuoteCache.get(hint);
+        quote=byEdge?.get(edge);
+        if(!quote){
+          quote=Object.freeze({kind:"external-swap",pool:hint.instanceKey,
+            edges:Object.freeze([edge]),mid:hint.effectiveMid,feeBps:0,depthProxy:0,
+            quoteAmountIn:hint.amountIn,quoteAmountOut:hint.amountOut});
+          if(!byEdge){byEdge=new WeakMap();screenQuoteCache.set(hint,byEdge);}
+          byEdge.set(edge,quote);
+        }
+      } else {
         quote=Object.freeze({kind:"external-swap",pool:hint.instanceKey,
           edges:Object.freeze([edge]),mid:hint.effectiveMid,feeBps:0,depthProxy:0,
           quoteAmountIn:hint.amountIn,quoteAmountOut:hint.amountOut});
-        if(!byEdge){byEdge=new WeakMap();screenQuoteCache.set(hint,byEdge);}
-        byEdge.set(edge,quote);
       }
-    } else {
-      quote=Object.freeze({kind:"external-swap",pool:hint.instanceKey,
-        edges:Object.freeze([edge]),mid:hint.effectiveMid,feeBps:0,depthProxy:0,
-        quoteAmountIn:hint.amountIn,quoteAmountOut:hint.amountOut});
+      (mids??=new Map(current)).set(id,quote);
+      hinted.add(id);
+      const refStart = resolveRefStart(tokenIn);
+      if (refStart !== null) startAmounts.set(id, refStart);
     }
-    (mids??=new Map(current)).set(id,quote);
-    hinted.add(id);
-    const ref=references?.get(edge.tokenIn.toLowerCase());
-    if(ref && ref.amountIn>0n && (ref.path.length
-        ? ref.path.at(-1)!.tokenOut===edge.tokenIn.toLowerCase() && ref.path.at(-1)!.amountOut===ref.amountIn &&
-          ref.path.every(row=>{
-            const q=current.get(row.edgeId),live=effective.rows.get(row.edgeId);
-            // Derived ETH columns may wrap the native row. Match the current
-            // validated sample, not the wrapper's JavaScript object identity.
-            return live && q && live.tokenIn===row.tokenIn && live.tokenOut===row.tokenOut &&
-              live.quotedAt?.number===effective.source.number && live.quotedAt.generation===effective.source.generation &&
-              live.quotedAt.hash.toLowerCase()===effective.source.hash.toLowerCase() &&
-              row.quotedAt?.number===effective.source.number && row.quotedAt.generation===effective.source.generation &&
-              row.quotedAt.hash.toLowerCase()===effective.source.hash.toLowerCase() &&
-              q.quoteAmountIn===row.amountIn && q.quoteAmountOut===row.amountOut;
-          })
-        : ref.amountIn===effective.referenceWethInput))startAmounts.set(id,ref.amountIn);
   }
   return mids?{mids,hinted,startAmounts}:undefined;
 }
@@ -143,9 +180,14 @@ export function detectProductionBlockScanOpportunities(
   const resolvedEdgeKeys = new Set(
     input.runtime.pricing.coverage.resolvedEdgeKeys,
   );
-  const edges = input.runtime.graph.edges.filter(
-    (edge) => !scannerConsumesEdge(edge) || resolvedEdgeKeys.has(blockScanEdgeKey(edge)) || screen?.hinted.has(blockScanEdgeKey(edge)),
-  );
+  const edgeMeta = getScannerEdgeMeta(input.runtime.graph.edges);
+  const edges: TokenEdge[] = [];
+  for (let i = 0; i < edgeMeta.length; i++) {
+    const m = edgeMeta[i]!;
+    if (!m.scannerConsumes || resolvedEdgeKeys.has(m.id) || screen?.hinted.has(m.id)) {
+      edges.push(m.edge);
+    }
+  }
   const selected = performance.now();
   const outcome = scanBlockStateFromResolvedMids({
     edges,

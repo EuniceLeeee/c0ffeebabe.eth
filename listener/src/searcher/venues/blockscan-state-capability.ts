@@ -1523,6 +1523,13 @@ export function blockScanStateKey(familyId: string, stateKey: string): string {
 }
 
 export function exactSetHash(values: Iterable<string>): string {
+  if (Array.isArray(values)) {
+    let sortedUnique = true;
+    for (let i = 1; i < values.length; i++) {
+      if (values[i - 1]! >= values[i]!) { sortedUnique = false; break; }
+    }
+    if (sortedUnique) return deterministicHash(values);
+  }
   return deterministicHash([...new Set(values)].sort());
 }
 
@@ -1694,6 +1701,13 @@ function normalizeTopic(value: string): string {
 }
 
 function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    let allStrings = true;
+    for (let i = 0; i < value.length; i++) {
+      if (typeof value[i] !== "string") { allStrings = false; break; }
+    }
+    if (allStrings) return JSON.stringify(value);
+  }
   return JSON.stringify(stableValue(value));
 }
 

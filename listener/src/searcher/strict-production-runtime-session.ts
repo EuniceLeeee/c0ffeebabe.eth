@@ -350,6 +350,7 @@ export class StrictProductionRuntimeRoot {
   readonly #pricingIndex: StrictReadyPricingIndex;
   readonly #poolLegs: PoolLegRefreshIndex;
   readonly #sqlPricePools=new Map<string,string>();
+  readonly #ownedEdgePoolKey=new WeakMap<TokenEdge,string>();
   readonly #periodicPrivate = new Set<string>();
   /** Ranking freshness only. No entry here may reach #bindings or #resolve. */
   readonly #trialMarkets:ReadonlyMap<string,ReadonlyMap<string,"on-touch"|"each-block">>;
@@ -544,7 +545,9 @@ export class StrictProductionRuntimeRoot {
           throw Error("SQL leg lacks its published pricing or pool identity");
         poolLegs.push({legId:id,stateKey:e.stateResourceKey,poolAddress:e.observationTarget??e.target,
           poolId:e.observationPoolId??e.poolId??null,activity:input.sqlPoolActivity?.get(id)});
-        this.#sqlPricePools.set(id,touchedPoolKey(e.observationTarget??e.target,e.observationPoolId??e.poolId));
+        const poolKey=touchedPoolKey(e.observationTarget??e.target,e.observationPoolId??e.poolId);
+        this.#sqlPricePools.set(id,poolKey);
+        this.#ownedEdgePoolKey.set(e,poolKey);
       }
       for(const [variant,rawKey] of this.#pricingIndex.stateKeyByEdgeKey)
         if(perBlockRefreshStateKeys.has(rawKey))this.#periodicPrivate.add(variant);
@@ -1047,7 +1050,16 @@ export class StrictProductionRuntimeRoot {
   sqlPoolPriceRefreshPlan(original:ReadonlySet<string>,base:{number:number;hash:string},target:{number:number;hash:string}){
     const logical=this.#logical,scope=sqlPoolPriceActivityScope(original,this.resolveBlockTouchedStateKeys,base,target);
     if(!logical||!scope)return;
+    const hasTrials = this.#trialMarkets.size > 0;
+    const hasPeriodic = this.#periodicPrivate.size > 0;
     const reasonFor=(edge:TokenEdge,verifiedVariant?:string):"pool"|"per-block"|"unverified"|undefined=>{
+      const fastPoolKey = this.#ownedEdgePoolKey.get(edge);
+      if (fastPoolKey !== undefined) {
+        if (scope.touchedPoolKey(fastPoolKey)) return "pool";
+        if (!hasTrials && !hasPeriodic) {
+          return verifiedVariant !== undefined && logical.owner.get(verifiedVariant) !== edge ? "unverified" : undefined;
+        }
+      }
       const id=edge.canonicalEdgeId,owned=id&&logical.publicEdges.get(id),key=id&&this.#sqlPricePools.get(id);
       if(!id||!owned||!key||(owned!==edge&&(edgeBindingFingerprint(owned)!==edgeBindingFingerprint(edge)||
         blockScanEdgeMetadataFingerprint(owned)!==blockScanEdgeMetadataFingerprint(edge))))return "unverified";

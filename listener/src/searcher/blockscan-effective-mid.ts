@@ -972,14 +972,13 @@ export async function buildEffectiveMids(input: {
   const reuseEmptyTombstone = (
     index: number,
     prior: EffectiveMidRow | undefined,
-    edgeId: string,
-    edge: TokenEdge,
+    item: (typeof work)[number],
     status: "disabled-for-run" | "missing-valuation" | "unsupported",
   ): boolean => {
     if (
       prior?.status === status && Object.isFrozen(prior) &&
-      prior.edgeId === edgeId && prior.instanceKey === edgeInstanceKey(edge) &&
-      prior.tokenIn === edge.tokenIn.toLowerCase() && prior.tokenOut === edge.tokenOut.toLowerCase() &&
+      prior.edgeId === item.edgeId && prior.instanceKey === item.instanceKey &&
+      prior.tokenIn === item.tokenIn && prior.tokenOut === item.tokenOut &&
       prior.amountIn === null && prior.amountOut === null && prior.effectiveMid === null &&
       prior.quotedAt === undefined && prior.carried === undefined && prior.failureEvidence === undefined &&
       prior.eth === undefined && prior.enumeration === undefined && !rowAmountReferences.has(prior)
@@ -989,25 +988,29 @@ export async function buildEffectiveMids(input: {
     }
     return false;
   };
-  for (const [index, { edgeId, edge }] of work.entries()) {
-    if (input.disabledEdgeIds?.has(edgeId)) {
+  const previousRowsMap = canReuse ? previous.rows : undefined;
+  const hasDisabledEdges = (input.disabledEdgeIds?.size ?? 0) > 0;
+  const hasRequireFreshEdges = (input.requireFreshEdgeIds?.size ?? 0) > 0;
+  for (let index = 0; index < work.length; index++) {
+    const item = work[index]!;
+    const { edgeId, edge } = item;
+    if (hasDisabledEdges && input.disabledEdgeIds!.has(edgeId)) {
       // The current run's exclusion is authoritative even when the pool is
       // touched. Reuse only the identical empty tombstone, never an old quote
       // or amount lineage; otherwise unchanged exclusions become native edits.
-      const prior = canReuse ? previous.rows.get(edgeId) : undefined;
-      if (!reuseEmptyTombstone(index, prior, edgeId, edge, "disabled-for-run")) {
+      const prior = previousRowsMap?.get(edgeId);
+      if (!reuseEmptyTombstone(index, prior, item, "disabled-for-run")) {
         unavailable(index, "disabled-for-run");
       }
     } else if (edge.leavesStandingPosition && !pricing.pricingStateKeyByEdgeKey?.has(edgeId)) {
-      const prior = canReuse ? previous.rows.get(edgeId) : undefined;
-      if (!reuseEmptyTombstone(index, prior, edgeId, edge, "unsupported")) {
+      const prior = previousRowsMap?.get(edgeId);
+      if (!reuseEmptyTombstone(index, prior, item, "unsupported")) {
         unavailable(index, "unsupported");
       }
     }
     else if (closed()) unavailable(index, "cancelled");
     else {
-      const prior = canReuse ? previous.rows.get(edgeId) : undefined;
-      const stateKey = stateKeyFor(edgeId, edge);
+      const prior = previousRowsMap?.get(edgeId);
       if(poolPlan&&previous&&edge.executionVerification==="startup-simulation"&&!edge.leavesStandingPosition){
         const old=oldRanking!.byId.get(edgeId);
         const proof=prior?.executionVerification;
@@ -1023,7 +1026,7 @@ export async function buildEffectiveMids(input: {
           requestedOrigins!.set(edgeId, prior);
         }
         const existing=old?.edge===edge?old:undefined;
-        if(input.requireFreshEdgeIds?.has(edgeId)||poolPlan.shouldRefresh(edge,verified?proof!.variantId:existing?.hint.variantId))poolDirty.add(index);
+        if((hasRequireFreshEdges && input.requireFreshEdgeIds!.has(edgeId))||poolPlan.shouldRefresh(edge,verified?proof!.variantId:existing?.hint.variantId))poolDirty.add(index);
         else {
           poolClean.add(index);
           if(existing)rankingCandidates.set(index,existing);
@@ -1032,16 +1035,17 @@ export async function buildEffectiveMids(input: {
               kind:"historical-ranking-only",edgeId,instanceKey:prior!.instanceKey,tokenIn:prior!.tokenIn,tokenOut:prior!.tokenOut,
               amountIn:prior!.amountIn!,amountOut:prior!.amountOut!,effectiveMid:prior!.effectiveMid!,quotedAt:prior!.quotedAt!,
               receiptHash:proof!.receiptHash,variantId:proof!.variantId!})});
-          if (!reuseEmptyTombstone(index, prior, edgeId, edge, "missing-valuation")) {
+          if (!reuseEmptyTombstone(index, prior, item, "missing-valuation")) {
             unavailable(index,"missing-valuation");
           }
         }
         continue;
       }
-      if (input.requireFreshEdgeIds?.has(edgeId)) continue; // normal forward funding; never reuse a price/ranking hint
+      if (hasRequireFreshEdges && input.requireFreshEdgeIds!.has(edgeId)) continue; // normal forward funding; never reuse a price/ranking hint
+      const stateKey = stateKeyFor(edgeId, edge);
       if (prior && (prior.status === "quoted" || (previous!.complete && prior.status !== "cancelled")) && prior.edgeId === edgeId &&
-          prior.instanceKey === edgeInstanceKey(edge) &&
-          prior.tokenIn === edge.tokenIn.toLowerCase() && prior.tokenOut === edge.tokenOut.toLowerCase() &&
+          prior.instanceKey === item.instanceKey &&
+          prior.tokenIn === item.tokenIn && prior.tokenOut === item.tokenOut &&
           !stateRejectsReceipt(stateKey, prior, edge) && referenceCanCarry(rowAmountReferences.get(prior), edge.executionVerification === "startup-simulation", index) &&
           (edge.executionVerification !== "startup-simulation" ||
             effectiveRowExecutionVerified(previous!, prior, edge))) {
@@ -1200,8 +1204,8 @@ export async function buildEffectiveMids(input: {
   for(const [i,entry] of rankingCandidates){
     if(bridges.has(entry.hint.edgeId))continue;
     if(!poolClean.has(i)){
-      const prior = canReuse ? previous.rows.get(entry.hint.edgeId) : undefined;
-      if (!reuseEmptyTombstone(i, prior, entry.hint.edgeId, entry.edge, "missing-valuation")) {
+      const prior = previousRowsMap?.get(entry.hint.edgeId);
+      if (!reuseEmptyTombstone(i, prior, work[i]!, "missing-valuation")) {
         unavailable(i,"missing-valuation");
       }
     }

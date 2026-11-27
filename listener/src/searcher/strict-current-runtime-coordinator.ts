@@ -882,6 +882,8 @@ const cachedEffectivePricingTopology = new WeakMap<StrictReadyPricingIndex, Weak
   readonly expectedEdgeKeys: readonly string[];
   readonly expectedSet: ReadonlySet<string>;
   readonly graphEdges: ReadonlyMap<string, VerifiedGraphView["edges"][number]>;
+  readonly edgesAt: readonly VerifiedGraphView["edges"][number][];
+  readonly familyIdsAt: readonly string[];
   readonly scannerKeyCount: number;
   readonly scannerKeyHash: string;
   readonly allFamilyIds: readonly string[];
@@ -914,17 +916,24 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
         throw new Error("effective pricing index differs from ready Graph");
       }
       const fams = new Set<string>();
-      for (const key of expectedEdgeKeys) {
+      const edgesAt: VerifiedGraphView["edges"][number][] = new Array(expectedEdgeKeys.length);
+      const familyIdsAt: string[] = new Array(expectedEdgeKeys.length);
+      for (let i = 0; i < expectedEdgeKeys.length; i++) {
+        const key = expectedEdgeKeys[i]!;
         const edge = graphEdges.get(key), familyId = index.familyIdByEdgeKey.get(key);
         if (!edge || !familyId || !index.stateKeyByEdgeKey.has(key)) {
           throw new Error(`effective pricing index omits ${key}`);
         }
+        edgesAt[i] = edge;
+        familyIdsAt[i] = familyId;
         fams.add(familyId);
       }
       topo = {
         expectedEdgeKeys,
         expectedSet,
         graphEdges,
+        edgesAt,
+        familyIdsAt,
         scannerKeyCount: scannerKeys.length,
         scannerKeyHash: scannerHashed.hash,
         allFamilyIds: Object.freeze([...fams].sort()),
@@ -934,20 +943,28 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
         byEdges.set(graph.edges, topo);
       }
     }
-    const { expectedEdgeKeys, expectedSet: expected, graphEdges } = topo;
+    const { expectedEdgeKeys, expectedSet: expected, edgesAt, familyIdsAt } = topo;
     if (topo.scannerKeyCount !== graph.scannerEdgeCount ||
         topo.scannerKeyHash !== graph.scannerEdgeKeyHash ||
         (effectiveMids.rows.size > expected.size)) {
       throw new Error("effective pricing index differs from ready Graph");
     }
-    for (const key of effectiveMids.rows.keys()) {
-      if (!expected.has(key)) throw new Error("effective pricing index differs from ready Graph");
+    if (effectiveMids.rows.size !== expected.size || !effectiveMids.rows.has(expectedEdgeKeys[0]!)) {
+      for (const key of effectiveMids.rows.keys()) {
+        if (!expected.has(key)) throw new Error("effective pricing index differs from ready Graph");
+      }
     }
     diagnostics?.enter("row-classification");
     const resolvedEdgeKeys: string[] = [], unavailableEdgeKeys: string[] = [], unresolvedEdgeKeys: string[] = [];
     const refreshedEdgeKeys: string[] = [], carriedEdgeKeys: string[] = [];
-    const coverageByEdgeKey = new Map<string, StateKeyCoverage>();
-    const pricingProvenanceByEdgeKey = new Map<string, StrictPricingProvenance>();
+    const canFastDeltaMaps = previous !== null &&
+      previous.graph.edges === graph.edges &&
+      previous.effectiveMids !== undefined &&
+      previous.coverageByEdgeKey.size === expectedEdgeKeys.length &&
+      previous.pricingProvenanceByEdgeKey?.size === expectedEdgeKeys.length;
+    const priorEffectiveRows = canFastDeltaMaps ? previous.effectiveMids!.rows : undefined;
+    const coverageByEdgeKey = canFastDeltaMaps ? new Map(previous.coverageByEdgeKey) : new Map<string, StateKeyCoverage>();
+    const pricingProvenanceByEdgeKey = canFastDeltaMaps ? new Map(previous.pricingProvenanceByEdgeKey!) : new Map<string, StrictPricingProvenance>();
     const resolvedCoverage: StateKeyCoverage = Object.freeze({ status: "resolved" });
     const failures = new Map<string, StateKeyCoverage>();
     const failureCoverage = (status: "rejected" | "unresolved", reason: string): StateKeyCoverage => {
@@ -958,9 +975,21 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
       return coverage;
     };
     const incompleteFamilyIds = new Set<string>();
-    for (const key of expectedEdgeKeys) {
-      const edge = graphEdges.get(key)!, familyId = index.familyIdByEdgeKey.get(key)!;
-      const row = effectiveMids.rows.get(key);
+    const currentRows = effectiveMids.rows;
+    for (let i = 0; i < expectedEdgeKeys.length; i++) {
+      const key = expectedEdgeKeys[i]!;
+      const row = currentRows.get(key);
+      if (priorEffectiveRows && row !== undefined && row === priorEffectiveRows.get(key) && row.status !== "quoted" && Object.isFrozen(row)) {
+        const st = row.status;
+        if (st === "no-output" || st === "unsupported" || st === "disabled-for-run") {
+          unavailableEdgeKeys.push(key);
+        } else {
+          unresolvedEdgeKeys.push(key);
+          incompleteFamilyIds.add(familyIdsAt[i]!);
+        }
+        continue;
+      }
+      const edge = edgesAt[i]!, familyId = familyIdsAt[i]!;
       if (row && (row.edgeId !== key || (!Object.isFrozen(row) && (row.instanceKey !== edgeInstanceKey(edge) ||
           row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() || row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase())))) {
         throw new Error(`effective pricing row differs from ready Graph: ${key}`);

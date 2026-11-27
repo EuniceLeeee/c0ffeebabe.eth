@@ -16,6 +16,7 @@ interface IndexedQuote {
 }
 
 // Algorithm-private, discardable duplicate-work cache; clearing never drops a path.
+const NUM_MEMO_MAX_ENTRIES = 131_072;
 const MEMO_MAX_ENTRIES = 16_384, MEMO_MAX_CHARACTERS = 1_048_576;
 const PACK_BASE = 131_072; // 2^17; 3 * PACK_BASE^3 = 6.75e15 < Number.MAX_SAFE_INTEGER (9.007e15).
 const PACK_CUBE = PACK_BASE * PACK_BASE * PACK_BASE;
@@ -239,7 +240,7 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
                 ? PACK_CUBE + (left[1]! * PACK_BASE + left[2]!) * PACK_BASE + right[1]!
                 : 2 * PACK_CUBE + (left[1]! * PACK_BASE + right[1]!) * PACK_BASE + right[2]!;
             if (numMemo.has(packed)) { stats.duplicateStatesSkipped++; return; }
-            if (numMemo.size >= MEMO_MAX_ENTRIES) numMemo.clear();
+            if (numMemo.size >= NUM_MEMO_MAX_ENTRIES) numMemo.clear();
             numMemo.add(packed);
           } else {
             const key = `${left.join(",")}|${right.join(",")}`;
