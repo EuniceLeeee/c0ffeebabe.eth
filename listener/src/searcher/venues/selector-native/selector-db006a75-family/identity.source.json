@@ -1,0 +1,13 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xdb006a75",
+  "signature": "function redeem(uint256)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_DB006A75_ENABLED" },
+  "options": [
+    {
+      "id": "redeem",
+      "tokenIn": "$target",
+      "tokenOut": "function underlying() view returns (address)"
+    }
+  ]
+}

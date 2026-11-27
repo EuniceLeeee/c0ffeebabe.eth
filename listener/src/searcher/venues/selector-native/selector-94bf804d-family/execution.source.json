@@ -1,0 +1,87 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0x94bf804d",
+  "signature": "function mint(uint256, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_94BF804D_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": ["edge.tokenIn", "edge.tokenOut"],
+    "watch": "pool-touch",
+    "on": ["call-target", "log-emitter", "asset-transfer-endpoint"],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "mint",
+    "resourceValues": {
+      "inputs": ["sqlEdge"]
+    },
+    "projection": {
+      "descriptor": {
+        "tokenIn": { "op": "address", "args": ["$sqlEdge.tokenIn"] },
+        "tokenOut": { "op": "address", "args": ["$sqlEdge.tokenOut"] }
+      }
+    },
+    "routes": {
+      "directions": [
+        {
+          "id": "mint",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": { "slotKind": "protocol", "protocolAction": "wrap" }
+        }
+      ],
+      "resource": { "target": "$descriptor.target" }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": { "directOutput": true },
+      "protectedAddresses": ["$target", "$route.tokenIn", "$route.tokenOut"],
+      "steps": [
+        {
+          "id": "preview",
+          "static": true,
+          "call": {
+            "target": "$target",
+            "signature": "function previewDeposit(uint256) view returns (uint256)",
+            "args": [{ "runtime": "amountIn" }],
+            "save": { "previewShares": 0 },
+            "checks": [{ "left": { "runtime": "previewShares" }, "operator": "gte", "right": 1 }]
+          }
+        },
+        {
+          "id": "mint",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$target",
+            "mode": "exact-clear",
+            "amount": { "runtime": "amountIn" },
+            "requireBool": true,
+            "verifyAllowance": true
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function mint(uint256, address) returns (uint256)",
+            "args": [{ "runtime": "previewShares" }, "$recipient"],
+            "save": { "assetsSpent": 0 },
+            "checks": [{ "left": { "runtime": "amountIn" }, "operator": "gte", "right": { "runtime": "assetsSpent" } }]
+          }
+        }
+      ],
+      "effects": [
+        { "kind": "debit", "token": "$route.tokenIn", "account": "$executor", "maximum": { "runtime": "amountIn" } },
+        { "kind": "credit", "token": "$route.tokenOut", "account": "$recipient", "equals": { "runtime": "previewShares" }, "minimum": "$minAmountOut" },
+        { "kind": "unchanged-token", "token": "$route.tokenIn", "account": "$recipient", "when": "$externalRecipient" },
+        { "kind": "unchanged-token", "token": "$route.tokenOut", "account": "$executor", "when": "$externalRecipient" },
+        { "kind": "unchanged-native" }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

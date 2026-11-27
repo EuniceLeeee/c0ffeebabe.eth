@@ -1,0 +1,16 @@
+{
+  "format": "simulated-erc20-conversion/v2",
+  "id": "deposit",
+  "selector": "0x6e553f65",
+  "signature": "function deposit(uint256, address)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_6E553F65_ENABLED" },
+  "args": ["amountIn", "recipient"],
+  "approval": "exact-clear",
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": ["edge.tokenIn", "edge.tokenOut"],
+    "watch": "pool-touch",
+    "on": ["call-target", "log-emitter", "asset-transfer-endpoint"],
+    "unclassifiedWatch": "each-block"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xea598cb0",
+  "signature": "function wrap(uint256)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_EA598CB0_ENABLED" },
+  "options": [
+    {
+      "id": "wrap",
+      "tokenIn": "function token() view returns (address)",
+      "tokenOut": "$target"
+    }
+  ]
+}

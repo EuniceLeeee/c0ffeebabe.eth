@@ -7,556 +7,307 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_94BF804D_ENABLED"
   },
-  "binding": {
-    "flow": {
-      "version": 1,
-      "steps": [
-        {
-          "id": "vault",
-          "requirements": {
-            "transports": [
-              "eth-call"
-            ]
-          },
-          "requests": [
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "bbd7b3a93a760e907e629d5bdc1d8e3c67098d8feb22b607fd7b07634ff28d66"
+  },
+  "programs": [
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function asset() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
             {
-              "id": "selectorBinding:vault:asset",
-              "kind": "eth-call",
-              "to": {
-                "op": "lower",
-                "args": [
-                  {
-                    "op": "address",
-                    "args": [
-                      "$target"
-                    ]
-                  }
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
                 ]
               },
-              "data": {
-                "op": "encode",
-                "args": [
-                  "bindingvaultasset",
-                  "asset()",
-                  []
-                ]
-              },
-              "completion": "return-data"
-            }
-          ],
-          "result": {
-            "asset": {
-              "op": "lower",
-              "args": [
+              "requests": [
                 {
-                  "op": "address",
-                  "args": [
-                    {
-                      "op": "decode",
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "asset()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
                       "args": [
-                        "bindingvaultasset",
-                        "asset()",
                         {
-                          "op": "get",
+                          "op": "address",
                           "args": [
                             {
-                              "op": "returned",
+                              "op": "decodeCanonical",
                               "args": [
-                                "selectorBinding:vault:asset"
+                                "endpointRead0",
+                                "asset()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
                               ]
-                            },
-                            "data"
+                            }
                           ]
-                        },
-                        0
+                        }
                       ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "mint",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$target"
+                          ]
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
-            }
-          }
-        }
-      ],
-      "result": {
-        "vault": {
-          "asset": "$steps.vault.asset"
-        }
-      }
-    },
-    "descriptor": {
-      "vault": {
-        "op": "address",
-        "args": [
-          "$target"
-        ]
-      },
-      "asset": {
-        "op": "address",
-        "args": [
-          "$binding.vault.asset"
-        ]
-      },
-      "share": {
-        "op": "address",
-        "args": [
-          {
-            "op": "coalesce",
-            "args": [
-              "$missing",
-              "$target"
-            ]
-          }
-        ]
-      },
-      "verifiedDirections": {
-        "mint": true
-      }
-    }
-  },
-  "routes": {
-    "target": "$descriptor.vault",
-    "directions": [
-      {
-        "id": "mint",
-        "enabled": "$descriptor.verifiedDirections.mint",
-        "tokenIn": "$descriptor.asset",
-        "tokenOut": "$descriptor.share",
-        "taxonomy": {
-          "slotKind": "protocol",
-          "protocolAction": "wrap"
-        }
-      }
-    ]
-  },
-  "execution": {
-    "version": 2,
-    "settlement": {
-      "directOutput": true
-    },
-    "protectedAddresses": [
-      "$descriptor.vault",
-      "$descriptor.share",
-      "$descriptor.asset"
-    ],
-    "contextChecks": [
-      {
-        "condition": {
-          "op": "or",
-          "args": [
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "deposit"
-              ]
-            },
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "redeem"
-              ]
-            },
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "withdraw"
-              ]
-            },
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "mint"
-              ]
-            }
-          ]
-        },
-        "error": "Morpho VaultV2 conversion direction unsupported"
-      }
-    ],
-    "steps": [
-      {
-        "id": "preview",
-        "static": true,
-        "when": {
-          "op": "or",
-          "args": [
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "withdraw"
-              ]
-            },
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "mint"
-              ]
-            }
-          ]
-        },
-        "call": {
-          "target": "$descriptor.vault",
-          "signature": {
-            "op": "if",
-            "args": [
-              {
-                "op": "eq",
-                "args": [
-                  "$direction",
-                  "withdraw"
-                ]
-              },
-              "function previewRedeem(uint256) view returns(uint256)",
-              "function previewDeposit(uint256) view returns(uint256)"
-            ]
-          },
-          "args": [
-            {
-              "runtime": "amountIn"
             }
           ],
-          "save": {
-            "previewAmount": 0
-          }
-        }
-      },
-      {
-        "id": "standard",
-        "when": {
-          "op": "or",
-          "args": [
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "deposit"
-              ]
-            },
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "redeem"
-              ]
-            }
-          ]
+          "result": "$steps.identity"
         },
-        "approval": {
-          "token": "$route.tokenIn",
-          "spender": "$descriptor.vault",
-          "mode": "ensure",
-          "when": {
-            "op": "eq",
+        "descriptor": {
+          "direction": "mint",
+          "tokenIn": {
+            "op": "address",
             "args": [
-              "$direction",
-              "deposit"
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
             ]
           }
-        },
-        "call": {
-          "target": "$descriptor.vault",
-          "signature": {
-            "op": "if",
-            "args": [
-              {
-                "op": "eq",
-                "args": [
-                  "$direction",
-                  "deposit"
-                ]
-              },
-              "function deposit(uint256,address) returns(uint256)",
-              "function redeem(uint256,address,address) returns(uint256)"
-            ]
-          },
-          "args": {
-            "op": "if",
-            "args": [
-              {
-                "op": "eq",
-                "args": [
-                  "$direction",
-                  "deposit"
-                ]
-              },
-              [
-                {
-                  "runtime": "amountIn"
-                },
-                "$recipient"
-              ],
-              [
-                {
-                  "runtime": "amountIn"
-                },
-                "$recipient",
-                "$executor"
-              ]
-            ]
-          },
-          "save": {
-            "output": 0
-          }
         }
       },
-      {
-        "id": "specified",
-        "when": {
-          "op": "or",
-          "args": [
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "withdraw"
-              ]
-            },
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "mint"
-              ]
-            }
-          ]
-        },
-        "approval": {
-          "token": "$route.tokenIn",
-          "spender": "$descriptor.vault",
-          "mode": "exact-clear",
-          "requireBool": true,
-          "verifyAllowance": true,
-          "when": {
-            "op": "eq",
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
             "args": [
-              "$direction",
-              "mint"
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
             ]
           },
-          "amount": {
-            "runtime": "amountIn"
-          }
+          "error": "identity input differs from edge"
         },
-        "call": {
-          "target": "$descriptor.vault",
-          "signature": {
-            "op": "if",
+        {
+          "assert": {
+            "op": "sameAddress",
             "args": [
-              {
-                "op": "eq",
-                "args": [
-                  "$direction",
-                  "withdraw"
-                ]
-              },
-              "function withdraw(uint256,address,address) returns(uint256)",
-              "function mint(uint256,address) returns(uint256)"
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
             ]
           },
-          "args": {
-            "op": "if",
-            "args": [
-              {
-                "op": "eq",
-                "args": [
-                  "$direction",
-                  "withdraw"
-                ]
-              },
-              [
-                {
-                  "runtime": "previewAmount"
-                },
-                "$recipient",
-                "$executor"
-              ],
-              [
-                {
-                  "runtime": "previewAmount"
-                },
-                "$recipient"
-              ]
-            ]
-          },
-          "save": {
-            "output": 0
-          },
-          "checks": [
-            {
-              "left": {
-                "runtime": "output"
-              },
-              "operator": "eq",
-              "right": {
-                "runtime": "amountIn"
-              }
-            }
-          ]
+          "error": "identity output differs from edge"
         }
-      }
-    ],
-    "effects": [
-      {
-        "kind": "debit",
-        "token": "$route.tokenIn",
-        "account": "$executor",
-        "equals": {
-          "runtime": "amountIn"
-        }
-      },
-      {
-        "kind": "credit",
-        "token": "$route.tokenOut",
-        "account": "$recipient",
-        "equals": {
-          "op": "if",
-          "args": [
-            {
-              "op": "or",
-              "args": [
-                {
-                  "op": "eq",
-                  "args": [
-                    "$direction",
-                    "withdraw"
-                  ]
-                },
-                {
-                  "op": "eq",
-                  "args": [
-                    "$direction",
-                    "mint"
-                  ]
-                }
-              ]
-            },
-            {
-              "runtime": "previewAmount"
-            },
-            {
-              "runtime": "output"
-            }
-          ]
-        },
-        "minimum": "$minAmountOut"
-      },
-      {
-        "kind": "supply",
-        "token": "$descriptor.share",
-        "direction": {
-          "op": "if",
-          "args": [
-            {
-              "op": "or",
-              "args": [
-                {
-                  "op": "eq",
-                  "args": [
-                    "$direction",
-                    "deposit"
-                  ]
-                },
-                {
-                  "op": "eq",
-                  "args": [
-                    "$direction",
-                    "mint"
-                  ]
-                }
-              ]
-            },
-            "increase",
-            "decrease"
-          ]
-        },
-        "equals": {
-          "op": "if",
-          "args": [
-            {
-              "op": "eq",
-              "args": [
-                "$direction",
-                "mint"
-              ]
-            },
-            {
-              "runtime": "previewAmount"
-            },
-            {
-              "op": "if",
-              "args": [
-                {
-                  "op": "eq",
-                  "args": [
-                    "$direction",
-                    "deposit"
-                  ]
-                },
-                {
-                  "runtime": "output"
-                },
-                {
-                  "runtime": "amountIn"
-                }
-              ]
-            }
-          ]
-        }
-      },
-      {
-        "kind": "unchanged-token",
-        "token": "$route.tokenOut",
-        "account": "$executor",
-        "when": "$externalRecipient"
-      },
-      {
-        "kind": "unchanged-token",
-        "token": "$route.tokenIn",
-        "account": "$recipient",
-        "when": "$externalRecipient"
-      },
-      {
-        "kind": "unchanged-native",
-        "when": "$directSettlement"
-      }
-    ]
-  },
-  "refreshPolicy": "on-touch",
-  "values": {
-    "abi": {
-      "bindingvaultasset": [
-        "function asset() view returns(address)"
       ]
-    }
-  },
-  "meta": {
-    "label": "protocol:erc4626/morpho-vault-v2"
-  },
-  "directionSupport": {
-    "version": 1,
-    "options": [
-      {
-        "query": [
+    },
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
+        "directions": [
           {
-            "id": "asset",
-            "method": "asset()"
+            "id": "mint",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "wrap"
+            }
+          }
+        ],
+        "resource": {
+          "target": "$descriptor.target"
+        }
+      },
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "preview",
+            "static": true,
+            "call": {
+              "target": "$target",
+              "signature": "function previewDeposit(uint256) view returns (uint256)",
+              "args": [
+                {
+                  "runtime": "amountIn"
+                }
+              ],
+              "save": {
+                "previewShares": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "previewShares"
+                  },
+                  "operator": "gte",
+                  "right": 1
+                }
+              ]
+            }
           },
           {
-            "id": "self",
-            "source": "self"
+            "id": "mint",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "amount": {
+                "runtime": "amountIn"
+              },
+              "requireBool": true,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function mint(uint256, address) returns (uint256)",
+              "args": [
+                {
+                  "runtime": "previewShares"
+                },
+                "$recipient"
+              ],
+              "save": {
+                "assetsSpent": 0
+              },
+              "checks": [
+                {
+                  "left": {
+                    "runtime": "amountIn"
+                  },
+                  "operator": "gte",
+                  "right": {
+                    "runtime": "assetsSpent"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "maximum": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "equals": {
+              "runtime": "previewShares"
+            },
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
           }
         ]
+      },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
+          }
+        }
       }
-    ],
-    "confirm": {
-      "in": "$edge.tokenIn",
-      "out": "$edge.tokenOut"
     }
-  }
+  ]
 }

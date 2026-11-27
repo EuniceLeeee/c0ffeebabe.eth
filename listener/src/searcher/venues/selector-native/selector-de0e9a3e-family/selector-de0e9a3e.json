@@ -7,14 +7,37 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_DE0E9A3E_ENABLED"
   },
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "6e573d5dfee3e0976f8bb472a6bc5753debfbc8cf6dc28126e94bc0cb1c98fb3"
+  },
   "programs": [
     {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function token() view returns (address)"
+          ]
+        }
+      },
       "binding": {
         "flow": {
           "version": 1,
           "steps": [
             {
-              "id": "wrapper",
+              "id": "identity",
               "requirements": {
                 "transports": [
                   "eth-call"
@@ -22,23 +45,13 @@
               },
               "requests": [
                 {
-                  "id": "selectorBinding:wrapper:asset",
+                  "id": "identity:ep0",
                   "kind": "eth-call",
-                  "to": {
-                    "op": "lower",
-                    "args": [
-                      {
-                        "op": "address",
-                        "args": [
-                          "$target"
-                        ]
-                      }
-                    ]
-                  },
+                  "to": "$target",
                   "data": {
                     "op": "encode",
                     "args": [
-                      "bindingwrapperasset",
+                      "endpointRead0",
                       "token()",
                       []
                     ]
@@ -46,99 +59,154 @@
                   "completion": "return-data"
                 }
               ],
-              "result": {
-                "asset": {
-                  "op": "lower",
-                  "args": [
-                    {
-                      "op": "address",
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
                       "args": [
                         {
-                          "op": "decode",
+                          "op": "address",
                           "args": [
-                            "bindingwrapperasset",
-                            "token()",
                             {
-                              "op": "get",
+                              "op": "decodeCanonical",
                               "args": [
+                                "endpointRead0",
+                                "token()",
                                 {
-                                  "op": "returned",
+                                  "op": "get",
                                   "args": [
-                                    "selectorBinding:wrapper:asset"
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
                                   ]
                                 },
-                                "data"
+                                0
                               ]
-                            },
-                            0
+                            }
                           ]
                         }
                       ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "unwrap",
+                    "tokenIn": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$target"
+                          ]
+                        }
+                      ]
+                    },
+                    "tokenOut": "$r.ep0"
+                  }
                 }
-              }
+              ]
             }
           ],
-          "result": {
-            "wrapper": {
-              "asset": "$steps.wrapper.asset"
-            }
-          }
+          "result": "$steps.identity"
         },
         "descriptor": {
-          "asset": {
+          "direction": "unwrap",
+          "tokenIn": {
             "op": "address",
             "args": [
-              "$binding.wrapper.asset"
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
             ]
           }
         }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
       },
       "routes": {
         "directions": [
           {
             "id": "unwrap",
             "enabled": true,
-            "tokenIn": "$descriptor.target",
-            "tokenOut": "$descriptor.asset",
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
             "taxonomy": {
               "slotKind": "protocol",
               "protocolAction": "unwrap"
             }
           }
-        ]
+        ],
+        "resource": {
+          "target": "$descriptor.target"
+        }
       },
       "execution": {
         "version": 2,
+        "requireCanonicalSource": true,
         "settlement": {
           "directOutput": false
         },
         "protectedAddresses": [
+          "$target",
+          "$route.tokenOut"
+        ],
+        "contextChecks": [
           {
-            "op": "address",
-            "args": [
-              "$descriptor.target"
-            ]
-          },
-          {
-            "op": "address",
-            "args": [
-              "$descriptor.asset"
-            ]
+            "condition": {
+              "op": "not",
+              "args": [
+                "$externalRecipient"
+              ]
+            },
+            "error": "unwrap pays executor only"
           }
         ],
         "steps": [
           {
             "id": "convert",
             "call": {
-              "target": {
-                "op": "address",
-                "args": [
-                  "$descriptor.target"
-                ]
-              },
-              "signature": "function unwrap(uint256) returns(uint256)",
+              "target": "$target",
+              "signature": "function unwrap(uint256) returns (uint256)",
               "args": [
                 {
                   "runtime": "amountIn"
@@ -173,191 +241,35 @@
           {
             "kind": "credit",
             "token": "$route.tokenOut",
-            "account": "$executor",
+            "account": "$recipient",
             "equals": {
               "runtime": "amountIn"
-            }
+            },
+            "minimum": "$minAmountOut"
           },
           {
             "kind": "unchanged-native"
           }
         ]
       },
-      "refreshPolicy": "each-block",
-      "values": {
-        "abi": {
-          "bindingwrapperasset": [
-            "function token() view returns(address)"
-          ]
-        }
-      },
-      "meta": {
-        "label": "protocol:few-wrapped/factory-wrapper-effects"
-      }
-    },
-    {
-      "parameters": [
-        {
-          "path": [
-            0
-          ],
-          "role": "amountIn"
-        }
-      ],
-      "payment": {
-        "kind": "none"
-      },
-      "values": {
-        "abi": {
-          "assettokenOut": [
-            "function stETH() view returns(address)"
-          ]
-        }
-      },
-      "binding": {
-        "flow": {
-          "version": 1,
-          "steps": [
-            {
-              "id": "assets",
-              "requirements": {
-                "transports": [
-                  "eth-call"
-                ]
-              },
-              "requests": {
-                "op": "concat",
-                "args": [
-                  {
-                    "op": "if",
-                    "args": [
-                      {
-                        "op": "not",
-                        "args": [
-                          {
-                            "op": "defined",
-                            "args": [
-                              "$scope.tokenOut"
-                            ]
-                          }
-                        ]
-                      },
-                      [
-                        {
-                          "id": "selector-assets:tokenOut",
-                          "kind": "eth-call",
-                          "to": "$target",
-                          "data": {
-                            "op": "encode",
-                            "args": [
-                              "assettokenOut",
-                              "stETH()",
-                              []
-                            ]
-                          },
-                          "completion": "return-data"
-                        }
-                      ],
-                      []
-                    ]
-                  }
-                ]
-              },
-              "result": {
-                "tokenIn": {
-                  "op": "coalesce",
-                  "args": [
-                    "$scope.tokenIn",
-                    "$target"
-                  ]
-                },
-                "tokenOut": {
-                  "op": "coalesce",
-                  "args": [
-                    "$scope.tokenOut",
-                    {
-                      "op": "lower",
-                      "args": [
-                        {
-                          "op": "address",
-                          "args": [
-                            {
-                              "op": "decode",
-                              "args": [
-                                "assettokenOut",
-                                "stETH()",
-                                {
-                                  "op": "get",
-                                  "args": [
-                                    {
-                                      "op": "returned",
-                                      "args": [
-                                        "selector-assets:tokenOut"
-                                      ]
-                                    },
-                                    "data"
-                                  ]
-                                },
-                                0
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          ],
-          "result": {
-            "tokenIn": "$steps.assets.tokenIn",
-            "tokenOut": "$steps.assets.tokenOut"
-          }
-        },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
         "descriptor": {
-          "tokenIn": "$binding.tokenIn",
-          "tokenOut": "$binding.tokenOut"
-        }
-      },
-      "meta": {
-        "label": "protocol:wsteth/steth-active-binding"
-      },
-      "routes": {
-        "directions": [
-          {
-            "id": "unwrap",
-            "enabled": true,
-            "tokenIn": "$descriptor.tokenIn",
-            "tokenOut": "$descriptor.tokenOut",
-            "taxonomy": {
-              "slotKind": "protocol",
-              "protocolAction": "unwrap"
-            }
-          }
-        ]
-      }
-    }
-  ],
-  "directionSupport": {
-    "version": 1,
-    "options": [
-      {
-        "query": [
-          {
-            "id": "token",
-            "method": "token()"
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
           },
-          {
-            "id": "self",
-            "source": "self"
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
           }
-        ]
+        }
       }
-    ],
-    "confirm": {
-      "in": "$edge.tokenIn",
-      "out": "$edge.tokenOut"
     }
-  }
+  ]
 }

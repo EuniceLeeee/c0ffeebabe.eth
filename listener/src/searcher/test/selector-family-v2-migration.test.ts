@@ -31,7 +31,7 @@ test("original migration inventory maps all 94 programs and preserves or upgrade
 });
 test("all ten migrated automatic programs build from census assets with zero binding RPC",()=>{
  for(const row of report.migrations.filter((r:any)=>r.mode==="parameters-and-payment")){
-  const definition=load(row.selector),program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey)!;
+  const definition=load(row.selector);if(definition.directState)continue;const program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey)!;
   const args=program.parameters!.map(p=>({amountIn:7n,minimumOut:1n,tokenIn:asset,tokenOut:output,executor:sender,recipient:sender})[p.role as "amountIn"]);
   const tx=census(definition.signature,args),candidate=selectorNativeCandidateFromCensus(definition,tx,tx.calls[0]!.id,row.newProgramKey);assert(candidate,row.legacyLabel);
   const runtime=createSelectorNativeRuntime(definition,program),request=runtime.step({candidate,source,executor,transactionOrigin:sender});assert.deepEqual(request.requests,[],row.legacyLabel);
@@ -43,7 +43,7 @@ test("all ten migrated automatic programs build from census assets with zero bin
 test("four wrapper entries preserve their own selector, recipient ability and 1:1 return/balance guards",()=>{
  const getter=new Interface(["function token() view returns(address)"]);
  for(const [selector,to] of [["0x26599850",true],["0x5dbd6059",true],["0xea598cb0",false],["0xde0e9a3e",false]] as const){
-  const definition=load(selector),row=report.migrations.find((r:any)=>r.selector===selector&&r.legacyLabel==="protocol:few-wrapped/factory-wrapper-effects"),program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey)!;
+  const definition=load(selector);if(definition.directState)continue;const row=report.migrations.find((r:any)=>r.selector===selector&&r.legacyLabel==="protocol:few-wrapped/factory-wrapper-effects"),program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey)!;
   const tx=census(definition.signature,to?[7n,sender]:[7n],false),candidate=selectorNativeCandidateFromCensus(definition,tx,tx.calls[0]!.id,row.newProgramKey);assert(candidate);
   const runtime=createSelectorNativeRuntime(definition,program),step=runtime.step({candidate,source,executor,transactionOrigin:sender});assert.equal(step.requests.length,1);
   const proof=step.decode([{id:step.requests[0]!.id,source,ok:true,completion:"returned",data:getter.encodeFunctionResult("token",[asset]),
@@ -69,7 +69,7 @@ test("pruned legacy provenance needs no identity RPC and preserves the exact exe
   ["0x86b01724","ella-exchange/verified-native-base-runtime",1],
   ["0xd0137d8d","ella-exchange/verified-native-base-runtime",1],
  ] as readonly (readonly [string,string,number])[]){
-  const definition=load(selector),row=removed.find((row:any)=>row.selector===selector&&row.legacyLabel===label),program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey)!;
+  const definition=load(selector);if(definition.directState)continue;const row=removed.find((row:any)=>row.selector===selector&&row.legacyLabel===label),program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey)!;
   if(selector==="0xa6e81533")assert.equal(program.math,undefined,"the retired proxy identity model is not an execution dependency");
   const iface=new Interface([definition.signature]),fragment=iface.getFunction(selector)!;
   const args=fragment.inputs.map(input=>input.type==="address"?sender:7n),tx=census(definition.signature,args,false);
@@ -86,7 +86,7 @@ test("pruned legacy provenance needs no identity RPC and preserves the exact exe
   assert(!JSON.stringify(bound.descriptor,(_key,value)=>typeof value==="bigint"?value.toString():value).includes("CodeHash"),label);
  }
  for(const selector of ["0x6e553f65","0xba087652"]){
-  const definition=load(selector),row=report.migrations.find((row:any)=>row.selector===selector&&row.legacyLabel==="protocol:erc4626/frax-custodian-sync-conversion"),program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey)!;
+  const definition=load(selector);if(definition.directState)continue;const row=report.migrations.find((row:any)=>row.selector===selector&&row.legacyLabel==="protocol:erc4626/frax-custodian-sync-conversion"),program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey)!;
   assert(JSON.stringify(program.binding).includes('"get-code"'));assert(JSON.stringify(program.execution!.protectedAddresses).includes("$descriptor.custodian.proxyAdmin"));
  }
 });

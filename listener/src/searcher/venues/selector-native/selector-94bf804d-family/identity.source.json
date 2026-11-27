@@ -1,0 +1,13 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x94bf804d",
+  "signature": "function mint(uint256, address)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_94BF804D_ENABLED" },
+  "options": [
+    {
+      "id": "mint",
+      "tokenIn": "function asset() view returns (address)",
+      "tokenOut": "$target"
+    }
+  ]
+}

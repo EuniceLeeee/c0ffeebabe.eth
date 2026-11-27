@@ -1097,8 +1097,123 @@ export function compileIdentitySource(identitySource: unknown, expected?: { read
       return compilePoolKeyIdentityOption(option, { poolKeyTarget, allowNativeToken: allowNativeToken === true });
     }
     need(!poolKeyTarget && !allowNativeToken, "poolKeyTarget/allowNativeToken require poolKey identity options");
-    return compileGetterIdentityOption(option);
+    if (Object.hasOwn(option, "tokenList")) {
+      return compileTokenListIdentityOption(option);
+    }
+    if (typeof option.tokenIn === "string" && typeof option.tokenOut === "string" &&
+        !option.tokenIn.startsWith("$") && !option.tokenOut.startsWith("$")) {
+      return compileGetterIdentityOption(option);
+    }
+    return compileEndpointIdentityOption(option);
   });
+}
+
+function compileEndpointIdentityOption(option: Data): Data {
+  keys(option, ["id", "tokenIn", "tokenOut"]);
+  const abi: Data = {}, decoded: Data = {}, requests: Data[] = [];
+  let callCount = 0;
+  const resolveEndpoint = (spec: unknown, side: "in" | "out"): unknown => {
+    if (spec === "$target" || spec === "$scope.tokenIn" || spec === "$scope.tokenOut") {
+      return op("lower", op("address", spec));
+    }
+    const isStr = typeof spec === "string";
+    need(isStr || obj(spec), `invalid ${side} identity endpoint`);
+    const sigStr = isStr ? spec : spec.call;
+    const rawArgs: unknown[] = isStr ? [] : (spec.args ?? []);
+    const outIdx: number = isStr ? 0 : (spec.output ?? 0);
+    if (!isStr) {
+      const allowed = new Set(["call", "args", "output"]);
+      need(Object.keys(spec).every(k => allowed.has(k)), `unexpected fields on ${side} identity call`);
+    }
+    need(typeof sigStr === "string" && Array.isArray(rawArgs) && Number.isSafeInteger(outIdx) && outIdx >= 0,
+      `invalid ${side} identity call specification`);
+    const fn = FunctionFragment.from(sigStr);
+    need(fn.stateMutability === "view" && fn.inputs.length === rawArgs.length &&
+      outIdx < fn.outputs.length && fn.outputs[outIdx]!.type === "address" &&
+      /^[a-zA-Z][a-zA-Z0-9_]*$/.test(fn.name),
+      `expected view function returning address at output ${outIdx}`);
+    for (const arg of rawArgs) {
+      need(typeof arg === "number" && Number.isSafeInteger(arg) ||
+        typeof arg === "string" && (arg === "$scope.tokenIn" || arg === "$scope.tokenOut" || /^-?\d+$/.test(arg)),
+        "unsupported identity call argument");
+    }
+    const idx = callCount++;
+    const alias = `endpointRead${idx}`, reqId = `identity:ep${idx}`, signature = fn.format("sighash");
+    abi[alias] = [fn.format("full")];
+    requests.push({ id: reqId, kind: "eth-call", to: "$target", data: op("encode", alias, signature, rawArgs), completion: "return-data" });
+    const field = `ep${idx}`;
+    decoded[field] = op("lower", op("address", op("decodeCanonical", alias, signature, op("get", op("returned", reqId), "data"), outIdx)));
+    return `$r.${field}`;
+  };
+  const exprIn = resolveEndpoint(option.tokenIn, "in");
+  const exprOut = resolveEndpoint(option.tokenOut, "out");
+  need(requests.length > 0, "identity option must perform at least one contract read");
+  need(JSON.stringify(option.tokenIn) !== JSON.stringify(option.tokenOut), "identity endpoints must be distinct");
+  return {
+    type: "independentIdentity",
+    values: { abi },
+    binding: {
+      flow: {
+        version: 1,
+        steps: [{
+          id: "identity",
+          requirements: { transports: ["eth-call"] },
+          requests,
+          decode: [{ let: "r", value: decoded }, { return: { direction: option.id, tokenIn: exprIn, tokenOut: exprOut } }],
+        }],
+        result: "$steps.identity",
+      },
+      descriptor: {
+        direction: option.id,
+        tokenIn: op("address", "$binding.tokenIn"),
+        tokenOut: op("address", "$binding.tokenOut"),
+      },
+    },
+    checks: [
+      { assert: op("sameAddress", "$descriptor.tokenIn", "$scope.tokenIn"), error: "identity input differs from edge" },
+      { assert: op("sameAddress", "$descriptor.tokenOut", "$scope.tokenOut"), error: "identity output differs from edge" },
+    ],
+  };
+}
+
+function compileTokenListIdentityOption(option: Data): Data {
+  keys(option, ["id", "tokenList"]);
+  need(typeof option.tokenList === "string", "invalid tokenList getter");
+  const fn = FunctionFragment.from(option.tokenList);
+  need(fn.stateMutability === "view" && fn.inputs.length === 0 && fn.outputs.length === 1 &&
+    fn.outputs[0]!.type === "address[]", "tokenList getter must be a nullary view returning address[]");
+  const alias = "tokenListRead", reqId = "identity:tokenList", signature = fn.format("sighash");
+  return {
+    type: "independentIdentity",
+    values: { abi: { [alias]: [fn.format("full")] } },
+    binding: {
+      flow: {
+        version: 1,
+        steps: [{
+          id: "identity",
+          requirements: { transports: ["eth-call"] },
+          requests: [{ id: reqId, kind: "eth-call", to: "$target", data: op("encode", alias, signature, []), completion: "return-data" }],
+          decode: [
+            { let: "rawTokens", value: op("decodeCanonical", alias, signature, op("get", op("returned", reqId), "data"), 0) },
+            { let: "tokens", value: op("map", "$rawTokens", "tok", op("lower", op("address", "$tok"))) },
+            { assert: op("some", "$tokens", "tok", op("sameAddress", "$tok", "$scope.tokenIn")), error: "tokenIn not in pool tokenList" },
+            { assert: op("some", "$tokens", "tok", op("sameAddress", "$tok", "$scope.tokenOut")), error: "tokenOut not in pool tokenList" },
+            { return: { direction: option.id, tokenIn: op("lower", op("address", "$scope.tokenIn")), tokenOut: op("lower", op("address", "$scope.tokenOut")) } },
+          ],
+        }],
+        result: "$steps.identity",
+      },
+      descriptor: {
+        direction: option.id,
+        tokenIn: op("address", "$binding.tokenIn"),
+        tokenOut: op("address", "$binding.tokenOut"),
+      },
+    },
+    checks: [
+      { assert: op("sameAddress", "$descriptor.tokenIn", "$scope.tokenIn"), error: "identity input differs from edge" },
+      { assert: op("sameAddress", "$descriptor.tokenOut", "$scope.tokenOut"), error: "identity output differs from edge" },
+    ],
+  };
 }
 
 function compileGetterIdentityOption(option: Data): Data {

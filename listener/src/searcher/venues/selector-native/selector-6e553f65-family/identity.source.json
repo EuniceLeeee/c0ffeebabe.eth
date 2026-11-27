@@ -1,0 +1,13 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x6e553f65",
+  "signature": "function deposit(uint256, address)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_6E553F65_ENABLED" },
+  "options": [
+    {
+      "id": "deposit",
+      "tokenIn": "function asset() view returns (address)",
+      "tokenOut": "$target"
+    }
+  ]
+}

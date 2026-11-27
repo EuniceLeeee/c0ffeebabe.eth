@@ -1,0 +1,68 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0x5dbd6059",
+  "signature": "function unwrapTo(uint256, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_5DBD6059_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": ["edge.tokenIn", "edge.tokenOut"],
+    "watch": "pool-touch",
+    "on": ["call-target", "log-emitter", "asset-transfer-endpoint"],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "unwrap-to",
+    "resourceValues": {
+      "inputs": ["sqlEdge"]
+    },
+    "projection": {
+      "descriptor": {
+        "tokenIn": { "op": "address", "args": ["$sqlEdge.tokenIn"] },
+        "tokenOut": { "op": "address", "args": ["$sqlEdge.tokenOut"] }
+      }
+    },
+    "routes": {
+      "directions": [
+        {
+          "id": "unwrap-to",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": { "slotKind": "protocol", "protocolAction": "unwrap" }
+        }
+      ],
+      "resource": { "target": "$descriptor.target" }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": { "directOutput": true },
+      "protectedAddresses": ["$target", "$route.tokenOut"],
+      "steps": [
+        {
+          "id": "convertTo",
+          "call": {
+            "target": "$target",
+            "signature": "function unwrapTo(uint256, address) returns (uint256)",
+            "args": [{ "runtime": "amountIn" }, "$recipient"],
+            "save": { "converted": 0 },
+            "checks": [{ "left": { "runtime": "converted" }, "operator": "eq", "right": { "runtime": "amountIn" } }]
+          }
+        }
+      ],
+      "effects": [
+        { "kind": "debit", "token": "$route.tokenIn", "account": "$executor", "equals": { "runtime": "amountIn" } },
+        { "kind": "credit", "token": "$route.tokenOut", "account": "$recipient", "equals": { "runtime": "amountIn" }, "minimum": "$minAmountOut" },
+        { "kind": "unchanged-token", "token": "$route.tokenIn", "account": "$recipient", "when": "$externalRecipient" },
+        { "kind": "unchanged-token", "token": "$route.tokenOut", "account": "$executor", "when": "$externalRecipient" },
+        { "kind": "unchanged-native" }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

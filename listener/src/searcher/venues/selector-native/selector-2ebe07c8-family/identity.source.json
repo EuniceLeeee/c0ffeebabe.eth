@@ -1,0 +1,17 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x2ebe07c8",
+  "signature": "function depositAsset(address, uint256, uint256, address)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_2EBE07C8_ENABLED" },
+  "options": [
+    {
+      "id": "deposit-asset",
+      "tokenIn": "$scope.tokenIn",
+      "tokenOut": {
+        "call": "function getMLRTAmountToMint(address, uint256) view returns (uint256, address)",
+        "args": ["$scope.tokenIn", 1],
+        "output": 1
+      }
+    }
+  ]
+}

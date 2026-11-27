@@ -7,14 +7,37 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_DB006A75_ENABLED"
   },
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "a5b0b5487b759894e390baabec62c928379c1aa45bbc3a80b4ecea9937484ba8"
+  },
   "programs": [
     {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function underlying() view returns (address)"
+          ]
+        }
+      },
       "binding": {
         "flow": {
           "version": 1,
           "steps": [
             {
-              "id": "market",
+              "id": "identity",
               "requirements": {
                 "transports": [
                   "eth-call"
@@ -22,23 +45,13 @@
               },
               "requests": [
                 {
-                  "id": "selectorBinding:market:underlying",
+                  "id": "identity:ep0",
                   "kind": "eth-call",
-                  "to": {
-                    "op": "lower",
-                    "args": [
-                      {
-                        "op": "address",
-                        "args": [
-                          "$target"
-                        ]
-                      }
-                    ]
-                  },
+                  "to": "$target",
                   "data": {
                     "op": "encode",
                     "args": [
-                      "bindingmarketunderlying",
+                      "endpointRead0",
                       "underlying()",
                       []
                     ]
@@ -46,138 +59,136 @@
                   "completion": "return-data"
                 }
               ],
-              "result": {
-                "underlying": {
-                  "op": "lower",
-                  "args": [
-                    {
-                      "op": "address",
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
                       "args": [
                         {
-                          "op": "decode",
+                          "op": "address",
                           "args": [
-                            "bindingmarketunderlying",
-                            "underlying()",
                             {
-                              "op": "get",
+                              "op": "decodeCanonical",
                               "args": [
+                                "endpointRead0",
+                                "underlying()",
                                 {
-                                  "op": "returned",
+                                  "op": "get",
                                   "args": [
-                                    "selectorBinding:market:underlying"
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
                                   ]
                                 },
-                                "data"
+                                0
                               ]
-                            },
-                            0
+                            }
                           ]
                         }
                       ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "redeem",
+                    "tokenIn": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$target"
+                          ]
+                        }
+                      ]
+                    },
+                    "tokenOut": "$r.ep0"
+                  }
                 }
-              }
+              ]
             }
           ],
-          "result": {
-            "market": {
-              "underlying": "$steps.market.underlying"
-            }
-          }
+          "result": "$steps.identity"
         },
         "descriptor": {
-          "market": {
+          "direction": "redeem",
+          "tokenIn": {
             "op": "address",
             "args": [
-              "$target"
+              "$binding.tokenIn"
             ]
           },
-          "underlying": {
+          "tokenOut": {
             "op": "address",
             "args": [
-              "$binding.market.underlying"
+              "$binding.tokenOut"
             ]
-          },
-          "share": {
-            "op": "address",
-            "args": [
-              "$target"
-            ]
-          },
-          "redemptionPathVerified": true
+          }
         }
       },
-      "routes": {
-        "target": {
-          "op": "address",
-          "args": [
-            "$descriptor.market"
-          ]
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
         },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
         "directions": [
           {
             "id": "redeem",
-            "enabled": "$descriptor.redemptionPathVerified",
-            "tokenIn": {
-              "op": "address",
-              "args": [
-                "$descriptor.share"
-              ]
-            },
-            "tokenOut": {
-              "op": "address",
-              "args": [
-                "$descriptor.underlying"
-              ]
-            },
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
             "taxonomy": {
               "slotKind": "protocol",
               "protocolAction": "redeem"
             }
           }
         ],
-        "assertions": [
-          {
-            "assert": {
-              "op": "not",
-              "args": [
-                {
-                  "op": "sameAddress",
-                  "args": [
-                    "$descriptor.underlying",
-                    "0x0000000000000000000000000000000000000000"
-                  ]
-                }
-              ]
-            },
-            "error": "compound cToken underlying cannot be the zero address"
-          },
-          {
-            "assert": {
-              "op": "not",
-              "args": [
-                {
-                  "op": "sameAddress",
-                  "args": [
-                    "$descriptor.share",
-                    "$descriptor.underlying"
-                  ]
-                }
-              ]
-            },
-            "error": "compound cToken share and underlying must be distinct"
-          }
-        ]
+        "resource": {
+          "target": "$descriptor.target"
+        }
       },
       "execution": {
         "version": 2,
+        "requireCanonicalSource": true,
         "settlement": {
           "directOutput": false
         },
         "protectedAddresses": [
-          "$descriptor.market",
-          "$descriptor.underlying"
+          "$target",
+          "$route.tokenOut"
         ],
         "contextChecks": [
           {
@@ -187,14 +198,14 @@
                 "$externalRecipient"
               ]
             },
-            "error": "compound cToken redeem pays the executor; an external recipient is unsupported"
+            "error": "compound cToken redeem pays executor only"
           }
         ],
         "steps": [
           {
             "id": "redeem",
             "call": {
-              "target": "$descriptor.market",
+              "target": "$target",
               "signature": "function redeem(uint256) returns (uint256)",
               "args": [
                 {
@@ -232,191 +243,28 @@
             "minimum": "$minAmountOut"
           },
           {
-            "kind": "supply",
-            "token": "$descriptor.market",
-            "direction": "decrease",
-            "equals": {
-              "runtime": "amountIn"
-            }
+            "kind": "unchanged-native"
           }
         ]
       },
-      "refreshPolicy": "each-block",
-      "values": {
-        "abi": {
-          "bindingmarketunderlying": [
-            "function underlying() view returns(address)"
-          ]
-        }
-      },
-      "meta": {
-        "label": "protocol:compound-ctoken/comptroller-registered-ctoken"
-      }
-    },
-    {
-      "parameters": [
-        {
-          "path": [
-            0
-          ],
-          "role": "amountIn"
-        }
-      ],
-      "payment": {
-        "kind": "none"
-      },
-      "values": {
-        "abi": {
-          "assettokenOut": [
-            "function BTB_TOKEN() view returns(address)"
-          ]
-        }
-      },
-      "binding": {
-        "flow": {
-          "version": 1,
-          "steps": [
-            {
-              "id": "assets",
-              "requirements": {
-                "transports": [
-                  "eth-call"
-                ]
-              },
-              "requests": {
-                "op": "concat",
-                "args": [
-                  {
-                    "op": "if",
-                    "args": [
-                      {
-                        "op": "not",
-                        "args": [
-                          {
-                            "op": "defined",
-                            "args": [
-                              "$scope.tokenOut"
-                            ]
-                          }
-                        ]
-                      },
-                      [
-                        {
-                          "id": "selector-assets:tokenOut",
-                          "kind": "eth-call",
-                          "to": "$target",
-                          "data": {
-                            "op": "encode",
-                            "args": [
-                              "assettokenOut",
-                              "BTB_TOKEN()",
-                              []
-                            ]
-                          },
-                          "completion": "return-data"
-                        }
-                      ],
-                      []
-                    ]
-                  }
-                ]
-              },
-              "result": {
-                "tokenIn": {
-                  "op": "coalesce",
-                  "args": [
-                    "$scope.tokenIn",
-                    "$target"
-                  ]
-                },
-                "tokenOut": {
-                  "op": "coalesce",
-                  "args": [
-                    "$scope.tokenOut",
-                    {
-                      "op": "lower",
-                      "args": [
-                        {
-                          "op": "address",
-                          "args": [
-                            {
-                              "op": "decode",
-                              "args": [
-                                "assettokenOut",
-                                "BTB_TOKEN()",
-                                {
-                                  "op": "get",
-                                  "args": [
-                                    {
-                                      "op": "returned",
-                                      "args": [
-                                        "selector-assets:tokenOut"
-                                      ]
-                                    },
-                                    "data"
-                                  ]
-                                },
-                                0
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          ],
-          "result": {
-            "tokenIn": "$steps.assets.tokenIn",
-            "tokenOut": "$steps.assets.tokenOut"
-          }
-        },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
         "descriptor": {
-          "tokenIn": "$binding.tokenIn",
-          "tokenOut": "$binding.tokenOut"
-        }
-      },
-      "meta": {
-        "label": "protocol:token-conversion/btb-bear-v1"
-      },
-      "routes": {
-        "directions": [
-          {
-            "id": "redeem",
-            "enabled": true,
-            "tokenIn": "$descriptor.tokenIn",
-            "tokenOut": "$descriptor.tokenOut",
-            "taxonomy": {
-              "slotKind": "protocol",
-              "protocolAction": "redeem"
-            }
-          }
-        ]
-      },
-      "refreshPolicy": "each-block"
-    }
-  ],
-  "directionSupport": {
-    "version": 1,
-    "options": [
-      {
-        "query": [
-          {
-            "id": "underlying",
-            "method": "underlying()"
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
           },
-          {
-            "id": "self",
-            "source": "self"
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
           }
-        ]
+        }
       }
-    ],
-    "confirm": {
-      "in": "$edge.tokenIn",
-      "out": "$edge.tokenOut"
     }
-  }
+  ]
 }
