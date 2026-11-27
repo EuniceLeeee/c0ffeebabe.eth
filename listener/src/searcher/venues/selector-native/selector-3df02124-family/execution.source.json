@@ -1,0 +1,253 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0x3df02124",
+  "signature": "function exchange(int128, int128, uint256, uint256)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_3DF02124_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "curve-exchange",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "pool": "$target",
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenIn"
+          ]
+        },
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenOut"
+          ]
+        }
+      }
+    },
+    "routes": {
+      "target": "$descriptor.pool",
+      "directions": [
+        {
+          "id": "swap",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": {
+            "slotKind": "swap"
+          },
+          "fields": {
+            "pool": "$descriptor.pool"
+          }
+        }
+      ],
+      "venue": {
+        "kind": "address-pool",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.pool"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "not",
+            "args": [
+              "$externalRecipient"
+            ]
+          },
+          "error": "4-arg curve exchange pays executor only"
+        }
+      ],
+      "steps": [
+        {
+          "id": "coin0",
+          "static": true,
+          "call": {
+            "target": "$target",
+            "signature": "function coins(uint256) view returns (address)",
+            "args": [
+              0
+            ],
+            "save": {
+              "coin0": 0
+            }
+          }
+        },
+        {
+          "id": "coin1",
+          "static": true,
+          "call": {
+            "target": "$target",
+            "signature": "function coins(uint256) view returns (address)",
+            "args": [
+              1
+            ],
+            "save": {
+              "coin1": 0
+            }
+          }
+        },
+        {
+          "id": "indices",
+          "math": {
+            "model": "pairIndices",
+            "inputs": {
+              "coin1": {
+                "runtime": "coin1"
+              },
+              "tokenIn": {
+                "op": "uint",
+                "args": [
+                  "$route.tokenIn"
+                ]
+              },
+              "tokenOut": {
+                "op": "uint",
+                "args": [
+                  "$route.tokenOut"
+                ]
+              }
+            },
+            "outputs": {
+              "indexIn": "indexIn",
+              "indexOut": "indexOut"
+            }
+          }
+        },
+        {
+          "id": "exchange",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$target",
+            "mode": "exact-clear",
+            "requireBool": true,
+            "verifyAllowance": true
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function exchange(int128, int128, uint256, uint256)",
+            "args": [
+              {
+                "runtime": "indexIn"
+              },
+              {
+                "runtime": "indexOut"
+              },
+              {
+                "runtime": "amountIn"
+              },
+              "$minAmountOut"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    },
+    "runtimeMath": {
+      "version": 1,
+      "entries": {
+        "pairIndices": {
+          "model": "curve:pair-indices",
+          "version": 1
+        }
+      },
+      "models": [
+        {
+          "id": "curve:pair-indices",
+          "version": 1,
+          "inputs": [
+            "coin1",
+            "tokenIn",
+            "tokenOut"
+          ],
+          "outputs": [
+            "indexIn",
+            "indexOut"
+          ],
+          "operations": [
+            {
+              "name": "indexIn",
+              "op": "eq",
+              "left": {
+                "input": "coin1"
+              },
+              "right": {
+                "input": "tokenIn"
+              }
+            },
+            {
+              "name": "indexOut",
+              "op": "eq",
+              "left": {
+                "input": "coin1"
+              },
+              "right": {
+                "input": "tokenOut"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

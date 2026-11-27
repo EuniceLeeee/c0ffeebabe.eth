@@ -142,6 +142,7 @@ const rankingState=new WeakMap<EffectiveMidSnapshot,RankingState>();
 const issuedRankingReceipts=new WeakSet<EffectiveExecutionVerification>();
 // The general replay reader can record what it validated, but cannot enable SQL pool pricing.
 const anchoredReplayGraphs=new WeakMap<EffectiveMidSnapshot,readonly TokenEdge[]>();
+const restoredReplayPoolOrigins=new WeakMap<EffectiveMidSnapshot,ReadonlyMap<string,EffectiveMidRow>>();
 export function effectiveHistoricalRankingHint(snapshot:EffectiveMidSnapshot,edge:TokenEdge):EffectiveHistoricalRankingHint|undefined {
   const entry=rankingState.get(snapshot)?.byId.get(blockScanEdgeKey(edge));
   return entry?.edge===edge ? entry.hint : undefined;
@@ -154,6 +155,7 @@ interface EffectiveNativeChanges {
   readonly edges: readonly TokenEdge[];
   readonly updates: readonly (readonly [string, EffectiveMidRow])[];
   readonly removals: readonly string[];
+  readonly dirtyUnfunded?: readonly string[];
 }
 const nativeChanges = new WeakMap<EffectiveMidSnapshot, EffectiveNativeChanges>();
 const ownedRows = new WeakSet<ReadonlyMap<string, EffectiveMidRow>>();
@@ -285,6 +287,7 @@ export interface EffectiveMidReplayState {
   readonly references: readonly EffectiveAmountReference[];
   readonly byToken: readonly (readonly [string, number])[];
   readonly byRow: readonly (readonly [string, number])[];
+  readonly poolOrigins?: readonly (readonly [string, EffectiveMidRow, number])[];
 }
 
 export function exportEffectiveMidReplayState(snapshot: EffectiveMidSnapshot): EffectiveMidReplayState {
@@ -296,12 +299,22 @@ export function exportEffectiveMidReplayState(snapshot: EffectiveMidSnapshot): E
     if (value === undefined) { value = references.length; ids.set(reference, value); references.push(reference); }
     return value;
   };
+  const ranking = rankingState.get(snapshot);
+  const originsSource = ranking?.requestedOrigins ?? ranking?.restoredPoolOrigins;
+  const poolOrigins = originsSource
+    ? [...originsSource].flatMap(([key, originRow]) => {
+        if (snapshot.rows.get(key)?.status !== "missing-valuation" || originRow.status !== "quoted") return [];
+        const ref = rowAmountReferences.get(originRow);
+        return ref ? [[key, originRow, id(ref)] as const] : [];
+      })
+    : [];
   return { version: 1, source: state.source, weth: state.weth, maxInputPathHops: effectiveInputPathHops(snapshot.maxInputPathHops), references,
     byToken: [...state.references].map(([token, reference]) => [token, id(reference)] as const),
     byRow: [...snapshot.rows].flatMap(([key, row]) => {
       const reference = rowAmountReferences.get(row);
       return reference ? [[key, id(reference)] as const] : [];
-    }) };
+    }),
+    ...(poolOrigins.length ? { poolOrigins } : {}) };
 }
 
 export interface EffectiveMidReplayDelta {
@@ -314,6 +327,7 @@ export interface EffectiveMidReplayDelta {
   readonly removals: readonly string[];
   readonly tokenUpdates: readonly (readonly [string, EffectiveAmountReference])[];
   readonly tokenRemovals: readonly string[];
+  readonly dirtyUnfunded?: readonly string[];
 }
 
 /** Persistence consumes the producer's native edits, never a full row diff.
@@ -344,7 +358,8 @@ export function exportEffectiveMidReplayDelta(snapshot: EffectiveMidSnapshot,
     wallMs: snapshot.wallMs, removals: changes.removals,
     updates: changes.updates.map(([id, row]) => [id, row, rowAmountReferences.get(row) ?? null] as const),
     tokenUpdates: [...current.references].filter(([token, ref]) => !same(ref, prior.references.get(token))),
-    tokenRemovals: [...prior.references.keys()].filter(token => !current.references.has(token)) };
+    tokenRemovals: [...prior.references.keys()].filter(token => !current.references.has(token)),
+    ...(changes.dirtyUnfunded?.length ? { dirtyUnfunded: changes.dirtyUnfunded } : {}) };
 }
 
 export function restoreEffectiveMidReplayState(snapshot: EffectiveMidSnapshot,
@@ -353,6 +368,7 @@ export function restoreEffectiveMidReplayState(snapshot: EffectiveMidSnapshot,
   // caller passes the same object rather than a structured clone.
   rankingState.delete(snapshot);
   anchoredReplayGraphs.delete(snapshot);
+  restoredReplayPoolOrigins.delete(snapshot);
   assert(snapshot.complete && state.version === 1 && state.weth === weth.toLowerCase(), "incompatible effective baseline");
   const maxInputPathHops = effectiveInputPathHops(snapshot.maxInputPathHops);
   assert(effectiveInputPathHops(state.maxInputPathHops) === maxInputPathHops, "effective input-path policy changed");
@@ -436,8 +452,34 @@ export function restoreEffectiveMidReplayState(snapshot: EffectiveMidSnapshot,
     Object.freeze(row);
   }
   for (const [row, reference] of rows) rowAmountReferences.set(row, reference);
+  const replayOrigins = new Map<string, EffectiveMidRow>();
+  for (const [key, rawOrigin, id] of state.poolOrigins ?? []) {
+    const edge = graph.get(key), currentRow = snapshot.rows.get(key), reference = references[id];
+    assert(edge && currentRow?.status === "missing-valuation" && !replayOrigins.has(key) &&
+      rawOrigin.edgeId === key && rawOrigin.instanceKey === edgeInstanceKey(edge) &&
+      rawOrigin.tokenIn === edge.tokenIn.toLowerCase() && rawOrigin.tokenOut === edge.tokenOut.toLowerCase() &&
+      rawOrigin.status === "quoted" && Number.isSafeInteger(id) && reference &&
+      reference.token === rawOrigin.tokenIn && reference.reference.amountIn === rawOrigin.amountIn &&
+      typeof rawOrigin.amountIn === "bigint" && rawOrigin.amountIn > 0n &&
+      typeof rawOrigin.amountOut === "bigint" && rawOrigin.amountOut > 0n &&
+      rawOrigin.effectiveMid !== null && Number.isFinite(rawOrigin.effectiveMid) && rawOrigin.effectiveMid > 0 &&
+      rawOrigin.quotedAt && rawOrigin.quotedAt.number <= snapshot.source.number &&
+      rawOrigin.quotedAt.generation <= snapshot.source.generation &&
+      (rawOrigin.quotedAt.number !== snapshot.source.number || rawOrigin.quotedAt.hash.toLowerCase() === snapshot.source.hash.toLowerCase()),
+    "invalid historical pool origin");
+    const verified = verifyOriginalExecution(rawOrigin, edge, reference.reference);
+    assert(edge.executionVerification !== "startup-simulation" || verified,
+      "historical pool origin lacks current execution verification");
+    freezeExecutionVerification(rawOrigin);
+    Object.freeze(rawOrigin);
+    rowAmountReferences.set(rawOrigin, reference.reference);
+    replayOrigins.set(key, rawOrigin);
+  }
   amountReferenceState.set(snapshot, { source: Object.freeze({ ...snapshot.source }), weth: state.weth, references: tokens, verifiedExecutions });
-  if(anchored)anchoredReplayGraphs.set(snapshot,edges);
+  if(anchored){
+    anchoredReplayGraphs.set(snapshot,edges);
+    if(replayOrigins.size>0)restoredReplayPoolOrigins.set(snapshot,replayOrigins);
+  }
 }
 
 /** SQL native-store caller only, AFTER its exact read/anchor/producer checks and strict
@@ -450,9 +492,11 @@ export function bindVerifiedSqlNativePoolRestore(snapshot:EffectiveMidSnapshot,e
     snapshot.source.number===source.number&&snapshot.source.hash.toLowerCase()===source.hash.toLowerCase()&&snapshot.source.generation===source.generation&&
     state.source.number===source.number&&state.source.hash.toLowerCase()===source.hash.toLowerCase()&&state.source.generation===source.generation&&
     snapshot.rows.size===index.size&&[...snapshot.rows.keys()].every(id=>index.has(id)),"SQL pool restore requires the exact anchored native replay/immutable graph");
+  const replayOrigins=restoredReplayPoolOrigins.get(snapshot);
   const origins=new Map<string,EffectiveMidRow>();
-  for(const[id,row]of snapshot.rows){
-    if(row.status!=="quoted")continue;
+  for(const[id,rawRow]of snapshot.rows){
+    const row=rawRow.status==="quoted"?rawRow:replayOrigins?.get(id);
+    if(!row||row.status!=="quoted")continue;
     const edge=index.get(id)!,ref=rowAmountReferences.get(row),proof=row.executionVerification;
     if(edge.leavesStandingPosition||edge.executionVerification!=="startup-simulation"||!Object.isFrozen(row)||!proof?.variantId||
       !ref||!state.verifiedExecutions.has(proof.receiptHash)||!effectiveRowExecutionVerified(snapshot,row,edge,ref))continue;
@@ -463,6 +507,7 @@ export function bindVerifiedSqlNativePoolRestore(snapshot:EffectiveMidSnapshot,e
   }
   rankingState.set(snapshot,{edges,byId:new Map(),restoredPoolOrigins:origins});
   anchoredReplayGraphs.delete(snapshot); // this successful native-restore promotion is one-shot
+  restoredReplayPoolOrigins.delete(snapshot);
   return origins.size;
 }
 
@@ -1013,17 +1058,18 @@ export async function buildEffectiveMids(input: {
       const prior = previousRowsMap?.get(edgeId);
       if(poolPlan&&previous&&edge.executionVerification==="startup-simulation"&&!edge.leavesStandingPosition){
         const old=oldRanking!.byId.get(edgeId);
-        const proof=prior?.executionVerification;
-        const verified=prior?.status==="quoted" && proof?.variantId && prior.quotedAt && typeof prior.amountIn==="bigint" &&
-          typeof prior.amountOut==="bigint"&&prior.effectiveMid!==null&&(issuedRankingReceipts.has(proof)||
+        const sourceRow=prior?.status==="quoted"?prior:oldRanking!.restoredPoolOrigins?.get(edgeId);
+        const proof=sourceRow?.executionVerification;
+        const verified=sourceRow?.status==="quoted" && proof?.variantId && sourceRow.quotedAt && typeof sourceRow.amountIn==="bigint" &&
+          typeof sourceRow.amountOut==="bigint"&&sourceRow.effectiveMid!==null&&(issuedRankingReceipts.has(proof)||
             oldRanking!.restoredPoolOrigins?.get(edgeId)?.executionVerification===proof)&&
-          previousState!.verifiedExecutions.has(proof.receiptHash)&&rowAmountReferences.has(prior);
-        if(verified && requestedOrigins!.get(edgeId) !== prior) {
+          previousState!.verifiedExecutions.has(proof.receiptHash)&&rowAmountReferences.has(sourceRow);
+        if(verified && requestedOrigins!.get(edgeId) !== sourceRow) {
           if (!requestedOriginsCloned) {
             requestedOrigins = new Map(oldRanking?.requestedOrigins);
             requestedOriginsCloned = true;
           }
-          requestedOrigins!.set(edgeId, prior);
+          requestedOrigins!.set(edgeId, sourceRow);
         }
         const existing=old?.edge===edge?old:undefined;
         if((hasRequireFreshEdges && input.requireFreshEdgeIds!.has(edgeId))||poolPlan.shouldRefresh(edge,verified?proof!.variantId:existing?.hint.variantId))poolDirty.add(index);
@@ -1031,9 +1077,9 @@ export async function buildEffectiveMids(input: {
           poolClean.add(index);
           if(existing)rankingCandidates.set(index,existing);
           else if(verified)rankingCandidates.set(index,{edge,cause:"poolUnchanged",
-            prefix:Object.freeze(rowAmountReferences.get(prior!)!.path.map(s=>s.edgeId)),hint:Object.freeze({
-              kind:"historical-ranking-only",edgeId,instanceKey:prior!.instanceKey,tokenIn:prior!.tokenIn,tokenOut:prior!.tokenOut,
-              amountIn:prior!.amountIn!,amountOut:prior!.amountOut!,effectiveMid:prior!.effectiveMid!,quotedAt:prior!.quotedAt!,
+            prefix:Object.freeze(rowAmountReferences.get(sourceRow!)!.path.map(s=>s.edgeId)),hint:Object.freeze({
+              kind:"historical-ranking-only",edgeId,instanceKey:sourceRow!.instanceKey,tokenIn:sourceRow!.tokenIn,tokenOut:sourceRow!.tokenOut,
+              amountIn:sourceRow!.amountIn!,amountOut:sourceRow!.amountOut!,effectiveMid:sourceRow!.effectiveMid!,quotedAt:sourceRow!.quotedAt!,
               receiptHash:proof!.receiptHash,variantId:proof!.variantId!})});
           if (!reuseEmptyTombstone(index, prior, item, "missing-valuation")) {
             unavailable(index,"missing-valuation");
@@ -1488,10 +1534,14 @@ export async function buildEffectiveMids(input: {
   amountReferenceState.set(snapshot, { source, weth, references, verifiedExecutions });
   if(snapshot.complete && graphEdgeIndexes.has(graphEdges))rankingState.set(snapshot,{edges:graphEdges,byId:rankOnly,
     ...(requestedOrigins?{requestedOrigins}:{})});
-  if (canReuse && immutableRows) nativeChanges.set(snapshot, Object.freeze({
-    previous: new WeakRef(previous), edges: (input.quoteGraph ?? pricing.graph).edges,
-    updates: Object.freeze(updates), removals: Object.freeze(removals),
-  }));
+  if (canReuse && immutableRows) {
+    const dirtyUnfunded = poolPlan ? [...poolDirty].filter(i => rows[i]?.status === "missing-valuation").map(i => work[i]!.edgeId) : [];
+    nativeChanges.set(snapshot, Object.freeze({
+      previous: new WeakRef(previous), edges: (input.quoteGraph ?? pricing.graph).edges,
+      updates: Object.freeze(updates), removals: Object.freeze(removals),
+      ...(dirtyUnfunded.length ? { dirtyUnfunded: Object.freeze(dirtyUnfunded) } : {}),
+    }));
+  }
   phase = snapshot.complete ? "completed" : "interrupted";
   if (diagnostic) diagnostic.assemblyMs = Math.max(0, performance.now() - assemblyStartedAt);
   return snapshot;

@@ -126,3 +126,17 @@ test('unowned variant in target OR prefix is not promoted; generic restore, reor
  const unanchored=structuredClone(p),{source:_source,...legacy}=archive;
  restoreEffectiveMidReplayState(unanchored,legacy,graph,w);assert.throws(()=>bindVerifiedSqlNativePoolRestore(unanchored,graph,p.source,owns));
 });
+test('multi-block pool-plan demotions retain verified poolOrigins across export/restore while dropping dirtyUnfunded origins',async()=>{
+ const h=harness(),b100=await h.build(100),b101=await h.build(101,b100,[]),b102=await h.build(102,b101,['market','orphan']);
+ assert.equal(b102.rows.get('fund-A')!.status,'missing-valuation');assert.equal(b102.rows.get('fund-B')!.status,'missing-valuation');assert.equal(b102.rows.get('market')!.status,'quoted');
+ const state=structuredClone(exportEffectiveMidReplayState(b102)),disk=structuredClone(b102);
+ assert.equal(state.poolOrigins?.length,2);
+ restoreEffectiveMidReplayState(disk,state,graph,w);
+ assert.equal(bindVerifiedSqlNativePoolRestore(disk,graph,disk.source,owns),3);
+ h.calls.length=0;const b103=await h.build(103,disk,[]);assert.deepEqual(h.calls,[]);
+ assert.equal(effectiveHistoricalRankingHint(b103,h1)?.quotedAt.number,100);
+ assert.equal(effectiveHistoricalRankingHint(b103,h2)?.quotedAt.number,100);
+ assert.equal(effectiveHistoricalRankingHint(b103,t)?.quotedAt.number,102);
+ h.calls.length=0;const b104=await h.build(104,b103,['market']);assert.deepEqual(h.calls,['market']);
+ assert.equal(b104.rows.get('market')!.amountIn,500n);
+});

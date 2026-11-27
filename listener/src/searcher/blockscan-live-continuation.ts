@@ -559,6 +559,7 @@ class ContinuationReplay {
   private readonly rows;
   private readonly byToken: Map<string, EffectiveAmountReference>;
   private readonly byRow: Map<string, EffectiveAmountReference>;
+  private readonly poolOrigins: Map<string, [import("./blockscan-effective-mid.js").EffectiveMidRow, EffectiveAmountReference]>;
   private readonly disabled;
   private readonly startup;
   private readonly routes;
@@ -571,6 +572,15 @@ class ContinuationReplay {
     const lineage = base.pricing.lineage;
     this.byToken = new Map(lineage.byToken.map(([key, id]) => [key, lineage.references[id]!]));
     this.byRow = new Map(lineage.byRow.map(([key, id]) => [key, lineage.references[id]!]));
+    this.poolOrigins = new Map();
+    for (const [key, row, id] of lineage.poolOrigins ?? []) {
+      const ref = lineage.references[id];
+      if (ref) this.poolOrigins.set(key, [row, ref]);
+    }
+    for (const [key, row] of this.rows) {
+      const ref = this.byRow.get(key);
+      if (row.status === "quoted" && ref) this.poolOrigins.set(key, [row, ref]);
+    }
     this.disabled = new Set(base.pricing.disabledInstances);
     this.startup = new Map(base.startup.rows);
     this.routes = new Set(base.simRejects.routes); this.pools = new Set(base.simRejects.pools);
@@ -584,11 +594,14 @@ class ContinuationReplay {
     if (delta.effective) {
       const edit = delta.effective;
       assert(sameSource(edit.source, delta.source), "effective delta source mismatch");
-      for (const key of edit.removals) { this.rows.delete(key); this.byRow.delete(key); }
+      for (const key of edit.removals) { this.rows.delete(key); this.byRow.delete(key); this.poolOrigins.delete(key); }
+      for (const key of edit.dirtyUnfunded ?? []) this.poolOrigins.delete(key);
       for (const [key, row, reference] of edit.updates) {
         assert(key === row.edgeId, "invalid continuation row identity");
         this.rows.set(key, row);
         if (reference) this.byRow.set(key, reference); else this.byRow.delete(key);
+        if (row.status === "quoted" && reference) this.poolOrigins.set(key, [row, reference]);
+        else if (row.status !== "missing-valuation") this.poolOrigins.delete(key);
       }
       for (const key of edit.tokenRemovals) this.byToken.delete(key);
       for (const [key, ref] of edit.tokenUpdates) this.byToken.set(key, ref);
@@ -615,6 +628,9 @@ class ContinuationReplay {
       if (found === undefined) { found = references.length; ids.set(ref, found); references.push(ref); }
       return found;
     };
+    const poolOrigins = [...this.poolOrigins]
+      .filter(([key]) => this.rows.get(key)?.status === "missing-valuation")
+      .map(([key, [row, ref]]) => [key, row, id(ref)] as const);
     const at = this.effective.source, previous = this.base.pricing.pricing;
     return { ...this.base, pricing: { ...this.base.pricing,
       pricing: { ...previous, sourceBlock: at.number, sourceBlockHash: at.hash, generation: at.generation,
@@ -622,7 +638,8 @@ class ContinuationReplay {
         effectiveMids: this.effective },
       lineage: { version: 1, source: at, weth: this.base.pricing.lineage.weth, maxInputPathHops: this.effective.maxInputPathHops, references,
         byToken: [...this.byToken].map(([key, ref]) => [key, id(ref)]),
-        byRow: [...this.byRow].map(([key, ref]) => [key, id(ref)]) }, disabledInstances: [...this.disabled] },
+        byRow: [...this.byRow].map(([key, ref]) => [key, id(ref)]),
+        ...(poolOrigins.length ? { poolOrigins } : {}) }, disabledInstances: [...this.disabled] },
       startup: { version: 1, rows: [...this.startup] },
       simRejects: { version: 1, routes: [...this.routes], pools: [...this.pools] },
       amounts: { version: 1, headers: [...this.headers.values()], samples: [...this.samples.values()] } };

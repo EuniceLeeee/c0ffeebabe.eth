@@ -1,0 +1,41 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x7e3db030",
+  "signature": "function exchange_received(int128, int128, uint256, uint256)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_7E3DB030_ENABLED"
+  },
+  "options": [
+    {
+      "id": "coin0-to-coin1",
+      "tokenIn": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          0
+        ]
+      },
+      "tokenOut": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          1
+        ]
+      }
+    },
+    {
+      "id": "coin1-to-coin0",
+      "tokenIn": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          1
+        ]
+      },
+      "tokenOut": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          0
+        ]
+      }
+    }
+  ]
+}

@@ -428,3 +428,86 @@ for (const mode of ["add", "remove", "mixed", "replace", "same"] as const) {
     }
   });
 }
+
+test("journal delta replay retains untouched SQL poolOrigins across chained restarts and drops dirtyUnfunded pools", async () => {
+  const { exportEffectiveMidReplayDelta, bindVerifiedSqlNativePoolRestore, effectiveHistoricalRankingHint } =
+    await import("../blockscan-effective-mid.js");
+  const { BlockScanSimRejectCache } = await import("../blockscan-sim-reject-cache.js");
+  const dir = await mkdtemp(join(tmpdir(), "live-pool-origins-"));
+  try {
+    const w = ADDR.WETH.toLowerCase();
+    const mkEdge = (id: string, tokenIn: string, tokenOut: string): TokenEdge => Object.freeze({
+      canonicalEdgeId: id as TokenEdge["canonicalEdgeId"], instanceKey: id, adapterId: "fixture",
+      target: id, tokenIn, tokenOut, slotKind: "swap", edgeKind: "swap", leavesStandingPosition: false,
+      executionVerification: "startup-simulation",
+    });
+    const eA = mkEdge("fund-A", w, token(1)), eB = mkEdge("fund-B", w, token(1));
+    const eM = mkEdge("market", token(1), token(2)), eU = mkEdge("unfunded", w, token(3));
+    const g = Object.freeze([eA, eB, eM, eU]);
+    const sim = Object.assign(async (q: any) => {
+      if (q.source.number === 12 && q.legs.some((l: any) => l.program === "0x04")) {
+        return { kind: "revert" as const, failure: { hop: 0, reason: "0x" }, receipts: [], returnData: "0x",
+          gasUsed: 1n, targetBlock: q.source.number + 1, scriptHash: hash(4), inputFundingMode: "native-prefix" as const, simulationMs: 1, nodeQueueMs: 0 };
+      }
+      let amt = q.amount;
+      const receipts = [{ hop: -1, amountIn: amt, amountSpent: amt, amountOut: amt }];
+      q.legs.forEach((_l: any, i: number) => { const out = amt * 2n; receipts.push({ hop: i, amountIn: amt, amountSpent: amt, amountOut: out }); amt = out; });
+      return { kind: "success" as const, receipts, returnData: "0x", gasUsed: 1n, targetBlock: q.source.number + 1,
+        scriptHash: hash(4), inputFundingMode: "native-prefix" as const, simulationMs: 1, nodeQueueMs: 0 };
+    }, { stats: () => ({ requests: 1, retries: 0, simulations: 1, headers: 1, maxCuIn1000Ms: 1 }) });
+    const pre = createBlockScanStartupExecutionPreflight({ executor: token(90), transactionOrigin: token(91), simRejects: new BlockScanSimRejectCache(), concurrency: 1, simulateStandalone: sim });
+    const progMap: Record<string, string> = { "fund-A": "0x01", "fund-B": "0x02", "market": "0x03", "unfunded": "0x04" };
+    const sessionFor = () => ({ executionVariantIds: (e: TokenEdge) => ["v-" + e.canonicalEdgeId], confirmExecutionVariant() {},
+      buildRuntimeAmountLeg: ({ edge: e }: { edge: TokenEdge }) => ({ program: progMap[e.canonicalEdgeId!]! }) }) as any;
+    const rawAt = (n: number) => ({ sourceBlock: n, sourceBlockHash: hash(n), generation: n, graph: { edges: g }, mids: new Map(),
+      coverage: { resolvedEdgeKeys: g.map(e => e.canonicalEdgeId!) }, pricingStateKeyByEdgeKey: new Map(g.map(e => [e.canonicalEdgeId!, e.instanceKey!])) });
+    const step = (n: number, prev?: any, choose?: string[], forceMissingFor?: string) => buildEffectiveMids({
+      pricing: rawAt(n), previous: prev, touchedStateKeys: prev ? new Set(g.map(e => e.canonicalEdgeId!)) : undefined,
+      ...(choose ? { poolPriceRefreshPlan: { shouldRefresh: e => choose.includes(e.canonicalEdgeId!) } } : {}),
+      weth: w, fixedWethInput: 100n, maxInputPathHops: 4, gasCostWei: null, enumerationSpreadBps: 0, concurrency: 1, control: {},
+      quote: async q => {
+        if (forceMissingFor && q.edge.canonicalEdgeId === forceMissingFor) return { source: source(n), amountIn: 0n, amountOut: 0n } as any;
+        return (await pre.quoteEffective({ ...q, edges: g, prepareQuote: async () => {}, sessionFor }))!;
+      },
+    });
+    const owns = (e: TokenEdge, v: string) => v === "v-" + e.canonicalEdgeId;
+    const emptyDelta = { reset: false, rows: [], routes: [], pools: [], headers: [], samples: [], removedHeaders: [], removedSamples: [] };
+
+    const b10 = await step(10);
+    const store1 = new LivePricingContinuationStore(dir, "c".repeat(64));
+    await store1.write({ version: 1, identity: store1.identity,
+      pricing: { version: 1, raw: rawAt(10) as any, pricing: { ...rawAt(10), effectiveMids: b10 } as any, disabledInstances: [], lineage: exportEffectiveMidReplayState(b10) },
+      startup: { version: 1, rows: [] }, simRejects: { version: 1, routes: [], pools: [] }, amounts: { version: 1, headers: [], samples: [] } });
+    // Delta 1: poolPlan activates, 0 touched pools -> all 4 become missing-valuation in snapshot.rows, retained in poolOrigins.
+    const b11 = await step(11, b10, []);
+    await store1.append({ version: 2, previous: b10.source, source: b11.source, effective: exportEffectiveMidReplayDelta(b11, b10),
+      disabled: [], amounts: emptyDelta, startup: emptyDelta, simRejects: emptyDelta });
+    // Delta 2: market refreshes at 12; market2 (if unfunded) - test dirtyUnfunded by having market fail funding when prefixes revert on a separate edge
+    const b12 = await step(12, b11, ["market"]);
+    await store1.append({ version: 2, previous: b11.source, source: b12.source, effective: exportEffectiveMidReplayDelta(b12, b11),
+      disabled: [], amounts: emptyDelta, startup: emptyDelta, simRejects: emptyDelta });
+
+    // First restart: store2 reads baseline + delta1 + delta2
+    const store2 = new LivePricingContinuationStore(dir, "d".repeat(64), ["c".repeat(64)]);
+    const restored1 = (await store2.read())!;
+    const snap1 = restored1.pricing.pricing.effectiveMids!;
+    restoreEffectiveMidReplayState(snap1, restored1.pricing.lineage, g, w, true);
+    assert.equal(bindVerifiedSqlNativePoolRestore(snap1, g, snap1.source, owns), 4);
+
+    // Next block 13 on restored1 with 0 touched pools -> all 4 historical hints survive, 0 quotes!
+    const b13 = await step(13, snap1, []);
+    assert.equal(effectiveHistoricalRankingHint(b13, eA)?.quotedAt.number, 10);
+    assert.equal(effectiveHistoricalRankingHint(b13, eB)?.quotedAt.number, 10);
+    assert.equal(effectiveHistoricalRankingHint(b13, eM)?.quotedAt.number, 12);
+    assert.equal(effectiveHistoricalRankingHint(b13, eU)?.quotedAt.number, 10);
+    await store2.append({ version: 2, previous: snap1.source, source: b13.source, effective: exportEffectiveMidReplayDelta(b13, snap1),
+      disabled: [], amounts: emptyDelta, startup: emptyDelta, simRejects: emptyDelta });
+
+    // Second chained restart: store3 reads baseline + delta1..3 -> still retains all 4!
+    const store3 = new LivePricingContinuationStore(dir, "e".repeat(64), ["c".repeat(64), "d".repeat(64)]);
+    const restored2 = (await store3.read())!;
+    const snap2 = restored2.pricing.pricing.effectiveMids!;
+    restoreEffectiveMidReplayState(snap2, restored2.pricing.lineage, g, w, true);
+    assert.equal(bindVerifiedSqlNativePoolRestore(snap2, g, snap2.source, owns), 4);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
