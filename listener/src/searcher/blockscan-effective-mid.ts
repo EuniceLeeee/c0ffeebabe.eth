@@ -626,6 +626,49 @@ export function createEffectiveQuoteSessions(
   };
 }
 
+const cachedGraphWorkSpecs = new WeakMap<readonly TokenEdge[], {
+  readonly scannerOnlyKeys: readonly string[];
+  readonly scannerOnlyPresent: ReadonlySet<string>;
+  readonly edgeMeta: readonly {
+    readonly edgeId: string;
+    readonly edge: TokenEdge;
+    readonly instanceKey: string;
+    readonly tokenIn: string;
+    readonly tokenOut: string;
+  }[];
+}>();
+
+function getGraphWorkSpec(graphEdges: readonly TokenEdge[], edges: ReadonlyMap<string, TokenEdge>) {
+  let cached = cachedGraphWorkSpecs.get(graphEdges);
+  if (cached) return cached;
+  const scannerOnlyKeys: string[] = [];
+  const edgeMeta: {
+    readonly edgeId: string;
+    readonly edge: TokenEdge;
+    readonly instanceKey: string;
+    readonly tokenIn: string;
+    readonly tokenOut: string;
+  }[] = [];
+  for (const [key, edge] of edges) {
+    if (!scannerConsumesEdge(edge)) continue;
+    scannerOnlyKeys.push(key);
+    edgeMeta.push({
+      edgeId: key,
+      edge,
+      instanceKey: edgeInstanceKey(edge),
+      tokenIn: edge.tokenIn.toLowerCase(),
+      tokenOut: edge.tokenOut.toLowerCase(),
+    });
+  }
+  const built = {
+    scannerOnlyKeys,
+    scannerOnlyPresent: new Set(scannerOnlyKeys),
+    edgeMeta,
+  };
+  if (graphEdgeIndexes.has(graphEdges)) cachedGraphWorkSpecs.set(graphEdges, built);
+  return built;
+}
+
 /** Forward effective sampling: shortest successful WETH paths first, then the
  * greatest output at that depth. Tokens at the configured maximum depth still
  * quote outgoing edges; those outputs cannot seed another input reference. */
@@ -706,7 +749,8 @@ export async function buildEffectiveMids(input: {
   const referenceWethInput = gasCostWei === null ? defaultInput :
     gasReferenceInput(gasCostWei, { num: 1n, den: 1n }, input.enumerationSpreadBps)!;
   const weth = input.weth.toLowerCase();
-  const edges = graphEdgeIndex((input.quoteGraph ?? pricing.graph).edges);
+  const rawGraphEdges = (input.quoteGraph ?? pricing.graph).edges;
+  const edges = graphEdgeIndex(rawGraphEdges);
   // A simple token path cannot use more distinct steps than the graph has
   // edges. This allocation bound follows topology, not another funding policy.
   const samplingDepthLimit = Math.min(maxInputPathHops, edges.size);
@@ -714,13 +758,33 @@ export async function buildEffectiveMids(input: {
     (pricing.pricingStateKeyByEdgeKey?.get(edgeId) ?? edgeInstanceKey(edge)).toLowerCase();
   // Membership comes from the verified graph, never the availability of a raw
   // mid. In particular, a successful Exact can recover an unpriced direction.
-  const keys = [...edges].filter(([key, edge]) => scannerConsumesEdge(edge) ||
-    pricing.pricingStateKeyByEdgeKey?.has(key)).map(([key]) => key);
-  const work = keys.map(edgeId => {
-    const edge = edges.get(edgeId)!;
-    return { edgeId, edge, amountIn: null as bigint | null,
-      reference: undefined as EffectiveAmountReference | undefined };
-  });
+  const cachedSpec = getGraphWorkSpec(rawGraphEdges, edges);
+  let hasExtraStateKeyEdges = false;
+  if (pricing.pricingStateKeyByEdgeKey && pricing.pricingStateKeyByEdgeKey.size > cachedSpec.scannerOnlyKeys.length) {
+    for (const k of pricing.pricingStateKeyByEdgeKey.keys()) {
+      if (!cachedSpec.scannerOnlyPresent.has(k) && edges.has(k)) { hasExtraStateKeyEdges = true; break; }
+    }
+  } else if (pricing.pricingStateKeyByEdgeKey) {
+    for (const k of pricing.pricingStateKeyByEdgeKey.keys()) {
+      if (!cachedSpec.scannerOnlyPresent.has(k) && edges.has(k)) { hasExtraStateKeyEdges = true; break; }
+    }
+  }
+  const keys = hasExtraStateKeyEdges
+    ? [...edges].filter(([key, edge]) => scannerConsumesEdge(edge) || pricing.pricingStateKeyByEdgeKey?.has(key)).map(([key]) => key)
+    : cachedSpec.scannerOnlyKeys;
+  const presentKeysSet = hasExtraStateKeyEdges ? new Set(keys) : cachedSpec.scannerOnlyPresent;
+  const work = hasExtraStateKeyEdges
+    ? keys.map(edgeId => {
+        const edge = edges.get(edgeId)!;
+        return { edgeId, edge, instanceKey: edgeInstanceKey(edge),
+          tokenIn: edge.tokenIn.toLowerCase(), tokenOut: edge.tokenOut.toLowerCase(),
+          amountIn: null as bigint | null, reference: undefined as EffectiveAmountReference | undefined };
+      })
+    : cachedSpec.edgeMeta.map(m => ({
+        edgeId: m.edgeId, edge: m.edge, instanceKey: m.instanceKey,
+        tokenIn: m.tokenIn, tokenOut: m.tokenOut,
+        amountIn: null as bigint | null, reference: undefined as EffectiveAmountReference | undefined,
+      }));
   const rows = new Array<EffectiveMidRow>(work.length);
   const byStatus: Record<string, number> = {};
   const reusedIndices = new Set<number>();
@@ -762,9 +826,8 @@ export async function buildEffectiveMids(input: {
   const writeRow = (index: number, result: Pick<EffectiveMidRow,
     "status" | "amountOut" | "effectiveMid" | "quotedAt" | "carried" | "failureEvidence" | "amountSpent" | "pricingMethod" |
     "executionVerification">) => {
-    const { edgeId, edge, amountIn } = work[index]!;
-    storeRow(index, Object.freeze({ edgeId, instanceKey: edgeInstanceKey(edge),
-      tokenIn: edge.tokenIn.toLowerCase(), tokenOut: edge.tokenOut.toLowerCase(), amountIn, ...result }));
+    const { edgeId, instanceKey, tokenIn, tokenOut, amountIn } = work[index]!;
+    storeRow(index, Object.freeze({ edgeId, instanceKey, tokenIn, tokenOut, amountIn, ...result }));
     const reference = work[index]!.reference;
     if (reference) rowAmountReferences.set(rows[index]!, reference);
   };
@@ -868,7 +931,10 @@ export async function buildEffectiveMids(input: {
     ? input.historicalRankingPolicy:undefined;
   const poolPlan=canReuse && previous.complete && source.number>previous.source.number && !input.cascadeAmountChanges &&
     oldRanking?.edges===graphEdges && graphEdgeIndexes.has(graphEdges) ? input.poolPriceRefreshPlan : undefined;
-  const requestedOrigins=poolPlan?new Map(oldRanking?.requestedOrigins):undefined;
+  let requestedOrigins: Map<string, EffectiveMidRow> | undefined = poolPlan && oldRanking?.requestedOrigins
+    ? (oldRanking.requestedOrigins as Map<string, EffectiveMidRow>)
+    : (poolPlan ? new Map<string, EffectiveMidRow>() : undefined);
+  let requestedOriginsCloned = !oldRanking?.requestedOrigins;
   const poolClean=new Set<number>(),poolDirty=new Set<number>();let poolDispatches=0;
   const rankingCandidates=new Map<number,RankingEntry>();
   const forcedRefresh = canReuse && previous?.complete && source.number > previous.source.number
@@ -949,7 +1015,13 @@ export async function buildEffectiveMids(input: {
           typeof prior.amountOut==="bigint"&&prior.effectiveMid!==null&&(issuedRankingReceipts.has(proof)||
             oldRanking!.restoredPoolOrigins?.get(edgeId)?.executionVerification===proof)&&
           previousState!.verifiedExecutions.has(proof.receiptHash)&&rowAmountReferences.has(prior);
-        if(verified)requestedOrigins!.set(edgeId,prior);
+        if(verified && requestedOrigins!.get(edgeId) !== prior) {
+          if (!requestedOriginsCloned) {
+            requestedOrigins = new Map(oldRanking?.requestedOrigins);
+            requestedOriginsCloned = true;
+          }
+          requestedOrigins!.set(edgeId, prior);
+        }
         const existing=old?.edge===edge?old:undefined;
         if(input.requireFreshEdgeIds?.has(edgeId)||poolPlan.shouldRefresh(edge,verified?proof!.variantId:existing?.hint.variantId))poolDirty.add(index);
         else {
@@ -1031,8 +1103,10 @@ export async function buildEffectiveMids(input: {
   const references = new Map<string, EffectiveAmountReference>([[weth,
     Object.freeze({ amountIn: referenceWethInput, path: Object.freeze([]) })]]);
   const pending = Array.from({ length: samplingDepthLimit + 1 }, () => new Map<string, EffectiveAmountReference>());
-  const altByToken = new Map<string, EffectiveAmountReference[]>();
-  const pendingAlts = Array.from({ length: samplingDepthLimit + 1 }, () => new Map<string, EffectiveAmountReference[]>());
+  // Only #1 (physical resource disjointness) and #3 (defer self-colliding pool to next hop via
+  // another intermediate token; never switch to a runner-up pool on the same hop).
+  const deferredRef = new Map<string, EffectiveAmountReference>();
+  const pendingDeferred = Array.from({ length: samplingDepthLimit + 1 }, () => new Map<string, EffectiveAmountReference>());
   const deferredSelfResource = new Map<string, number[]>();
   const betterReference = (a: EffectiveAmountReference, b: EffectiveAmountReference): boolean =>
     a.amountIn > b.amountIn || (a.amountIn === b.amountIn &&
@@ -1047,29 +1121,18 @@ export async function buildEffectiveMids(input: {
       if (!prior || betterReference(reference, prior)) {
         candidates.set(token, reference);
       }
+      return;
     }
-    if (!references.has(token) || deferredSelfResource.has(token)) {
-      const altBucket = pendingAlts[reference.path.length]!;
-      const list = altBucket.get(token) ?? [];
-      const lastEdge = edges.get(reference.path[reference.path.length - 1]!.edgeId);
-      const lastResKey = lastEdge ? (edgeExplicitRes(lastEdge)?.[0] ?? lastEdge.canonicalEdgeId ?? "") : "";
-      const existingIdx = list.findIndex(r => {
-        const re = edges.get(r.path[r.path.length - 1]!.edgeId);
-        return (re ? (edgeExplicitRes(re)?.[0] ?? re.canonicalEdgeId ?? "") : "") === lastResKey;
-      });
-      if (existingIdx >= 0) {
-        if (betterReference(reference, list[existingIdx]!)) list[existingIdx] = reference;
-      } else if (list.length < 4) {
-        list.push(reference);
-      } else {
-        let worstIdx = 0;
-        for (let i = 1; i < list.length; i++) {
-          if (betterReference(list[worstIdx]!, list[i]!)) worstIdx = i;
+    const waiting = deferredSelfResource.get(token);
+    const primary = references.get(token)!;
+    if (waiting && waiting.length > 0 && reference.path.length > primary.path.length) {
+      if (waiting.some(idx => !referenceSharesExplicitResource(reference, work[idx]!.edge))) {
+        const candidates = pendingDeferred[reference.path.length]!;
+        const prior = candidates.get(token);
+        if (!prior || betterReference(reference, prior)) {
+          candidates.set(token, reference);
         }
-        if (betterReference(reference, list[worstIdx]!)) list[worstIdx] = reference;
       }
-      list.sort((a, b) => (betterReference(a, b) ? -1 : 1));
-      altBucket.set(token, list);
     }
   };
   const offerOutput = (row: EffectiveMidRow, reference: EffectiveAmountReference) => {
@@ -1187,11 +1250,12 @@ export async function buildEffectiveMids(input: {
         propose(r.tokenOut,{amountIn:r.amountOut,path:[...ref.path,r]});
     }
     for(const i of poolDirty){
-      const token=work[i]!.edge.tokenIn.toLowerCase();
+      const token=work[i]!.tokenIn;
       let p=proposals.get(token);
       if(p&&referenceSharesExplicitResource(p,work[i]!.edge)){
+        const minLen = p.path.length + 1;
         p=[...(paidChoices.get(token)?.values()??[])]
-          .filter(r=>!referenceSharesExplicitResource(r,work[i]!.edge))
+          .filter(r=>r.path.length>=minLen && !referenceSharesExplicitResource(r,work[i]!.edge))
           .sort((a,b)=>a.path.length-b.path.length||(b.amountIn>a.amountIn?1:b.amountIn<a.amountIn?-1:0))[0];
       }
       if(p)proposedAt[p.path.length]!.push(i);
@@ -1244,17 +1308,13 @@ export async function buildEffectiveMids(input: {
         for (const index of workByToken.get(token) ?? []) layer.push(index);
       }
     }
-    for (const [token, refs] of pendingAlts[depth]!) {
-      const list = altByToken.get(token) ?? [];
-      for (const r of refs) {
-        if (list.length < 8 && !list.includes(r)) list.push(r);
-      }
-      if (list.length > 0) altByToken.set(token, list);
+    for (const [token, crossRef] of pendingDeferred[depth]!) {
+      deferredRef.set(token, crossRef);
       const waiting = deferredSelfResource.get(token);
       if (waiting && waiting.length > 0) {
         const stillWaiting: number[] = [];
         for (const idx of waiting) {
-          if (list.some(r => !referenceSharesExplicitResource(r, work[idx]!.edge))) {
+          if (!referenceSharesExplicitResource(crossRef, work[idx]!.edge)) {
             layer.push(idx);
           } else {
             stillWaiting.push(idx);
@@ -1271,17 +1331,20 @@ export async function buildEffectiveMids(input: {
     const fresh: number[] = [];
     for (const index of layer) {
       const item = work[index]!;
-      const token=item.edge.tokenIn.toLowerCase();
-      let reference: EffectiveAmountReference | undefined = references.get(token)??proposals.get(token);
+      const token = item.tokenIn;
+      let reference: EffectiveAmountReference | undefined = references.get(token) ?? proposals.get(token);
       if (!reference || referenceSharesExplicitResource(reference, item.edge)) {
-        const alt = (altByToken.get(token) ?? []).find(r => !referenceSharesExplicitResource(r, item.edge))
-          ?? (poolPlan
+        const baseLen = reference ? reference.path.length : 0;
+        const crossHop = deferredRef.get(token);
+        const validCrossHop = crossHop && crossHop.path.length > baseLen && !referenceSharesExplicitResource(crossHop, item.edge)
+          ? crossHop
+          : (poolPlan
             ? [...(paidChoices.get(token)?.values() ?? [])]
-                .filter(r => !referenceSharesExplicitResource(r, item.edge))
+                .filter(r => r.path.length > baseLen && !referenceSharesExplicitResource(r, item.edge))
                 .sort((a, b) => a.path.length - b.path.length || (b.amountIn > a.amountIn ? 1 : b.amountIn < a.amountIn ? -1 : 0))[0]
             : undefined);
-        if (alt) {
-          reference = alt;
+        if (validCrossHop) {
+          reference = validCrossHop;
         } else {
           if (!poolPlan && depth < samplingDepthLimit) {
             const waiting = deferredSelfResource.get(token);
@@ -1402,8 +1465,9 @@ export async function buildEffectiveMids(input: {
     return previousRows.get(row.edgeId) !== row;
   })
     .map(row => Object.freeze([row.edgeId, row] as const));
-  const present = new Set(keys);
-  const removals = [...previousRows.keys()].filter(key => !present.has(key));
+  const removals = canReuse && oldRanking?.edges === graphEdges && previousRows.size === keys.length
+    ? []
+    : [...previousRows.keys()].filter(key => !presentKeysSet.has(key));
   const snapshot: EffectiveMidSnapshot = Object.freeze({ source, maxInputPathHops,
     reference: input.fixedWethInput !== undefined ? "fixed" : gasCostWei === null ? "default" : "gas",
     referenceWethInput, rows: ownRows(deltaMap(previousRows, updates, removals),

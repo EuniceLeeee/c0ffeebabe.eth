@@ -878,6 +878,15 @@ function matchesReorgActivity(previous: BlockScanStateSnapshot, graph: VerifiedG
     [...proof.touchedStateKeys].every(key => activity.touchedStateKeys.has(key));
 }
 
+const cachedEffectivePricingTopology = new WeakMap<StrictReadyPricingIndex, WeakMap<VerifiedGraphView["edges"], {
+  readonly expectedEdgeKeys: readonly string[];
+  readonly expectedSet: ReadonlySet<string>;
+  readonly graphEdges: ReadonlyMap<string, VerifiedGraphView["edges"][number]>;
+  readonly scannerKeyCount: number;
+  readonly scannerKeyHash: string;
+  readonly allFamilyIds: readonly string[];
+}>>();
+
 /** The current publication owns effective coverage; raw retains its startup
  * source/map and supplies sizing only. It is never promoted to current state. */
 function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
@@ -889,18 +898,50 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
     "index-validation/preparation");
   let diagnosticStatus: PricingPhaseStatus = "failed";
   try {
-    const expectedKeys = effectiveCoverageKeys(keyCache, "expected", [...index.expectedEdgeKeys].sort());
-    const expectedEdgeKeys = expectedKeys.keys;
-    const expected = new Set(expectedEdgeKeys);
-    const graphEdges = new Map(graph.edges.map(edge => [blockScanEdgeKey(edge), edge]));
-    const scannerKeys = graph.edges.filter(scannerConsumesEdge).map(blockScanEdgeKey);
-    if (expected.size !== expectedEdgeKeys.length ||
-        expectedKeys.hash !== index.expectedEdgeKeyHash ||
-        index.readyGraphContractFingerprint !== strictReadyGraphContractFingerprint(graph.edges) ||
-        scannerKeys.length !== graph.scannerEdgeCount ||
-        effectiveCoverageKeys(keyCache, "scanner", scannerKeys).hash !== graph.scannerEdgeKeyHash ||
-        scannerKeys.some(key => !expected.has(key)) || [...effectiveMids.rows.keys()].some(key => !expected.has(key))) {
+    let byEdges = cachedEffectivePricingTopology.get(index);
+    let topo = byEdges?.get(graph.edges);
+    if (!topo) {
+      const expectedKeys = effectiveCoverageKeys(keyCache, "expected", [...index.expectedEdgeKeys].sort());
+      const expectedEdgeKeys = expectedKeys.keys;
+      const expectedSet = new Set(expectedEdgeKeys);
+      const graphEdges = new Map(graph.edges.map(edge => [blockScanEdgeKey(edge), edge]));
+      const scannerKeys = graph.edges.filter(scannerConsumesEdge).map(blockScanEdgeKey);
+      const scannerHashed = effectiveCoverageKeys(keyCache, "scanner", scannerKeys);
+      if (expectedSet.size !== expectedEdgeKeys.length ||
+          expectedKeys.hash !== index.expectedEdgeKeyHash ||
+          index.readyGraphContractFingerprint !== strictReadyGraphContractFingerprint(graph.edges) ||
+          scannerKeys.some(key => !expectedSet.has(key))) {
+        throw new Error("effective pricing index differs from ready Graph");
+      }
+      const fams = new Set<string>();
+      for (const key of expectedEdgeKeys) {
+        const edge = graphEdges.get(key), familyId = index.familyIdByEdgeKey.get(key);
+        if (!edge || !familyId || !index.stateKeyByEdgeKey.has(key)) {
+          throw new Error(`effective pricing index omits ${key}`);
+        }
+        fams.add(familyId);
+      }
+      topo = {
+        expectedEdgeKeys,
+        expectedSet,
+        graphEdges,
+        scannerKeyCount: scannerKeys.length,
+        scannerKeyHash: scannerHashed.hash,
+        allFamilyIds: Object.freeze([...fams].sort()),
+      };
+      if (Object.isFrozen(graph.edges)) {
+        if (!byEdges) { byEdges = new WeakMap(); cachedEffectivePricingTopology.set(index, byEdges); }
+        byEdges.set(graph.edges, topo);
+      }
+    }
+    const { expectedEdgeKeys, expectedSet: expected, graphEdges } = topo;
+    if (topo.scannerKeyCount !== graph.scannerEdgeCount ||
+        topo.scannerKeyHash !== graph.scannerEdgeKeyHash ||
+        (effectiveMids.rows.size > expected.size)) {
       throw new Error("effective pricing index differs from ready Graph");
+    }
+    for (const key of effectiveMids.rows.keys()) {
+      if (!expected.has(key)) throw new Error("effective pricing index differs from ready Graph");
     }
     diagnostics?.enter("row-classification");
     const resolvedEdgeKeys: string[] = [], unavailableEdgeKeys: string[] = [], unresolvedEdgeKeys: string[] = [];
@@ -916,16 +957,12 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
       failures.set(reason, coverage);
       return coverage;
     };
-    const familyIds = new Set<string>(), incompleteFamilyIds = new Set<string>();
+    const incompleteFamilyIds = new Set<string>();
     for (const key of expectedEdgeKeys) {
-      const edge = graphEdges.get(key), familyId = index.familyIdByEdgeKey.get(key);
-      if (!edge || !familyId || !index.stateKeyByEdgeKey.has(key)) {
-        throw new Error(`effective pricing index omits ${key}`);
-      }
-      familyIds.add(familyId);
+      const edge = graphEdges.get(key)!, familyId = index.familyIdByEdgeKey.get(key)!;
       const row = effectiveMids.rows.get(key);
-      if (row && (row.edgeId !== key || row.instanceKey !== edgeInstanceKey(edge) ||
-          row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() || row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase())) {
+      if (row && (row.edgeId !== key || (!Object.isFrozen(row) && (row.instanceKey !== edgeInstanceKey(edge) ||
+          row.tokenIn.toLowerCase() !== edge.tokenIn.toLowerCase() || row.tokenOut.toLowerCase() !== edge.tokenOut.toLowerCase())))) {
         throw new Error(`effective pricing row differs from ready Graph: ${key}`);
       }
       if (row?.status === "quoted" && (edge.executionVerification !== "startup-simulation" ||
@@ -982,7 +1019,7 @@ function buildEffectivePricingSnapshot(raw: BlockScanStateSnapshot,
       pricingStateKeyByEdgeKey: index.stateKeyByEdgeKey,
       pricingFamilyIdByEdgeKey: index.familyIdByEdgeKey,
       pricingProvenanceByEdgeKey,
-      resolvedFamilyIds: Object.freeze([...familyIds].filter(id => !incompleteFamilyIds.has(id)).sort()),
+      resolvedFamilyIds: incompleteFamilyIds.size === 0 ? topo.allFamilyIds : Object.freeze(topo.allFamilyIds.filter(id => !incompleteFamilyIds.has(id))),
       incompleteFamilyIds: Object.freeze([...incompleteFamilyIds].sort()),
     });
     const graphFingerprint = strictGraphPublicationFingerprint(graph);

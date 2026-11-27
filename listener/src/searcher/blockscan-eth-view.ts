@@ -10,7 +10,28 @@ import { edgeInstanceKey, explicitStateResourceKeys, stateResourceSetIdentity } 
 import { isBlockScanConversionEdge } from "./strategy-taxonomy.js";
 import { BLOCKSCAN_ENUMERATION_DEFAULTS } from "./blockscan-enumeration-config.js";
 
+const approxCache = new WeakMap<RawTokenRate, number>();
+const approxRatio = (r: RawTokenRate): number => {
+  let cached = approxCache.get(r);
+  if (cached !== undefined) return cached;
+  const n = Number(r.num), d = Number(r.den);
+  let res = NaN;
+  if (n > 0 && Number.isFinite(n) && d > 0 && Number.isFinite(d)) {
+    const q = n / d;
+    if (q > 0 && Number.isFinite(q)) res = q;
+  }
+  approxCache.set(r, res);
+  return res;
+};
 const compare = (a: RawTokenRate, b: RawTokenRate): number => {
+  const fa = approxRatio(a);
+  const fb = approxRatio(b);
+  if (Number.isFinite(fa) && Number.isFinite(fb)) {
+    const diff = fa - fb;
+    const tol = (fa + fb) * 1e-11;
+    if (diff > tol) return 1;
+    if (diff < -tol) return -1;
+  }
   const delta = a.num * b.den - b.num * a.den;
   return delta < 0n ? -1 : delta > 0n ? 1 : 0;
 };
@@ -287,9 +308,10 @@ function buildEthView(
     const q: DfsQuote = reusableCol ? old.quote : { id, instance, ...(resources === undefined ? {} : { resources }), tokenIn, tokenOut, ...rate,
       value: mIn && mOut ? { num: rate.num * mOut.num * mIn.den,
         den: rate.den * mOut.den * mIn.num } : null };
-    const entry: EffectiveEthColumns = reusableCol ? old : Object.freeze({ quote: q, markIn: mIn, markOut: mOut,
+    const rawEntry: EffectiveEthColumns = reusableCol ? old : { quote: q, markIn: mIn, markOut: mOut,
       buy: mIn ? { quote: q, price: { num: q.den * mIn.num, den: q.num * mIn.den } } : undefined,
-      sell: mOut ? { quote: q, price: { num: q.num * mOut.num, den: q.den * mOut.den } } : undefined });
+      sell: mOut ? { quote: q, price: { num: q.num * mOut.num, den: q.den * mOut.den } } : undefined };
+    const entry: EffectiveEthColumns = reusableCol || !effective ? rawEntry : Object.freeze(rawEntry);
     columns.set(id, entry);
     if (!effective) work.cols.set(id, entry);
     replaceContribution(id, old, entry);
@@ -373,7 +395,11 @@ function buildEthView(
     // therefore dominate all omitted rows, including the existing index ties.
     // Pool exclusion changes each row's first sell: keep all seeds in that case.
     const seedLimit = allowRepeatedPools ? Math.min(signalPairsPerToken, buys.length) : buys.length;
+    const topSellPrice = sells[0]!.price;
     for (let bi = 0; bi < seedLimit; bi++) {
+      // Since sells is sorted descending and buys ascending, once topSellPrice <= buys[bi].price,
+      // no row >= bi can ever produce signal.num > signal.den (which line below breaks on).
+      if (heap.length > 0 && compare(topSellPrice, buys[bi]!.price) <= 0) break;
       const si = !allowRepeatedPools && !composite && buys[bi]!.quote.instance === sells[0]!.quote.instance ? firstOtherPool : 0;
       if (si >= 0) push(bi, si);
     }

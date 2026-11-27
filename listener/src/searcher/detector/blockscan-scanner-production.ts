@@ -359,7 +359,7 @@ export function assertAtomicBlockScanPricingView(
   }
   const coverageFinishedAtMs = Date.now();
 
-  const expectedEdgeSet = edgeSets.expected;
+  const expectedEdgeSet = getFrozenArraySet(coverage.expectedEdgeKeys);
   const resolvedReadSet = readSets.resolved;
   const resolvedEdgeSet = edgeSets.resolved;
   const unavailableEdgeSet = edgeSets.unavailable;
@@ -420,35 +420,55 @@ export function assertAtomicBlockScanPricingView(
     );
   }
   const midsFinishedAtMs = Date.now();
-  // Coverage's expected hash has already been verified above. Prove exact set
-  // equality against the actual graph, including duplicate rejection, instead
-  // of sorting/hashing that same set again. Never trust the graph header alone.
-  let pricingEdgeCount = 0;
-  const scannerEdgeKeys: string[] = [];
-  let invalidPricingEdge = false;
-  for (const edge of graph.edges) {
-    const scanner = scannerConsumesEdge(edge);
-    const key = blockScanEdgeKey(edge);
-    if (scanner) scannerEdgeKeys.push(key);
-    if (!scanner && !pricing.pricingStateKeyByEdgeKey?.has(key)) continue;
-    // Consume only this invocation's validation set, never snapshot data.
-    // Missing membership also detects a duplicate after its first occurrence.
-    if (!expectedEdgeSet.delete(key)) invalidPricingEdge = true;
-    pricingEdgeCount++;
-  }
-  const exactPricingGraph = !invalidPricingEdge && expectedEdgeSet.size === 0;
-  // Scanner keys are a subset of pricing keys. Equal cardinality after exact
-  // set validation proves equality; mixed graphs retain their own scanner hash.
-  const scannerHash = exactPricingGraph && scannerEdgeKeys.length === pricingEdgeCount
-    ? coverage.expectedEdgeKeyHash : exactSetHash(scannerEdgeKeys);
+  const cachedDigest = Object.isFrozen(graph.edges) ? verifiedGraphDigestCache.get(graph.edges) : undefined;
   if (
-    !exactPricingGraph ||
-    scannerEdgeKeys.length !== graph.scannerEdgeCount ||
-    scannerHash !== graph.scannerEdgeKeyHash
+    cachedDigest &&
+    cachedDigest.stateKeyMap === pricing.pricingStateKeyByEdgeKey &&
+    cachedDigest.expectedEdgeKeyHash === coverage.expectedEdgeKeyHash &&
+    cachedDigest.scannerEdgeCount === graph.scannerEdgeCount &&
+    cachedDigest.scannerEdgeKeyHash === graph.scannerEdgeKeyHash
   ) {
-    throw new Error(
-      "production scanner missing current-N mid or pricing coverage does not exactly match its graph",
-    );
+    // Static frozen graph topology & pricing state key index already proved exact set equality.
+  } else {
+    // Coverage's expected hash has already been verified above. Prove exact set
+    // equality against the actual graph, including duplicate rejection, instead
+    // of sorting/hashing that same set again. Never trust the graph header alone.
+    const mutableExpected = new Set(coverage.expectedEdgeKeys);
+    let pricingEdgeCount = 0;
+    const scannerEdgeKeys: string[] = [];
+    let invalidPricingEdge = false;
+    for (const edge of graph.edges) {
+      const scanner = scannerConsumesEdge(edge);
+      const key = blockScanEdgeKey(edge);
+      if (scanner) scannerEdgeKeys.push(key);
+      if (!scanner && !pricing.pricingStateKeyByEdgeKey?.has(key)) continue;
+      // Consume only this invocation's validation set, never snapshot data.
+      // Missing membership also detects a duplicate after its first occurrence.
+      if (!mutableExpected.delete(key)) invalidPricingEdge = true;
+      pricingEdgeCount++;
+    }
+    const exactPricingGraph = !invalidPricingEdge && mutableExpected.size === 0;
+    // Scanner keys are a subset of pricing keys. Equal cardinality after exact
+    // set validation proves equality; mixed graphs retain their own scanner hash.
+    const scannerHash = exactPricingGraph && scannerEdgeKeys.length === pricingEdgeCount
+      ? coverage.expectedEdgeKeyHash : exactSetHash(scannerEdgeKeys);
+    if (
+      !exactPricingGraph ||
+      scannerEdgeKeys.length !== graph.scannerEdgeCount ||
+      scannerHash !== graph.scannerEdgeKeyHash
+    ) {
+      throw new Error(
+        "production scanner missing current-N mid or pricing coverage does not exactly match its graph",
+      );
+    }
+    if (Object.isFrozen(graph.edges)) {
+      verifiedGraphDigestCache.set(graph.edges, {
+        stateKeyMap: pricing.pricingStateKeyByEdgeKey,
+        expectedEdgeKeyHash: coverage.expectedEdgeKeyHash,
+        scannerEdgeCount: graph.scannerEdgeCount,
+        scannerEdgeKeyHash: graph.scannerEdgeKeyHash,
+      });
+    }
   }
   const finishedAtMs = Date.now();
   onTiming?.(Object.freeze({
@@ -488,30 +508,48 @@ function assertCoverageIntegrity(
   ) {
     throw new Error(`production scanner rejected invalid ${label} coverage hash`);
   }
-  const expectedSet = new Set(expected);
+  const expectedSet = getFrozenArraySet(expected);
   const resolvedSet = new Set(resolved);
   const unresolvedSet = new Set(unresolved);
-  const unavailableSet = new Set(unavailable);
+  const unavailableSet = getFrozenArraySet(unavailable);
   if (
     resolved.some(
       (key) => unresolvedSet.has(key) || unavailableSet.has(key),
     ) ||
     unresolved.some((key) => unavailableSet.has(key)) ||
-    expected.some(
-      (key) =>
-        !resolvedSet.has(key) &&
-        !unresolvedSet.has(key) &&
-        !unavailableSet.has(key),
-    ) ||
-    [...resolvedSet, ...unresolvedSet, ...unavailableSet].some(
-      (key) => !expectedSet.has(key),
-    )
+    (resolvedSet.size + unresolvedSet.size + unavailableSet.size !== expectedSet.size &&
+      expected.some(
+        (key) =>
+          !resolvedSet.has(key) &&
+          !unresolvedSet.has(key) &&
+          !unavailableSet.has(key),
+      )) ||
+    resolved.some((key) => !expectedSet.has(key)) ||
+    unresolved.some((key) => !expectedSet.has(key)) ||
+    unavailable.some((key) => !expectedSet.has(key))
   ) {
     throw new Error(`production scanner rejected non-partitioned ${label} coverage`);
   }
-  return { expected: expectedSet, resolved: resolvedSet, unavailable: unavailableSet };
+  return { expected: expectedSet as Set<string>, resolved: resolvedSet, unavailable: unavailableSet as Set<string> };
 }
 
+const frozenArraySetCache = new WeakMap<readonly string[], ReadonlySet<string>>();
+function getFrozenArraySet(values: readonly string[]): ReadonlySet<string> {
+  if (!Object.isFrozen(values)) return new Set(values);
+  let cached = frozenArraySetCache.get(values);
+  if (!cached) {
+    cached = new Set(values);
+    frozenArraySetCache.set(values, cached);
+  }
+  return cached;
+}
+
+const verifiedGraphDigestCache = new WeakMap<readonly TokenEdge[], {
+  readonly stateKeyMap: BlockScanStateSnapshot["pricingStateKeyByEdgeKey"];
+  readonly expectedEdgeKeyHash: string;
+  readonly scannerEdgeCount: number;
+  readonly scannerEdgeKeyHash: string;
+}>();
 const frozenSetHashCache = new WeakMap<readonly string[], string>();
 const verifiedCoverageCache = new WeakMap<object, {
   seal: string;

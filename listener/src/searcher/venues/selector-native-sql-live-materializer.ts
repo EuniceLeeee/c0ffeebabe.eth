@@ -2,7 +2,7 @@ import {selectorExecutionPrograms,selectorProgramProjection,selectSingleExecutio
 import { keccak256 } from 'ethers';
 import { runStrictFamilyLifecycle } from '../strict-family-lifecycle-runner.js';
 import { createStrictCentralAdapterRuntime } from '../strict-central-adapter-runtime.js';
-import { buildFamilyRuntimeAmountLeg } from './adapter-family-runtime.js';
+import { buildFamilyRuntimeAmountLeg, reissuePreparedInstanceRouteHandles, type PreparedFamilyInstance } from './adapter-family-runtime.js';
 import type { CanonicalSource } from './adapter-request-program.js';
 import type { FamilyCapabilityCatalog } from './family-capability-catalog.js';
 import type { CanonicalValue } from './canonical-value.js';
@@ -27,6 +27,25 @@ const issuedTrialIds=new WeakMap<object,{routeKey:string;programKey:string;alias
 export function issuedSqlTrialVariant(instance:object,routeKey:string,programKey:string):string|undefined {
   const v=issuedTrialIds.get(instance);
   return v?.routeKey===routeKey&&v.programKey===programKey?v.alias:undefined;
+}
+
+/** Re-issues a deterministic 0-RPC direct-execution template instance at a new
+ * canonical source without re-compiling the selector AST lifecycle. */
+export function reissueSqlDirectMaterializedInstance(input: {
+  readonly catalog: FamilyCapabilityCatalog;
+  readonly templateInstance: PreparedFamilyInstance;
+  readonly source: CanonicalSource;
+}): PreparedFamilyInstance {
+  const family = input.catalog.forFamily(input.templateInstance.familyId);
+  const reissued = reissuePreparedInstanceRouteHandles({
+    family,
+    instance: input.templateInstance,
+    source: input.source,
+    generation: input.source.generation,
+  });
+  const priorTrial = issuedTrialIds.get(input.templateInstance);
+  if (priorTrial) issuedTrialIds.set(reissued, priorTrial);
+  return reissued;
 }
 
 function need(ok:unknown,message:string):asserts ok { if(!ok)throw Error('SQL live binding receipt: '+message); }
