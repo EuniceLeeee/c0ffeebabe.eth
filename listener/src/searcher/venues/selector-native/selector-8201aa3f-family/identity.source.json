@@ -1,0 +1,15 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x8201aa3f",
+  "signature": "function swapExactAmountIn(address, uint256, address, uint256, uint256)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_8201AA3F_ENABLED"
+  },
+  "options": [
+    {
+      "id": "bpool-swap",
+      "tokenList": "function getFinalTokens() view returns (address[])"
+    }
+  ]
+}

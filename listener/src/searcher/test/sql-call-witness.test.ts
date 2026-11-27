@@ -5,12 +5,15 @@ import {createHash} from 'node:crypto';
 import {createSqlRootCallWitnessReader,sqlHistoricalCallObservation} from '../venues/selector-sql-call-witness.js';
 import {issueSqlFamilyAlternatives} from '../venues/selector-native-sql-live-materializer.js';
 import {selectorNativeProgramKey} from '../venues/selector-native-definition.js';
-import {sqlSelectorModules} from '../sql-edge-live-producer.js';
 import {sqlDirectionId} from '../sql-edge-price-index.js';
-import {PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog} from '../venues/production-family-composition.js';
+process.env.SEARCHER_FAMILY_SELECTOR_F1DC3CC9_ENABLED='1';
+const {sqlSelectorModules}=await import('../sql-edge-live-producer.js');
+const {PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG:catalog}=await import('../venues/production-family-composition.js');
 const target='0x'+'1'.repeat(40),asset='0x'+'2'.repeat(40),sender='0x'+'3'.repeat(40),owner='0x'+'4'.repeat(40),
   txHash='0x'+'a'.repeat(64),oldHash='0x'+'b'.repeat(64),source={generation:21,number:21,hash:'0x'+'c'.repeat(64)};
-const selector='0x1a4d01d2',def=sqlSelectorModules.get(selector)!.definition,abi=new Interface([def.signature]),call=abi.encodeFunctionData(selector,[89,1,1]);
+const selector='0xf1dc3cc9',baseDef=sqlSelectorModules.get(selector)!.definition;
+const def=Object.freeze({...baseDef,activation:Object.freeze({enabled:true,envKey:'SEARCHER_FAMILY_SELECTOR_F1DC3CC9_ENABLED'})});
+const abi=new Interface([def.signature]),call=abi.encodeFunctionData(selector,[89,1,1]);
 const edge={chainId:1 as const,selector,poolAddress:target,poolId:null,poolNamespace:null,tokenInId:null,tokenOutId:null,tokenIn:target,tokenOut:asset};
 const ref={txHash,callPath:''};
 function mock(){
@@ -46,7 +49,7 @@ test('a call-bound recipe uses original arguments to verify the current pinned p
     code:string[]=[],queries:string[]=[];
   let returnedAsset=asset;
   const args={edge:e,source,catalog,definition:def,executor:owner,transactionOrigin:sender,
-    historicalProgramKeys:[selectorNativeProgramKey(def.programs[1]!),selectorNativeProgramKey(def.programs[3]!)],
+    historicalProgramKeys:[selectorNativeProgramKey(def.programs[0]!)],
     readCallWitness:m.reader,readCode:async(a:string)=>{code.push(a);return '0x6000';},read:async(a:string,data:string)=>{
       assert.equal(a,target);queries.push(data);
       if(data===gets.encodeFunctionData('coins',[1]))return AbiCoder.defaultAbiCoder().encode(['address'],[returnedAsset]);

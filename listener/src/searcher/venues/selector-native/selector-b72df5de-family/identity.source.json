@@ -1,0 +1,31 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xb72df5de",
+  "signature": "function add_liquidity(uint256[], uint256)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_B72DF5DE_ENABLED"
+  },
+  "options": [
+    {
+      "id": "mint-from-coin0",
+      "tokenIn": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          0
+        ]
+      },
+      "tokenOut": "$target"
+    },
+    {
+      "id": "mint-from-coin1",
+      "tokenIn": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          1
+        ]
+      },
+      "tokenOut": "$target"
+    }
+  ]
+}

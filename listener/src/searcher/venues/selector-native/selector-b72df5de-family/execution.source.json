@@ -1,0 +1,306 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0xb72df5de",
+  "signature": "function add_liquidity(uint256[], uint256)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_B72DF5DE_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "curve-ng-add-liquidity-2coin",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "pool": "$target",
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenIn"
+          ]
+        },
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenOut"
+          ]
+        }
+      }
+    },
+    "routes": {
+      "target": "$descriptor.pool",
+      "directions": [
+        {
+          "id": "mint-lp",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.pool",
+          "taxonomy": {
+            "slotKind": "swap"
+          },
+          "fields": {
+            "pool": "$descriptor.pool"
+          }
+        }
+      ],
+      "venue": {
+        "kind": "address-pool",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.pool"
+              ]
+            }
+          ]
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$descriptor.pool"
+            ]
+          },
+          "error": "standard curve add_liquidity requires pool LP token as output"
+        },
+        {
+          "assert": {
+            "op": "not",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$descriptor.tokenIn",
+                  "0x0000000000000000000000000000000000000000"
+                ]
+              }
+            ]
+          },
+          "error": "standard curve add_liquidity requires nonzero ERC20 input"
+        }
+      ]
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "not",
+            "args": [
+              "$externalRecipient"
+            ]
+          },
+          "error": "2-arg curve add_liquidity mints LP to caller only"
+        },
+        {
+          "condition": {
+            "op": "sameAddress",
+            "args": [
+              "$route.tokenOut",
+              "$target"
+            ]
+          },
+          "error": "standard curve add_liquidity requires pool LP token as output"
+        }
+      ],
+      "steps": [
+        {
+          "id": "coin0",
+          "static": true,
+          "call": {
+            "target": "$target",
+            "signature": "function coins(uint256) view returns (address)",
+            "args": [
+              0
+            ],
+            "save": {
+              "coin0": 0
+            }
+          }
+        },
+        {
+          "id": "coin1",
+          "static": true,
+          "call": {
+            "target": "$target",
+            "signature": "function coins(uint256) view returns (address)",
+            "args": [
+              1
+            ],
+            "save": {
+              "coin1": 0
+            }
+          }
+        },
+        {
+          "id": "amounts",
+          "math": {
+            "model": "depositAmounts",
+            "inputs": {
+              "amountIn": {
+                "runtime": "amountIn"
+              },
+              "coin1": {
+                "runtime": "coin1"
+              },
+              "tokenIn": {
+                "op": "uint",
+                "args": [
+                  "$route.tokenIn"
+                ]
+              }
+            },
+            "outputs": {
+              "amt0": "amt0",
+              "amt1": "amt1"
+            }
+          }
+        },
+        {
+          "id": "deposit",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$target",
+            "mode": "exact-clear",
+            "requireBool": true,
+            "verifyAllowance": true
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function add_liquidity(uint256[], uint256)",
+            "args": [
+              [
+                {
+                  "runtime": "amt0"
+                },
+                {
+                  "runtime": "amt1"
+                }
+              ],
+              "$minAmountOut"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    },
+    "runtimeMath": {
+      "version": 1,
+      "entries": {
+        "depositAmounts": {
+          "model": "curve:deposit-2coin-amounts",
+          "version": 1
+        }
+      },
+      "models": [
+        {
+          "id": "curve:deposit-2coin-amounts",
+          "version": 1,
+          "inputs": [
+            "amountIn",
+            "coin1",
+            "tokenIn"
+          ],
+          "outputs": [
+            "amt0",
+            "amt1"
+          ],
+          "operations": [
+            {
+              "name": "isCoin1",
+              "op": "eq",
+              "left": {
+                "input": "coin1"
+              },
+              "right": {
+                "input": "tokenIn"
+              }
+            },
+            {
+              "name": "isCoin0",
+              "op": "sub",
+              "left": {
+                "constant": "1"
+              },
+              "right": {
+                "local": "isCoin1"
+              }
+            },
+            {
+              "name": "amt0",
+              "op": "mul",
+              "left": {
+                "input": "amountIn"
+              },
+              "right": {
+                "local": "isCoin0"
+              }
+            },
+            {
+              "name": "amt1",
+              "op": "mul",
+              "left": {
+                "input": "amountIn"
+              },
+              "right": {
+                "local": "isCoin1"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

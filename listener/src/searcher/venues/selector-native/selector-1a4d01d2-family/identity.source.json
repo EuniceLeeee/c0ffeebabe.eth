@@ -1,0 +1,31 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x1a4d01d2",
+  "signature": "function remove_liquidity_one_coin(uint256, int128, uint256)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_1A4D01D2_ENABLED"
+  },
+  "options": [
+    {
+      "id": "redeem-coin0",
+      "tokenIn": "$target",
+      "tokenOut": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          0
+        ]
+      }
+    },
+    {
+      "id": "redeem-coin1",
+      "tokenIn": "$target",
+      "tokenOut": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          1
+        ]
+      }
+    }
+  ]
+}

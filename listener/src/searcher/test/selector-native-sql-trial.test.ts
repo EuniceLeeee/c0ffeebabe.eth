@@ -61,10 +61,28 @@ test('actual V3 direction compiles to a single leg without fee/tickSpacing, tran
   }
 });
 
-test('direct redemption consumes the SQL call target, direction and only the observed bound index',()=>{
-  const s='0x1a4d01d2',lp='0x02950460e2b9529d0e00284a5fa2d7bdf3fa4d72',usdc='0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
-  const x=fixture(s,{chainId:1,selector:s,poolAddress:lp,tokenIn:lp,tokenOut:usdc});
-  const keys=[1,3].map(i=>selectorNativeProgramKey(x.definition.programs[i]!));
+test('source-authored 0x1a4d01d2 compiles to single runtime-coin redemption leg and legacy call-bound 0xf1dc3cc9 retains index witness binding',()=>{
+  const lp='0x02950460e2b9529d0e00284a5fa2d7bdf3fa4d72',usdc='0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
+  const cur=fixture('0x1a4d01d2',{chainId:1,selector:'0x1a4d01d2',poolAddress:lp,tokenIn:lp,tokenOut:usdc});
+  const compiledCur=compileSqlTrialLegs(cur);
+  assert.equal(compiledCur.complete,true,compiledCur.issues.join('; '));
+  assert.deepEqual(compiledCur.legs.map(l=>[l.programKey,l.tokenIn,l.tokenOut]),
+    [[selectSingleExecution(cur.definition).programKey,lp,usdc]]);
+  assert.equal(compileSqlTrialLegs({...cur,edge:{...cur.edge,tokenIn:coin0}}).legs.length,0);
+  assert.equal(compileSqlTrialLegs({...cur,edge:{...cur.edge,tokenOut:ZeroAddress}}).legs.length,0);
+
+  const s='0xf1dc3cc9';
+  const rawActive={...JSON.parse(readFileSync(new URL('../venues/selector-native/selector-f1dc3cc9-family/selector-f1dc3cc9.json',import.meta.url),'utf8')),
+    activation:{enabled:true,envKey:'SEARCHER_FAMILY_SELECTOR_F1DC3CC9_ENABLED'}};
+  const defActive=normalizeSelectorNativeExecutionDefinition(rawActive);
+  const recipesActive=compileSqlExecutionParamPlan(defActive).recipes.map(({index,requirements})=>({
+    index,observed:[] as {key:string;kind:'argument';value:string}[],
+    missing:requirements.filter(r=>!r.sources.some(src=>['runtime','edge','fixed'].includes(src.kind))).map(r=>r.key),
+  }));
+  const x={definition:defActive,source,...actors,edge:{chainId:1 as const,selector:s,poolAddress:lp,tokenIn:lp,tokenOut:usdc,
+    executionParamEvidence:{consensus:'uniform' as const,definitionSha256:createHash('sha256').update(JSON.stringify(defActive)).digest('hex'),
+      txHash:'0x'+'ab'.repeat(32),callPath:'',innerSwapPath:null,recipes:recipesActive}}};
+  const keys=[0].map(i=>selectorNativeProgramKey(x.definition.programs[i]!));
   const withIndex=(value:string)=>({...x,edge:{...x.edge,executionParamEvidence:{...x.edge.executionParamEvidence,
     recipes:x.edge.executionParamEvidence.recipes.map(r=>r.missing.includes('descriptor.index')?{...r,
       observed:[...r.observed,{key:'descriptor.index',kind:'argument' as const,value}],missing:r.missing.filter(k=>k!=='descriptor.index')}:r)}}});
@@ -74,15 +92,14 @@ test('direct redemption consumes the SQL call target, direction and only the obs
   const other=compileSqlTrialLegs(withIndex('0'));assert.deepEqual(other.legs.map(l=>l.programKey),keys);
   for(const [i,a] of actual.legs.entries())assert.notEqual(a.leg.program,other.legs[i]!.leg.program);
   assert.equal(compileSqlTrialLegs(x).legs.length,0);
-  assert.equal(compileSqlTrialLegs(withIndex((1n<<127n).toString())).legs.length,0);
   const native=withIndex('1');assert.equal(compileSqlTrialLegs({...native,edge:{...native.edge,tokenOut:ZeroAddress}}).legs.length,0);
-  const raw=JSON.parse(readFileSync(new URL('../venues/selector-native/selector-1a4d01d2-family/selector-1a4d01d2.json',import.meta.url),'utf8'));
-  for(const i of [1,3])raw.programs[i].binding.flow.steps[0].result.coin={op:'coalesce',args:[coin1,'$scope.tokenOut']};
+  const raw=structuredClone(rawActive);
+  raw.programs[0].binding.flow.steps[0].result.coin={op:'coalesce',args:[coin1,'$scope.tokenOut']};
   const d=normalizeSelectorNativeExecutionDefinition(raw),old=withIndex('1');
   const changed={...old,definition:d,edge:{...old.edge,executionParamEvidence:{...old.edge.executionParamEvidence,
     definitionSha256:createHash('sha256').update(JSON.stringify(d)).digest('hex')}}};
   const denied=compileSqlTrialLegs(changed);assert.equal(denied.legs.length,0);
-  for(const i of [1,3])assert(denied.issues.some(s=>s.startsWith(selectorNativeProgramKey(d.programs[i]!))&&s.includes('binding.coin')),denied.issues.join('; '));
+  assert(denied.issues.some(s=>s.startsWith(selectorNativeProgramKey(d.programs[0]!))&&s.includes('binding.coin')),denied.issues.join('; '));
 });
 
 test('source-funded V2 single 25bps template compiles cleanly without binding token bytecode RPC',async()=>{
