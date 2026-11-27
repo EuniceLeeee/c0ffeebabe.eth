@@ -1,6 +1,7 @@
 import { initializeSqlLiveProducer } from "./sql-live-intake.js";
+import { guardSqlSelectedAuthority } from "./sql-live-selected-authority.js";
 import { startupPriceSessions, type SqlStartupPriceTrials } from "./sql-startup-price-sessions.js";
-import {assertSqlSelectorSamplePrices} from "./sql-selector-startup-check.js";
+import { assertSqlSourcePricePublication } from "./sql-selector-startup-check.js";
 import { NodeStrictClient } from "./simulator/node-strict-client.js";
 import { createNodeFundingCache } from "./simulator/node-input-funding.js";
 import { readFileSync } from "node:fs";
@@ -10,7 +11,7 @@ import { LivePricingContinuationStore, LivePricingContinuationWriter, liveContin
 import { createBlockScanActivityTransport } from "./blockscan-activity-transport.js";
 import { startupRevertFilterEnabled } from "./blockscan-startup-filter.js";
 import { writeEffectiveMidProgress } from "./effective-mid-progress-file.js";
-import { isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ethers } from "ethers";
 import { resolveProfitMode, validatePositiveGrossProfitMode, type ProfitMode } from "../shared/profit-mode.js";
@@ -920,7 +921,7 @@ export function createBlockScanPriceRuntime(input: {
   sqlStartupTrials?:SqlStartupPriceTrials;
   checkStartupPrices?:(effective:EffectiveMidSnapshot,edges:readonly TokenEdge[])=>void;
   requireFreshStartupDirections?:()=>ReadonlySet<string>|undefined;
-  selectedAuthority?:(req:{source:CanonicalSource;requiredEdgeIds:ReadonlySet<string>;control?:AdapterWorkControl})=>Promise<StrictProductionRuntimeRoot|undefined>;
+  selectedAuthority?:(req:{purpose:StrictSessionRequest["purpose"];source:CanonicalSource;requiredEdgeIds:ReadonlySet<string>;control?:AdapterWorkControl})=>Promise<StrictProductionRuntimeRoot|undefined>;
   blockScanRuntimeAbort: AbortController;
   blockScanRethTransportScheduler?: RethTransportScheduler;
   blockScanCfg: BlockScanCoreConfig | undefined;
@@ -970,7 +971,10 @@ export function createBlockScanPriceRuntime(input: {
       );
     }
     const source = request.source;
-    const kind = request.purpose === "exact-execution" ? "exact" : "pricing";
+    if (request.purpose === "startup-price" && (request.requiredEdgeIds === undefined || request.fundingAssets.length || request.touchedPools !== undefined)) {
+      throw Error("startup-price session requires explicit leg scope and no funding or touched scope");
+    }
+    const kind = request.purpose === "exact-execution" || request.purpose === "startup-price" ? "exact" : "pricing";
     const fundingAssets = request.fundingAssets;
     const fundingKey = [...new Set(fundingAssets.map((token) =>
       token.toLowerCase()
@@ -1054,8 +1058,8 @@ export function createBlockScanPriceRuntime(input: {
     const createStartedAtMs = Date.now();
     // Only a scoped execution request may ask the issuer to bind SQL
     // candidates. Raw pricing/funding and table membership carry no authority.
-    const selectRoot=(request.purpose==="exact-execution"||request.purpose==="source-n-runtime")&&request.requiredEdgeIds?.size&&input.selectedAuthority
-      ? input.selectedAuthority({source,requiredEdgeIds:request.requiredEdgeIds,control:request.control})
+    const selectRoot=(request.purpose==="exact-execution"||request.purpose==="source-n-runtime"||request.purpose==="startup-price")&&request.requiredEdgeIds?.size&&input.selectedAuthority
+      ? input.selectedAuthority({purpose:request.purpose,source,requiredEdgeIds:request.requiredEdgeIds,control:request.control})
       : undefined;
     const created = Promise.resolve(selectRoot).then(root=>(root??strictRuntimeRoot).createSession({
       source,
@@ -1154,7 +1158,7 @@ export function createBlockScanPriceRuntime(input: {
       ) : undefined;
       try {
         const strictQuotes = createEffectiveQuoteSessions(requiredEdgeIds =>
-          strictSessionFor({ purpose: "exact-execution", source, simulationTransport,
+          strictSessionFor({ purpose: input.startupExecutionPreflight?.quoteEffective ? "startup-price" : "exact-execution", source, simulationTransport,
             control: effectiveControl, fundingAssets: [], requiredEdgeIds,
             exactCallBackend: pricingBackend ?? ownedBackend! }));
         const sessions = startupPriceSessions({strict:strictQuotes,trials:input.sqlStartupTrials,source,executor:input.executor});
@@ -1753,6 +1757,9 @@ async function main(): Promise<void> {
       path: blockScanRouteEventsPath,
       eventsPath: eventContext.path,
       runId: eventContext.runId,
+      maxRoutes: 16_384,
+      maxBatchBytes: 16 * 1024 * 1024,
+      maxCatalogEntries: 262_144,
     });
   if (blockScanRouteTelemetry.enabled) {
     console.log(
@@ -1990,25 +1997,19 @@ async function main(): Promise<void> {
       ...executionIdentity, executorRuntimeCode: finalSimulationExecutorRuntimeCode,
       rawExecutionEntry, scheduler: blockScanRethTransportScheduler }) }) : undefined;
   let samplePricesPublished=false,lastSampleReportSource="",restoredContinuation=false;
-  const sampleIds=new Set(sqlProducer.sqlSelectorSamples.map(s=>s.edgeId));
   const sampleChecked=new WeakSet<EffectiveMidSnapshot>();
   const checkFirstPrices=(effective:EffectiveMidSnapshot,edges:readonly TokenEdge[])=>{
     if(samplePricesPublished||sampleChecked.has(effective))return;
     const {number,hash,generation}=effective.source,sourceKey=number+":"+hash+":"+generation;
-    try{assertSqlSelectorSamplePrices(sqlProducer.sqlSelectorSamples,effective,edges,record=>{
-      // The same table may be checked before and after derived columns are attached.
-      if(record.status==="stopped"||lastSampleReportSource!==sourceKey)console.log("[searcher/sql-selector-simulation] "+JSON.stringify(record));
-    });sampleChecked.add(effective);lastSampleReportSource=sourceKey;}
-    catch(e){const error=e instanceof Error?e:new Error("SQL selector sample price check failed");requestRuntimeStop.fail(error);throw error;}
+    try{const {usable}=assertSqlSourcePricePublication(effective,edges);
+      if(lastSampleReportSource!==sourceKey)console.log("[searcher/sql-price-publication] "+JSON.stringify({sourceBlock:number,usable,complete:true}));
+      sampleChecked.add(effective);lastSampleReportSource=sourceKey;}
+    catch(e){const error=e instanceof Error?e:new Error("SQL price publication check failed");requestRuntimeStop.fail(error);throw error;}
   };
   const priceRuntime = createBlockScanPriceRuntime({
     provider, rpcUrl: config.rpcUrl, ...executionIdentity, strictRuntimeRoot,
-    sqlStartupTrials:sqlProducer.trials,selectedAuthority:req=>{
-      if(!samplePricesPublished)throw Error("SQL execution blocked until the selector sample price table is published");
-      return sqlProducer.selectedAuthority(req);
-    },
+    sqlStartupTrials:sqlProducer.trials,selectedAuthority:guardSqlSelectedAuthority({published:()=>samplePricesPublished,issue:sqlProducer.selectedAuthority}),
     checkStartupPrices:checkFirstPrices,
-    requireFreshStartupDirections:()=>restoredContinuation&&!samplePricesPublished?sampleIds:undefined,
     fixedEffectiveWethInput: blockScanStageSettings.fixedEffectiveWethInput,
     blockScanRuntimeAbort, blockScanRethTransportScheduler, blockScanCfg,
     recordPricing: publication => {
@@ -2152,8 +2153,13 @@ async function main(): Promise<void> {
     });
   }
 
+  const poolRevertEvidenceDir = process.env.SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH
+    ? resolve(dirname(process.env.SEARCHER_SIM_REVERT_DIAGNOSTICS_PATH), "pool-revert-evidence")
+    : eventContext.path
+      ? resolve(dirname(eventContext.path), "pool-revert-evidence")
+      : undefined;
   const blockScanPoolRevertAttributor = blockScanPoolRevertFilter
-    ? new BlockScanPoolRevertAttributor(blockScanSimRejects) : undefined;
+    ? new BlockScanPoolRevertAttributor(blockScanSimRejects, poolRevertEvidenceDir) : undefined;
   console.log(`[searcher/blockscan-pool-revert-filter] ${JSON.stringify({ enabled: blockScanPoolRevertFilter })}`);
   let activeBlindSourceHead: BlindProductionSourceHeadControl | null = null;
   let preparedBlindBase: BlindProductionPrepareControl | null = null;
@@ -2513,7 +2519,7 @@ async function main(): Promise<void> {
           retryRpcThrottle: true, allowSingleCallFallback: false, transportScheduler: blockScanRethTransportScheduler,
         });
         const strictQuotes = createEffectiveQuoteSessions(requiredEdgeIds => strictSessionFor({
-          purpose: "exact-execution", source: effective.source, control,
+          purpose: "startup-price", source: effective.source, control,
           fundingAssets: [], requiredEdgeIds, exactCallBackend: backend,
         }));
         const sessions=startupPriceSessions({strict:strictQuotes,trials:sqlProducer.trials,source:effective.source,executor:executionIdentity.executor});

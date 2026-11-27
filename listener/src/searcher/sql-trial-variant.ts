@@ -7,3 +7,9 @@ export function sqlTrialVariantId(programKey:string,program:string):string {
     throw new Error("invalid SQL trial recipe or runtime program");
   return "sql-trial:v1:"+programKey.slice("parameters:".length)+":"+keccak256(program);
 }
+
+export function sqlSourceTemplateVariantId(programKey:string):string {
+  if(!/^parameters:[a-f0-9]{64}$/.test(programKey))
+    throw new Error("invalid SQL source execution template key");
+  return "sql-source-template:v1:"+programKey.slice("parameters:".length);
+}

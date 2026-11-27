@@ -1,0 +1,19 @@
+{
+  "format": "simulated-constant-product-swap/v1",
+  "id": "v2-swap",
+  "selector": "0x022c0d9f",
+  "signature": "function swap(uint256, uint256, address, bytes)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_022C0D9F_ENABLED" },
+  "reservesGetter": "function getReserves() view returns(uint112,uint112,uint32)",
+  "feeBps": 30,
+  "callback": "function uniswapV2Call(address,uint256,uint256,bytes)",
+  "alternativeCallbacks": ["function nomiswapCall(address,uint256,uint256,bytes)"],
+  "refreshPolicy": "on-touch",
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": ["edge.tokenIn", "edge.tokenOut"],
+    "watch": "pool-touch",
+    "on": ["call-target", "log-emitter", "asset-transfer-endpoint"],
+    "unclassifiedWatch": "each-block"
+  }
+}

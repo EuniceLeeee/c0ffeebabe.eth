@@ -141,12 +141,6 @@ test("weighted debond executes its amount and empty optional lists without an ol
   const f = recipe("ee9c79da", "typed:peapods-debond:single-asset", {}, target, output), state = host({ tokenIn: target });
   state.run(f.leg().program, 17n); assert.equal(state.get(target, executor), 9983n); assert.equal(state.get(output, executor), 10034n);
 });
-for (const [selector, name] of [["95991276", "sellGem"], ["8d7ef9bb", "buyGem"]]) test(`PSV ${name} has transaction-local direct pricing and clear approvals`, () => {
-  const f = recipe(selector!, `typed:psv:${name}`), q = host();
-  assert.equal(q.run(f.leg({ kind: "quote-output", recipient }).program, 17n, true).registers[0], 31n);
-  const state = host(); state.run(f.leg({ kind: "direct-output", recipient }).program, 17n);
-  assert.equal(state.get(input, executor), 9983n); assert.equal(state.get(output, recipient), 38n);
-});
 for (const [selector, count] of [["4d44e663", 1], ["52180208", 2], ["8033d687", 3], ["66ae5880", 4]] as const)
   test(`auction take/${count} consumes computed positive cost within the input budget`, () => {
     const f = recipe(selector, `typed:yearn-auction:take-${count}`, { wantScale: 1n, soldScale: 1n, denominator: 10n ** 18n, priceProbe: 10n ** 18n });

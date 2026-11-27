@@ -1,0 +1,18 @@
+{
+  "format": "simulated-psm-buy/v1",
+  "id": "buy-gem",
+  "selector": "0x8d7ef9bb",
+  "signature": "function buyGem(address, uint256)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_8D7EF9BB_ENABLED" },
+  "args": ["recipient", "gemAmount"],
+  "approval": "exact-clear",
+  "feeGetter": "function tout() view returns (uint256)",
+  "scaleGetter": "function to18ConversionFactor() view returns (uint256)",
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": ["edge.tokenIn", "edge.tokenOut"],
+    "watch": "pool-touch",
+    "on": ["call-target", "log-emitter", "asset-transfer-endpoint"],
+    "unclassifiedWatch": "each-block"
+  }
+}

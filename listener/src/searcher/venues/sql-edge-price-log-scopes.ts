@@ -1,4 +1,5 @@
 import { EventFragment, ZeroAddress, getAddress } from "ethers";
+import {selectorExecutionPrograms} from "./selector-program-role.js";
 import { isDeepStrictEqual } from "node:util";
 import { compileDeclarativeEventCodec, type DeclarativeEventLog } from "./declarative-event-codec.js";
 import { compileDeclarativeValues } from "./declarative-values.js";
@@ -64,12 +65,14 @@ export function createSqlEdgePriceLogScopes(definitions:readonly SelectorNativeE
   const physicalConsensus=new Map<string,string|null>();
   // State-only declarations never enter SQL discovery/nomination, pricing or execution.
   const stateOnly=new Map<string,Read>(),existingObservation=new Set<string>();
-  for(const def of definitions)for(const p of def.programs){
+  const sourcePhysical=new Map<string,Read>();
+  for(const def of definitions)for(const p of selectorExecutionPrograms(def)){
     // A declaration cannot grant itself ownership of a manager by name. The
     // executable venue and resource must share the same independently pinned
     // manager. Undeclared/conflicting programs for that owner stay broad.
     const manager=path((p.routes?.venue as Data|undefined)?.manager);
-    const pins=manager?emitters(p,{}):[];
+    const sourceManager=def.directState?.poolId&&literal(def.managerCustody?.manager);
+    const pins=sourceManager?[sourceManager]:manager?emitters(p,{}):[];
     if(pins.length===1){
       const owner=pins[0]!,c=def.managerCustody,prior=custody.get(owner);
       const activity=selectorPhysicalPoolActivity(c);
@@ -77,6 +80,13 @@ export function createSqlEdgePriceLogScopes(definitions:readonly SelectorNativeE
         ...activity.map(p=>[EventFragment.from(p.signature).format("full"),p.indexedPoolId,true])].sort());
       const priorShape=physicalConsensus.get(owner);
       physicalConsensus.set(owner,priorShape===undefined||priorShape===shape?shape:null);
+      if(sourceManager&&c)for(const e of [...(c.physicalPoolEvents??[]),...activity]){
+        const codec=compileDeclarativeEventCodec({signature:e.signature}),k=owner+'/'+codec.topic!.toLowerCase();
+        if(!sourcePhysical.has(k))sourcePhysical.set(k,l=>{
+          const id=codec.decode(l)[e.indexedPoolId];
+          return typeof id==='string'&&/^0x[0-9a-f]{64}$/i.test(id)?id.toLowerCase():null;
+        });
+      }
       for(const event of (p.observations?.events??[]) as Data[]){
         if(typeof event.signature==="string")existingObservation.add(owner+"/"+EventFragment.from(event.signature).topicHash.toLowerCase());
       }
@@ -145,6 +155,13 @@ export function createSqlEdgePriceLogScopes(definitions:readonly SelectorNativeE
     const agreed = !!owner && !!topic && !!physicalConsensus.get(owner) && !!custody.get(owner) &&
       !custody.get(owner)?.has(topic) && !index.has(key) && !existingObservation.has(key);
     index.set(key, [agreed ? decodeId : () => null]);
+  }
+  // Source declarations name the physical event field directly. They no
+  // longer need discovery nomination/getter machinery to select pool IDs.
+  for(const [key,decode] of sourcePhysical){
+    const [owner,topic]=key.split('/');
+    const agreed=!!owner&&!!topic&&!!physicalConsensus.get(owner)&&!!custody.get(owner)&&!custody.get(owner)?.has(topic);
+    index.set(key,[...(index.get(key)??[]),agreed?decode:()=>null]);
   }
   const read=(log:DeclarativeEventLog):readonly string[]|null=>{
     if(!log||typeof log.data!=="string"||log.data.length>131074||!Array.isArray(log.topics)||log.topics.length<1||log.topics.length>4||

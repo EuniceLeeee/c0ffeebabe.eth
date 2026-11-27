@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {AbiCoder,Interface,keccak256} from 'ethers';
-import {normalizeSelectorNativeExecutionDefinition,selectorNativeProgramKey} from '../venues/selector-native-definition.js';
+import {AbiCoder,keccak256} from 'ethers';
+import {normalizeSelectorNativeExecutionDefinition} from '../venues/selector-native-definition.js';
+import {selectSingleExecution} from '../venues/selector-program-role.js';
 import {validateSqlExecutionParamHints as validate} from '../venues/selector-native-sql-param-hints.js';
 import {compileSqlExecutionParamPlan} from '../venues/selector-native-execution-param-plan.js';
 
@@ -33,21 +34,18 @@ function v4(){
   f.edge.poolId=keccak256(AbiCoder.defaultAbiCoder().encode(['address','address','uint24','int24','address'],Object.values(tuples)));
   f.edge.poolNamespace='contract-pool-id';f.evidence.innerSwapPath='0,0,1';return f;
 }
-test('same active recipe, already found direction; target, full calldata and complete expected returns come from the active program',()=>{
+test('single active V3 template validates direction-asset hints with zero execution-embedded getters',()=>{
   const f=v3(),r=validate(f)!.recipes[0]!;
-  assert.equal(r.programKey,selectorNativeProgramKey(f.definition.programs[0]!));assert.equal(r.verifiedTuple.size,0);
-  assert.deepEqual(r.currentGetterChecks.map(x=>x.target),[pool,pool]);
-  assert.deepEqual(new Set(r.currentGetterChecks.map(x=>x.calldata)),new Set(['0x0dfe1681','0xd21220a7']));
-  assert.equal(r.currentGetterChecks.find(x=>x.calldata==='0x0dfe1681')!.expectedReturn,'0x'+'00'.repeat(12)+coin0.slice(2));
-  assert(r.currentGetterChecks.every(x=>new Interface([x.abi]).fragments.length===1));
+  assert.equal(r.programKey,selectSingleExecution(f.definition).programKey);
+  assert.equal(r.verifiedTuple.size,0);
+  assert.equal(r.currentGetterChecks.length,0);
 });
-test('pool-id-bound tuple yields five fields but one complete, declaration-owned read expectation',()=>{
+test('pool-id-bound tuple yields five verified fields committed to full keccak256 poolId',()=>{
   const f=v4(),r=validate(f)!.recipes[0]!;
-  assert.equal(r.verifiedTuple.get('descriptor.poolKey.hooks'),zero);assert.equal(r.verifiedTuple.size,5);assert.equal(r.currentGetterChecks.length,1);
-  const read=r.currentGetterChecks[0]!,iface=new Interface([read.abi]),sig='poolKeys(bytes25)';
-  assert.notEqual(read.target,f.edge.poolAddress);assert.equal(read.target,'0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e');
-  assert.equal(read.calldata,iface.encodeFunctionData(sig,[f.edge.poolId!.slice(0,52)]));
-  assert.equal(read.expectedReturn,iface.encodeFunctionResult(sig,[coin0,coin1,500,10,zero]));
+  assert.equal(r.programKey,selectSingleExecution(f.definition).programKey);
+  assert.equal(r.verifiedTuple.get('descriptor.poolKey.hooks'),zero);
+  assert.equal(r.verifiedTuple.size,5);
+  assert.equal(r.currentGetterChecks.length,0);
   assert.throws(()=>validate({...f,edge:{...f.edge,tokenOut:pool}}),/direction assets/);
   const n=v4();n.evidence.recipes[0]!.observed.find(x=>x.key==='descriptor.poolKey.currency0')!.value=zero;
   n.edge.poolId=keccak256(AbiCoder.defaultAbiCoder().encode(['address','address','uint24','int24','address'],[zero,coin1,500,10,zero]));
@@ -74,11 +72,13 @@ test('an unqualified public ID uses the uniquely declared manager namespace only
   assert.throws(()=>validate({...f,edge:{...edge,poolNamespace:'another-scope'}}),/logical pool/);
   assert.throws(()=>validate({...f,edge:{...edge,poolId:'0x'+'12'.repeat(32)}}),/hash to this logical pool/);
   assert.throws(()=>validate({...f,edge:{...edge,tokenOut:pool}}),/direction assets/);
-  for(const mode of ['no-manager','ambiguous','no-state-scope']){
+  for(const mode of ['no-manager','no-state-scope']){
     const d=JSON.parse(JSON.stringify(f.definition));
     if(mode==='no-manager')delete d.managerCustody;
-    if(mode==='ambiguous')d.programs[0].binding.nomination.poolNamespace='another-scope';
-    if(mode==='no-state-scope')delete d.programs[0].binding.stateBinding.poolNamespace;
+    if(mode==='no-state-scope'){
+      const execProg=d.programs.find((p:any)=>p.type==='execution');
+      delete execProg.projection.stateBinding.poolNamespace;
+    }
     const evidence={...f.evidence,definitionSha256:createHash('sha256').update(JSON.stringify(d)).digest('hex')};
     assert.throws(()=>validate({definition:d,edge,evidence}),/logical pool/);
   }

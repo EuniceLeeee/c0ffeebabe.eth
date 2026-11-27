@@ -1,3 +1,4 @@
+import {selectorExecutionPrograms,selectorProgramProjection,selectSingleExecution} from "./selector-program-role.js";
 import { FunctionFragment, Interface, getAddress, MaxUint256, ZeroAddress } from "ethers";
 import { assertExecutionRounding } from "../../shared/executor/amount-rounding.js";
 import { compileDeclarativeReadFlow } from "./declarative-read-flow.js";
@@ -15,6 +16,11 @@ import { hashCanonical } from "./canonical-value.js";
 import { freezeSelectorNative, selectorNativeFamilyId, selectorNativeProgramKey,
   type SelectorNativeExecutionDefinition, type SelectorNativeProgram } from "./selector-native-definition.js";
 import type { SelectorNativeBindingCandidate } from "./selector-native-discovery.js";
+import { selectorObservedTargetCode } from "./selector-native-discovery.js";
+import { assertVerifiedSelectorSourceCall } from "./selector-source-call-witness.js";
+import {validateSqlExecutionParamHints} from './selector-native-sql-param-hints.js';
+import {selectorSourceParameters} from './selector-source-parameters.js';
+import {assertSelectorSourceIdentity} from './selector-source-identity.js';
 import type { AdapterRequest, AdapterRequestResult, CanonicalSource, RequestRequirements } from "./adapter-request-program.js";
 type Data=Record<string,any>;
 export interface SelectorNativeBindingProof {
@@ -25,12 +31,34 @@ export interface SelectorNativeBindingProof {
  readonly bound?:Data;readonly reason?:string;
 }
 const same=(a:string,b:string)=>getAddress(a)===getAddress(b);
-const clean=(v:any):any=>Array.isArray(v)?v.map(clean):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).filter(([,x])=>x!==undefined).map(([k,x])=>[k,clean(x)])):v;
+const cleanFrozen=new WeakSet<object>();
+const clean=(v:any):any=>{
+ if(!v||typeof v!=='object')return v;
+ if(cleanFrozen.has(v))return v;
+ if(Array.isArray(v)){
+  let sameRef=Object.isFrozen(v);
+  const mapped=v.map(x=>{const c=clean(x);if(c!==x||(c&&typeof c==='object'&&!cleanFrozen.has(c)))sameRef=false;return c;});
+  if(sameRef){cleanFrozen.add(v);return v;}
+  return mapped;
+ }
+ const keys=Object.keys(v);
+ let sameRef=Object.isFrozen(v);
+ const out:Record<string,any>={};
+ for(let i=0;i<keys.length;i++){
+  const k=keys[i]!,x=v[k];
+  if(x===undefined){sameRef=false;continue;}
+  const c=clean(x);
+  if(c!==x||(c&&typeof c==='object'&&!cleanFrozen.has(c)))sameRef=false;
+  out[k]=c;
+ }
+ if(sameRef){cleanFrozen.add(v);return v;}
+ return out;
+};
 const hash=(v:any)=>hashCanonical(clean(v));
 /** Token IDs can name logical ERC20 resource slots. Only actual NFT transfers
  * require balance observations which the ERC20 execution backend cannot prove. */
 export function selectorNativeHasNonFungibleFlow(candidate:SelectorNativeBindingCandidate,assets:Data=candidate.scope):boolean {
- if(candidate.candidateKind==="selector-native-state")return false;
+ if(candidate.candidateKind!=="selector-native-execution")return false;
  const tokens=[assets.tokenIn,assets.tokenOut].filter((v):v is string=>typeof v==='string').map(v=>getAddress(v).toLowerCase());
  return candidate.census.tokenFlows.some(flow=>flow.standard!=='erc20'&&tokens.includes(flow.token.toLowerCase())&&BigInt(flow.amount)>0n);
 }
@@ -43,15 +71,17 @@ function valueDocument(...sources:readonly (Data|undefined)[]):Data {
 /** This compiler consumes a complete execution definition. It has no protocol
  * registry, legacy root/child loader, pricing model or identity adapter. */
 export function createSelectorNativeRuntime(definition:SelectorNativeExecutionDefinition,program:SelectorNativeProgram){
+ if(program.type==='independentIdentity')throw Error('identity program cannot create an execution runtime');
+ const projection=selectorProgramProjection(program);
  for(const checks of [program.checks,program.routes?.checks,program.routes?.assertions,program.receiptChecks?.checks])if(checks)validateDeclarativeStatements(checks);
  const family=selectorNativeFamilyId(definition),key=selectorNativeProgramKey(program),actionId=`${family}:call`,lineage=`${family}:${key}`;
  const models=program.math?bindSelectorNativeMath(program.math):{};
  const values=compileDeclarativeValues(valueDocument(program.values) as any,{},models);
  const resources=compileDeclarativeValues(valueDocument(program.values,program.resourceValues) as any,{},models);
- const flow=program.binding?.flow?compileDeclarativeReadFlow(program.binding.flow,values):undefined;
- const stateAuthority=program.binding?.stateBinding?.authority
-  ?compileDeclarativeReadFlow(program.binding.stateBinding.authority,values):undefined;
- const instanceReads=program.binding?.descriptorReads?compileInstanceEvidence(program.binding.descriptorReads,resources):undefined;
+ const flow=projection?.flow?compileDeclarativeReadFlow(projection.flow,values):undefined;
+ const stateAuthority=projection?.stateBinding?.authority
+  ?compileDeclarativeReadFlow(projection.stateBinding.authority,values):undefined;
+ const instanceReads=projection?.descriptorReads?compileInstanceEvidence(projection.descriptorReads,resources):undefined;
  const runtimeMath=program.runtimeMath?createDeclarativeRuntimeMathRegistry(program.runtimeMath.models??[]).bind({version:program.runtimeMath.version,entries:program.runtimeMath.entries}):undefined;
  const options=runtimeMath?{math:runtimeMath}:{};
  const signed=program.runtimeEvidence?compileSignedBlockEvidence(family,program.runtimeEvidence,values):undefined;
@@ -60,8 +90,32 @@ export function createSelectorNativeRuntime(definition:SelectorNativeExecutionDe
   assertDeclarativeExecutionSource(source);getAddress(executor);
   assertExecutionRounding(executionRoundingRawUnits);
   if(transactionOrigin!==undefined)getAddress(transactionOrigin);
+  if(candidate.candidateKind==='selector-native-source-identity'){
+   if(!definition.directState||!program.execution||flow||stateAuthority||signed||instanceReads)throw Error('source identity execution cannot run legacy binding');
+   if(selectSingleExecution(definition).programKey!==key)throw Error('source identity execution must target single execution program');
+   if(candidate.identity!==null)assertSelectorSourceIdentity(candidate.identity,{definition,edge:candidate.edge,source,programKey:key});
+   else if(definition.programs.some(p=>p.type==='independentIdentity'))throw Error('source identity missing for identity-guarded definition');
+   if(!selectorObservedTargetCode(candidate,source,candidate.target))throw Error('source identity lacks current deployed-code observation');
+   const hookData=candidate.edge.hookData?.toLowerCase()??'0x';
+   return {candidate,scope:candidate.scope,target:candidate.target,sqlEdge:{tokenIn:candidate.scope.tokenIn,tokenOut:candidate.scope.tokenOut,hookData},
+    sourceParameters:candidate.identity?.binding??{},source,executor,transactionOrigin,executionPolicy:{executionRoundingRawUnits},familyId:family,programLineage:lineage};
+  }
+  if(candidate.candidateKind==="selector-native-source"){
+   if(!definition.directState||!program.execution||signed||instanceReads)throw Error("source program needs undeclared state");
+   if(selectSingleExecution(definition).programKey!==key)throw Error("source witness must target single execution program");
+   assertVerifiedSelectorSourceCall(candidate.witness,{edge:candidate.witness,source,discoveryRuleHash:definition.directState.discoveryRuleHash});
+   if(!selectorObservedTargetCode(candidate,source,candidate.target))throw Error("source execution lacks current deployed-code observation");
+   const args=abi.decodeFunctionData(FunctionFragment.from(definition.signature),candidate.witness.calldata).toArray(true);
+   const hints=validateSqlExecutionParamHints({definition,edge:candidate.witness,evidence:candidate.witness.executionParamEvidence});
+   const hint=hints?.recipes.find(p=>p.programKey===key);
+   if(!hint)throw Error('source execution lacks independently reconstructed parameters');
+   const sourceParameters=selectorSourceParameters(program,hint);
+   const hookData=(candidate.witness as Data).hookData?.toLowerCase()??'0x';
+   return {candidate,scope:candidate.scope,target:candidate.target,sqlEdge:{tokenIn:candidate.witness.tokenIn,tokenOut:candidate.witness.tokenOut,hookData},
+    args,arguments:args,sourceParameters:sourceParameters.binding,source,executor,transactionOrigin,executionPolicy:{executionRoundingRawUnits},familyId:family,programLineage:lineage};
+  }
   if(candidate.candidateKind==="selector-native-state"){
-   const spec=program.binding?.stateBinding;
+   const spec=projection?.stateBinding;
    // The Family discovery boundary also admits the restricted, independently
    // read SQL pair profile. It has no synthetic calldata or candidate fields.
    if(!flow||!program.execution||signed)throw new Error("recipe has no state-bound execution");
@@ -75,7 +129,7 @@ export function createSelectorNativeRuntime(definition:SelectorNativeExecutionDe
   const env={candidate,census:candidate.census,call,args,arguments:args,target:candidate.target,scope:candidate.scope,
    tokenIn:candidate.scope.tokenIn,tokenOut:candidate.scope.tokenOut,observedAmountIn:candidate.observedAmountIn,
    source,executor,transactionOrigin,executionPolicy:{executionRoundingRawUnits},familyId:family,programLineage:lineage};
-  return {...env,candidate:program.binding?.candidate===undefined?candidate:values.evaluate(program.binding.candidate,env)};
+  return {...env,candidate:projection?.candidate===undefined?candidate:values.evaluate(projection.candidate,env)};
  }
  function environment(input:Data):Data {
   const env={...input,routes:input.routes??input.descriptor?.routes??[],direction:input.direction??input.route?.direction,
@@ -108,20 +162,20 @@ export function createSelectorNativeRuntime(definition:SelectorNativeExecutionDe
    descriptor.target=getAddress(descriptor.target).toLowerCase();
    return descriptor;
   }
-  const factsValue=values.evaluate(program.binding?.facts??{}, {...env,binding});
+  const factsValue=values.evaluate(projection?.facts??{}, {...env,binding});
   if(!factsValue||typeof factsValue!=='object'||Array.isArray(factsValue))throw new Error('native execution facts must be a record');
-  const facts={...factsValue,facts:factsValue,subject:program.binding?.subject===undefined?candidate.target:values.evaluate(program.binding.subject,{...env,binding}),
+  const facts={...factsValue,facts:factsValue,subject:projection?.subject===undefined?candidate.target:values.evaluate(projection.subject,{...env,binding}),
    familyId:family,lineageId:lineage,provenance:[]};
-  const draft=completed(program.binding?resources.evaluate(program.binding.descriptor,{...env,binding,facts}):{});
+  const draft=completed(projection?resources.evaluate(projection.descriptor,{...env,binding,facts}):{});
   if(instanceReads&&staticResults!==undefined){
    const staticEvidence=instanceReads.decode({programInput:draft,results:staticResults});
-   resources.run(program.binding!.descriptorReads!.checks??[],{draft,staticEvidence,sharedBindings:[]});
-   return completed(resources.evaluate(program.binding!.descriptorReads!.finalize,{draft,staticEvidence,sharedBindings:[]}));
+   resources.run(projection!.descriptorReads!.checks??[],{draft,staticEvidence,sharedBindings:[]});
+   return completed(resources.evaluate(projection!.descriptorReads!.finalize,{draft,staticEvidence,sharedBindings:[]}));
   }
   return draft;
  }
  function progress(candidate:SelectorNativeBindingCandidate,source:CanonicalSource,executor:string,transactionOrigin:string|undefined,rounds:readonly (readonly AdapterRequestResult[])[],executionRoundingRawUnits=0n):Data {
-  const env=bindingEnvironment(candidate,source,executor,transactionOrigin,executionRoundingRawUnits);let binding:unknown={},used=0;
+  const env=bindingEnvironment(candidate,source,executor,transactionOrigin,executionRoundingRawUnits);let binding:unknown=env.sourceParameters??{},used=0;
   const dependencies=new Set<string>([candidate.target]);
   const note=(requests:readonly AdapterRequest[])=>requests.forEach(request=>{if('to'in request&&typeof request.to==='string')dependencies.add(getAddress(request.to).toLowerCase());if('address'in request&&typeof request.address==='string')dependencies.add(getAddress(request.address).toLowerCase());});
   function readFlow(compiled:NonNullable<typeof flow>,scope:Data,requireRead:boolean,trackPricingDependencies=true):Data{
@@ -139,7 +193,7 @@ export function createSelectorNativeRuntime(definition:SelectorNativeExecutionDe
    return {value:compiled.complete(scope as any,initial,dependent).decode()};
   }
   const state=candidate.candidateKind==="selector-native-state";
-  if(flow){
+  if(flow&&candidate.candidateKind!=="selector-native-source"){
    const read=readFlow(flow,env,state);
    if(read.next)return read;binding=read.value;
   }
@@ -159,7 +213,7 @@ export function createSelectorNativeRuntime(definition:SelectorNativeExecutionDe
   // These fields are framework ownership, never accepted from JSON identity.
   descriptor={...descriptor,familyId:family,lineageId:lineage,instanceKey:candidate.target,provenance:[],runtimeRequirements:[]};
   if(signed)descriptor.signedInstanceKey=values.evaluate(program.runtimeEvidence!.call.instance,env);
-  if(program.binding?.match!==undefined&&values.evaluate(program.binding.match,{descriptor,programLineage:lineage})!==true)throw new Error('execution parameter shape mismatch');
+  if(projection?.match!==undefined&&values.evaluate(projection.match,{descriptor,programLineage:lineage})!==true)throw new Error('execution parameter shape mismatch');
   const innerRoutes=projectInnerRoutes(candidate,descriptor,env);
   if(!innerRoutes.length)throw new Error('no compatible execution direction');
   return {bound:freezeSelectorNative({descriptor,innerRoutes,dependencies:[...dependencies].sort(),
@@ -200,11 +254,15 @@ export function createSelectorNativeRuntime(definition:SelectorNativeExecutionDe
    if(d.enabled!==undefined&&resources.evaluate(d.enabled,env)!==true)continue;
    const tokenIn=getAddress(resources.evaluate(d.tokenIn,env)),tokenOut=getAddress(resources.evaluate(d.tokenOut,env));
    if(same(tokenIn,tokenOut))throw new Error('execution route has identical assets');
-   if(descriptor.tokenIn&&!same(descriptor.tokenIn,tokenIn)||descriptor.tokenOut&&!same(descriptor.tokenOut,tokenOut))continue;
+   const executionAssets=d.executionAssets?resources.evaluate(d.executionAssets,env):undefined;
+   const matchesSide=(descToken:unknown,graphToken:string,assetKind:unknown)=>
+    !descToken||same(String(descToken),graphToken)||(assetKind==='native'&&same(String(descToken),ZeroAddress));
+   if(!matchesSide(descriptor.tokenIn,tokenIn,executionAssets?.input)||
+      !matchesSide(descriptor.tokenOut,tokenOut,executionAssets?.output))continue;
    const fields=resources.evaluate(d.fields??{},env);
    const route:Data={...fields,familyId:family,lineageId:lineage,instanceKey:candidate.target,routeKey:d.id,direction:d.id,
     target:env.target,adapterId:actionId,tokenIn,tokenOut,taxonomy:d.taxonomy,
-    ...(d.executionAssets?{executionAssets:resources.evaluate(d.executionAssets,env)}:{})};
+    ...(executionAssets?{executionAssets}:{})};
    if(candidate.candidateKind==="selector-native-state"){
     const matches=(wanted:string,actual:string,asset:unknown)=>asset==="native"
       ? wanted===ZeroAddress

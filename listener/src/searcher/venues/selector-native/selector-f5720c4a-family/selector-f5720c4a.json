@@ -198,5 +198,9 @@
   },
   "meta": {
     "label": "protocol:token-migration/mantle-immutable-runtime"
+  },
+  "directionSupport": {
+    "status": "not-applicable",
+    "reason": "migrateBIT is not a pool conversion"
   }
 }

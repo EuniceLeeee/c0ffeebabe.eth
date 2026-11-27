@@ -959,5 +959,9 @@
   },
   "meta": {
     "label": "protocol:erc4626/infinifi-gateway-staking"
+  },
+  "directionSupport": {
+    "status": "not-applicable",
+    "reason": "stake is not a pool conversion"
   }
 }

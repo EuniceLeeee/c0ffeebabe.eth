@@ -1222,9 +1222,35 @@ export function stateSchemaFingerprint(edges: readonly TokenEdge[]): string {
   );
 }
 
+const deepFrozenObjects = new WeakSet<object>();
+function isDeepFrozenObject(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return true;
+  if (deepFrozenObjects.has(value)) return true;
+  if (!Object.isFrozen(value)) return false;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      if (!isDeepFrozenObject(value[i])) return false;
+    }
+  } else {
+    for (const k of Object.keys(value)) {
+      if (!isDeepFrozenObject((value as Record<string, unknown>)[k])) return false;
+    }
+  }
+  deepFrozenObjects.add(value);
+  return true;
+}
+
+const edgeMetadataFingerprintCache = new WeakMap<TokenEdge, string>();
+
 /** Exact immutable graph-edge identity, ownership and execution metadata. */
 export function blockScanEdgeMetadataFingerprint(edge: TokenEdge): string {
-  return deterministicHash(canonicalEdgeRecord(edge));
+  const cached = edgeMetadataFingerprintCache.get(edge);
+  if (cached !== undefined) return cached;
+  const hash = deterministicHash(canonicalEdgeRecord(edge));
+  if (isDeepFrozenObject(edge)) {
+    edgeMetadataFingerprintCache.set(edge, hash);
+  }
+  return hash;
 }
 
 /**

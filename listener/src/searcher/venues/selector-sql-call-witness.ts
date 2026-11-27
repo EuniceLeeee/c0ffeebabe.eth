@@ -6,19 +6,16 @@ import type { SqlLiveEdgeCoordinates } from './selector-native-sql-live-binding.
 
 type Locator={txHash:string;callPath:string;signal?:AbortSignal};
 export type SqlCallWitnessReader=(input:Locator)=>Promise<ReadySelectorCensusTransaction>;
-type WitnessMethod='eth_getTransactionByHash'|'eth_getTransactionReceipt'|'eth_getBlockByNumber';
+export type WitnessMethod='eth_getTransactionByHash'|'eth_getTransactionReceipt'|'eth_getBlockByNumber';
 type WitnessTransport={send:(method:WitnessMethod,params:unknown[],signal?:AbortSignal)=>Promise<unknown>};
 const observations=new WeakSet<ReadySelectorCensusTransaction>();
 function need(ok:unknown,msg:string):asserts ok {if(!ok)throw Error('SQL observed call: '+msg);}
 const obj=(v:unknown):Record<string,any>=>v!==null&&typeof v==='object'&&!Array.isArray(v)?v as Record<string,any>:{};
 const word=/^0x[a-f0-9]{64}$/,address=/^0x[a-f0-9]{40}$/,quantity=/^0x(?:0|[1-9a-f][0-9a-f]*)$/;
 
-/** Trust boundary: observations come from the existing pinned provider, not
- * from SQL. The SQL row supplies only a locator. Root-only, no guessed trace
- * paths, no calls to the nominated contract and no historical amount replay. */
-export function createSqlRootCallWitnessReader(rpc:WitnessTransport):SqlCallWitnessReader {
-  return async ({txHash,callPath,signal})=>{
-    need(word.test(txHash)&&callPath==='','requires a canonical root call; inner frame unavailable');
+/** Transaction and receipt inclusion; neither this helper nor a SQL row issues an execution capability. */
+export async function readCanonicalSqlWitnessTransaction(rpc:WitnessTransport,txHash:string,signal?:AbortSignal){
+    need(word.test(txHash),'invalid transaction hash');
     const read=async(method:WitnessMethod,params:unknown[])=>{
       signal?.throwIfAborted();
       try{return await rpc.send(method,params,signal);}
@@ -43,6 +40,13 @@ export function createSqlRootCallWitnessReader(rpc:WitnessTransport):SqlCallWitn
     const block=obj(await read('eth_getBlockByNumber',[tx.blockNumber,false]));
     need(block.hash===tx.blockHash&&block.number===tx.blockNumber&&Array.isArray(block.transactions)&&block.transactions[index]===txHash,
       'historical transaction is not canonical at its index');
+    signal?.throwIfAborted();return {tx,rc,n,index};
+}
+/** The legacy root-only method intentionally does not guess inner call paths. */
+export function createSqlRootCallWitnessReader(rpc:WitnessTransport):SqlCallWitnessReader {
+  return async ({txHash,callPath,signal})=>{
+    need(word.test(txHash)&&callPath==='','requires a canonical root call; inner frame unavailable');
+    const {tx,rc,n,index}=await readCanonicalSqlWitnessTransaction(rpc,txHash,signal);
     const census=readySelectorCensusFromTransaction({from:tx.from,to:tx.to,input:tx.input,value:tx.value,logs:rc.logs,traces:[],
       chainId:1,transactionHash:txHash,transactionIndex:index,blockNumber:n,blockHash:tx.blockHash,status:1});
     signal?.throwIfAborted();observations.add(census);return census;

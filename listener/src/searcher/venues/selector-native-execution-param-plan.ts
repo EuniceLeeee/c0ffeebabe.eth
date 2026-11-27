@@ -1,3 +1,4 @@
+import {selectorExecutionPrograms,selectorProgramProjection} from "./selector-program-role.js";
 // Compile data requirements from the actual executable expression, not from a
 // list of getters or the set of fields present in a historical Ready file.
 import {FunctionFragment} from 'ethers';
@@ -96,8 +97,11 @@ function orderedAssetSources(def:Expr,p:Expr,resolve:(x:Expr)=>ExecutionParamSou
 }
 function edgeField(p:readonly string[]){
   const s=p.join('.');
+  if(s==='sqlEdge.tokenIn')return 'tokenIn';
+  if(s==='sqlEdge.tokenOut')return 'tokenOut';
+  if(s==='sqlEdge.hookData')return 'hookData';
   if(s==='target'||s==='scope.target'||s==='candidate.target'||s==='candidate.scope.target')return 'poolAddress';
-  for(const k of ['poolId','poolNamespace','tokenIn','tokenOut','tokenInId','tokenOutId','chainId']){
+  for(const k of ['poolId','poolNamespace','tokenIn','tokenOut','tokenInId','tokenOutId','chainId','hookData']){
     if(s==='scope.'+k||s==='candidate.scope.'+k)return k;
   }
 }
@@ -112,7 +116,7 @@ function localResult(step:Expr,name:readonly string[]):Expr{
 function compileRecipe(def:Expr,p:Expr,index:number){
   const doc={abi:{...p.values?.abi,...p.resourceValues?.abi},constants:{...p.values?.constants,...p.resourceValues?.constants},
     expressions:{...p.values?.expressions,...p.resourceValues?.expressions},programs:{...p.values?.programs,...p.resourceValues?.programs}};
-  const binding=p.binding??{},flow=binding.flow??{},steps=flow.steps??[],byStep=new Map<string,Expr>(steps.map((s:Expr)=>[s.id,s]));
+  const binding:Expr=selectorProgramProjection(p)??{},flow=binding.flow??{},steps=flow.steps??[],byStep=new Map<string,Expr>(steps.map((s:Expr)=>[s.id,s]));
   const requirements=new Map<string,ExecutionParamRequirement>(),tupleByKey=new Map<string,ExecutionParamSource>();
   const base=(x:Expr,depth=0):ExecutionParamSource=>{
     if(depth>45)return missing('cyclic-or-deep-binding');
@@ -138,6 +142,11 @@ function compileRecipe(def:Expr,p:Expr,index:number){
       return missing('unresolved-declaration');
     }
     if(x?.op==='coalesce'){
+      // These coordinates always exist on a SQL execution leg. Do not
+      // collect the non-SQL fallback as another historical requirement.
+      if(x.args[0]==='$sqlEdge.tokenIn')return edge('tokenIn');
+      if(x.args[0]==='$sqlEdge.tokenOut')return edge('tokenOut');
+      if(x.args[0]==='$sqlEdge.hookData')return edge('hookData');
       const a=base(x.args[0],depth+1);if(a.kind==='fixed')return a.value===null?base(x.args[1],depth+1):a;
       return missing('conditional-binding');
     }
@@ -203,6 +212,21 @@ function compileRecipe(def:Expr,p:Expr,index:number){
         paths.forEach((path,j)=>tupleByKey.set(path!.join('.'),{kind:'pool-id-tuple',signature:call.signature,path:[i],types,member:j}));
       });
     });
+  }
+  // A source-owned ABI commitment replaces an old getter postcondition. This
+  // only nominates tuple bytes; the consumer still verifies the full pool ID.
+  const declaredTuple=binding.stateBinding?.poolIdTuple;
+  if(declaredTuple){
+    const fn=canonicalFn(declaredTuple.signature);let part:import('ethers').ParamType|undefined;
+    for(const [depth,i] of (declaredTuple.path??[]).entries()){
+      part=depth===0?fn?.inputs[i]:part?.baseType==='tuple'?part.components?.[i]:undefined;
+      if(!part)break;
+    }
+    if(part?.baseType==='tuple'&&part.components?.length===declaredTuple.fields?.length){
+      const types=part.components!.map(t=>t.type);
+      declaredTuple.fields.forEach((field:string,member:number)=>tupleByKey.set('descriptor.'+field,
+        {kind:'pool-id-tuple',signature:declaredTuple.signature,path:declaredTuple.path,types,member}));
+    }
   }
   const ordered=orderedAssetSources(def,p,selected);
   const put=(key:string,sources:ExecutionParamSource[]):void=>{if(!requirements.has(key))requirements.set(key,{key,sources});};
@@ -289,5 +313,5 @@ function compileRecipe(def:Expr,p:Expr,index:number){
 }
 export function compileSqlExecutionParamPlan(definition:Expr):ExecutionParamPlan{
   const active=['swap','protocol'].includes(definition.domain)&&definition.activation?.enabled!==false;
-  return {selector:definition.selector,recipes:active?(definition.programs??[]).map((p:Expr,i:number)=>compileRecipe(definition,p,i)):[]};
+  return {selector:definition.selector,recipes:active?(selectorExecutionPrograms(definition)??[]).map((p:Expr,i:number)=>compileRecipe(definition,p,i)):[]};
 }

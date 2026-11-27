@@ -1313,5 +1313,26 @@
         "label": "protocol:ethertoken-native-redeem/active-ethertoken-native-effect-proof"
       }
     }
-  ]
+  ],
+  "directionSupport": {
+    "version": 1,
+    "options": [
+      {
+        "query": [
+          {
+            "id": "self",
+            "source": "self"
+          },
+          {
+            "id": "native",
+            "source": "native"
+          }
+        ]
+      }
+    ],
+    "confirm": {
+      "in": "$edge.tokenIn",
+      "out": "$edge.tokenOut"
+    }
+  }
 }

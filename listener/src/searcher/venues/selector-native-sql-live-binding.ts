@@ -10,6 +10,7 @@ export interface SqlLiveEdgeCoordinates {
   readonly familyIds?: readonly string[];
   readonly poolId?: string | null; readonly poolNamespace?: string | null;
   readonly tokenIn: string; readonly tokenOut: string; readonly tokenInId?: string | null; readonly tokenOutId?: string | null;
+  readonly hookData?: string | null;
 }
 const obj = (value: unknown): Record<string, unknown> | undefined => value !== null && typeof value === 'object' && !Array.isArray(value)
   ? value as Record<string, unknown> : undefined;

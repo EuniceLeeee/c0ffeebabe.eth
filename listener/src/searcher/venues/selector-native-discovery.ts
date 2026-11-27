@@ -1,3 +1,4 @@
+import {selectorExecutionPrograms,selectorProgramProjection,selectSingleExecution} from "./selector-program-role.js";
 import { EventFragment, keccak256 } from "ethers";
 import { instanceKey, lineageId } from "./adapter-family-identifiers.js";
 import type { DiscoverySemantics, FamilyManifest, FamilyCandidate, LogPattern } from "./adapter-family-plugin.js";
@@ -6,6 +7,10 @@ import { hashCanonical, type CanonicalValue } from "./canonical-value.js";
 import { selectorObservedCallResources, type SelectorObservedCallScope } from "./selector-execution-observation.js";
 import { hasSqlPairBinding } from "./selector-native-edge-price.js";
 import type { SelectorAbiValue, SelectorImmutableParameter } from "./selector-execution-keys.js";
+import { assertVerifiedSelectorSourceCall, type VerifiedSelectorSourceCall } from "./selector-source-call-witness.js";
+import type { CanonicalSource } from "./adapter-request-program.js";
+import {assertSelectorSourceIdentity,isDirectSelectorSourceIdentity,type SelectorSourceIdentity} from './selector-source-identity.js';
+import type {SqlLiveEdgeCoordinates} from './selector-native-sql-live-binding.js';
 import { freezeSelectorNative, normalizeSelectorNativeExecutionDefinition, selectorNativeFamilyId, selectorNativeProgramKey,
   type SelectorNativeExecutionDefinition } from "./selector-native-definition.js";
 
@@ -33,7 +38,18 @@ export interface SelectorNativeStateCandidate extends FamilyCandidate {
   readonly declarationFingerprint: string;
 }
 
-export type SelectorNativeBindingCandidate = SelectorNativeCandidate | SelectorNativeStateCandidate;
+export interface SelectorNativeSourceCandidate extends FamilyCandidate {
+ readonly candidateKind:"selector-native-source"; readonly target:string;
+ readonly scope:SelectorObservedCallScope;readonly immutableParameters:readonly [];
+ readonly programKey:string;readonly declarationFingerprint:string;
+ readonly witness:VerifiedSelectorSourceCall;readonly source:CanonicalSource;
+}
+export interface SelectorNativeSourceIdentityCandidate extends FamilyCandidate {
+ readonly candidateKind:'selector-native-source-identity';readonly target:string;readonly scope:SelectorObservedCallScope;
+ readonly immutableParameters:readonly [];readonly programKey:string;readonly declarationFingerprint:string;
+ readonly identity:SelectorSourceIdentity|null;readonly edge:SqlLiveEdgeCoordinates;readonly source:CanonicalSource;
+}
+export type SelectorNativeBindingCandidate = SelectorNativeCandidate | SelectorNativeStateCandidate | SelectorNativeSourceCandidate | SelectorNativeSourceIdentityCandidate;
 type ReadSource={readonly number:number;readonly hash:string;readonly generation:number};
 type CapturedCode={readonly source:ReadSource;readonly target:string;readonly hash:string};
 // Non-serialized hint. Only reverseBinding's existing canonical code read may
@@ -44,7 +60,47 @@ export function selectorObservedTargetCode(candidate:object,source:ReadSource,ta
  const info=candidateCode.get(candidate);return info&&sameRead(info.source,source)&&info.target===target?info.hash:undefined;
 }
 const hash = (value: unknown): string => hashCanonical(value as CanonicalValue);
+const defHashMemo = new WeakMap<SelectorNativeExecutionDefinition, string>();
+function memoDefHash(definition: SelectorNativeExecutionDefinition): string {
+ const hit = defHashMemo.get(definition);
+ if (hit !== undefined) return hit;
+ const digest = hash(definition);
+ if (Object.isFrozen(definition)) defHashMemo.set(definition, digest);
+ return digest;
+}
 const address = (value: unknown): value is string => typeof value === "string" && /^0x[0-9a-f]{40}$/.test(value);
+export function selectorNativeSourceIdentityCandidate(definition:SelectorNativeExecutionDefinition,identity:SelectorSourceIdentity|null,
+ edge:SqlLiveEdgeCoordinates,source:CanonicalSource,programKey:string):SelectorNativeSourceIdentityCandidate{
+ const single=selectSingleExecution(definition);
+ if(single.programKey!==programKey)throw Error('unknown source execution program');
+ if(identity!==null)assertSelectorSourceIdentity(identity,{definition,edge,source,programKey});
+ else if(definition.programs.some(p=>p.type==='independentIdentity'))throw Error('source execution requires matching identity option');
+ const state=definition.directState;if(!state)throw Error('unknown source execution identity');
+ if((edge.poolId!=null)!==!!state.poolId||(edge.poolNamespace!=null&&edge.poolNamespace!==state.poolNamespace))throw Error('source identity physical pool scope differs');
+ if(state.poolId&&(!/^0x[a-f0-9]{64}$/.test(edge.poolId!)||/^0x0{64}$/.test(edge.poolId!)))throw Error('source identity requires a full logical pool id');
+ if(edge.hookData!=null&&(typeof edge.hookData!=='string'||edge.hookData.length>8194||!/^0x(?:[0-9a-f]{2})*$/i.test(edge.hookData)))
+  throw Error('invalid source identity hookData');
+ const target=edge.poolAddress.toLowerCase();
+ const coordinates:SqlLiveEdgeCoordinates={chainId:edge.chainId,selector:edge.selector,poolAddress:target,tokenIn:edge.tokenIn,tokenOut:edge.tokenOut,
+  ...(edge.poolId==null?{}:{poolId:edge.poolId}),...(edge.poolNamespace==null?{}:{poolNamespace:edge.poolNamespace}),
+  ...(edge.tokenInId==null?{}:{tokenInId:edge.tokenInId}),...(edge.tokenOutId==null?{}:{tokenOutId:edge.tokenOutId}),
+  ...(edge.hookData==null?{}:{hookData:edge.hookData.toLowerCase()})};
+ return freezeSelectorNative({candidateKind:'selector-native-source-identity',target,
+  scope:{chainId:1,target,tokenIn:edge.tokenIn.toLowerCase(),tokenOut:edge.tokenOut.toLowerCase(),
+   ...(edge.poolId==null?{}:{poolId:edge.poolId,poolNamespace:state.poolNamespace})},
+  immutableParameters:[],programKey,declarationFingerprint:memoDefHash(definition),identity,edge:coordinates,source:{...source}});
+}
+export function selectorNativeSourceCandidate(definition:SelectorNativeExecutionDefinition,witness:VerifiedSelectorSourceCall,
+ source:CanonicalSource,programKey:string):SelectorNativeSourceCandidate {
+ if(!definition.directState||witness.selector!==definition.selector||selectSingleExecution(definition).programKey!==programKey)
+  throw Error("no declared source execution program");
+ assertVerifiedSelectorSourceCall(witness,{edge:witness,source,discoveryRuleHash:definition.directState.discoveryRuleHash});
+ if((witness.poolId!==null)!==!!definition.directState.poolId||witness.poolNamespace!==(definition.directState.poolNamespace??null))throw Error("source definition differs from physical pool scope");
+ return freezeSelectorNative({candidateKind:"selector-native-source",target:witness.poolAddress,
+  scope:{chainId:1,target:witness.poolAddress,tokenIn:witness.tokenIn,tokenOut:witness.tokenOut,
+    ...(witness.poolId!==null?{poolId:witness.poolId,poolNamespace:witness.poolNamespace!}:{})},immutableParameters:[],
+  programKey,declarationFingerprint:hash(definition),witness,source});
+}
 const stateDefinitions = new WeakMap<SelectorNativeExecutionDefinition, {
   readonly fingerprint: string;
   readonly byProgram: ReadonlyMap<string, NonNullable<NonNullable<SelectorNativeExecutionDefinition["programs"][number]["binding"]>["stateBinding"]>>;
@@ -52,8 +108,9 @@ const stateDefinitions = new WeakMap<SelectorNativeExecutionDefinition, {
 function stateDefinition(definition: SelectorNativeExecutionDefinition) {
   const prior=stateDefinitions.get(definition);if(prior)return prior;
   const byProgram=new Map();
-  for(const p of definition.programs){
-    if(p.binding?.stateBinding)byProgram.set(selectorNativeProgramKey(p),p.binding.stateBinding);
+  for(const p of selectorExecutionPrograms(definition)){
+    const stateBinding=selectorProgramProjection(p)?.stateBinding;
+    if(stateBinding)byProgram.set(selectorNativeProgramKey(p),stateBinding);
     else if(hasSqlPairBinding(definition,p))byProgram.set(selectorNativeProgramKey(p),{});
   }
   const result={fingerprint:hash(definition),byProgram};
@@ -92,8 +149,8 @@ export function selectorNativeCandidateFromCensus(
   programKey?: string,
 ): SelectorNativeCandidate | null {
   try {
-    const entries = definition.programs.length
-      ? definition.programs.map(program => ({ program, key: selectorNativeProgramKey(program) }))
+    const entries = selectorExecutionPrograms(definition).length
+      ? selectorExecutionPrograms(definition).map(program => ({ program, key: selectorNativeProgramKey(program) }))
       : [{ program: undefined, key: "observed" }];
     const selected = programKey === undefined ? entries : entries.filter(entry => entry.key === programKey);
     if (selected.length !== 1) return null;
@@ -140,6 +197,15 @@ function candidateOwnedState(candidate: SelectorNativeStateCandidate) {
     programKey:candidate.programKey,declarationFingerprint:candidate.declarationFingerprint};
 }
 export function assertSelectorNativeCandidate(candidate: SelectorNativeBindingCandidate, definition: SelectorNativeExecutionDefinition): void {
+  if(candidate?.candidateKind==='selector-native-source-identity'){
+   const rebuilt=selectorNativeSourceIdentityCandidate(definition,candidate.identity,candidate.edge,candidate.source,candidate.programKey);
+   if(hash(rebuilt)!==hash(candidate))throw Error('source identity nomination changed');return;
+  }
+  if(candidate?.candidateKind==="selector-native-source"){
+   const rebuilt=selectorNativeSourceCandidate(definition,candidate.witness,candidate.source,candidate.programKey);
+   if(hash(rebuilt)!==hash(candidate))throw Error("source nomination changed");
+   return;
+  }
   if(candidate?.candidateKind==="selector-native-state"){
     const rebuilt=selectorNativeStateCandidate(definition,{...candidate.scope,...candidate.requestedDirection},candidate.programKey);
     if(!rebuilt||["census","callId","arguments","observedAmountIn","readyObservation","transactionHash"].some(key=>Object.hasOwn(candidate,key))||
@@ -158,23 +224,37 @@ export function assertSelectorNativeCandidate(candidate: SelectorNativeBindingCa
 /** SQL/Ready projection. It never executes a protocol adapter or requests state. */
 export function compileSelectorNativeDiscovery(raw: unknown): { manifest: FamilyManifest<any>; discovery: DiscoverySemantics<SelectorNativeBindingCandidate> } {
   const definition = normalizeSelectorNativeExecutionDefinition(raw), id = selectorNativeFamilyId(definition), callId = `${id}:call`;
-  const programKeys = definition.programs.length ? definition.programs.map(selectorNativeProgramKey) : ["observed"];
+  const programKeys = selectorExecutionPrograms(definition).length ? selectorExecutionPrograms(definition).map(selectorNativeProgramKey) : ["observed"];
   const patternPrograms = new Map(programKeys.map(key => [`${callId}:${key}`, key]));
-  const statePatterns = definition.programs.filter(p=>stateDefinition(definition).byProgram.has(selectorNativeProgramKey(p))).map(program=>{
+  const statePatterns = selectorExecutionPrograms(definition).filter(p=>stateDefinition(definition).byProgram.has(selectorNativeProgramKey(p))).map(program=>{
     const key=selectorNativeProgramKey(program);
     return {id:`${callId}:state:${key}`,kind:"interface" as const,fingerprint:`${id}:state:${key}`,key};
   });
+  if(definition.directState)for(const program of selectorExecutionPrograms(definition).filter(p=>p.execution)){
+   const key=selectorNativeProgramKey(program);
+   statePatterns.push({id:`${callId}:source:${key}`,kind:"interface",fingerprint:`${id}:source:${key}`,key});
+  }
   const stateByPattern=new Map(statePatterns.map(p=>[p.id,p]));
   const decodeState=(opaque:unknown,key:string,target:string)=>{
     try{
-      const raw=(opaque as {selectorStateCandidate?:SelectorNativeStateCandidate})?.selectorStateCandidate;
+      const raw=(opaque as {selectorStateCandidate?:SelectorNativeBindingCandidate})?.selectorStateCandidate;
+      if(raw?.candidateKind==="selector-native-source"){
+       if(raw.programKey!==key||raw.target!==target)return null;
+       assertSelectorNativeCandidate(raw,definition);
+       return selectorNativeSourceCandidate(definition,raw.witness,raw.source,raw.programKey);
+      }
+      if(raw?.candidateKind==='selector-native-source-identity'){
+       if(raw.programKey!==key||raw.target!==target)return null;
+       assertSelectorNativeCandidate(raw,definition);
+       return selectorNativeSourceIdentityCandidate(definition,raw.identity,raw.edge,raw.source,raw.programKey);
+      }
       if(raw?.candidateKind!=="selector-native-state"||raw.programKey!==key||raw.target!==target)return null;
       assertSelectorNativeCandidate(raw,definition);
       return freezeSelectorNative(candidateOwnedState(raw));
     }catch{return null;}
   };
   const events = new Map<string, LogPattern>();
-  for (const program of definition.programs) for (const row of program.observations?.events ?? []) {
+  for (const program of selectorExecutionPrograms(definition)) for (const row of program.observations?.events ?? []) {
     if (!row.signature && !row.topic) continue;
     const signatureTopic = row.signature === undefined ? undefined : EventFragment.from(row.signature).topicHash;
     const topic = String(row.topic ?? signatureTopic).toLowerCase();
@@ -200,14 +280,21 @@ export function compileSelectorNativeDiscovery(raw: unknown): { manifest: Family
         return Promise.all(nominations.map(async({address,opaque})=>{
           const target=address.toLowerCase();
           const input={selectorStateCandidate:opaque};
-          const pattern=statePatterns.find(row=>decodeState(input,row.key,target)!==null);
+          const sourceCandidate=['selector-native-source','selector-native-source-identity'].includes((opaque as unknown as SelectorNativeBindingCandidate)?.candidateKind);
+          const pattern=statePatterns.find(row=>row.id.includes(":source:")===sourceCandidate&&decodeState(input,row.key,target)!==null);
           if(!pattern)return {status:"unsupported" as const,reason:"no declared state binding for nomination"};
           const candidate=decodeState(input,pattern.key,target)!;
-          const code=await provider.getCode(target,source.number);
-          if(!/^0x(?:[0-9a-f]{2})+$/i.test(code))return {status:"failed" as const,reason:"candidate has no deployed code"};
-          // This is an address-surface observation, not an attestation. The
-          // lifecycle issues the Family's declared identity reads at source.
-          const codeHash=keccak256(code),packet=Object.freeze({selectorStateCandidate:candidate});
+          let codeHash:string;
+          if(candidate.candidateKind==="selector-native-source-identity"&&candidate.identity!==null&&isDirectSelectorSourceIdentity(candidate.identity)){
+            codeHash=keccak256(Buffer.from(`direct-source-execution:${source.number}:${source.hash.toLowerCase()}:${source.generation}:${target}`));
+          }else{
+            const code=await provider.getCode(target,source.number);
+            if(!/^0x(?:[0-9a-f]{2})+$/i.test(code))return {status:"failed" as const,reason:"candidate has no deployed code"};
+            // This is an address-surface observation, not an attestation. The
+            // lifecycle issues the Family's declared identity reads at source.
+            codeHash=keccak256(code);
+          }
+          const packet=Object.freeze({selectorStateCandidate:candidate});
           observedCode.set(packet,Object.freeze({source:Object.freeze({number:source.number,hash:source.hash,generation:source.generation}),target,hash:codeHash}));
           return {status:"verified" as const,observation:{kind:"address-surface" as const,
             source,address:target,codeHash,implementationWord:"0x"+"00".repeat(32),

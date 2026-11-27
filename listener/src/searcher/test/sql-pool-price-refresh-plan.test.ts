@@ -1,12 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {Interface,id} from "ethers";
-import {buildSqlEdgeLiveProducer,sqlSelectorModules} from "../sql-edge-live-producer.js";
+import legacyV2 from "./fixtures/legacy-selector-022c0d9f.json";
+import legacyV4 from "./fixtures/legacy-selector-48c89491.json";
+import {defineSelectorFamilyModule} from "../venues/selector-family-module.js";
+import {definedFamilyPluginContractSummary} from "../venues/adapter-family-plugin.js";
+import {FamilyCapabilityCatalog,FAMILY_CAPABILITY_NAMES,capabilityManifestHash} from "../venues/family-capability-catalog.js";
+import {hashCanonical} from "../venues/canonical-value.js";
+import {buildFamilyRouteGraphView} from "../adapter-family-graph-runtime.js";
+import {StrictProductionRuntimeRoot} from "../strict-production-runtime-session.js";
+import {createSqlEdgePriceLogScopes} from "../venues/sql-edge-price-log-scopes.js";
+import {selectorExecutionResourceKey} from "../venues/selector-execution-keys.js";
+import {deriveEdgeTaxonomy} from "../strategy-taxonomy.js";
+import type {TokenEdge} from "../planner/token-graph.js";
 import {readBlockTouchedStateKeys} from "../blockscan-touched-state.js";
 import {sqlDirectionId} from "../sql-edge-price-index.js";
 import {PoolLegRefreshIndex,observePoolLegRefresh,publishedPoolLegIndex,touchedPoolKey} from "../pool-leg-refresh.js";
 import {issueSqlFamilyAlternatives} from "../venues/selector-native-sql-live-materializer.js";
-import {PRODUCTION_STRICT_SHADOW_FAMILY_CAPABILITY_CATALOG as catalog} from "../venues/production-family-composition.js";
 import {createStrictCentralAdapterRuntime} from "../strict-central-adapter-runtime.js";
 
 const a=(n:number)=>"0x"+n.toString(16).padStart(40,"0"),h=(n:number)=>"0x"+n.toString(16).padStart(64,"0"),base={number:10,generation:10,hash:h(10)},target={number:12,hash:h(12)};
@@ -18,16 +28,35 @@ const sql=(selector:string,poolAddress:string,ti:string,to:string,poolId:string|
 const direct=sql("0x022c0d9f",first,asset,second),back=sql("0x022c0d9f",first,second,asset),another=sql("0x022c0d9f",other,asset,second),
   ma=sql("0x48c89491",manager,asset,second,h(100)),mb=sql("0x48c89491",manager,asset,second,h(200)),ma2=sql("0x48c89491",manager,second,asset,h(100)),loose=sql("0x48c89491",manager,asset,second);
 const rows=[direct,back,another,ma,mb,ma2,loose],abi=new Interface(["function token0() view returns(address)","function token1() view returns(address)"]);
+// Frozen pre-source V2 programs 1/4 retain on-touch versus each-block winner
+// policy; V4 program 0 retains the independently-pinned legacy event scope.
+// Production source-path tests live separately; no old fixture enters runtime.
+const modules=[legacyV2,legacyV4].map(defineSelectorFamilyModule);
+const entries=modules.flatMap(({plugin})=>FAMILY_CAPABILITY_NAMES.map(capability=>({familyId:plugin.manifest.familyId,capability,
+  contractVersion:"legacy-refresh-fixture/v1",contentHash:hashCanonical({family:plugin.manifest.familyId,capability}),
+  semanticDependencies:[`contract:${capability}`],provenanceCommit:null})));
+const catalog=new FamilyCapabilityCatalog({modules:modules.map(({plugin},i)=>({sourceFile:`fixture/legacy-refresh-${i}.production.ts`,plugin,
+  definitionBoundaryHash:definedFamilyPluginContractSummary(plugin).definitionBoundaryHash})),
+  generatedManifest:{format:"adapter-family-capabilities-v1",entries,manifestHash:capabilityManifestHash(entries)}});
 async function fixture(){
-  const alts=await issueSqlFamilyAlternatives({catalog,definition:sqlSelectorModules.get(direct.selector)!.definition,
+  const alts=await issueSqlFamilyAlternatives({catalog,definition:modules[0]!.definition as any,
     edge:direct,source:base,executor:actor,transactionOrigin:a(102),readCode:async()=>"0x6000",read:async(t,d)=>{
       assert.equal(t,first);const f=abi.parseTransaction({data:d})!.fragment;return abi.encodeFunctionResult(f,[f.name==="token0"?asset:second]);}});
   assert(alts.alternatives.length>1,JSON.stringify(alts.issues));
-  const funds=catalog.listAll().find(f=>f.plugin.manifest.domain==="funding")!.plugin.manifest;
-  const {runtimeRoot:root,graph}=buildSqlEdgeLiveProducer({edges:rows,source:base,currentHead:10,swapTableSha256:"a".repeat(64),fundingTableSha256:"b".repeat(64),
-    fundingAssets:[{familyId:funds.familyId,asset:a(88),binding:{chainId:1,provider:a(89),asset:a(88),selector:"0x12345678",signature:"offline()"}}],
-    materialized:alts.alternatives.map(z=>({...z,sqlEdgeKey:direct.candidateInstanceKey})),
-    unavailable:rows.slice(1).map(r=>({sqlEdgeKey:r.candidateInstanceKey,reason:"offline synthetic shell"}))});
+  const instances=alts.alternatives.map(z=>z.instance);
+  const variants=buildFamilyRouteGraphView({routes:instances.flatMap(instance=>instance.routes.map((route,i)=>({
+    family:catalog.forFamily(instance.familyId),descriptor:instance.descriptor,route,handle:instance.routeHandles[i]!}))) }).edges;
+  const graph=rows.map(row=>{
+    const module=modules.find(m=>m.definition.selector===row.selector)!,exemplar=row===direct?variants[0]:undefined;
+    const stateResourceKey=exemplar?.stateResourceKey??selectorExecutionResourceKey({chainId:1,target:row.poolAddress,
+      ...(row.poolId===null?{}:{poolId:row.poolId,poolNamespace:row.poolNamespace!})});
+    return {canonicalEdgeId:row.candidateInstanceKey,instanceKey:row.candidateInstanceKey,adapterId:module.plugin.manifest.ownedActionAdapterIds[0]!,
+      target:row.poolAddress,observationTarget:row.poolAddress,...(row.poolId===null?{}:{observationPoolId:row.poolId,poolId:row.poolId}),
+      stateResourceKey,tokenIn:row.tokenIn,tokenOut:row.tokenOut,slotKind:"swap",...deriveEdgeTaxonomy("swap"),executionVerification:"startup-simulation"} as TokenEdge;
+  });
+  const root=new StrictProductionRuntimeRoot({catalog,readySource:base,readyGraph:graph,readyInstances:instances,readyFundingAssets:[],
+    poolLogScopes:createSqlEdgePriceLogScopes(modules.map(m=>m.definition as any)),
+    logicalRoutes:new Map(rows.map(row=>[row.candidateInstanceKey,row===direct?variants:[]]))});
   const legs=rows.map(r=>graph.find(e=>e.canonicalEdgeId===r.candidateInstanceKey)!);
   const no=async()=>{throw Error("forbidden external read");};
   const ses=await root.createSession({source:base,kind:"exact",requiredEdgeIds:new Set([direct.candidateInstanceKey]),fundingAssets:[],
@@ -37,7 +66,8 @@ async function fixture(){
 type Log={address:string;topics:readonly string[];data:string};
 const convert=new Interface(["event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)"]);
 const transfer=(from:string,to:string,token=asset):Log=>({address:token,topics:[id("Transfer(address,address,uint256)"),h(Number(BigInt(from))),h(Number(BigInt(to)))],data:h(1)});
-function sourceLogs(entries:readonly Log[],late:readonly Log[]=[]){return {reads:0,async getLogs(f:{blockHash?:string}){
+function sourceLogs(entries:readonly Log[],late:readonly Log[]=[]){return {reads:0,async getLogs(f:{blockHash:string}|{fromBlock:number;toBlock:number}){
+  assert("blockHash" in f,"fixture requires source-pinned log reads");
   this.reads++;return (f.blockHash===h(11)?entries:late).map(e=>({...e,blockHash:f.blockHash}));},async send(){throw Error("no network");}};}
 test("bytes32 is raw bytes for both insert and lookup, but opaque pool IDs and namespaces remain case-sensitive",()=>{
   const low="0x"+"ab".repeat(32),upper="0x"+"AB".repeat(32),row=(id:string,legId:string,ns?:string)=>({poolAddress:manager,poolId:id,poolNamespace:ns,legId,stateKey:"res:"+legId});

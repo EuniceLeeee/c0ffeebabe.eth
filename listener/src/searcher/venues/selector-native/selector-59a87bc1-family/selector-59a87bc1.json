@@ -571,5 +571,9 @@
     "canonicalIntakeTargets": [],
     "victimSupport": "detect-only"
   },
-  "refreshPolicy": "each-block"
+  "refreshPolicy": "each-block",
+  "directionSupport": {
+    "status": "not-applicable",
+    "reason": "buy(uint256,uint256,address) is an order action, not a pool conversion"
+  }
 }

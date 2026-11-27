@@ -575,8 +575,8 @@ export class PinnedRethQuoteBackend
     const view = new PinnedRethQuoteBackend(this.rpcUrl, this.sourceBlockHash, {
       transportLane: "producer-critical",
       transportScheduler: this.transportScheduler,
-      maxBatchSize: 32,
-      maxConcurrentBatches: 2,
+      maxBatchSize: 128,
+      maxConcurrentBatches: 4,
       signal: this.scopeController.signal,
       deadlineAtMs: this.options.deadlineAtMs,
       retryRpcThrottle: this.options.retryRpcThrottle,

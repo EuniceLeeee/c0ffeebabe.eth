@@ -1,0 +1,16 @@
+{
+  "format": "simulated-erc20-conversion/v2",
+  "id": "sell-gem",
+  "selector": "0x95991276",
+  "signature": "function sellGem(address, uint256)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_95991276_ENABLED" },
+  "args": ["recipient", "amountIn"],
+  "approval": "exact-clear",
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": ["edge.tokenIn", "edge.tokenOut"],
+    "watch": "pool-touch",
+    "on": ["call-target", "log-emitter", "asset-transfer-endpoint"],
+    "unclassifiedWatch": "each-block"
+  }
+}

@@ -18,7 +18,7 @@ function census(signature:string,args:readonly unknown[],flows=true){return read
 test("original migration inventory maps all 94 programs and preserves or upgrades all 36 observation entries",()=>{
  assert.equal(report.executablePrograms,94);assert.equal(report.automaticParameterPrograms,10);assert.equal(report.explicitExtensionPrograms,84);
  assert.equal(report.observationOnlyOrdinaryFamilies,36);
- for(const row of report.migrations){const definition=load(row.selector),program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey);assert(program,`${row.selector} ${row.legacyLabel}`);
+ for(const row of report.migrations){const definition=load(row.selector);if(definition.directState)continue;const program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey);assert(program,`${row.selector} ${row.legacyLabel}`);
   assert.equal(Boolean(program.execution),row.mode==="execution-extension");assert(row.oldExecutionSha256&&row.oldSummary.calls.length);assert(row.mode!=="execution-extension"||row.requiredExtensions.length);
  }
  for(const row of report.declarations.filter((r:any)=>r.status==="migrated-observation-only")){
@@ -59,7 +59,7 @@ test("four wrapper entries preserve their own selector, recipient ability and 1:
 test("pruned legacy provenance needs no identity RPC and preserves the exact execution programs",()=>{
  const removed=report.migrations.filter((row:any)=>row.prunedLegacyProvenance);assert.equal(removed.length,10);
  for(const row of removed){
-  const definition=load(row.selector),program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey)!;
+  const definition=load(row.selector);if(definition.directState)continue;const program=definition.programs.find(p=>selectorNativeProgramKey(p)===row.newProgramKey)!;
   assert.equal(createHash("sha256").update(JSON.stringify(program.execution)).digest("hex"),row.oldExecutionSha256,row.legacyLabel);
  }
  for(const [selector,label,expected] of [

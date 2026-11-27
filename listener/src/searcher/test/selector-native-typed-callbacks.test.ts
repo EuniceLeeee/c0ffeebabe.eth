@@ -8,8 +8,9 @@ import { buildDeclarativeRuntimeLeg, declarativeSettlementCapabilities } from ".
 import { compileDeclarativeValues } from "../venues/declarative-values.js";
 import { createDeclarativeRuntimeMathRegistry } from "../venues/declarative-runtime-math.js";
 import { createSelectorNativeRuntime } from "../venues/selector-native-runtime.js";
-import { selectorNativeCandidateFromCensus } from "../venues/selector-native-discovery.js";
+import { compileSelectorNativeDiscovery, selectorNativeCandidateFromCensus, selectorNativeSourceIdentityCandidate } from "../venues/selector-native-discovery.js";
 import { selectorNativeProgramKey } from "../venues/selector-native-definition.js";
+import { readSelectorSourceIdentity } from "../venues/selector-source-identity.js";
 import { readySelectorCensusFromTransaction } from "../ready-selector-census.js";
 import { inspectRuntime, type RuntimeCall } from "./runtime-program-testkit.js";
 
@@ -17,7 +18,7 @@ const a = (n: number) => toBeHex(n, 20), T0 = a(1), T1 = a(2), POOL = a(3), EXEC
 const erc20 = new Interface(["function balanceOf(address) view returns(uint256)", "function transfer(address,uint256) returns(bool)"]);
 const continuation = new Interface(["function continueRoute(uint256)"]);
 const variants = [
-  { selector: "128acb08", callback: "algebraSwapCallback", amountIndex: 2, directionIndex: 1, enabled: true },
+  { selector: "128acb08", callback: "uniswapV3SwapCallback", amountIndex: 2, directionIndex: 1, enabled: true },
   { selector: "24b31a0c", callback: "swapCallback", amountIndex: 1, directionIndex: 2, enabled: false },
 ];
 type Variant = typeof variants[number];
@@ -27,10 +28,12 @@ function fixture(variant: Variant) {
   const raw = JSON.parse(readFileSync(new URL(`../venues/selector-native/selector-${variant.selector}-family/selector-${variant.selector}.json`, import.meta.url), "utf8"));
   const module = defineSelectorFamilyModule(raw);
   assert.equal(module.activation.defaultEnabled, variant.enabled);
-  const program = (module.definition as any).programs.find((p: any) => JSON.stringify(p.execution).includes(variant.callback));
+  const program = (module.definition as any).programs.find((p: any) => p.execution && JSON.stringify(p.execution).includes(variant.callback));
   assert.ok(program);
   const values = compileDeclarativeValues({ abi: {}, constants: {}, expressions: {}, programs: {}, ...program.values });
-  const math = createDeclarativeRuntimeMathRegistry(program.runtimeMath.models).bind({ version: 1, entries: program.runtimeMath.entries });
+  const math = program.runtimeMath
+    ? createDeclarativeRuntimeMathRegistry(program.runtimeMath.models).bind({ version: 1, entries: program.runtimeMath.entries })
+    : undefined;
   return { module, program, values, math };
 }
 function execute(variant: Variant, reverse: boolean, mode: Mode, fault?: string) {
@@ -49,7 +52,7 @@ function execute(variant: Variant, reverse: boolean, mode: Mode, fault?: string)
   };
   const capabilities = declarativeSettlementCapabilities(program.execution, context, values);
   assert.equal(capabilities.directOutput, true); assert.equal(capabilities.deferredInput?.toLowerCase(), POOL); assert.equal(capabilities.deferredDebtInput, true);
-  const leg = buildDeclarativeRuntimeLeg(program.execution, context, values, { math }); assert.ok(leg);
+  const leg = buildDeclarativeRuntimeLeg(program.execution, context, values, math ? { math } : {}); assert.ok(leg);
   const frame = reverse ? program.execution.steps[1].frame : program.execution.steps[0].frame;
   const outer = new Interface([frame.call.signature]), callback = new Interface([frame.callback.signature]);
   function token(call: RuntimeCall): string {
@@ -95,10 +98,41 @@ function execute(variant: Variant, reverse: boolean, mode: Mode, fault?: string)
   assert.equal(poolInput, 113n + cap); assert.equal(payments, mode === "deferred" ? 0 : 1); assert.equal(continuations, mode === "deferred" ? 1 : 0);
 }
 for (const variant of variants) {
-  test(`${variant.callback}: direction binding needs only the actual token pair`, () => {
+  test(`${variant.callback}: direction binding needs only the actual token pair`, async () => {
     const { module, program } = fixture(variant), definition = module.definition as any;
     const source = { number: 100, hash: toBeHex(100, 32), generation: 1 };
     const runtime = createSelectorNativeRuntime(definition, program);
+    const tokenPair = new Interface(["function token0() view returns(address)", "function token1() view returns(address)"]);
+    if (definition.directState) {
+      const edge = { chainId: 1 as const, selector: definition.selector, poolAddress: POOL, tokenIn: T0, tokenOut: T1 };
+      const idRes = await readSelectorSourceIdentity({
+        definition, edge, source,
+        readRequests: async requests => requests.map((r, index) => {
+          const fn = tokenPair.parseTransaction({ data: (r as any).data })!;
+          return {
+            id: r.id, ok: true as const, source, completion: "returned" as const,
+            data: tokenPair.encodeFunctionResult(fn.name, [fn.name === "token0" ? T0 : T1]),
+            provenance: { kind: "local-fixture" as const, fingerprint: toBeHex(201 + index, 32) },
+          };
+        }),
+      });
+      assert.equal(idRes.matches.length, 1);
+      const rawCandidate = selectorNativeSourceIdentityCandidate(definition, idRes.matches[0]!, edge, source, selectorNativeProgramKey(program))!;
+      const { discovery } = compileSelectorNativeDiscovery(definition);
+      const [boundCode] = await (discovery.reverseBinding as any).reverseBinding({
+        source, nominations: [{ address: POOL, opaque: rawCandidate }],
+        provider: { getCode: async () => "0x6000" },
+      });
+      const pattern = discovery.addressSurfaces!.find(s => s.fingerprint === boundCode.observation.interfaceFingerprints[0])!;
+      const candidate = discovery.decodeCandidate({ observation: boundCode.observation, matchedPatternId: pattern.id })!;
+      const step = runtime.step({ candidate, source, executor: EXECUTOR });
+      assert.equal(step.requests.length, 0);
+      const bound = runtime.verify(candidate, step.decode([]));
+      assert.equal(bound.descriptor.token0, T0); assert.equal(bound.descriptor.token1, T1);
+      assert.equal(bound.descriptor.fee, undefined); assert.equal(bound.descriptor.tickSpacing, undefined);
+      assert.deepEqual(bound.innerRoutes.map((route: { tokenIn: string; tokenOut: string }) => [route.tokenIn, route.tokenOut]), [[T0, T1]]);
+      return;
+    }
     const call = new Interface([definition.signature]);
     const args = [RECEIVER, true, 7n, 0n, "0x"];
     if (variant.amountIndex === 1) [args[1], args[2]] = [args[2]!, args[1]!];
@@ -109,7 +143,6 @@ for (const variant of variants) {
     assert.ok(candidate);
     const first = runtime.step({ candidate, source, executor: EXECUTOR });
     assert.deepEqual(first.requests.map(request => request.id.split(":").at(-1)), ["token0", "token1"]);
-    const tokenPair = new Interface(["function token0() view returns(address)", "function token1() view returns(address)"]);
     const proof = first.decode(first.requests.map((request, index) => ({ id: request.id, ok: true, source,
       completion: "returned" as const, data: tokenPair.encodeFunctionResult(`token${index}`, [index === 0 ? T0 : T1]),
       provenance: { kind: "local-fixture" as const, fingerprint: toBeHex(201 + index, 32) } })));

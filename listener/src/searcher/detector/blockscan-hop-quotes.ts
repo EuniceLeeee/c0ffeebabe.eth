@@ -76,8 +76,12 @@ export function selectTopHopQuotes(quotes: readonly DfsQuote[], limit: number): 
   const selected = new Set<string>();
   for (const outputs of pairs.values()) {
     for (const instances of outputs.values()) {
-      const ranked = [...instances.values()].sort(compareQuotes);
-      for (let i = 0; i < Math.min(limit, ranked.length); i++) selected.add(ranked[i]!.id);
+      if (instances.size <= limit) {
+        for (const q of instances.values()) selected.add(q.id);
+      } else {
+        const ranked = topRanked(instances.values(), limit, compareQuotes);
+        for (let i = 0; i < ranked.length; i++) selected.add(ranked[i]!.id);
+      }
     }
   }
   return quotes.filter(quote => selected.has(quote.id));
@@ -125,13 +129,19 @@ export function selectTopHopTokens(quotes: readonly DfsQuote[], limit: number): 
     }
     const selected = new Set<string>();
     for (const neighbors of roots.values()) {
-      const ranked = topRanked(neighbors, limit, ([a, left], [b, right]) => {
-        const l = left.value.num * right.value.den, r = right.value.num * left.value.den;
-        if (l !== r) return l > r ? -1 : 1;
-        return a < b ? -1 : a > b ? 1 : 0;
-      });
-      for (let i = 0; i < Math.min(limit, ranked.length); i++) {
-        for (const id of ranked[i]![1].ids) selected.add(id);
+      if (neighbors.size === 1) {
+        for (const group of neighbors.values()) {
+          for (const id of group.ids) selected.add(id);
+        }
+      } else {
+        const ranked = topRanked(neighbors, limit, ([a, left], [b, right]) => {
+          const l = left.value.num * right.value.den, r = right.value.num * left.value.den;
+          if (l !== r) return l > r ? -1 : 1;
+          return a < b ? -1 : a > b ? 1 : 0;
+        });
+        for (let i = 0; i < Math.min(limit, ranked.length); i++) {
+          for (const id of ranked[i]![1].ids) selected.add(id);
+        }
       }
     }
     return selected;

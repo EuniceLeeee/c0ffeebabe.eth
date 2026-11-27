@@ -537,5 +537,26 @@
   },
   "meta": {
     "label": "protocol:erc4626/morpho-vault-v2"
+  },
+  "directionSupport": {
+    "version": 1,
+    "options": [
+      {
+        "query": [
+          {
+            "id": "asset",
+            "method": "asset()"
+          },
+          {
+            "id": "self",
+            "source": "self"
+          }
+        ]
+      }
+    ],
+    "confirm": {
+      "in": "$edge.tokenIn",
+      "out": "$edge.tokenOut"
+    }
   }
 }

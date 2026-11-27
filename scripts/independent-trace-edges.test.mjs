@@ -19,7 +19,7 @@ const move=(path,token,from,to,amount)=>call(path,from,token,'0xa9059cbb'+word(t
 const receipt=(idx,token,from,to,amount)=>({idx,emitter:token,topics:[cfg.transferTopic,'0x'+word(from),'0x'+word(to)],data:'0x'+word(amount)});
 const run=(frames,logs)=>traceCallFlows(frames,logs,cfg).filter(e=>e.poolAddress===pool);
 
-test('the CLI filters only the final observations using the enabled live conversion selectors', async () => {
+test('SQL filters final observations by enabled conversion and credit selectors, never by funding or callback alone', async () => {
   const {GENERATED_PRODUCTION_FAMILY_ENTRIES: entries} = await import(
     '../listener/src/searcher/generated/production-family-entries.generated.ts');
   const modules = entries.map(entry => entry.module.selectorFamilyModule);
@@ -29,9 +29,9 @@ test('the CLI filters only the final observations using the enabled live convers
   const tsx = new URL('../listener/node_modules/tsx/dist/loader.mjs', import.meta.url).href;
   const render = (...flags) => execFileSync(process.execPath, ['--import', tsx, script, '--sql-only', ...flags], {env, encoding:'utf8'});
   const raw = render();
-  const expected = predicate => raw.replace('FROM observations\nGROUP BY', 'FROM observations\n' + predicate + '\nGROUP BY');
+  const expected = (sql,predicate) => sql.replace('FROM observations\nGROUP BY', 'FROM observations\n' + predicate + '\nGROUP BY');
   assert.match(raw, /FROM observations\nGROUP BY/);
-  assert.equal(render('--live-selectors-only'), expected('WHERE FALSE'));
+  assert.equal(render('--live-selectors-only'), expected(raw,'WHERE FALSE'));
 
   const selected = ['swap', 'protocol', 'funding', 'credit'].map(domain => modules.find(m => m.definition.domain === domain &&
     (!['swap','protocol'].includes(domain) || m.definition.programs.length > 0)));
@@ -40,11 +40,12 @@ test('the CLI filters only the final observations using the enabled live convers
     const callback=modules.find(m=>m.definition.selector===selector);
     assert.equal(callback.definition.programs.length,0); env[callback.activation.envKey]='1';
   }
-  assert.equal(render('--live-selectors-only'), expected('WHERE FALSE'));
+  assert.equal(render('--live-selectors-only'), expected(raw,'WHERE FALSE'));
   for (const m of selected) env[m.activation.envKey] = '1';
-  const selectors = selected.slice(0, 2).map(m => m.definition.selector).sort();
-  assert.equal(render('--live-selectors-only'), expected("WHERE selector IN ('" + selectors.join("','") + "')"));
-  assert.equal(render(), raw);
+  const selectors = selected.filter(m=>m.definition.domain!=='funding').map(m => m.definition.selector).sort();
+  // Turning on an owned Family discovery recipe can change the UDF. Only
+  // the predicate may differ when comparing the SAME activation settings.
+  assert.equal(render('--live-selectors-only'), expected(render(),"WHERE selector IN ('" + selectors.join("','") + "')"));
 });
 
 test('a read does not consume a prepayment; two later payouts cannot claim it by proximity',()=>{

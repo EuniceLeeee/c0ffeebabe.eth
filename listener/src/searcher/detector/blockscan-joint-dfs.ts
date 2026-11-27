@@ -7,10 +7,18 @@ interface IndexedQuote {
   readonly from: number;
   readonly to: number;
   readonly pool: number;
+  readonly valNum: bigint;
+  readonly valDen: bigint;
+  readonly valFloat: number;
+  readonly valExactOnly: boolean;
+  readonly quoteFloat: number;
+  readonly quoteExactOnly: boolean;
 }
 
 // Algorithm-private, discardable duplicate-work cache; clearing never drops a path.
 const MEMO_MAX_ENTRIES = 16_384, MEMO_MAX_CHARACTERS = 1_048_576;
+const PACK_BASE = 131_072; // 2^17; 3 * PACK_BASE^3 = 6.75e15 < Number.MAX_SAFE_INTEGER (9.007e15).
+const PACK_CUBE = PACK_BASE * PACK_BASE * PACK_BASE;
 
 /** A signal fixes sell(anchor -> left) and buy(right -> anchor). Either frontier
  * may then move, sharing one total edge budget and one reference-value floor.
@@ -23,6 +31,10 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
   let selectionComplete = false, indexingComplete = false;
   const { allowRepeatedPools, allowRepeatedTokens, prefixPruningEnabled, maxPrefixDrawdownBps, hopTokensPerStep } = resolvePairedEnumerationOptions(input);
   const prefixFloor = BigInt(10_000 - maxPrefixDrawdownBps);
+  const prefixFloorFloat = Number(prefixFloor);
+  const prefixAcceptBound = prefixFloorFloat * 1.000001;
+  const prefixRejectBound = prefixFloorFloat * 0.999999;
+  const spreadRejectBound = (10_000 + input.minSpreadBps) * 0.999999;
   const stats = { expanded: 0, completedSignalTokens: 0, completedSignalPairs: 0,
     deadlineHit: false, closed: 0, halfPaths: 0, joins: 0, signalMatched: 0,
     indexedJoinComparisons: 0, joinSkippedBeforeConflicts: 0,
@@ -62,8 +74,22 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
   for (const quote of input.quotes) {
     if ((edges.length & 1023) === 0 && expired()) return finish();
     byId.set(quote.id, edges.length);
-    edges.push({ quote, from: intern(tokens, quote.tokenIn), to: intern(tokens, quote.tokenOut),
-      pool: intern(pools, quote.instance) });
+    const valNum = quote.value?.num ?? 1n;
+    const valDen = quote.value?.den ?? 1n;
+    const valFloat = Number(valNum) / Number(valDen);
+    const quoteFloat = Number(quote.num) / Number(quote.den);
+    edges.push({
+      quote,
+      from: intern(tokens, quote.tokenIn),
+      to: intern(tokens, quote.tokenOut),
+      pool: intern(pools, quote.instance),
+      valNum,
+      valDen,
+      valFloat,
+      valExactOnly: !Number.isFinite(valFloat) || valFloat <= 0,
+      quoteFloat,
+      quoteExactOnly: !Number.isFinite(quoteFloat) || quoteFloat <= 0,
+    });
   }
   const outgoing: number[][] = Array.from({ length: tokens.size }, () => []);
   const incoming: number[][] = Array.from({ length: tokens.size }, () => []);
@@ -96,62 +122,133 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
     seeds.push({ buy: b, sell: s });
   }
   const funding = new Set(input.funding), emitted = new Set<string>();
+  const canStart = new Uint8Array(tokens.size);
+  for (const f of funding) {
+    const tid = tokens.get(f);
+    if (tid !== undefined) canStart[tid] = 1;
+  }
   preparedAt = performance.now();
   indexingComplete = true;
   if (funding.size === 0 || anchors.size === 0) return finish();
   stats.phase = "joint";
 
+  const usedPools = new Uint8Array(pools.size);
+  const usedTokens = new Uint8Array(tokens.size);
+  const canPackMemo = edges.length < PACK_BASE;
+  const numMemo = new Set<number>();
+  const strMemo = new Set<string>();
+
   for (const seeds of anchors.values()) {
     for (const seed of seeds) {
       if (expired()) break;
+      const sell = edges[seed.sell]!, buy = edges[seed.buy]!;
       // left is in execution order; right is stored in reverse search order.
       const left = [seed.sell], right = [seed.buy];
-      const usedPools = new Set([edges[seed.sell]!.pool, edges[seed.buy]!.pool]);
-      const usedTokens = new Set([edges[seed.sell]!.from, edges[seed.sell]!.to, edges[seed.buy]!.from]);
-      const memo = new Set<string>();
-      let memoCharacters = 0;
+      usedPools[sell.pool] = 1;
+      usedPools[buy.pool] = 1;
+      usedTokens[sell.from] = 1;
+      usedTokens[sell.to] = 1;
+      usedTokens[buy.from] = 1;
+      numMemo.clear();
+      strMemo.clear();
+      let strMemoCharacters = 0;
+
       const emit = (): void => {
         stats.joins++; stats.signalMatched++;
-        const path = [...left, ...right.slice().reverse()];
+        const pathLen = left.length + right.length;
+        const path = new Array<number>(pathLen);
+        let pIdx = 0;
+        let qFloat = 1;
+        let qExact = false;
+        for (let i = 0; i < left.length; i++) {
+          const id = left[i]!;
+          path[pIdx++] = id;
+          const e = edges[id]!;
+          qFloat *= e.quoteFloat;
+          if (e.quoteExactOnly) qExact = true;
+        }
+        for (let i = right.length - 1; i >= 0; i--) {
+          const id = right[i]!;
+          path[pIdx++] = id;
+          const e = edges[id]!;
+          qFloat *= e.quoteFloat;
+          if (e.quoteExactOnly) qExact = true;
+        }
+        if (!qExact && Number.isFinite(qFloat) && qFloat > 0 && qFloat * 10_000 < spreadRejectBound) return;
         let n = 1n, d = 1n;
-        for (const id of path) {
-          const quote = edges[id]!.quote;
-          n *= quote.num; d *= quote.den;
+        for (let i = 0; i < pathLen; i++) {
+          const q = edges[path[i]!]!.quote;
+          n *= q.num; d *= q.den;
         }
         if (!aboveSpread(n, d, input.minSpreadBps)) return;
         const spread = (Number(n) / Number(d) - 1) * 10_000;
-        for (let start = 0; start < path.length; start++) {
+        for (let start = 0; start < pathLen; start++) {
           if (expired()) return;
-          if (!funding.has(edges[path[start]!]!.quote.tokenIn)) continue;
+          if (canStart[edges[path[start]!]!.from] === 0) continue;
           let key = "";
-          for (let offset = 0; offset < path.length; offset++)
-            key += (offset === 0 ? "" : ",") + path[(start + offset) % path.length]!;
+          for (let offset = 0; offset < pathLen; offset++)
+            key += (offset === 0 ? "" : ",") + path[(start + offset) % pathLen]!;
           if (emitted.has(key)) continue;
           emitted.add(key); stats.closed++;
-          const rotated = Array.from({ length: path.length }, (_, offset) =>
-            edges[path[(start + offset) % path.length]!]!.quote);
+          const rotated = Array.from({ length: pathLen }, (_, offset) =>
+            edges[path[(start + offset) % pathLen]!]!.quote);
           // Preserve the established spread conversion and caller object identity.
           input.onCycle(rotated, Number.isFinite(spread) ? spread
             : Number(n * 1_000_000_000n / d - 1_000_000_000n) / 100_000);
           if (expired()) return;
         }
       };
-      const visit = (leftToken: number, rightToken: number, valueN: bigint, valueD: bigint): void => {
-        if (expired()) return;
-        if (prefixPruningEnabled && valueN * 10_000n < valueD * prefixFloor) {
-          stats.prefixPrunedJoint++; stats.prefixPrunedTotal++; return;
+
+      const exactPrefixPruned = (): boolean => {
+        let valueN = 1n, valueD = 1n;
+        for (let i = 0; i < left.length; i++) {
+          const e = edges[left[i]!]!;
+          valueN *= e.valNum; valueD *= e.valDen;
+        }
+        for (let i = 0; i < right.length; i++) {
+          const e = edges[right[i]!]!;
+          valueN *= e.valNum; valueD *= e.valDen;
+        }
+        return valueN * 10_000n < valueD * prefixFloor;
+      };
+
+      const visit = (leftToken: number, rightToken: number, valFloat: number, valExact: boolean): void => {
+        if (stats.deadlineHit || ((stats.jointStates & 255) === 0 && expired())) return;
+        if (prefixPruningEnabled) {
+          if (!valExact && Number.isFinite(valFloat) && valFloat > 0) {
+            const scaled = valFloat * 10_000;
+            if (scaled < prefixRejectBound) {
+              stats.prefixPrunedJoint++; stats.prefixPrunedTotal++; return;
+            }
+            if (scaled <= prefixAcceptBound && exactPrefixPruned()) {
+              stats.prefixPrunedJoint++; stats.prefixPrunedTotal++; return;
+            }
+          } else if (exactPrefixPruned()) {
+            stats.prefixPrunedJoint++; stats.prefixPrunedTotal++; return;
+          }
         }
         const hops = left.length + right.length;
         // Only mixed, expandable states can repeat useful future work through
         // a different left/right interleaving. Full paths, not endpoints or
         // products, define identity; failed-floor states are never remembered.
         if (left.length > 1 && right.length > 1 && hops < input.maxHops) {
-          const key = `${left.join(",")}|${right.join(",")}`;
-          if (memo.has(key)) { stats.duplicateStatesSkipped++; return; }
-          if (memo.size >= MEMO_MAX_ENTRIES || memoCharacters + key.length > MEMO_MAX_CHARACTERS) {
-            memo.clear(); memoCharacters = 0;
+          if (canPackMemo && hops <= 5) {
+            const packed = left.length === 2 && right.length === 2
+              ? left[1]! * PACK_BASE + right[1]!
+              : left.length === 3
+                ? PACK_CUBE + (left[1]! * PACK_BASE + left[2]!) * PACK_BASE + right[1]!
+                : 2 * PACK_CUBE + (left[1]! * PACK_BASE + right[1]!) * PACK_BASE + right[2]!;
+            if (numMemo.has(packed)) { stats.duplicateStatesSkipped++; return; }
+            if (numMemo.size >= MEMO_MAX_ENTRIES) numMemo.clear();
+            numMemo.add(packed);
+          } else {
+            const key = `${left.join(",")}|${right.join(",")}`;
+            if (strMemo.has(key)) { stats.duplicateStatesSkipped++; return; }
+            if (strMemo.size >= MEMO_MAX_ENTRIES || strMemoCharacters + key.length > MEMO_MAX_CHARACTERS) {
+              strMemo.clear(); strMemoCharacters = 0;
+            }
+            if (key.length <= MEMO_MAX_CHARACTERS) { strMemo.add(key); strMemoCharacters += key.length; }
           }
-          if (key.length <= MEMO_MAX_CHARACTERS) { memo.add(key); memoCharacters += key.length; }
         }
         stats.jointStates++;
         if (leftToken === rightToken) {
@@ -162,10 +259,11 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
         const extend = (reverse: boolean): void => {
           const candidates = reverse ? incoming[rightToken]! : outgoing[leftToken]!;
           const path = reverse ? right : left;
-          for (const id of candidates) {
+          for (let ci = 0; ci < candidates.length; ci++) {
+            const id = candidates[ci]!;
             if ((stats.expanded++ & 1023) === 0 && expired()) return;
             const edge = edges[id]!;
-            if (!allowRepeatedPools && usedPools.has(edge.pool)) continue;
+            if (!allowRepeatedPools && usedPools[edge.pool] !== 0) continue;
             const next = reverse ? edge.from : edge.to;
             const closes = next === (reverse ? leftToken : rightToken);
             // Both seed legs count toward the configured total. With only one
@@ -174,15 +272,15 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
               stats.finalHopUnclosedPruned++;
               continue;
             }
-            if (!allowRepeatedTokens && usedTokens.has(next) && !closes) continue;
+            if (!allowRepeatedTokens && usedTokens[next] !== 0 && !closes) continue;
             path.push(id);
-            if (!allowRepeatedPools) usedPools.add(edge.pool);
-            if (!allowRepeatedTokens && !closes) usedTokens.add(next);
-            const nextN = prefixPruningEnabled ? valueN * edge.quote.value!.num : valueN;
-            const nextD = prefixPruningEnabled ? valueD * edge.quote.value!.den : valueD;
-            visit(reverse ? leftToken : edge.to, reverse ? edge.from : rightToken, nextN, nextD);
-            if (!allowRepeatedPools) usedPools.delete(edge.pool);
-            if (!allowRepeatedTokens && !closes) usedTokens.delete(next);
+            if (!allowRepeatedPools) usedPools[edge.pool] = 1;
+            if (!allowRepeatedTokens && !closes) usedTokens[next] = 1;
+            const nextFloat = prefixPruningEnabled ? valFloat * edge.valFloat : 1;
+            const nextExact = prefixPruningEnabled ? (valExact || edge.valExactOnly) : false;
+            visit(reverse ? leftToken : edge.to, reverse ? edge.from : rightToken, nextFloat, nextExact);
+            if (!allowRepeatedPools) usedPools[edge.pool] = 0;
+            if (!allowRepeatedTokens && !closes) usedTokens[next] = 0;
             path.pop();
             if (stats.deadlineHit) return;
           }
@@ -190,10 +288,18 @@ export function enumerateJointDfs(input: PairedEnumerationInput) {
         extend(false);
         if (!stats.deadlineHit) extend(true);
       };
-      const sell = edges[seed.sell]!, buy = edges[seed.buy]!;
-      visit(sell.to, buy.from,
-        prefixPruningEnabled ? sell.quote.value!.num * buy.quote.value!.num : 1n,
-        prefixPruningEnabled ? sell.quote.value!.den * buy.quote.value!.den : 1n);
+
+      try {
+        visit(sell.to, buy.from,
+          prefixPruningEnabled ? sell.valFloat * buy.valFloat : 1,
+          prefixPruningEnabled ? (sell.valExactOnly || buy.valExactOnly) : false);
+      } finally {
+        usedPools[sell.pool] = 0;
+        usedPools[buy.pool] = 0;
+        usedTokens[sell.from] = 0;
+        usedTokens[sell.to] = 0;
+        usedTokens[buy.from] = 0;
+      }
       if (stats.deadlineHit) break;
       stats.completedSignalPairs++;
     }

@@ -1,6 +1,7 @@
 import { FunctionFragment, ZeroAddress, id } from "ethers";
 import type { FamilyPricingPool, MutationPricingEntry, MutationSemantics } from "./adapter-family-plugin.js";
 import type { SelectorNativeProgram } from "./selector-native-definition.js";
+import { selectorProgramProjection } from "./selector-program-role.js";
 import { selectorExecutionResourceKey } from "./selector-execution-keys.js";
 import type { DeclarativeEventLog } from "./declarative-event-codec.js";
 import type {SelectorPaidRankProfile} from "./selector-native/paid-ranking-contract.js";
@@ -91,34 +92,36 @@ export function selectorNativeMutationRole(input:{program:SelectorNativeProgram;
   // An alternate nomination that only renames these two physical coordinates
   // adds no state/address dependency. Do NOT infer this for an authority
   // read, a computed candidate, or another namespace; those stay broad.
-  const sb=p.binding?.stateBinding,vars=sb?.candidate&&typeof sb.candidate==="object"&&!Array.isArray(sb.candidate)
+  const proj=selectorProgramProjection(p);
+  const sb=proj?.stateBinding,vars=sb?.candidate&&typeof sb.candidate==="object"&&!Array.isArray(sb.candidate)
     ?Object.values(sb.candidate):[];
   const coordinateOnly=!!sb?.poolNamespace&&sb.authority===undefined&&pools.every(ps=>ps.every(x=>x.poolId&&x.poolNamespace===sb.poolNamespace))&&
     vars.length===2&&vars.includes("$target")&&vars.includes("$scope.poolId");
-  if(p.dependencies!==undefined||p.state||p.context||p.runtimeEvidence||p.ethCall||p.binding?.descriptorReads||sb&&!coordinateOnly||
-    p.receiptChecks||p.binding?.subject||p.binding?.match||p.refreshPolicy!=="on-touch")return base;
-  const bound=instance.bound,desc=bound.descriptor,steps=p.binding?.flow?.steps;
-  if(!Array.isArray(steps)||!steps.length||!steps.every(s=>Array.isArray(s.requests)&&s.requests.length&&!s.when))return base;
+  if(p.dependencies!==undefined||p.state||p.context||p.runtimeEvidence||p.ethCall||proj?.descriptorReads||sb&&!coordinateOnly||
+    p.receiptChecks||proj?.subject||proj?.match||p.refreshPolicy!=="on-touch")return base;
+  const bound=instance.bound,desc=bound.descriptor,steps=p.binding?.flow?.steps,sourceTemplate=p.type==="execution";
+  if(!sourceTemplate&&(!Array.isArray(steps)||!steps.length||!steps.every((s:Data)=>Array.isArray(s.requests)&&s.requests.length&&!s.when)))return base;
   const ps=pools.flat(),pool=ps[0]!;
   if(!ps.every(x=>x.resourceKey===pool.resourceKey)&&pool.poolId!==undefined)return base;
   if(pool.poolId!==undefined){
-    // Only one manager/key, no extra manager reads and an explicit null guard on
-    // a key component: hook or unknown programs keep their broad fallback.
+    const expectedNs=sourceTemplate?sb?.poolNamespace:p.binding?.nomination?.poolNamespace;
     if(!ps.every(x=>x.poolId===pool.poolId&&x.poolAddress===pool.poolAddress&&x.poolNamespace===pool.poolNamespace)||
-      !(p.routes?.venue as Data|undefined)?.manager||!p.binding?.nomination?.poolNamespace||
-      pool.poolNamespace!==p.binding.nomination.poolNamespace||!steps.every(s=>s.requests.every((r:Data)=>
-        r.kind==="eth-call"&&typeof ref(r.to)==="string"&&/^0x[\da-f]{40}$/i.test(ref(r.to)!)&&ref(r.to)!.toLowerCase()!==pool.poolAddress.toLowerCase())))return base;
+      !(p.routes?.venue as Data|undefined)?.manager||!expectedNs||pool.poolNamespace!==expectedNs||
+      (!sourceTemplate&&!steps!.every((s:Data)=>s.requests.every((r:Data)=>
+        r.kind==="eth-call"&&typeof ref(r.to)==="string"&&/^0x[\da-f]{40}$/i.test(ref(r.to)!)&&ref(r.to)!.toLowerCase()!==pool.poolAddress.toLowerCase()))))return base;
     const owner=ref((p.routes?.venue as Data).manager),assets=new Set(routes.flatMap(r=>[r.tokenIn.toLowerCase(),r.tokenOut.toLowerCase()]));
     if(!owner||independentlyMentions(desc,pool.poolAddress.toLowerCase(),new Set([owner,"$descriptor.target","$descriptor.instanceKey"])))return base;
-    const keyGuard=(p.routes?.checks as Data[]|undefined)?.some(c=>c.when===undefined&&c.assert?.op==="sameAddress"&&c.assert.args.includes(ZeroAddress)&&
+    const staticKeyGuard=(p.routes?.checks as Data[]|undefined)?.some(c=>c.when===undefined&&c.assert?.op==="sameAddress"&&c.assert.args.includes(ZeroAddress)&&
       c.assert.args.some((x:any)=>{const path=ref(x);if(!path?.startsWith("$descriptor."))return false;
         const fields=path.split(".").slice(1);if(fields.length!==2||!knownTuple(p,desc,assets,path,owner))return false;
         return desc[fields[0]!]?.[fields[1]!]===ZeroAddress;}));
-    return keyGuard?{...base,logical:{manager:pool.poolAddress.toLowerCase(),poolId:pool.poolId,scopes:input.scopes}}:base;
+    const hookFreeTemplate=sourceTemplate&&desc.poolKey?.hooks===ZeroAddress&&(desc.hookData===undefined||desc.hookData==="0x")&&
+      knownTuple(p,desc,assets,"$descriptor.poolKey.hooks",owner);
+    return (staticKeyGuard||hookFreeTemplate)?{...base,logical:{manager:pool.poolAddress.toLowerCase(),poolId:pool.poolId,scopes:input.scopes}}:base;
   }
   if((p.routes?.venue as Data|undefined)?.kind!=="address-pool"||pool.poolAddress!==instance.target||
-    !ps.every(x=>x.poolId===undefined&&x.poolAddress===pool.poolAddress)||steps.length!==1||
-    !steps[0].requests.every((r:Data)=>r.kind==="eth-call"&&ref(r.to)==="$target"))return base;
+    !ps.every(x=>x.poolId===undefined&&x.poolAddress===pool.poolAddress)||
+    (!sourceTemplate&&(steps!.length!==1||!steps![0].requests.every((r:Data)=>r.kind==="eth-call"&&ref(r.to)==="$target"))))return base;
   // Prove *directly bound* currencies. A derived graph alias (e.g. wrapped
   // native), a multi-resource route, a two-step token-code/fee model, or an
   // address appearing elsewhere in the descriptor is not mere currency.

@@ -1,0 +1,57 @@
+{
+  "format": "simulated-v4-unlock-swap/v1",
+  "id": "v4-unlock",
+  "selector": "0x48c89491",
+  "signature": "function unlock(bytes)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_48C89491_ENABLED" },
+  "unlockSignature": "function unlock(bytes data) returns (bytes)",
+  "callback": "function unlockCallback(bytes data) returns (bytes)",
+  "swapSignature": "function swap((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks) key,(bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96) params,bytes hookData) returns (int256 swapDelta)",
+  "takeSignature": "function take(address currency,address recipient,uint256 amount)",
+  "syncSignature": "function sync(address currency)",
+  "settleSignature": "function settle() payable returns (uint256)",
+  "wrappedNative": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+  "sqrtPriceLimits": ["4295128740", "1461446703485210103287273052203988822378723970341"],
+  "hookData": "$sqlEdge.hookData",
+  "refreshPolicy": "on-touch",
+  "state": {
+    "pool": "edge.poolAddress",
+    "poolId": "edge.poolId",
+    "poolNamespace": "contract-pool-id",
+    "assets": ["edge.tokenIn", "edge.tokenOut"],
+    "watch": "pool-touch",
+    "on": ["pool-id-event"],
+    "unclassifiedWatch": "each-block"
+  },
+  "managerCustody": {
+    "manager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+    "erc20Transfers": "settlement-only",
+    "physicalPoolEvents": [
+      {
+        "signature": "event Swap(bytes32 indexed id,address indexed sender,int128 amount0,int128 amount1,uint160 sqrtPriceX96,uint128 liquidity,int24 tick,uint24 fee)",
+        "indexedPoolId": "id"
+      },
+      {
+        "signature": "event Initialize(bytes32 indexed id,address indexed currency0,address indexed currency1,uint24 fee,int24 tickSpacing,address hooks,uint160 sqrtPriceX96,int24 tick)",
+        "indexedPoolId": "id"
+      },
+      {
+        "signature": "event ModifyLiquidity(bytes32 indexed id,address indexed sender,int24 tickLower,int24 tickUpper,int256 liquidityDelta,bytes32 salt)",
+        "indexedPoolId": "id"
+      }
+    ],
+    "ledgerEvents": [
+      "event Transfer(address caller,address indexed sender,address indexed receiver,uint256 indexed id,uint256 amount)"
+    ]
+  },
+  "physicalPoolActivity": [
+    {
+      "signature": "event ProtocolFeeUpdated(bytes32 indexed id,uint24 protocolFee)",
+      "indexedPoolId": "id"
+    },
+    {
+      "signature": "event Donate(bytes32 indexed id,address indexed sender,uint256 amount0,uint256 amount1)",
+      "indexedPoolId": "id"
+    }
+  ]
+}

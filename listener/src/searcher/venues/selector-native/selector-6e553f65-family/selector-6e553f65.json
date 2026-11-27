@@ -2162,5 +2162,26 @@
         "label": "protocol:staked-usdat/source-bound-staked-usdat-deposit"
       }
     }
-  ]
+  ],
+  "directionSupport": {
+    "version": 1,
+    "options": [
+      {
+        "query": [
+          {
+            "id": "asset",
+            "method": "asset()"
+          },
+          {
+            "id": "self",
+            "source": "self"
+          }
+        ]
+      }
+    ],
+    "confirm": {
+      "in": "$edge.tokenIn",
+      "out": "$edge.tokenOut"
+    }
+  }
 }

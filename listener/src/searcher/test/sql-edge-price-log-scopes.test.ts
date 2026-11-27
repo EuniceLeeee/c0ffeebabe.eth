@@ -10,7 +10,9 @@ import {PoolLegRefreshIndex, observePoolLegRefresh, observePoolBalanceRefresh} f
 import {compileDeclarativeSwap} from "../venues/declarative-swap-domain.js";
 import {compileDeclarativeValues} from "../venues/declarative-values.js";
 
-const raw=JSON.parse(readFileSync(new URL("../venues/selector-native/selector-48c89491-family/selector-48c89491.json",import.meta.url),"utf8"));
+// Frozen public pre-source V4 program 0. These tests intentionally exercise the
+// legacy independently-pinned nomination contract, not source execution rules.
+const raw=JSON.parse(readFileSync(new URL("./fixtures/legacy-selector-48c89491.json",import.meta.url),"utf8"));
 const def=normalizeSelectorNativeExecutionDefinition(raw),lookup=createSqlEdgePriceLogScopes([def]);
 const emitter="0x000000000004444c5dc75cb358380d2e3de08a90",sender="0x"+"3".repeat(40),pool="0x"+"ab".repeat(32);
 const abi=new Interface(raw.programs[0].observations.events.map((e:any)=>e.signature));
@@ -71,6 +73,22 @@ test("physical activity is separate from executable identity; relabels cannot hi
   assert.notEqual(equal(def),equal(edit(v=>v.programs[0].refreshPolicy=v.programs[0].refreshPolicy==="each-block"?"on-touch":"each-block")));
 });
 const swap=(a0:bigint,a1:bigint)=>({address:emitter,...abi.encodeEventLog("Swap",[pool,sender,a0,a1,20,30,-1,5])});
+test("source physical readers cannot override a conflicting legacy reader for the same emitter/topic",()=>{
+  const source=JSON.parse(readFileSync(new URL("../venues/selector-native/selector-48c89491-family/selector-48c89491.json",import.meta.url),"utf8"));
+  // Keep declarations identical so a null cannot be explained by a different
+  // physicalConsensus shape; only the competing legacy reader veto is tested.
+  source.managerCustody=structuredClone(raw.managerCustody);
+  source.physicalPoolActivity=structuredClone(raw.physicalPoolActivity);
+  const current=normalizeSelectorNativeExecutionDefinition(source);
+  assert.equal(current.directState?.poolId,"edge.poolId");
+  const log=swap(-10n,20n),bad=structuredClone(raw);
+  bad.programs[0].binding.nomination.poolIdLogs.find((n:any)=>n.topic===log.topics[0]).topicIndex=2;
+  const conflict=normalizeSelectorNativeExecutionDefinition(bad);
+  assert.deepEqual(createSqlEdgePriceLogScopes([current])(log),[pool]);
+  assert.equal(createSqlEdgePriceLogScopes([conflict])(log),null);
+  for(const definitions of [[current,conflict],[conflict,current]])
+    assert.equal(createSqlEdgePriceLogScopes(definitions)(log),null,"source reader must append, not replace a veto");
+});
 test("qualified signed Swap and explicit mutation yield only this pool, independent of other graph entries",()=>{
   assert.deepEqual(lookup(swap(-12n,18n)),[pool]);assert.deepEqual(lookup(swap(21n,-17n)),[pool]);
   assert.deepEqual(lookup({address:emitter,...abi.encodeEventLog("ModifyLiquidity",[pool,sender,-4,4,1,"0x"+"ef".repeat(32)])}),[pool]);

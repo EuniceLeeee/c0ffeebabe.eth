@@ -26,16 +26,16 @@ export const flowConfig = {
 };
 
 // Resolve activation at query generation with the same environment as live.
-async function liveSelectorPredicate() {
-  const {enabledConversionDefinitions} = await import('./selector-live-conversions.mjs');
-  const selectors = enabledConversionDefinitions().map(definition => definition.selector).sort();
+async function liveSelectorPredicate(withDiscovery = false) {
+  const {enabledConversionDefinitions,enabledDiscoveryDefinitions} = await import('./selector-live-conversions.mjs');
+  const selectors = (withDiscovery?enabledDiscoveryDefinitions():enabledConversionDefinitions()).map(definition => definition.selector).sort();
   for (const selector of selectors) assert.match(selector, /^0x[0-9a-f]{8}$/);
   return selectors.length ? '\nWHERE selector IN (' + selectors.map(s => "'" + s + "'").join(',') + ')' : '\nWHERE FALSE';
 }
 
 export async function renderIndependentTraceEdges(window, options = {}) {
   const {renderDirectSqlEdges} = await import('./selector-direct-f3-sql.mjs');
-  return renderDirectSqlEdges(window, options, flowConfig, liveSelectorPredicate);
+  return renderDirectSqlEdges(window, options, flowConfig, ()=>liveSelectorPredicate(options.familyDiscovery!==false));
 }
 
 // Research only. No production CLI / live projection selects this renderer.
@@ -167,7 +167,7 @@ async function main() {
   assert(!job.status.errorResult);
   const bytes=JSON.stringify(edges,null,2)+'\n';
   writeFileSync(join(dir,'edges.json'),bytes,{flag:'wx'});
-  const summary={window,sourceSnapshotAt:pinned.snapshotAt,sourceCoverage:pinned.coverage,sourceCoverageJobId:pinned.jobId,jobId,maximumBytesBilled,sqlSha256:sha(sql),edgesSha256:sha(bytes),total,liveSelectorsOnly,
+  const summary={window,familyDiscoveryVersion:2,sourceSnapshotAt:pinned.snapshotAt,sourceCoverage:pinned.coverage,sourceCoverageJobId:pinned.jobId,jobId,maximumBytesBilled,sqlSha256:sha(sql),edgesSha256:sha(bytes),total,liveSelectorsOnly,
     observations:edges.reduce((count,e)=>count+Number(e.observations),0),
     bytesBilled:job.statistics.query.totalBytesBilled,
     elapsedMs:Number(job.statistics.endTime)-Number(job.statistics.startTime)};

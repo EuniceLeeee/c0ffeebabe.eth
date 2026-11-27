@@ -40,7 +40,7 @@ function decode(raw = definition(), obs: UnifiedObservation = observation(), pat
 
 test("native SQL nomination validates the complete call envelope without identity or state reads", () => {
   const def = definition(), obs = observation(), candidate = decode(def, obs);
-  assert(candidate); assert.equal(candidate.target, target); assert.equal(candidate.scope.poolId, "PoolA");
+  assert(candidate && candidate.candidateKind === "selector-native-execution"); assert.equal(candidate.target, target); assert.equal(candidate.scope.poolId, "PoolA");
   assert.deepEqual(candidate.arguments, ["PoolA", tokenIn, tokenOut, "7", recipient]);
   assert.equal(candidate.programKeys.length, 1); assertSelectorNativeCandidate(candidate, def);
   for (const patch of [{ target: a(202) }, { sender: a(102) }, { transactionHash: h(999) }, { data: obs.data + "00" },
@@ -117,7 +117,7 @@ test("minimal role declarations retain pool and token IDs without a separate nom
 test("unknown or non-entry declarations retain census candidates without invented programs", () => {
   const def = normalizeSelectorNativeExecutionDefinition({ ...definition(), programs: [], unsupportedReason: "callback selector, no direct route execution" });
   const compiled = compileSelectorNativeDiscovery(def), tx = census(), candidate = decode(def)!;
-  assert(candidate); assert.equal(candidate.programKey, "observed"); assert.deepEqual(candidate.programKeys, ["observed"]);
+  assert(candidate && candidate.candidateKind === "selector-native-execution"); assert.equal(candidate.programKey, "observed"); assert.deepEqual(candidate.programKeys, ["observed"]);
   assert.equal(compiled.discovery.callPatterns!.length, 1); assertSelectorNativeCandidate(candidate, def);
   assert.equal(selectorNativeCandidateFromCensus(def, tx, tx.calls[0]!.id, "forged"), null);
   assert.throws(() => assertSelectorNativeCandidate({ ...candidate, programKey: "forged" }, def), /binding changed/);

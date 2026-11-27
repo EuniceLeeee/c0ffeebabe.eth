@@ -1,0 +1,20 @@
+{
+  "type": "familyModule",
+  "source": {
+    "eventTopic0": "0x8b3e96f2b889fa771c53c981b40daf005f63f637f1869f707052d15a3dd97140",
+    "transferTopic": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+    "inputs": [
+      "0xa9059cbb",
+      "0x23b872dd",
+      "0x70a08231"
+    ],
+    "outputs": [
+      "0x7e3db030",
+      "0x70a08231"
+    ],
+    "callSelector": "0x7e3db030",
+    "balanceSelector": "0x70a08231",
+    "sendSelector": "0xa9059cbb",
+    "pullSelector": "0x23b872dd"
+  }
+}

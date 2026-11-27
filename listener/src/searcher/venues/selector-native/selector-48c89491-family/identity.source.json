@@ -1,0 +1,24 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x48c89491",
+  "signature": "function unlock(bytes)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_48C89491_ENABLED" },
+  "poolKeyTarget": "0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e",
+  "allowNativeToken": true,
+  "options": [
+    {
+      "id": "currency0-in-currency1-out",
+      "poolId": "$scope.poolId",
+      "poolKey": "function poolKeys(bytes25) view returns (address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks)",
+      "tokenIn": "currency0",
+      "tokenOut": "currency1"
+    },
+    {
+      "id": "currency1-in-currency0-out",
+      "poolId": "$scope.poolId",
+      "poolKey": "function poolKeys(bytes25) view returns (address currency0, address currency1, uint24 fee, int24 tickSpacing, address hooks)",
+      "tokenIn": "currency1",
+      "tokenOut": "currency0"
+    }
+  ]
+}

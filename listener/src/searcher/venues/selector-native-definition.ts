@@ -4,10 +4,14 @@ import { familyId, type FamilyId } from "./adapter-family-identifiers.js";
 import { selectorFamilyIdentity } from "./selector-execution-keys.js";
 import { validateDeclarativeValue } from "./declarative-values.js";
 import { assertModuleData } from "./declarative-modules.js";
+import {selectorExecutionPrograms,selectorProgramProjection} from './selector-program-role.js';
 
 export type SelectorNativeData = Readonly<Record<string, any>>;
 export interface SelectorNativeProgram {
   /** Canonical runtime data. Author metadata is removed before this type exists. */
+  readonly type?:'independentIdentity'|'execution';
+  /** Pure descriptor projection; the source compiler never writes a read flow here. */
+  readonly projection?:SelectorNativeProgram['binding'];
   readonly parameters?: readonly { readonly path: readonly number[]; readonly role: "amountIn" | "minimumOut" | "recipient" | "executor" | "tokenIn" | "tokenOut" | "poolId" | "tokenInId" | "tokenOutId" | "bound" }[];
   readonly payment?: { readonly kind: "none" | "approval" | "pretransfer"; readonly address?: unknown };
   readonly values?: SelectorNativeData;
@@ -26,6 +30,7 @@ export interface SelectorNativeProgram {
     readonly stateBinding?: {
       readonly poolNamespace?: string;
       readonly candidate?: unknown;
+      readonly poolIdTuple?: {readonly signature:string;readonly path:readonly number[];readonly fields:readonly string[]};
       /** Additional state-only proof of immutable membership after the
        * pool's own getters. Must not supply pricing parameters. */
       readonly authority?: SelectorNativeData;
@@ -54,7 +59,20 @@ export interface SelectorNativeProgram {
   readonly receiptChecks?: { readonly observe: readonly string[]; readonly checks: readonly unknown[]; readonly tokenBalances?: unknown; readonly totalSupplies?: unknown };
   readonly dependencies?: unknown;
   readonly refreshPolicy?: "on-touch" | "each-block";
+  readonly sourceRefreshPolicy?: "on-touch" | "each-block";
   readonly ethCall?: { readonly signature: string; readonly arguments: readonly unknown[]; readonly outputWord: number };
+}
+/** An address-scoped direct execution state contract. Describes how to
+ * monitor a proven direction; not evidence that a particular address owns it. */
+export interface SelectorDirectState {
+  readonly discoveryRuleHash:string;
+  readonly pool:"edge.poolAddress";
+  readonly poolId?:"edge.poolId";
+  readonly poolNamespace?:string;
+  readonly assets:readonly ["edge.tokenIn","edge.tokenOut"];
+  readonly watch:"pool-touch";
+  readonly on:readonly ("call-target"|"log-emitter"|"asset-transfer-endpoint"|"pool-id-event")[];
+  readonly unclassifiedWatch:"each-block";
 }
 export interface SelectorNativeExecutionDefinition {
   readonly format: "selector-family/v2";
@@ -62,6 +80,7 @@ export interface SelectorNativeExecutionDefinition {
   readonly signature: string;
   readonly domain: "swap" | "protocol";
   readonly activation?: { readonly enabled: boolean; readonly envKey: string };
+  readonly directState?:SelectorDirectState;
   /** Physical manager custody, not an admission rule or a leg program. These
    * events and ERC20 transfers to/from this owner do not change logical pool
    * pricing state. Independent hook/oracle/dependency invalidation still runs. */
@@ -69,12 +88,27 @@ export interface SelectorNativeExecutionDefinition {
     /** These canonical manager events name a physical pool independently of trade evidence. */
     readonly physicalPoolEvents?: readonly {readonly signature:string; readonly indexedPoolId:string}[] };
   readonly programs: readonly SelectorNativeProgram[];
+  /** Acceptance-time pool direction reads. Not used by SQL execution. */
+  readonly directionSupport?: SelectorNativeData;
   readonly unsupportedReason?: string;
 }
-const PROGRAM_FIELDS = ["parameters", "payment", "values", "resourceValues", "binding", "routes", "context", "state", "checks", "execution", "math", "runtimeMath", "quoteOutput", "runtimeEvidence", "observations", "receiptChecks", "dependencies", "refreshPolicy", "ethCall"];
+const PROGRAM_FIELDS = ["type","projection","parameters", "payment", "values", "resourceValues", "binding", "routes", "context", "state", "checks", "execution", "math", "runtimeMath", "quoteOutput", "runtimeEvidence", "observations", "receiptChecks", "dependencies", "refreshPolicy", "sourceRefreshPolicy", "ethCall"];
 function shape(value: any, required: readonly string[], optional: readonly string[], label: string): void {
   if (!value || typeof value !== "object" || Array.isArray(value) || required.some(key => !Object.hasOwn(value,key)) ||
       Object.keys(value).some(key => !required.includes(key) && !optional.includes(key))) throw new Error(`selector-native ${label} fields`);
+}
+export function validateSelectorDirectState(value:unknown):asserts value is SelectorDirectState {
+  shape(value,["pool","assets","watch","on","unclassifiedWatch","discoveryRuleHash"],["poolId","poolNamespace"],"direct execution state");
+  const s=value as SelectorDirectState;
+  function tuple(actual:unknown,expected:readonly string[]){
+    return Array.isArray(actual)&&actual.length===expected.length&&expected.every((x,i)=>x===actual[i]);
+  }
+  if(typeof s.discoveryRuleHash!=="string"||!/^[a-f0-9]{64}$/.test(s.discoveryRuleHash)||
+    s.pool!=="edge.poolAddress"||s.watch!=="pool-touch"||s.unclassifiedWatch!=="each-block"||
+    !tuple(s.assets,["edge.tokenIn","edge.tokenOut"])||
+    (s.poolId===undefined? s.poolNamespace!==undefined||!tuple(s.on,["call-target","log-emitter","asset-transfer-endpoint"]):
+      s.poolId!=="edge.poolId"||typeof s.poolNamespace!=="string"||!/^[a-z0-9][a-z0-9:._-]{0,127}$/.test(s.poolNamespace)||!tuple(s.on,["pool-id-event"])))
+    throw Error("invalid selector direct execution state");
 }
 function validateParameters(signature:string,program:SelectorNativeProgram):void {
   const fn=FunctionFragment.from(signature),parameters=program.parameters??[];
@@ -106,15 +140,30 @@ function validateParameters(signature:string,program:SelectorNativeProgram):void
   }
   if(!fn.inputs.every((type,index)=>covered(type,[index])))throw new Error('selector-native simple call must declare every ABI parameter as mutable or bound');
 }
+const deepFrozenNative = new WeakSet<object>();
 export function freezeSelectorNative<T>(value: T): T {
-  if (value && typeof value === "object") { Object.values(value).forEach(freezeSelectorNative); Object.freeze(value); }
+  if (value && typeof value === "object") {
+    if (deepFrozenNative.has(value)) return value;
+    Object.values(value).forEach(freezeSelectorNative);
+    Object.freeze(value);
+    deepFrozenNative.add(value);
+  }
   return value;
 }
 export function selectorNativeFamilyId(raw: Pick<SelectorNativeExecutionDefinition,"signature"|"selector">): FamilyId {
   return familyId(selectorFamilyIdentity(raw.signature, raw.selector).familyId);
 }
+const programKeyMemo = new WeakMap<object, string>();
 export function selectorNativeProgramKey(program: SelectorNativeProgram): string {
-  return `parameters:${hashCanonical(program as any)}`;
+  if (program && typeof program === "object") {
+    const hit = programKeyMemo.get(program);
+    if (hit !== undefined) return hit;
+  }
+  const key = `parameters:${hashCanonical(program as any)}`;
+  if (program && typeof program === "object" && Object.isFrozen(program)) {
+    programKeyMemo.set(program, key);
+  }
+  return key;
 }
 type PhysicalEvent = {readonly signature:string; readonly indexedPoolId:string};
 // Activity evidence is neither part of the executable ABI nor an input to
@@ -145,10 +194,16 @@ function checkedPhysicalActivity(input:unknown,def:SelectorNativeExecutionDefini
 }
 /** A single author syntax, with an optional one-program shorthand. Metadata is
  * validated as inert JSON, then omitted before any semantic fingerprint. */
+const normalizedDefinitionMemo = new WeakMap<object, SelectorNativeExecutionDefinition>();
 export function normalizeSelectorNativeExecutionDefinition(raw: unknown): SelectorNativeExecutionDefinition {
+  if (raw !== null && typeof raw === "object") {
+    const hit = normalizedDefinitionMemo.get(raw);
+    if (hit !== undefined) return hit;
+  }
   assertModuleData(raw);
-  shape(raw,["selector","signature"],["format","domain","programs","activation","managerCustody","physicalPoolActivity","unsupportedReason","meta",...PROGRAM_FIELDS],"definition");
+  shape(raw,["selector","signature"],["format","domain","programs","activation","managerCustody","physicalPoolActivity","unsupportedReason","meta","directionSupport","directState",...PROGRAM_FIELDS],"definition");
   const author=raw as Record<string,any>;
+  if(Object.hasOwn(author,"directState"))validateSelectorDirectState(author.directState);
   if(author.format!==undefined&&author.format!=="selector-family/v2")throw new Error("selector-family requires v2; legacy execution formats are not supported");
   const inline=PROGRAM_FIELDS.filter(field=>Object.hasOwn(author,field));
   if(Object.hasOwn(author,'programs')&&inline.length)throw new Error('selector-family cannot mix top-level execution fields with programs');
@@ -157,11 +212,15 @@ export function normalizeSelectorNativeExecutionDefinition(raw: unknown): Select
   const value={format:'selector-family/v2',selector:author.selector,signature:author.signature,domain:author.domain===undefined?'swap':author.domain,
     ...(author.activation===undefined?{}:{activation:author.activation}),...(author.unsupportedReason===undefined?{}:{unsupportedReason:author.unsupportedReason}),
     ...(author.managerCustody===undefined?{}:{managerCustody:author.managerCustody}),
+    ...(author.directionSupport===undefined?{}:{directionSupport:author.directionSupport}),
+    ...(author.directState===undefined?{}:{directState:author.directState}),
     programs:programs.map((program:unknown)=>{
       shape(program,[],[...PROGRAM_FIELDS,'meta'],'program');
       const {meta:_meta,...semantic}=program as Record<string,any>;
       if(semantic.binding!==undefined){shape(semantic.binding,[],['nomination','candidate','subject','flow','facts','descriptor','descriptorReads','match','stateBinding'],'binding');
         semantic.binding={facts:{},descriptor:{},...semantic.binding};}
+      if(semantic.projection!==undefined){shape(semantic.projection,['descriptor'],['facts','stateBinding'],'projection');
+        semantic.projection={facts:{},...semantic.projection};}
       if(semantic.routes!==undefined){shape(semantic.routes,[],['target','directions','venue','resource','resources','checks','assertions','allowedDirections'],'routes');
         semantic.routes={target:'$descriptor.target',...semantic.routes};}
       return semantic;
@@ -191,27 +250,70 @@ export function normalizeSelectorNativeExecutionDefinition(raw: unknown): Select
   if(value.activation){shape(value.activation,["enabled","envKey"],[],"activation");
     if(typeof value.activation.enabled!=="boolean"||!/^SEARCHER_FAMILY_[A-Z0-9_]+_ENABLED$/.test(value.activation.envKey)) throw new Error("selector-native activation");}
   if(!Array.isArray(value.programs)||value.programs.length>256||(!value.programs.length)!==Boolean(value.unsupportedReason)) throw new Error("selector-native executable programs or explicit non-entry reason required");
+  if(value.programs.some(p=>p.type!==undefined)&&value.programs.some(p=>p.type===undefined))
+    throw Error('selector definition cannot mix role-tagged and legacy programs');
+  if(value.directState||value.programs.some(p=>p.type!==undefined)){
+    if(value.programs.some(p=>p.type!=='independentIdentity'&&p.type!=='execution'))
+      throw Error('source selector definition programs must declare explicit identity or execution roles');
+    if(value.programs.filter(p=>p.type==='execution').length!==1)
+      throw Error('selector source definition requires exactly one execution program');
+  }
+  if(value.directState){
+    const state=value.directState;
+    const executable=selectorExecutionPrograms(value);
+    if(executable.length!==1||executable.some(p=>!p.execution||p.routes?.resources||
+      p.runtimeEvidence||p.dependencies||p.state||selectorProgramProjection(p)?.descriptorReads||
+      (selectorProgramProjection(p)?.stateBinding?.poolNamespace??undefined)!==state.poolNamespace))
+      throw Error("selector direct execution state requires standalone programs and declared physical pool scope");
+    if(state.poolId&&(!value.managerCustody?.physicalPoolEvents?.length))
+      throw Error("logical source state requires declared physical pool events");
+  }
   if(value.unsupportedReason!==undefined && (typeof value.unsupportedReason!=="string"||!value.unsupportedReason.trim())) throw new Error("selector-native non-entry reason");
   const keys=new Set<string>();
   for(const p of value.programs){
     shape(p,[],PROGRAM_FIELDS,"program");
-    if(!p.execution&&!p.parameters?.length)throw new Error("selector-native parameters or execution required");
+    if(p.type!==undefined&&!['independentIdentity','execution'].includes(p.type))throw Error('invalid selector program role');
+    if(p.type==='independentIdentity'){
+      const allowed=new Set(['type','values','resourceValues','binding','context','checks']);
+      if(Object.keys(p).some(k=>!allowed.has(k))||!p.binding?.flow)throw Error('identity program must contain only an independent read binding');
+      shape(p.binding,['flow','facts','descriptor'],['candidate'],'independent identity binding');
+    }else if(p.type==='execution'){
+      if(!p.execution||!p.projection||p.binding)throw Error('execution program requires pure projection, not identity binding');
+    }else if(p.projection)throw Error('source projection requires explicit execution role');
+    if(p.sourceRefreshPolicy!==undefined&&(!value.directState||!['on-touch','each-block'].includes(p.sourceRefreshPolicy)))throw Error('source refresh policy needs declared source state');
+    if(p.type!=='independentIdentity'&&!p.execution&&!p.parameters?.length)throw new Error("selector-native parameters or execution required");
     if(p.values)shape(p.values,[],["abi","constants","expressions","programs","inputs"],"values");
     if(p.resourceValues)shape(p.resourceValues,[],["abi","constants","expressions","programs","inputs"],"resource values");
     if(p.payment){shape(p.payment,["kind"],["address"],"payment");if(!['none','approval','pretransfer'].includes(p.payment.kind)||p.payment.kind==='none'&&p.payment.address!==undefined)throw new Error('selector-native payment');}
     if(p.receiptChecks){shape(p.receiptChecks,["observe","checks"],["tokenBalances","totalSupplies"],"receipt checks");if(!Array.isArray(p.receiptChecks.checks)||!Array.isArray(p.receiptChecks.observe)||p.receiptChecks.observe.some((effect:string)=>!['return-data','revert-data','token-delta','native-delta','logs','total-supply-delta'].includes(effect)))throw new Error('selector-native receipt observations');}
     if(p.binding){shape(p.binding,["facts","descriptor"],["nomination","candidate","subject","flow","descriptorReads","match","stateBinding"],"binding");
       if(p.binding.flow){shape(p.binding.flow,["version","steps","result"],[],"binding flow");if(p.binding.flow.version!==1||!Array.isArray(p.binding.flow.steps)||!p.binding.flow.steps.length||p.binding.flow.steps.length>128)throw new Error('selector-native binding flow bounds');}}
-    if(p.binding?.stateBinding){
-      const declared=p.binding.stateBinding;
-      shape(declared,[],["poolNamespace","candidate","authority"],"state binding");
+    const projection=selectorProgramProjection(p);
+    if(projection?.stateBinding){
+      const declared=projection.stateBinding;
+      shape(declared,[],["poolNamespace","candidate","authority","poolIdTuple"],"state binding");
+      if(p.projection&&declared.authority!==undefined)throw Error('source projection cannot contain identity authority');
+      if(declared.poolIdTuple){
+        const t=declared.poolIdTuple;
+        shape(t,["signature","path","fields"],[],"pool id tuple");
+        const fn=FunctionFragment.from(t.signature);
+        let part:ParamType|undefined;
+        if(!Array.isArray(t.path)||!t.path.length||t.path.some((n:number)=>!Number.isSafeInteger(n)||n<0))throw Error("invalid pool tuple path");
+        for(const [i,n] of t.path.entries()){
+          part=i===0?fn.inputs[n]:part?.baseType==='tuple'?part.components?.[n]:undefined;
+          if(!part)throw Error('pool tuple path exceeds ABI');
+        }
+        if(!declared.poolNamespace||part?.baseType!=="tuple"||!Array.isArray(t.fields)||t.fields.length!==part.components!.length||
+          new Set(t.fields).size!==t.fields.length||t.fields.some((k:string)=>!/^[_a-zA-Z][_a-zA-Z0-9]*(\.[_a-zA-Z][_a-zA-Z0-9]*)*$/.test(k)||k.split('.').some((v:string)=>['__proto__','constructor','prototype'].includes(v))))
+          throw Error("invalid physical pool tuple declaration");
+      }
       if(declared.poolNamespace!==undefined&&(typeof declared.poolNamespace!=="string"||!/^[a-z0-9][a-z0-9:._-]{0,127}$/.test(declared.poolNamespace)))
         throw new Error("selector-native state binding pool namespace");
       const directions=p.routes?.directions;
       const derivesDirections=directions?.op==="map"||directions?.op==="flatMap";
       if(derivesDirections)validateDeclarativeValue(directions,"state binding directions");
-      if(!p.binding.flow||!p.execution||p.parameters?.length||p.runtimeEvidence||
-         !(Array.isArray(directions)&&directions.length||derivesDirections)||!p.routes?.checks?.length)
+      if((!value.directState&&!projection.flow)||!p.execution||p.parameters?.length||p.runtimeEvidence||
+         !(Array.isArray(directions)&&directions.length||derivesDirections)||(!value.directState&&!p.routes?.checks?.length))
         throw new Error("selector-native state binding needs independent reads, explicit execution, and checked directions");
       if(declared.authority!==undefined){
         shape(declared.authority,["version","steps","result"],[],"state binding authority");
@@ -227,7 +329,7 @@ export function normalizeSelectorNativeExecutionDefinition(raw: unknown): Select
       const fn=FunctionFragment.from(p.ethCall.signature);if(!Array.isArray(p.ethCall.arguments)||fn.inputs.length!==p.ethCall.arguments.length||!Number.isSafeInteger(p.ethCall.outputWord)||p.ethCall.outputWord<0)throw new Error("selector-native eth-call ABI");}
     if(p.parameters){if(!Array.isArray(p.parameters)||p.parameters.length>256)throw new Error("selector-native parameters");
       for(const parameter of p.parameters){shape(parameter,["path","role"],[],"parameter");if(!Array.isArray(parameter.path)||!parameter.path.length||parameter.path.some((n:number)=>!Number.isSafeInteger(n)||n<0)||!['amountIn','minimumOut','recipient','executor','tokenIn','tokenOut','poolId','tokenInId','tokenOutId','bound'].includes(parameter.role))throw new Error("selector-native parameter role/path");}}
-    validateParameters(value.signature,p);
+    if(p.type!=='independentIdentity')validateParameters(value.signature,p);
     const key=selectorNativeProgramKey(p);if(keys.has(key))throw new Error("duplicate selector-native parameter program");keys.add(key);
   }
   const normalized:SelectorNativeExecutionDefinition=freezeSelectorNative(JSON.parse(JSON.stringify({...value,selector:value.selector.toLowerCase(),signature:FunctionFragment.from(value.signature).format('full')})));
@@ -237,6 +339,10 @@ export function normalizeSelectorNativeExecutionDefinition(raw: unknown): Select
     // observation is invalid, not an unstated licence to suppress refresh.
     const events=checkedPhysicalActivity(Object.hasOwn(author,"physicalPoolActivity")?author.physicalPoolActivity:activity,normalized);
     physicalActivity.set(normalized.managerCustody!,events);
+  }
+  normalizedDefinitionMemo.set(normalized, normalized);
+  if (raw !== null && typeof raw === "object" && deepFrozenNative.has(raw)) {
+    normalizedDefinitionMemo.set(raw, normalized);
   }
   return normalized;
 }

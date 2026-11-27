@@ -17,6 +17,7 @@ export interface SqlPriceEdge {
   readonly tokenInId: string | null;
   readonly tokenOut: string;
   readonly tokenOutId: string | null;
+  readonly hookData?: string | null;
   /** Optional historical inputs from the pinned SQL artifact. Not a price,
    * signed program or permission to supersede Family-configured values. */
   readonly executionParamEvidence?: SqlExecutionParamEvidence;
@@ -39,6 +40,7 @@ const maxRows = 2_000_000;
 const zeroAddress = "0x" + "0".repeat(40);
 const isHash = (x: unknown): x is string => typeof x === "string" && /^[0-9a-f]{64}$/.test(x);
 const isAddress = (x: unknown): x is string => typeof x === "string" && /^0x[0-9a-f]{40}$/.test(x);
+const isHexBytes = (x: unknown): x is string | null => x === null || (typeof x === "string" && x.length <= 8194 && /^0x(?:[0-9a-f]{2})*$/.test(x));
 const isId = (x: unknown): x is string | null => x === null || (typeof x === "string" && x.length > 0 && x.length <= 256);
 const sha256 = (x: string | Buffer) => createHash("sha256").update(x).digest("hex");
 function record(x: unknown): Record<string, unknown> {
@@ -81,8 +83,11 @@ function parseEdge(x: unknown): SqlPriceEdge {
   // Match BigQuery TO_JSON_STRING([CAST(chainId AS STRING), ...]); never
   // reconstruct an adapter/Ready key from these coordinates.
   if (candidateInstanceKey !== sqlDirectionId({chainId,selector,poolAddress,poolNamespace,poolId,tokenIn,tokenInId,tokenOut,tokenOutId})) throw Error("SQL candidate instance key mismatch");
-  const extra=Object.hasOwn(record(x),'executionParamEvidence')?{executionParamEvidence:paramEvidence(record(x).executionParamEvidence)}:{};
-  return {candidateInstanceKey: candidateInstanceKey as string, chainId, selector, poolAddress, poolNamespace, poolId, tokenIn, tokenInId, tokenOut, tokenOutId,...extra};
+  const row = record(x);
+  if (Object.hasOwn(row, "hookData") && !isHexBytes(row.hookData)) throw Error("invalid SQL edge hookData bytes");
+  const hook = Object.hasOwn(row, "hookData") ? {hookData: row.hookData as string | null} : {};
+  const extra=Object.hasOwn(row,'executionParamEvidence')?{executionParamEvidence:paramEvidence(row.executionParamEvidence)}:{};
+  return {candidateInstanceKey: candidateInstanceKey as string, chainId, selector, poolAddress, poolNamespace, poolId, tokenIn, tokenInId, tokenOut, tokenOutId,...hook,...extra};
 }
 
 /** Offline artifact integrity only. No Ready/admission, Family lookup or RPC. */

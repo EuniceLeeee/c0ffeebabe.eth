@@ -3,7 +3,7 @@ import { AmountNotExecutableError } from "./solver/amount-rejection.js";
 import { types as nodeTypes } from "node:util";
 import type { BlockTouchedStateKeyResolver } from "./blockscan-touched-state.js";
 import { physicalRankingScope, sqlPoolPriceActivityScope } from "./blockscan-touched-state.js";
-import { canonicalPhysicalPoolId, observePoolBalanceRefresh, observePoolLegRefresh, PoolLegRefreshIndex, publishedPoolLegIndex, touchedPoolKey, type PoolLegBinding, type PoolLogScopes } from "./pool-leg-refresh.js";
+import { canonicalPhysicalPoolId, observePoolBalanceRefresh, observePoolLegRefresh, PoolLegRefreshIndex, publishedPoolLegIndex, touchedPoolKey, type PoolLegBinding, type PoolLogScopes, type PoolActivityRule } from "./pool-leg-refresh.js";
 import { PoolTouchCounts, type PhysicalHit } from "./sql-pool-touch-counts.js";
 import type {
   AdapterWorkControl,
@@ -369,6 +369,7 @@ export class StrictProductionRuntimeRoot {
     readonly sqlTrialMarkets?: ReadonlyMap<string,ReadonlyMap<string,"on-touch"|"each-block">>;
     readonly paidAliases?: ReadonlyMap<string,ReadonlyMap<string,string>>;
     readonly poolLogScopes?: PoolLogScopes;
+    readonly sqlPoolActivity?: ReadonlyMap<string, PoolActivityRule>;
     readonly historicalAssetLogActors?:NonNullable<BlockTouchedStateKeyResolver["rankAssetActors"]>;
     readonly readyInstances: readonly PreparedFamilyInstance[];
     readonly readyFundingAssets: readonly StrictReadyFundingAsset[];
@@ -542,7 +543,7 @@ export class StrictProductionRuntimeRoot {
         if(!e.stateResourceKey||this.#publishedIndex.stateKeyByEdgeKey.get(id)!==id)
           throw Error("SQL leg lacks its published pricing or pool identity");
         poolLegs.push({legId:id,stateKey:e.stateResourceKey,poolAddress:e.observationTarget??e.target,
-          poolId:e.observationPoolId??e.poolId??null});
+          poolId:e.observationPoolId??e.poolId??null,activity:input.sqlPoolActivity?.get(id)});
         this.#sqlPricePools.set(id,touchedPoolKey(e.observationTarget??e.target,e.observationPoolId??e.poolId));
       }
       for(const [variant,rawKey] of this.#pricingIndex.stateKeyByEdgeKey)
@@ -2289,8 +2290,30 @@ function assertSameReadyTopology(
   }
 }
 
+const deepFrozenSessionEdges = new WeakSet<object>();
+function isDeepFrozenSessionEdge(value: unknown): boolean {
+  if (value === null || typeof value !== "object") return true;
+  if (deepFrozenSessionEdges.has(value)) return true;
+  if (!Object.isFrozen(value)) return false;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      if (!isDeepFrozenSessionEdge(value[i])) return false;
+    }
+  } else {
+    for (const k of Object.keys(value)) {
+      if (!isDeepFrozenSessionEdge((value as Record<string, unknown>)[k])) return false;
+    }
+  }
+  deepFrozenSessionEdges.add(value);
+  return true;
+}
+
+const edgeBindingFingerprintCache = new WeakMap<TokenEdge, string>();
+
 function edgeBindingFingerprint(edge: TokenEdge): string {
-  return [
+  const cached = edgeBindingFingerprintCache.get(edge);
+  if (cached !== undefined) return cached;
+  const fp = [
     requiredCanonicalEdgeId(edge),
     edge.adapterId,
     edge.target.toLowerCase(),
@@ -2308,6 +2331,10 @@ function edgeBindingFingerprint(edge: TokenEdge): string {
     ...(edge.stateResourceKeys === undefined ? [] : [JSON.stringify(["stateResourceKeys", normalizeStateResourceKeys(edge.stateResourceKeys)])]),
     ...(edge.executionVerification === undefined ? [] : [JSON.stringify(["executionVerification", edge.executionVerification])]),
   ].join("\u001f");
+  if (isDeepFrozenSessionEdge(edge)) {
+    edgeBindingFingerprintCache.set(edge, fp);
+  }
+  return fp;
 }
 
 function requiredCanonicalEdgeId(edge: TokenEdge): CanonicalEdgeId {

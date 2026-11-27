@@ -397,5 +397,26 @@
       },
       "refreshPolicy": "each-block"
     }
-  ]
+  ],
+  "directionSupport": {
+    "version": 1,
+    "options": [
+      {
+        "query": [
+          {
+            "id": "underlying",
+            "method": "underlying()"
+          },
+          {
+            "id": "self",
+            "source": "self"
+          }
+        ]
+      }
+    ],
+    "confirm": {
+      "in": "$edge.tokenIn",
+      "out": "$edge.tokenOut"
+    }
+  }
 }

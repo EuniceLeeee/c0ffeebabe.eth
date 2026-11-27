@@ -7,7 +7,7 @@ import {AbiCoder,solidityPackedKeccak256,dataSlice,getAddress,toBeHex} from 'eth
 import {bindSelectorNativeMath} from '../venues/selector-native-math.js';
 import {normalizeSelectorFamilyDefinition} from '../venues/selector-family-definition.js';
 const root=fileURLToPath(new URL('../venues/selector-native/',import.meta.url));
-const definitions=readdirSync(root).map(dir=>normalizeSelectorFamilyDefinition(JSON.parse(readFileSync(resolve(root,dir,dir.replace(/-family$/,'')+'.json'),'utf8'))));
+const definitions=readdirSync(root,{withFileTypes:true}).filter(d=>d.isDirectory()).map(d=>normalizeSelectorFamilyDefinition(JSON.parse(readFileSync(resolve(root,d.name,d.name.replace(/-family$/,'')+'.json'),'utf8'))));
 const programs=definitions.flatMap(doc=>doc.domain==='funding'?[]:doc.programs);
 const models=new Map<string,any>();
 for(const p of programs)for(const m of p.math?.models??[]){
@@ -16,7 +16,7 @@ for(const p of programs)for(const m of p.math?.models??[]){
 const get=(id:string)=>{const model=models.get(id);assert(model,'missing migrated inline value calculation');return bindSelectorNativeMath({version:1,entries:{value:{model:id,version:1}},models:[model]}).value!;};
 const address=(n:string)=>'0x'+n.repeat(40);
 test('all installed native parameter model bindings are self-contained data',()=>{
- for(const id of ['balancer-v1:sum-weights','univ4-fee-hook:sat1-hook-data','ekubo:core-swap-log','fluid-credit:config-state','fluid-credit:max-borrow-request'])assert(models.has(id),id);
+ for(const id of ['balancer-v1:sum-weights','ekubo:core-swap-log','fluid-credit:config-state','fluid-credit:max-borrow-request'])assert(models.has(id),id);
  for(const p of programs)if(p.math)assert.doesNotThrow(()=>bindSelectorNativeMath(p.math));
 });
 test('inline models reject I/O, functions, missing handlers and imported models',()=>{
@@ -28,13 +28,6 @@ test('inline models reject I/O, functions, missing handlers and imported models'
 test('checked uint sum keeps eight-weight bound and overflow behavior',()=>{
  const sum=get('balancer-v1:sum-weights');assert.equal(sum([1n,3n,5n]),9n);assert.equal(sum([]),0n);
  assert.throws(()=>sum(Array(9).fill(1n)));assert.throws(()=>sum([-1n]));assert.throws(()=>sum([1]));assert.throws(()=>sum([(1n<<256n)-1n,1n]));
-});
-test('hook arguments bind executor and a deterministic separate sell key',()=>{
- const fn=get('univ4-fee-hook:sat1-hook-data'),executor=address('1'),hook=address('2');
- const forward=fn({executor,hook,direction:'zero-for-one'}) as any,backward=fn({executor,hook,direction:'one-for-zero'}) as any;
- const abi=AbiCoder.defaultAbiCoder(),seller=getAddress(dataSlice(solidityPackedKeccak256(['string','address','address'],['univ4-fee-hook:sat1:sell:v1',executor,hook]),12));
- assert.equal(abi.decode(['address'],forward.hookData)[0],getAddress(executor));assert.equal(abi.decode(['address'],backward.hookData)[0],seller);
- assert.notEqual(seller,getAddress(executor));assert.notDeepEqual(backward,fn({executor,hook:address('3'),direction:'one-for-zero'}));assert.throws(()=>fn({executor,hook,direction:'unknown'}));
 });
 test('signed packed flow binds payment to the opposite receipt',()=>{
  const fn=get('ekubo:core-swap-log'),pack=(a:bigint,b:bigint)=>({balanceUpdate:toBeHex((BigInt.asUintN(128,a)<<128n)|BigInt.asUintN(128,b),32)});

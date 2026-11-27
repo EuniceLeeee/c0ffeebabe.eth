@@ -49,6 +49,7 @@ import type { AdapterFamilyExactQuoteCache } from "./adapter-family-exact-quote-
 
 export type StrictSessionPurpose =
   | "coarse-pricing"
+  | "startup-price"
   | "source-n-runtime"
   | "exact-execution";
 

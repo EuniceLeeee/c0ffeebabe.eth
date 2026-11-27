@@ -8792,5 +8792,34 @@
         "label": "curve-plain/registry-execution-sim"
       }
     }
-  ]
+  ],
+  "directionSupport": {
+    "version": 1,
+    "options": [
+      {
+        "query": [
+          {
+            "id": "tokens",
+            "method": "coins(uint256)",
+            "from": 0,
+            "count": 8
+          }
+        ]
+      },
+      {
+        "query": [
+          {
+            "id": "tokens",
+            "method": "coins(int128)",
+            "from": 0,
+            "count": 8
+          }
+        ]
+      }
+    ],
+    "confirm": {
+      "in": "$edge.tokenIn",
+      "out": "$edge.tokenOut"
+    }
+  }
 }

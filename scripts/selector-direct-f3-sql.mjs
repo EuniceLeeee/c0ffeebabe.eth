@@ -6,7 +6,7 @@ import {poolIdLayouts} from './selector-direct-f3/trace-pool-id.mjs';
 import {compileActionReceipts} from './selector-sql-sources/compile-action-receipts.mjs';
 import {renderSelectorTraceSourceSql} from './selector-trace-source-sql.mjs';
 import {fixedTraceRead} from './selector-trace-store.mjs';
-export async function renderDirectSqlEdges(window, {liveSelectorsOnly = false, legacyCoordinates = false, fixedSource, executionParams = !!fixedSource} = {}, flowConfig, liveSelectorPredicate) {
+export async function renderDirectSqlEdges(window, {liveSelectorsOnly = false, legacyCoordinates = false, fixedSource, executionParams = !!fixedSource, familyDiscovery = true} = {}, flowConfig, liveSelectorPredicate) {
   const source = fixedSource ? '' : renderSelectorTraceSourceSql({window,materialize:true})+';\n';
   const cte = fixedSource ? 'canonical_trace AS (\n'+fixedTraceRead(window,fixedSource.snapshotAt)+'\n), ' : '';
   const {build}=createRequire(new URL('../listener/package.json',import.meta.url))('esbuild');
@@ -54,18 +54,48 @@ export async function renderDirectSqlEdges(window, {liveSelectorsOnly = false, l
     ...Object.keys(actionReceipts).filter(selector=>actionReceipts[selector].transferProof)])]);
   const argIndices=layouts.flatMap(r=>Object.values(r.equals)).flatMap(ref=>/^arg(\d+)/.exec(ref)?.[1] ?? []);
   const actionPrefix=10 + 64*(1+Math.max(-1,...argIndices.map(Number)));
-  const topics=quoted([...new Set([flowConfig.transferTopic, flowConfig.amountSwapTopic,...poolIdLayouts.map(l=>l.topic),
-    ...actionTopics,...layouts.map(r=>r.snapshot?.topic).filter(Boolean)])]);
+  const legacyTopics=[...new Set([flowConfig.transferTopic, flowConfig.amountSwapTopic,...poolIdLayouts.map(l=>l.topic),
+    ...actionTopics,...layouts.map(r=>r.snapshot?.topic).filter(Boolean)])];
+  let topics=quoted(legacyTopics),familyFrameType='',familyFrameInput='',hookDataReturn='',hookDataSelect='',hookDataExample='';
+  const cfg=JSON.stringify({...flowConfig,actionReceipts});
+  let result=executionParams?'return ExecutionParams.annotateExecutionParams(Discovery.traceCallFlows(frames, logs, '+cfg+'), frames, paramPlans);':'return Discovery.traceCallFlows(frames, logs, '+cfg+');';
+  if(familyDiscovery){
+    const withHookData=familyDiscovery===true||Number(familyDiscovery)>=2;
+    const {familyDiscoveryCatalog}=await import('./selector-family-discovery-sql.mjs');
+    const {rules,methods,topics:extra,outputs,modules}=familyDiscoveryCatalog();
+    const registered=Object.entries(modules);
+    const source=registered.map(([id,path],i)=>'import {discover as d'+i+'} from '+JSON.stringify(path)+';').join('\n')+
+      '\nimport {composeFamilyObservations as compose} from "./scripts/selector-family-discovery-compose.mjs";'+
+      '\nconst modules={'+registered.map(([id],i)=>JSON.stringify(id)+':d'+i).join(',')+'};'+
+      '\nexport const composeFamilyObservations=(old,frames,logs,rules)=>compose(old,frames,logs,rules,modules);';
+    const family=await build({stdin:{contents:source,resolveDir:fileURLToPath(new URL('../',import.meta.url)),loader:'js'},
+      bundle:true,platform:'browser',target:'es2020',format:'iife',globalName:'FamilyDiscovery',minify:true,legalComments:'none',write:false});
+    familyFrameType=', discoveryInput STRING, discoveryOutput STRING';
+    const eligible=methods.length?'LEFT(f.input,10) IN ('+quoted(methods)+')':'FALSE';
+    familyFrameInput=',\n      IF('+eligible+' AND LENGTH(f.input)<=131074,f.input,NULL),'+
+      '\n      IF('+(outputs.length?'LEFT(f.input,10) IN ('+quoted(outputs)+')':'FALSE')+' AND LENGTH(f.output)=66,f.output,NULL)';
+    if(withHookData){
+      hookDataReturn=', hookData STRING';
+      hookDataSelect='\n  IF(COUNTIF(hookData IS NOT NULL)>0 AND MIN(hookData)=MAX(hookData), MIN(hookData), NULL) AS hookData,';
+      hookDataExample='hookData,';
+    }
+    topics=quoted([...new Set([...legacyTopics,...extra])]);
+    const extraOnly=extra.filter(t=>!legacyTopics.includes(t));
+    const expr='FamilyDiscovery.composeFamilyObservations(Discovery.traceCallFlows(frames, legacyLogs, '+cfg+'),frames,logs,familyRules)';
+    result=family.outputFiles[0].text+'\nconst familyRules='+JSON.stringify(rules).replaceAll("'",'\\u0027')+';\n'+
+      'const extraTopics='+JSON.stringify(extraOnly)+'; const legacyLogs=logs.map(l=>extraTopics.includes(l.topics[0])?{...l,topics:[],data:null}:l);\n'+
+      (executionParams?'return ExecutionParams.annotateExecutionParams('+expr+', frames, paramPlans);':'return '+expr+';');
+  }
   return `${source}CREATE TEMP FUNCTION traceFlows(
-  frames ARRAY<STRUCT<path STRING, ok BOOL, kind STRING, sender STRING, target STRING, input STRING, value STRING, output STRING${parameterFrameType}>>,
+  frames ARRAY<STRUCT<path STRING, ok BOOL, kind STRING, sender STRING, target STRING, input STRING, value STRING, output STRING${parameterFrameType}${familyFrameType}>>,
   logs ARRAY<STRUCT<idx FLOAT64, emitter STRING, topics ARRAY<STRING>, data STRING>>
 ) RETURNS ARRAY<STRUCT<selector STRING, poolAddress STRING, poolId STRING, tokenIn STRING, tokenOut STRING,
   evidence STRING, callPath STRING, receiptIndices STRING, selectorTarget STRING, innerSwapPath STRING,
   amountPoolOutRaw STRING, amountReceivedOutRaw STRING, amountVenueInRaw STRING, amountPayerInRaw STRING,
-  conflictingFlow STRUCT<tokenIn STRING,tokenOut STRING,evidence STRING,receiptIndices STRING>${parameterReturn}>>
+  conflictingFlow STRUCT<tokenIn STRING,tokenOut STRING,evidence STRING,receiptIndices STRING>${hookDataReturn}${parameterReturn}>>
 LANGUAGE js AS r'''
 ${bundle.outputFiles[0].text}
-${parameterCode}${executionParams?'return ExecutionParams.annotateExecutionParams(Discovery.traceCallFlows(frames, logs, ':'return Discovery.traceCallFlows(frames, logs, '}${JSON.stringify({...flowConfig,actionReceipts})}${executionParams?'), frames, paramPlans);':');'}
+${parameterCode}${result}
 ''';
 
 WITH ${cte}${legacyCoordinates ? 'observations' : 'observedCalls'} AS (
@@ -79,7 +109,7 @@ WITH ${cte}${legacyCoordinates ? 'observations' : 'observedCalls'} AS (
         WHEN LEFT(f.input,10) IN (${readMethods}) THEN LEFT(f.input,75)
         WHEN LEFT(f.input,10) IN ('0xa9059cbb','0x23b872dd','${flowConfig.amountSwapSelector}') THEN LEFT(f.input,202)
         ELSE LEFT(f.input,10) END, f.value,
-      IF(LEFT(f.input,10) IN (${outputMethods}),LEFT(f.output,67),NULL)${parameterFrameInput}
+      IF(LEFT(f.input,10) IN (${outputMethods}),LEFT(f.output,67),NULL)${parameterFrameInput}${familyFrameInput}
       FROM UNNEST(t.traces) f WITH OFFSET AS ord ORDER BY ord),
     ARRAY(SELECT AS STRUCT CAST(l.log_index AS FLOAT64), l.log_address,
         IF(keepBody,l.topics,ARRAY<STRING>[]), IF(keepBody,l.data,NULL)
@@ -93,9 +123,9 @@ WITH ${cte}${legacyCoordinates ? 'observations' : 'observedCalls'} AS (
   FROM observedCalls AS o
 )`}
 SELECT selector, poolAddress, poolId, tokenIn, tokenOut,${legacyCoordinates ? '' : '\n  IF(MIN(selectorTarget) = MAX(selectorTarget), MIN(selectorTarget), NULL) AS callTarget,'}
-  TRUE AS observedTargetSelector, FALSE AS verified, COUNT(*) AS observations,${parameterSelect}
+  TRUE AS observedTargetSelector, FALSE AS verified, COUNT(*) AS observations,${hookDataSelect}${parameterSelect}
   ARRAY_AGG(DISTINCT evidence ORDER BY evidence) AS evidenceTypes,
-  ARRAY_AGG(STRUCT(txHash,selectorTarget,${legacyCoordinates ? '' : 'observedPoolAddress,'}callPath,innerSwapPath,receiptIndices,evidence,amountPoolOutRaw,amountReceivedOutRaw,amountVenueInRaw,amountPayerInRaw,conflictingFlow)
+  ARRAY_AGG(STRUCT(txHash,selectorTarget,${legacyCoordinates ? '' : 'observedPoolAddress,'}callPath,innerSwapPath,${hookDataExample}receiptIndices,evidence,amountPoolOutRaw,amountReceivedOutRaw,amountVenueInRaw,amountPayerInRaw,conflictingFlow)
     ORDER BY conflictingFlow.tokenIn IS NULL,txHash,callPath,receiptIndices LIMIT 1)[OFFSET(0)] AS example
 FROM observations${liveSelectorsOnly ? await liveSelectorPredicate() : ''}
 GROUP BY selector,poolAddress,poolId,tokenIn,tokenOut

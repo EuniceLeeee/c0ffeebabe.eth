@@ -4952,5 +4952,42 @@
         "sourceCommit": "fdb859a9b9b606a38c3b7afa52452752849ee465"
       }
     }
-  ]
+  ],
+  "directionSupport": {
+    "version": 1,
+    "options": [
+      {
+        "query": [
+          {
+            "id": "tokens",
+            "method": "coins(uint256)",
+            "from": 0,
+            "count": 8
+          },
+          {
+            "id": "self",
+            "source": "self"
+          }
+        ]
+      },
+      {
+        "query": [
+          {
+            "id": "tokens",
+            "method": "coins(int128)",
+            "from": 0,
+            "count": 8
+          },
+          {
+            "id": "self",
+            "source": "self"
+          }
+        ]
+      }
+    ],
+    "confirm": {
+      "in": "$edge.tokenIn",
+      "out": "$edge.tokenOut"
+    }
+  }
 }

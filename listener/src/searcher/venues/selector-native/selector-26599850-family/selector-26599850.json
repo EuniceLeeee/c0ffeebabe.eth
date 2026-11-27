@@ -243,5 +243,9 @@
   },
   "meta": {
     "label": "protocol:few-wrapped/factory-wrapper-effects"
+  },
+  "directionSupport": {
+    "status": "not-applicable",
+    "reason": "CoW settlement wrapTo is not a pool conversion"
   }
 }

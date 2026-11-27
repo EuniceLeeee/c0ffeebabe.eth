@@ -571,5 +571,9 @@
     "canonicalIntakeTargets": [],
     "victimSupport": "detect-only"
   },
-  "refreshPolicy": "each-block"
+  "refreshPolicy": "each-block",
+  "directionSupport": {
+    "status": "not-applicable",
+    "reason": "sell order action, not a pool conversion"
+  }
 }

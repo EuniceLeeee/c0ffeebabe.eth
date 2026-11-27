@@ -1,0 +1,18 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x022c0d9f",
+  "signature": "function swap(uint256, uint256, address, bytes)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_022C0D9F_ENABLED" },
+  "options": [
+    {
+      "id": "token0-in-token1-out",
+      "tokenIn": "function token0() view returns (address)",
+      "tokenOut": "function token1() view returns (address)"
+    },
+    {
+      "id": "token1-in-token0-out",
+      "tokenIn": "function token1() view returns (address)",
+      "tokenOut": "function token0() view returns (address)"
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "format": "simulated-v3-callback-swap/v1",
+  "id": "v3-swap",
+  "selector": "0x128acb08",
+  "signature": "function swap(address, bool, int256, uint160, bytes)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_128ACB08_ENABLED" },
+  "swapSignature": "function swap(address recipient,bool zeroForOne,int256 amountSpecified,uint160 sqrtPriceLimitX96,bytes data) returns (int256 amount0, int256 amount1)",
+  "callback": "function uniswapV3SwapCallback(int256 amount0Delta,int256 amount1Delta,bytes data)",
+  "sqrtPriceLimits": ["4295128740", "1461446703485210103287273052203988822378723970341"],
+  "refreshPolicy": "on-touch",
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": ["edge.tokenIn", "edge.tokenOut"],
+    "watch": "pool-touch",
+    "on": ["call-target", "log-emitter", "asset-transfer-endpoint"],
+    "unclassifiedWatch": "each-block"
+  }
+}

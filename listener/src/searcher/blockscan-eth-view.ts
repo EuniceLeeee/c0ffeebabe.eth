@@ -65,6 +65,7 @@ interface EthViewWork {
   buy: Map<string, Map<string, Offer>>;
   sell: Map<string, Map<string, Offer>>;
   pairs: Map<string, { signals: readonly DirectedPriceSignal[]; comparable: boolean }>;
+  cols: Map<string, EffectiveEthColumns>;
   mids: ReadonlyMap<string, ResolvedBlockScanQuote>;
   output?: BlockScanEthView;
   quotePositions: Map<string, number>;
@@ -106,6 +107,90 @@ export function buildBlockScanEthView(
       resolveEthReferenceTouchedMode(process.env.SEARCHER_BLOCKSCAN_ETH_REFERENCE_TOUCHED)).view;
 }
 
+/** Private consumer-local incremental ETH-reference builder for screening mids,
+ * isolated from published effective pricing/valuation caches. */
+export function createIncrementalBlockScanEthViewBuilder() {
+  let recentScreen: {
+    sourceBlock: number;
+    sourceBlockHash: string;
+    generation: number;
+    signalPairsPerToken: number;
+    allowRepeatedPools: boolean;
+    touchedMode: EthReferenceTouchedMode;
+    work: EthViewWork;
+  } | undefined;
+  return (
+    source: { readonly number: number; readonly hash: string; readonly generation: number },
+    edges: readonly TokenEdge[],
+    mids: ReadonlyMap<string, ResolvedBlockScanQuote>,
+    signalPairsPerToken = DEFAULT_ETH_SIGNAL_PAIRS_PER_TOKEN,
+    allowRepeatedPools = DEFAULT_ALLOW_REPEATED_POOLS,
+    policyView?: BlockScanEthView,
+  ): BlockScanEthView => {
+    const touchedMode =
+      (policyView && workStats.get(policyView)?.touchedMode) ??
+      resolveEthReferenceTouchedMode(process.env.SEARCHER_BLOCKSCAN_ETH_REFERENCE_TOUCHED);
+    const old = recentScreen;
+    const forward = old && (
+      (source.number > old.sourceBlock && source.generation > old.generation) ||
+      (source.number === old.sourceBlock && source.generation >= old.generation &&
+        source.hash.toLowerCase() === old.sourceBlockHash.toLowerCase())
+    );
+    const advance = !old || forward || (source.number === old.sourceBlock && source.generation > old.generation);
+    const previous = forward &&
+      old.signalPairsPerToken === signalPairsPerToken &&
+      old.allowRepeatedPools === allowRepeatedPools &&
+      old.touchedMode === touchedMode &&
+      (old.work.edges === edges || sameTopology(old.work, edges))
+        ? old.work
+        : undefined;
+    let changes: Map<string, RawTokenRate | undefined> | undefined;
+    let visited = mids.size;
+    if (previous) {
+      changes = new Map();
+      visited = 0;
+      for (const [id, quote] of mids) {
+        const prior = previous.mids.get(id);
+        if (prior === quote) continue;
+        visited++;
+        if (!prior || prior.quoteAmountIn !== quote.quoteAmountIn || prior.quoteAmountOut !== quote.quoteAmountOut) {
+          changes.set(id, quoteRate(quote));
+        }
+      }
+      for (const id of previous.mids.keys()) {
+        if (!mids.has(id)) {
+          visited++;
+          changes.set(id, undefined);
+        }
+      }
+    }
+    const built = buildEthView(
+      edges,
+      mids,
+      signalPairsPerToken,
+      allowRepeatedPools,
+      previous,
+      touchedMode,
+      changes,
+      undefined,
+      undefined,
+      visited,
+    );
+    if (advance) {
+      recentScreen = {
+        sourceBlock: source.number,
+        sourceBlockHash: source.hash,
+        generation: source.generation,
+        signalPairsPerToken,
+        allowRepeatedPools,
+        touchedMode,
+        work: built.work,
+      };
+    }
+    return built.view;
+  };
+}
+
 function buildEthView(
   edges: readonly TokenEdge[], mids: ReadonlyMap<string, ResolvedBlockScanQuote>,
   signalPairsPerToken: number, allowRepeatedPools: boolean, previous?: EthViewWork,
@@ -129,7 +214,7 @@ function buildEthView(
     references: new DirectedRateReferenceIndex(edges, key => {
       const mid = mids.get(key); return mid && quoteRate(mid);
     }, ADDR.WETH), effective: undefined, byToken: new Map(), byId: new Map(),
-    pairs: new Map(), buy: new Map(), sell: new Map(), mids, quotePositions: new Map(),
+    pairs: new Map(), cols: new Map(), buy: new Map(), sell: new Map(), mids, quotePositions: new Map(),
   };
   const priorOutput = reusable ? work.output : undefined;
   const priorRows = reusable ? work.effective?.rows : undefined;
@@ -139,11 +224,21 @@ function buildEthView(
   const columns = new Map<string, EffectiveEthColumns | undefined>();
   const changes = new Map(reusable ? validatedChanges : undefined);
   if (!reusable || !validatedChanges) for (const item of work.topology) {
-    const mid = mids.get(item.id), prior = priorRows?.get(item.id);
-    if (!mid) {
-      if (prior) changes.set(item.id, undefined);
-    } else if (!prior || prior.amountOut !== mid.quoteAmountOut || prior.amountIn !== mid.quoteAmountIn) {
-      changes.set(item.id, quoteRate(mid));
+    const mid = mids.get(item.id);
+    if (effective) {
+      const prior = priorRows?.get(item.id);
+      if (!mid) {
+        if (prior) changes.set(item.id, undefined);
+      } else if (!prior || prior.amountOut !== mid.quoteAmountOut || prior.amountIn !== mid.quoteAmountIn) {
+        changes.set(item.id, quoteRate(mid));
+      }
+    } else {
+      const priorMid = reusable ? work.mids.get(item.id) : undefined;
+      if (!mid) {
+        if (priorMid) changes.set(item.id, undefined);
+      } else if (!priorMid || priorMid.quoteAmountOut !== mid.quoteAmountOut || priorMid.quoteAmountIn !== mid.quoteAmountIn) {
+        changes.set(item.id, quoteRate(mid));
+      }
     }
     if (!reusable) {
       if (!work.byId.has(item.id)) work.byId.set(item.id, item);
@@ -173,11 +268,12 @@ function buildEthView(
   for (const id of affected) {
     const { instance, resources, tokenIn, tokenOut, conversion } = work.byId.get(id)!;
     if (!conversion) continue;
-    const mid = mids.get(id), old = priorRows?.get(id)?.eth;
+    const mid = mids.get(id), old = effective ? priorRows?.get(id)?.eth : (reusable ? work.cols.get(id) : undefined);
     const rate = mid && quoteRate(mid);
     const mIn = marks.get(tokenIn), mOut = marks.get(tokenOut);
     if (!rate) {
       columns.set(id, undefined);
+      if (!effective) work.cols.delete(id);
       replaceContribution(id, old, undefined);
       if (old) {
         work.buy.get(tokenOut)?.delete(id); work.sell.get(tokenIn)?.delete(id);
@@ -185,18 +281,19 @@ function buildEthView(
       }
       continue;
     }
-    const reusable = old && old.quote.instance === instance && old.quote.tokenIn === tokenIn &&
+    const reusableCol = old && old.quote.instance === instance && old.quote.tokenIn === tokenIn &&
       old.quote.tokenOut === tokenOut && sameRate(old.quote, rate) &&
       sameRate(old.markIn, mIn) && sameRate(old.markOut, mOut);
-    const q: DfsQuote = reusable ? old.quote : { id, instance, ...(resources === undefined ? {} : { resources }), tokenIn, tokenOut, ...rate,
+    const q: DfsQuote = reusableCol ? old.quote : { id, instance, ...(resources === undefined ? {} : { resources }), tokenIn, tokenOut, ...rate,
       value: mIn && mOut ? { num: rate.num * mOut.num * mIn.den,
         den: rate.den * mOut.den * mIn.num } : null };
-    const entry: EffectiveEthColumns = reusable ? old : Object.freeze({ quote: q, markIn: mIn, markOut: mOut,
+    const entry: EffectiveEthColumns = reusableCol ? old : Object.freeze({ quote: q, markIn: mIn, markOut: mOut,
       buy: mIn ? { quote: q, price: { num: q.den * mIn.num, den: q.num * mIn.den } } : undefined,
       sell: mOut ? { quote: q, price: { num: q.num * mOut.num, den: q.den * mOut.den } } : undefined });
     columns.set(id, entry);
+    if (!effective) work.cols.set(id, entry);
     replaceContribution(id, old, entry);
-    if (reusable) continue;
+    if (reusableCol) continue;
     updatedQuotes++;
     dirtyTokens.add(tokenIn); dirtyTokens.add(tokenOut);
     if (entry.buy) {

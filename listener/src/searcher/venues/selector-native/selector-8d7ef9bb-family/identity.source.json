@@ -1,0 +1,13 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x8d7ef9bb",
+  "signature": "function buyGem(address, uint256)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_8D7EF9BB_ENABLED" },
+  "options": [
+    {
+      "id": "buy-gem",
+      "tokenIn": "function dai() view returns (address)",
+      "tokenOut": "function gem() view returns (address)"
+    }
+  ]
+}

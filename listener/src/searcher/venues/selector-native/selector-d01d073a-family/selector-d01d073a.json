@@ -97,5 +97,9 @@
   },
   "meta": {
     "label": "protocol:rocksolid/active-sync-deposit"
+  },
+  "directionSupport": {
+    "status": "not-applicable",
+    "reason": "syncDeposit is not a pool conversion"
   }
 }

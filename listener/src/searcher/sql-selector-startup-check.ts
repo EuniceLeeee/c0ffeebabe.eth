@@ -40,6 +40,22 @@ export interface SqlSelectorSampleResult {
   readonly status:"passed"|"stopped";readonly selector:string;readonly edgeId:string;readonly index:number;readonly total:number;
   readonly remainingUnchecked:number;readonly sourceBlock:number;readonly reason?:string;
 }
+
+/** A completed producer table, not an arbitrary representative, gates trading.
+ * Unreachable or reverting rows stay unpriced. At least one graph-owned price
+ * must come from the actual funded simulation receipt path. */
+export function assertSqlSourcePricePublication(effective:EffectiveMidSnapshot,graph:readonly TokenEdge[]):{usable:number}{
+  assert(effective.complete&&!!effectiveAmountReferences(effective)&&effective.referenceWethInput>0n,
+    "SQL startup requires a complete producer-owned price publication");
+  let usable=0;
+  for(const edge of graph){
+    const id=edge.canonicalEdgeId,r=id&&effective.rows.get(id),ref=r&&effectiveRowAmountReference(r);
+    if(!r||!ref||r.status!=="quoted"||!r.executionVerification?.variantId||!effectiveOwnsLocalExecutionReceipt(effective,r))continue;
+    if(effectiveRowExecutionVerified(effective,r,edge,ref))usable++;
+  }
+  assert(usable>0,"SQL startup has no usable funded simulation prices");
+  return {usable};
+}
 /** Consume the ordinary funded P+prefix price receipt, without a second SIM.
  * Stop at the first failed check; the tail of the plan remains unexamined. */
 export function assertSqlSelectorSamplePrices(samples:readonly SqlSelectorRepresentative[],effective:EffectiveMidSnapshot,

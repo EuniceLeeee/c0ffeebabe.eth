@@ -1,3 +1,4 @@
+import {selectorExecutionPrograms,selectorProgramProjection} from "./selector-program-role.js";
 import {createHash} from 'node:crypto';
 import {AbiCoder, FunctionFragment, Interface, keccak256, type ParamType} from 'ethers';
 import {compileSqlExecutionParamPlan,type ExecutionParamSource} from './selector-native-execution-param-plan.js';
@@ -38,7 +39,7 @@ function compileContract(def:SelectorNativeExecutionDefinition){
   const plan=compileSqlExecutionParamPlan(def);
   // Old public IDs may have a logical poolId with no namespace. Resolve the
   // context of the hint, never the edge key, from the active declaration.
-  const scopes=new Set(def.programs.flatMap(p=>[p.binding?.stateBinding?.poolNamespace,p.binding?.nomination?.poolNamespace])
+  const scopes=new Set(selectorExecutionPrograms(def).flatMap(p=>[selectorProgramProjection(p)?.stateBinding?.poolNamespace,selectorProgramProjection(p)?.nomination?.poolNamespace])
     .filter((n):n is string=>typeof n==='string'&&n.length>0));
   const unambiguousScope=scopes.size===1?[...scopes][0]:undefined;
   // These ABIs come only from the active definition, never from input rows.
@@ -47,9 +48,9 @@ function compileContract(def:SelectorNativeExecutionDefinition){
     for(const abi of [s.abi,s.signature])if(typeof abi==='string'&&!abis.has(abi)){const f=FunctionFragment.from(abi);abis.set(abi,{f,iface:new Interface([f])});}
   }
   return {abis,digest:createHash('sha256').update(JSON.stringify(def)).digest('hex'),recipes:plan.recipes.map(r=>({
-    programKey:selectorNativeProgramKey(def.programs[r.index]!),
-    scope:def.programs[r.index]!.binding?.stateBinding?.poolNamespace,
-    legacyManager:unambiguousScope!==undefined&&def.programs[r.index]!.binding?.stateBinding?.poolNamespace===unambiguousScope
+    programKey:selectorNativeProgramKey(selectorExecutionPrograms(def)[r.index]!),
+    scope:selectorProgramProjection(selectorExecutionPrograms(def)[r.index]!)?.stateBinding?.poolNamespace,
+    legacyManager:unambiguousScope!==undefined&&selectorProgramProjection(selectorExecutionPrograms(def)[r.index]!)?.stateBinding?.poolNamespace===unambiguousScope
       ?def.managerCustody?.manager.toLowerCase():undefined,
     fields:new Map(r.requirements.map(f=>[f.key,f.sources])),
   }))};
@@ -86,7 +87,7 @@ function tupleDirectionOK(p:SelectorNativeExecutionDefinition['programs'][number
   // declaring the actual input/output. An unknown path/operation does not
   // become "false" in a conditional. Treat a native side as native only when
   // the declaration says so; there is no implicit ETH == WETH conversion.
-  const descriptor=p.binding?.descriptor,dirs=p.routes?.directions;
+  const descriptor=selectorProgramProjection(p)?.descriptor,dirs=p.routes?.directions;
   if(!Array.isArray(dirs)||edge.tokenInId!=null||edge.tokenOutId!=null)return false;
   const facts=new Map<string,Atom>();
   for(const [k,val] of tuple){const base=astPath(peel(at(descriptor,k.split('.').slice(1))));if(!base?.length||base[0]!=='binding')return false;
@@ -215,10 +216,10 @@ export function validateSqlExecutionParamHints(input:{
       const values=g.types.map((_,n)=>g.values.get(n)!);
       need(keccak256(coder.encode(g.types,values))===edge.poolId,'typed tuple does not hash to this logical pool');
       const tuple=new Map<string,Atom>();for(const [n,key] of g.keys)tuple.set(key,values[n]!);
-      need(tupleDirectionOK(definition.programs[i]!,tuple,edge),'pool tuple does not establish direction assets');
+      need(tupleDirectionOK(selectorExecutionPrograms(definition)[i]!,tuple,edge),'pool tuple does not establish direction assets');
       // Later descriptor finalizers are outside the SQL compiler's pure
       // projection. A trusted semantic contradiction must not depend on them.
-      if(!definition.programs[i]!.binding?.descriptorReads)for(const [n,key] of g.keys)verifiedTuple.set(key,values[n]!);
+      if(!selectorProgramProjection(selectorExecutionPrograms(definition)[i]!)?.descriptorReads)for(const [n,key] of g.keys)verifiedTuple.set(key,values[n]!);
     }
     recipes.push(Object.freeze({index:i,programKey,observed,verifiedTuple,currentGetterChecks:currentGetterGroups(edge,fields,observed,live.abis)}));
   }

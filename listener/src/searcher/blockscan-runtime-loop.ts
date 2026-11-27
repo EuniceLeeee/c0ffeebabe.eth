@@ -3747,14 +3747,6 @@ export class BlockScanRuntimeLoop {
       candidates = coarse.opportunities.length;
       diagnostic?.onEnumeration(coarse);
       if (diagnostic?.through === "enumerate") return;
-      const requiredEdgeIds = requiredCanonicalEdgeIds(coarse.opportunities);
-      // The exact/solver session only needs Funding authority for the
-      // candidate start tokens.  Passing this bounded set avoids re-running
-      // provider reads for the entire graph when the coarse producer is
-      // already available.
-      exactFundingTokens = blockScanCandidateFundingTokens(
-        coarse.opportunities,
-      );
       if (Date.now() >= passDeadlineAtMs) {
         outcome = "budget_exceeded";
         skippedReason = "scanner_deadline";
@@ -3825,6 +3817,106 @@ export class BlockScanRuntimeLoop {
           " hash=" + (exactSourceBlockHash ?? "null").slice(0, 10) +
           " -> source=" + exactSource.number + ":" +
           exactSource.generation,
+      );
+      let probeAmountsByOpportunity = this.deps.amountReference?.prepare({
+        pricing: amountPricingSnapshot,
+        opportunities: coarse.opportunities,
+      });
+      if(probeAmountsByOpportunity && historicalStartTrialAmounts?.size &&
+          amountPricingSnapshot?.sourceBlock===exactSource.number && amountPricingSnapshot.generation===exactSource.generation &&
+          amountPricingSnapshot.sourceBlockHash.toLowerCase()===exactSource.hash.toLowerCase()){
+        const amounts=new Map(probeAmountsByOpportunity);
+        for(const o of coarse.opportunities){
+          const edge=o.seedEdges[0];if(!edge||edge.tokenIn.toLowerCase()!==o.flashToken.toLowerCase())continue;
+          const input=historicalStartTrialAmounts.get(blockScanEdgeKey(edge));
+          if(input && input===o.searchSeed.searchCenter && input<=o.searchSeed.maxInput)amounts.set(o,input);
+        }
+        probeAmountsByOpportunity=amounts;
+      }
+      console.log(`[searcher/blockscan-amount-reference] ${JSON.stringify({
+        block: blockNumber, sourceBlock: exactSource.number,
+        enumerationSpreadBps: blockScanCfg.minSpreadBps,
+        candidates: coarse.opportunities.length,
+        reference: "effective-first-edge",
+        referenceSourceBlock: amountPricingSnapshot?.sourceBlock ?? null,
+        effectiveReferences: probeAmountsByOpportunity?.size ?? 0,
+        missingReferences: coarse.opportunities.length - (probeAmountsByOpportunity?.size ?? 0),
+      })}`);
+      // Recheck before the downstream cap: in-flight work may have recorded a
+      // revert since enumeration. Earlier reverts were excluded before its cap.
+      // New simulations still respect this pass's candidate and time budgets.
+      const candidateOpportunities = coarse.opportunities.filter(opportunity => {
+        if (!this.deps.isRouteSimRejected?.(opportunity)) return true;
+        const reason = "sim_revert_seen_this_live";
+        const routeId = this.deps.formatRouteKey(opportunity);
+        const targetBlock = blockNumber + (this.deps.historicalExecutionMode === "source-block" ? 0 : 1);
+        const evidenceKey = blindOpportunityEvidenceKey(opportunity);
+        const evidence = auditOpportunities?.get(evidenceKey);
+        if (evidence) auditOpportunities!.set(evidenceKey, {
+          ...evidence, ev: { executionStatus: "not_run", decision: "reject", reason },
+        });
+        emitEvent({
+          type: "pipeline_dropped",
+          opportunity_id: makeBlockScanOpportunityId({
+            sourceBlock: blockNumber, cycleId: opportunity.cycleId,
+            startToken: opportunity.flashToken,
+            seedPools: opportunity.seedEdges.map(edge => edge.target),
+          }),
+          route_id: routeId, source_block: blockNumber, target_block: targetBlock,
+          opportunity_kind: "block-scan-arb", cycle_id: opportunity.cycleId,
+          cycle_fingerprint: opportunity.cycleFingerprint, strategy_view_used: "blockscan",
+          stage: "planner_solver", reason, plans: 0,
+        });
+        return false;
+      });
+      console.log(`[searcher/blockscan-candidate-filter] ${JSON.stringify({
+        block: blockNumber, coarseCandidates: coarse.opportunities.length,
+        enumerationSimRejected,
+        simRejected: enumerationSimRejected + coarse.opportunities.length - candidateOpportunities.length,
+        eligibleCandidates: candidateOpportunities.length, maxCandidates: blockScanCfg.maxCandidates,
+      })}`);
+      let preselectedExactOpportunities: readonly BlockScanOpportunity[] | null = null;
+      if (!exactRefineEnabled) {
+        const prepared =
+          prepareBlockScanCandidatesWithoutExactRefinement(
+            candidateOpportunities,
+            blockScanCfg.maxCandidates,
+            {
+              probeAmountsByOpportunity,
+              admissionSpreadBps:
+                blockScanCfg.exactAdmissionSpreadBps ??
+                blockScanCfg.minSpreadBps,
+              concurrency: this.deps.exactConcurrency,
+            },
+          );
+        candidates = prepared.opportunities.length;
+        console.log(
+          `[searcher/blockscan-exact-refine-skip] ${JSON.stringify({
+            block: blockNumber,
+            enabled: false,
+            amountSource: prepared.disabled.amountSource,
+            coarseCandidates: coarse.opportunities.length,
+            selected: prepared.disabled.selected,
+            rejectedMissing: prepared.disabled.rejectedMissing,
+            rejectedOverCap: prepared.disabled.rejectedOverCap,
+            rejectedAdmission: prepared.disabled.rejectedAdmission,
+            eligibleNotSelected: prepared.disabled.eligibleNotSelected,
+            maxCandidates: blockScanCfg.maxCandidates,
+            sourceBlock: exactSource.number,
+            sourceBlockHash: exactSource.hash,
+          })}`,
+        );
+        preselectedExactOpportunities = prepared.opportunities;
+      }
+      const sessionOpportunities = exactRefineEnabled
+        ? coarse.opportunities
+        : preselectedExactOpportunities!;
+      const requiredEdgeIds = requiredCanonicalEdgeIds(sessionOpportunities);
+      // The exact/solver session only needs Funding authority for the
+      // surviving candidate start tokens. Passing this bounded set avoids
+      // materializing routes for unselected coarse rings when exactRefine is off.
+      exactFundingTokens = blockScanCandidateFundingTokens(
+        sessionOpportunities,
       );
       /*
        * Exact rides the shared source-pinned transport scheduler. Its physical
@@ -3916,63 +4008,6 @@ export class BlockScanRuntimeLoop {
       const runtimeEvidence = strictSession
         .runtimeEvidenceFromPendingExecution(executionEvidence);
       const exactQuoteStateRef: StateBackend = exactQuoteState;
-      let probeAmountsByOpportunity = this.deps.amountReference?.prepare({
-        pricing: amountPricingSnapshot,
-        opportunities: coarse.opportunities,
-      });
-      if(probeAmountsByOpportunity && historicalStartTrialAmounts?.size &&
-          amountPricingSnapshot?.sourceBlock===exactSource.number && amountPricingSnapshot.generation===exactSource.generation &&
-          amountPricingSnapshot.sourceBlockHash.toLowerCase()===exactSource.hash.toLowerCase()){
-        const amounts=new Map(probeAmountsByOpportunity);
-        for(const o of coarse.opportunities){
-          const edge=o.seedEdges[0];if(!edge||edge.tokenIn.toLowerCase()!==o.flashToken.toLowerCase())continue;
-          const input=historicalStartTrialAmounts.get(blockScanEdgeKey(edge));
-          if(input && input===o.searchSeed.searchCenter && input<=o.searchSeed.maxInput)amounts.set(o,input);
-        }
-        probeAmountsByOpportunity=amounts;
-      }
-      console.log(`[searcher/blockscan-amount-reference] ${JSON.stringify({
-        block: blockNumber, sourceBlock: exactSource.number,
-        enumerationSpreadBps: blockScanCfg.minSpreadBps,
-        candidates: coarse.opportunities.length,
-        reference: "effective-first-edge",
-        referenceSourceBlock: amountPricingSnapshot?.sourceBlock ?? null,
-        effectiveReferences: probeAmountsByOpportunity?.size ?? 0,
-        missingReferences: coarse.opportunities.length - (probeAmountsByOpportunity?.size ?? 0),
-      })}`);
-      // Recheck before the downstream cap: in-flight work may have recorded a
-      // revert since enumeration. Earlier reverts were excluded before its cap.
-      // New simulations still respect this pass's candidate and time budgets.
-      const candidateOpportunities = coarse.opportunities.filter(opportunity => {
-        if (!this.deps.isRouteSimRejected?.(opportunity)) return true;
-        const reason = "sim_revert_seen_this_live";
-        const routeId = this.deps.formatRouteKey(opportunity);
-        const targetBlock = blockNumber + (this.deps.historicalExecutionMode === "source-block" ? 0 : 1);
-        const evidenceKey = blindOpportunityEvidenceKey(opportunity);
-        const evidence = auditOpportunities?.get(evidenceKey);
-        if (evidence) auditOpportunities!.set(evidenceKey, {
-          ...evidence, ev: { executionStatus: "not_run", decision: "reject", reason },
-        });
-        emitEvent({
-          type: "pipeline_dropped",
-          opportunity_id: makeBlockScanOpportunityId({
-            sourceBlock: blockNumber, cycleId: opportunity.cycleId,
-            startToken: opportunity.flashToken,
-            seedPools: opportunity.seedEdges.map(edge => edge.target),
-          }),
-          route_id: routeId, source_block: blockNumber, target_block: targetBlock,
-          opportunity_kind: "block-scan-arb", cycle_id: opportunity.cycleId,
-          cycle_fingerprint: opportunity.cycleFingerprint, strategy_view_used: "blockscan",
-          stage: "planner_solver", reason, plans: 0,
-        });
-        return false;
-      });
-      console.log(`[searcher/blockscan-candidate-filter] ${JSON.stringify({
-        block: blockNumber, coarseCandidates: coarse.opportunities.length,
-        enumerationSimRejected,
-        simRejected: enumerationSimRejected + coarse.opportunities.length - candidateOpportunities.length,
-        eligibleCandidates: candidateOpportunities.length, maxCandidates: blockScanCfg.maxCandidates,
-      })}`);
       const onRefinementDiagnostic =
         routeTelemetryPass !== null || this.deps.blind.enabled
           ? (diagnostic: BlockScanProbeDiagnostic) => {
@@ -4065,36 +4100,7 @@ export class BlockScanRuntimeLoop {
             : refinement.opportunities;
         }
       } else {
-        const prepared =
-          prepareBlockScanCandidatesWithoutExactRefinement(
-            candidateOpportunities,
-            blockScanCfg.maxCandidates,
-            {
-              probeAmountsByOpportunity,
-              admissionSpreadBps:
-                blockScanCfg.exactAdmissionSpreadBps ??
-                blockScanCfg.minSpreadBps,
-              concurrency: this.deps.exactConcurrency,
-            },
-          );
-        candidates = prepared.opportunities.length;
-        console.log(
-          `[searcher/blockscan-exact-refine-skip] ${JSON.stringify({
-            block: blockNumber,
-            enabled: false,
-            amountSource: prepared.disabled.amountSource,
-            coarseCandidates: coarse.opportunities.length,
-            selected: prepared.disabled.selected,
-            rejectedMissing: prepared.disabled.rejectedMissing,
-            rejectedOverCap: prepared.disabled.rejectedOverCap,
-            rejectedAdmission: prepared.disabled.rejectedAdmission,
-            eligibleNotSelected: prepared.disabled.eligibleNotSelected,
-            maxCandidates: blockScanCfg.maxCandidates,
-            sourceBlock: exactSource.number,
-            sourceBlockHash: exactSource.hash,
-          })}`,
-        );
-        exactOpportunities = prepared.opportunities;
+        exactOpportunities = preselectedExactOpportunities;
       }
       if (exactOpportunities === null) return;
       if (!exactRefineEnabled) {

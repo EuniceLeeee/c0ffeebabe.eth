@@ -7,6 +7,8 @@ import {blockScanEdgeKey} from "./venues/blockscan-state-capability.js";
 
 export interface SqlStartupPriceTrials {
   readonly ids:ReadonlySet<string>;
+  /** Lazy source-template variant IDs per SQL leg, resolved via paidAliases after strict prepareQuote. */
+  readonly templateVariants?:ReadonlyMap<string,string>;
   /** Quotes, not execution authorities. Recompile for this source/executor. */
   atSource(id:string,source:CanonicalSource):{
     readonly tokenIn:string;readonly tokenOut:string;readonly complete:boolean;
@@ -23,6 +25,7 @@ export function startupPriceSessions(input:{
   const {strict,trials}=input;
   if(!trials)return strict;
   const directSessions=new Map<string,StartupQuoteLegSession>();
+  const templateSessions=new Map<string,StartupQuoteLegSession>();
   return {
     prepareQuote:async(ids)=>{
       const required=new Set([...ids].filter(id=>!trials.ids.has(id)));
@@ -30,7 +33,26 @@ export function startupPriceSessions(input:{
     },
     sessionFor:(edge)=>{
       const id=blockScanEdgeKey(edge);
-      if(!trials.ids.has(id))return strict.sessionFor(edge);
+      if(!trials.ids.has(id)){
+        const templateVariant=trials.templateVariants?.get(id);
+        if(!templateVariant)return strict.sessionFor(edge);
+        const cached=templateSessions.get(id);if(cached)return cached;
+        const underlying=strict.sessionFor(edge);
+        const wrapped:StartupQuoteLegSession={
+          executionVariantIds:(e)=>{
+            const bound=underlying.executionVariantIds?.(e)??[];
+            return bound.length>0?[templateVariant]:[];
+          },
+          buildRuntimeAmountLeg:(req)=>underlying.buildRuntimeAmountLeg({
+            ...req,
+            variantId:req.variantId??templateVariant,
+          }),
+          confirmExecutionVariant:(e,variant)=>underlying.confirmExecutionVariant(e,variant),
+          ...(underlying.hasUnresolvedVariants?{hasUnresolvedVariants:(e)=>underlying.hasUnresolvedVariants!(e)}:{}),
+        };
+        templateSessions.set(id,wrapped);
+        return wrapped;
+      }
       const old=directSessions.get(id);if(old)return old;
       const current=trials.atSource(id,input.source);
       assert(edge.tokenIn.toLowerCase()===current.tokenIn&&edge.tokenOut.toLowerCase()===current.tokenOut,"SQL trial graph differs from edge");

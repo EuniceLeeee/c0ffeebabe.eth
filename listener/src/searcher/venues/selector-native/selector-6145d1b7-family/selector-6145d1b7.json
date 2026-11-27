@@ -470,5 +470,9 @@
   },
   "meta": {
     "label": "protocol:token-conversion/xwin-allocations-v1"
+  },
+  "directionSupport": {
+    "status": "not-applicable",
+    "reason": "withdraw(uint256,uint32) is staking/vesting, not a pool conversion"
   }
 }

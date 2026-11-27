@@ -9,6 +9,8 @@
     "build:enumerator": "node --import tsx build-rust-enumerator.mjs",
     "searcher:rust-enumeration": "node --import tsx src/searcher/test/blockscan-rust-enumeration.ts",
     "build:live": "tsc -p tsconfig.live.json --noEmit",
+    "prebuild:live": "npm run --silent selector-sources:check",
+    "selector-sources:check": "node --import tsx src/searcher/check-selector-sources.ts",
     "check:simulation-routes": "tsc -p tsconfig.simulation-routes.json --noEmit",
     "test:simulation-fallback": "node --import tsx --test src/searcher/test/observed-call-*.test.ts src/searcher/test/observed-execution-*.test.ts src/searcher/test/adapter-family-route-preview.test.ts",
     "benchmark:enumeration": "node --max-old-space-size=2048 --import tsx benchmarks/enumeration.ts",

@@ -2,6 +2,9 @@ import { fileURLToPath } from "node:url";
 import { definedFamilyPluginContractSummary } from "../venues/adapter-family-plugin.js";
 import { defineSelectorFamilyModule } from "../venues/selector-family-module.js";
 import { normalizeSelectorNativeExecutionDefinition } from "../venues/selector-native-definition.js";
+import { selectSingleExecution } from "../venues/selector-program-role.js";
+import { readSelectorSourceIdentity, createSelectorIdentityRequestReader } from "../venues/selector-source-identity.js";
+import { selectorNativeSourceIdentityCandidate } from "../venues/selector-native-discovery.js";
 import { hashCanonical } from "../venues/canonical-value.js";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -189,7 +192,9 @@ test("native selector EVM binds Ready without SIM, prices once through funded st
     // These local contracts implement one exact production recipe. Additional
     // recipes sharing its ABI are covered by the alternative-candidate case
     // below; they must not silently turn this focused fixture into another one.
-    const definition = normalizeSelectorNativeExecutionDefinition({ ...authored, programs: [authored.programs[0]] });
+    const definition = authored.directState
+      ? authored
+      : normalizeSelectorNativeExecutionDefinition({ ...authored, programs: [authored.programs[0]] });
     const plugin = defineSelectorFamilyModule(definition).plugin, familyId = plugin.manifest.familyId;
     const entries = FAMILY_CAPABILITY_NAMES.map(capability => ({ familyId, capability, contractVersion: "selector-family-evm-v2",
       contentHash: hashCanonical({ capability, signature: definition.signature }), semanticDependencies: [`contract:${capability}`], provenanceCommit: null }));
@@ -197,9 +202,39 @@ test("native selector EVM binds Ready without SIM, prices once through funded st
       definitionBoundaryHash: definedFamilyPluginContractSummary(plugin).definitionBoundaryHash }],
       generatedManifest: { format: "adapter-family-capabilities-v1", entries, manifestHash: capabilityManifestHash(entries) } });
     const family = asPricedFamily(catalog.forFamily(familyId)), census = censuses[index]!;
-    const observation: UnifiedObservation = { kind: "call", source, evidenceSource: { number: census.blockNumber!, hash: census.blockHash!, generation: 1 },
-      target: row.target, sender: oldAddress, data: census.calls[0]!.calldata!, transactionHash: census.transactionHash!,
-      opaque: { selectorCensus: census, callId: census.calls[0]!.id } as any };
+    let observation: UnifiedObservation;
+    if (definition.directState) {
+      const daiAddr = (await dai.getAddress()).toLowerCase(), gemAddr = (await gem.getAddress()).toLowerCase();
+      const sqlEdge = { chainId: 1 as const, selector: definition.selector, poolAddress: row.target, tokenIn: daiAddr, tokenOut: gemAddr };
+      const idRes = await readSelectorSourceIdentity({
+        definition, edge: sqlEdge, source,
+        readRequests: createSelectorIdentityRequestReader({
+          source,
+          read: (to, data) => provider.send("eth_call", [{ to, data }, pin]),
+          readCode: at => provider.send("eth_getCode", [at, pin]),
+        }),
+      });
+      assert.equal(idRes.matches.length, 1, idRes.issues.join("; "));
+      const candidate = selectorNativeSourceIdentityCandidate(definition, idRes.matches[0]!, sqlEdge, source, selectSingleExecution(definition).programKey);
+      assert(candidate && plugin.discovery.reverseBinding?.kind === "implementation");
+      const channel = await plugin.discovery.reverseBinding.reverseBinding({
+        source,
+        provider: {
+          call: ({ blockTag, ...tx }: any, n?: number) => { assert.equal(blockTag ?? n, source.number); return provider.send("eth_call", [tx, pin]); },
+          getCode: (address: string, n?: number) => { assert.equal(n, source.number); return provider.send("eth_getCode", [address, pin]); },
+          getStorage: (address: string, slot: string, n?: number) => { assert.equal(n, source.number); return provider.send("eth_getStorageAt", [address, slot, pin]); },
+          getLogs: async () => [],
+          getTransactionReceipt: async () => null,
+        } as any,
+        nominations: [{ address: candidate.target, opaque: candidate as any }],
+      });
+      assert.equal(channel.length, 1); assert.equal(channel[0]!.status, "verified");
+      observation = channel[0]!.observation;
+    } else {
+      observation = { kind: "call", source, evidenceSource: { number: census.blockNumber!, hash: census.blockHash!, generation: 1 },
+        target: row.target, sender: oldAddress, data: census.calls[0]!.calldata!, transactionHash: census.transactionHash!,
+        opaque: { selectorCensus: census, callId: census.calls[0]!.id } as any };
+    }
     const beforeReady = strictSimulations;
     const publication = await runStrictFamilyLifecycle({ catalog, familyId, source, observations: [observation], runtime });
     assert.equal(publication.instances.length, 1, stringify(publication.outcomes));

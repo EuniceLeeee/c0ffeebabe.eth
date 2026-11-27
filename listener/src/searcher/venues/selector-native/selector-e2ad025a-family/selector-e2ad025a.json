@@ -20851,5 +20851,44 @@
         "label": "curve-underlying/ng-factory-execution-sim"
       }
     }
-  ]
+  ],
+  "directionSupport": {
+    "version": 1,
+    "options": [
+      {
+        "query": [
+          {
+            "id": "tokens",
+            "method": "underlying_coins(uint256)",
+            "from": 0,
+            "count": 8
+          }
+        ]
+      },
+      {
+        "query": [
+          {
+            "id": "tokens",
+            "method": "underlying_coins(int128)",
+            "from": 0,
+            "count": 8
+          }
+        ]
+      },
+      {
+        "query": [
+          {
+            "id": "tokens",
+            "method": "coins(uint256)",
+            "from": 0,
+            "count": 8
+          }
+        ]
+      }
+    ],
+    "confirm": {
+      "in": "$edge.tokenIn",
+      "out": "$edge.tokenOut"
+    }
+  }
 }

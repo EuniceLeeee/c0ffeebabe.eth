@@ -1,3 +1,4 @@
+import {selectorExecutionPrograms,selectorProgramProjection} from "./selector-program-role.js";
 import { FunctionFragment, Interface, ZeroAddress, getAddress, keccak256 } from "ethers";
 import { types } from "node:util";
 import { getEthersCallRpcError } from "../rpc-throttle-guard.js";
@@ -50,7 +51,7 @@ function getterDecoder(expr:any,alias:string,signature:string,id:string){
   return wrappers.reduceRight<unknown>((value,op)=>({op,args:[value]}),"$decoded");
 }
 function shape(def:SelectorNativeExecutionDefinition,p:SelectorNativeProgram){
-  const binding=p.binding, routes=p.routes, exec=p.execution;
+  const binding=selectorProgramProjection(p), routes=p.routes, exec=p.execution;
   need(def.domain==="swap"&&exec&&!p.parameters&&!p.runtimeEvidence&&!p.state&&!p.context&&!p.receiptChecks&&!p.ethCall&&!p.dependencies&&!p.payment,
     "requires signed, observed, stateful or non-direct execution evidence");
   need(binding&&only(binding,"facts","descriptor","flow","nomination")&&only(binding.facts as Row),"requires additional binding or identity evidence");
@@ -177,13 +178,13 @@ export async function compileEdgePriceLegs(input:EdgePriceInput):Promise<{legs:L
   const issues:string[]=[],legs:Leg[]=[],invalid=(reason:string)=>({legs:[],issues:[reason]});
   const plan=registryPlan(definition);
   if(edge.selector!==definition.selector||plan.selector!==edge.selector)return invalid("edge selector differs from declared entry");
-  if(definition.unsupportedReason||!definition.programs.length)return invalid("no executable template for selector");
+  if(definition.unsupportedReason||!selectorExecutionPrograms(definition).length)return invalid("no executable template for selector");
   if([edge.poolId,edge.poolNamespace,edge.tokenInId,edge.tokenOutId].some(v=>v!=null))return invalid("logical pool, namespace or token IDs require another projection");
   let target:string,tokenIn:string,tokenOut:string;
   try{target=address(edge.poolAddress);tokenIn=address(edge.tokenIn);tokenOut=address(edge.tokenOut);}catch{return invalid("invalid edge address");}
   if([target,tokenIn,tokenOut].includes(ZeroAddress)||new Set([target,tokenIn,tokenOut,executor]).size!==4)return invalid("native or non-distinct address-pair inputs");
   const scope={tokenIn,tokenOut},ctx={target,scope,source,executor,transactionOrigin},cache=new Map<string,string>(),codes=new Map<string,string>();
-  for(const p of definition.programs){
+  for(const p of selectorExecutionPrograms(definition)){
     const info=programShape(plan,definition,p),key=info.key;
     if("issue" in info){issues.push(key+": "+info.issue);continue;}
     try{
@@ -221,8 +222,8 @@ export async function compileEdgePriceLegs(input:EdgePriceInput):Promise<{legs:L
         }
         steps[flow.stepIds[1]!]=tokenCode;
       }
-      const binding=rt.values.evaluate(p.binding!.flow!.result,{...ctx,steps});
-      const descriptor=rt.resources.evaluate(p.binding!.descriptor,{...ctx,binding,facts:{}});
+      const binding=rt.values.evaluate(selectorProgramProjection(p)!.flow!.result,{...ctx,steps});
+      const descriptor=rt.resources.evaluate(selectorProgramProjection(p)!.descriptor,{...ctx,binding,facts:{}});
       const env=rt.environment({...ctx,descriptor});need(address(env.target)===target,"execution target differs from pool");
       rt.resources.run(p.routes!.checks??[],env);
       const directions=rt.resources.evaluate(p.routes!.directions,env) as Row[];

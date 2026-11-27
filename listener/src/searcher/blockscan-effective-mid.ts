@@ -4,7 +4,7 @@ import { gasReferenceInput } from "./blockscan-amount-reference.js";
 import type { StrictProductionRuntimeSession } from "./strict-production-runtime-session.js";
 import type { CanonicalSource } from "./venues/adapter-request-program.js";
 import { blockScanEdgeKey, type VerifiedGraphView } from "./venues/blockscan-state-capability.js";
-import { edgeInstanceKey } from "./venues/route-instance-identity.js";
+import { edgeInstanceKey, explicitStateResourceKeys } from "./venues/route-instance-identity.js";
 import type { AdapterWorkControl } from "./adapter-work-intent.js";
 import type { BlockScanStateSnapshot } from "./blockscan-state-coordinator.js";
 import type { ResolvedBlockScanQuote } from "./detector/blockscan-scanner-core.js";
@@ -903,22 +903,40 @@ export async function buildEffectiveMids(input: {
     return !input.disabledEdgeIds?.has(edgeId) &&
       (!edge.leavesStandingPosition || pricing.pricingStateKeyByEdgeKey?.has(edgeId));
   };
+  const reuseEmptyTombstone = (
+    index: number,
+    prior: EffectiveMidRow | undefined,
+    edgeId: string,
+    edge: TokenEdge,
+    status: "disabled-for-run" | "missing-valuation" | "unsupported",
+  ): boolean => {
+    if (
+      prior?.status === status && Object.isFrozen(prior) &&
+      prior.edgeId === edgeId && prior.instanceKey === edgeInstanceKey(edge) &&
+      prior.tokenIn === edge.tokenIn.toLowerCase() && prior.tokenOut === edge.tokenOut.toLowerCase() &&
+      prior.amountIn === null && prior.amountOut === null && prior.effectiveMid === null &&
+      prior.quotedAt === undefined && prior.carried === undefined && prior.failureEvidence === undefined &&
+      prior.eth === undefined && prior.enumeration === undefined && !rowAmountReferences.has(prior)
+    ) {
+      storeRow(index, prior);
+      return true;
+    }
+    return false;
+  };
   for (const [index, { edgeId, edge }] of work.entries()) {
     if (input.disabledEdgeIds?.has(edgeId)) {
       // The current run's exclusion is authoritative even when the pool is
       // touched. Reuse only the identical empty tombstone, never an old quote
       // or amount lineage; otherwise unchanged exclusions become native edits.
       const prior = canReuse ? previous.rows.get(edgeId) : undefined;
-      if (prior?.status === "disabled-for-run" && Object.isFrozen(prior) &&
-          prior.edgeId === edgeId && prior.instanceKey === edgeInstanceKey(edge) &&
-          prior.tokenIn === edge.tokenIn.toLowerCase() && prior.tokenOut === edge.tokenOut.toLowerCase() &&
-          prior.amountIn === null && prior.amountOut === null && prior.effectiveMid === null &&
-          prior.quotedAt === undefined && prior.carried === undefined && prior.failureEvidence === undefined &&
-          prior.eth === undefined && prior.enumeration === undefined && !rowAmountReferences.has(prior)) {
-        storeRow(index, prior);
-      } else unavailable(index, "disabled-for-run");
+      if (!reuseEmptyTombstone(index, prior, edgeId, edge, "disabled-for-run")) {
+        unavailable(index, "disabled-for-run");
+      }
     } else if (edge.leavesStandingPosition && !pricing.pricingStateKeyByEdgeKey?.has(edgeId)) {
-      unavailable(index, "unsupported");
+      const prior = canReuse ? previous.rows.get(edgeId) : undefined;
+      if (!reuseEmptyTombstone(index, prior, edgeId, edge, "unsupported")) {
+        unavailable(index, "unsupported");
+      }
     }
     else if (closed()) unavailable(index, "cancelled");
     else {
@@ -942,7 +960,9 @@ export async function buildEffectiveMids(input: {
               kind:"historical-ranking-only",edgeId,instanceKey:prior!.instanceKey,tokenIn:prior!.tokenIn,tokenOut:prior!.tokenOut,
               amountIn:prior!.amountIn!,amountOut:prior!.amountOut!,effectiveMid:prior!.effectiveMid!,quotedAt:prior!.quotedAt!,
               receiptHash:proof!.receiptHash,variantId:proof!.variantId!})});
-          unavailable(index,"missing-valuation");
+          if (!reuseEmptyTombstone(index, prior, edgeId, edge, "missing-valuation")) {
+            unavailable(index,"missing-valuation");
+          }
         }
         continue;
       }
@@ -985,18 +1005,71 @@ export async function buildEffectiveMids(input: {
     }
   }
 
+  const edgeExplicitResCache = new WeakMap<TokenEdge, readonly string[] | null>();
+  const edgeExplicitRes = (e: TokenEdge): readonly string[] | null => {
+    let r = edgeExplicitResCache.get(e);
+    if (r !== undefined) return r;
+    r = explicitStateResourceKeys(e) ?? null;
+    edgeExplicitResCache.set(e, r);
+    return r;
+  };
+  const referenceSharesExplicitResource = (ref: EffectiveAmountReference | undefined, targetEdge: TokenEdge): boolean => {
+    if (!ref || ref.path.length === 0) return false;
+    const targetRes = edgeExplicitRes(targetEdge);
+    if (!targetRes || targetRes.length === 0) return false;
+    for (let i = 0; i < ref.path.length; i++) {
+      const stepEdge = edges.get(ref.path[i]!.edgeId);
+      if (!stepEdge) continue;
+      const stepRes = edgeExplicitRes(stepEdge);
+      if (!stepRes) continue;
+      for (let j = 0; j < stepRes.length; j++) {
+        if (targetRes.includes(stepRes[j]!)) return true;
+      }
+    }
+    return false;
+  };
   const references = new Map<string, EffectiveAmountReference>([[weth,
     Object.freeze({ amountIn: referenceWethInput, path: Object.freeze([]) })]]);
   const pending = Array.from({ length: samplingDepthLimit + 1 }, () => new Map<string, EffectiveAmountReference>());
+  const altByToken = new Map<string, EffectiveAmountReference[]>();
+  const pendingAlts = Array.from({ length: samplingDepthLimit + 1 }, () => new Map<string, EffectiveAmountReference[]>());
+  const deferredSelfResource = new Map<string, number[]>();
+  const betterReference = (a: EffectiveAmountReference, b: EffectiveAmountReference): boolean =>
+    a.amountIn > b.amountIn || (a.amountIn === b.amountIn &&
+      a.path.map(row => row.edgeId).join("\n") < b.path.map(row => row.edgeId).join("\n"));
   const offer = (token: string, reference: EffectiveAmountReference) => {
-    if (references.has(token) || reference.path.length === 0 || reference.path.length > samplingDepthLimit) return;
-    const candidates = pending[reference.path.length]!;
-    const prior = candidates.get(token);
-    // Equal outputs use the complete edge path, independent of graph ordering
-    // and asynchronous quote completion.
-    if (!prior || reference.amountIn > prior.amountIn || (reference.amountIn === prior.amountIn &&
-        reference.path.map(row => row.edgeId).join("\n") < prior.path.map(row => row.edgeId).join("\n"))) {
-      candidates.set(token, reference);
+    if (reference.path.length === 0 || reference.path.length > samplingDepthLimit) return;
+    if (!references.has(token)) {
+      const candidates = pending[reference.path.length]!;
+      const prior = candidates.get(token);
+      // Equal outputs use the complete edge path, independent of graph ordering
+      // and asynchronous quote completion.
+      if (!prior || betterReference(reference, prior)) {
+        candidates.set(token, reference);
+      }
+    }
+    if (!references.has(token) || deferredSelfResource.has(token)) {
+      const altBucket = pendingAlts[reference.path.length]!;
+      const list = altBucket.get(token) ?? [];
+      const lastEdge = edges.get(reference.path[reference.path.length - 1]!.edgeId);
+      const lastResKey = lastEdge ? (edgeExplicitRes(lastEdge)?.[0] ?? lastEdge.canonicalEdgeId ?? "") : "";
+      const existingIdx = list.findIndex(r => {
+        const re = edges.get(r.path[r.path.length - 1]!.edgeId);
+        return (re ? (edgeExplicitRes(re)?.[0] ?? re.canonicalEdgeId ?? "") : "") === lastResKey;
+      });
+      if (existingIdx >= 0) {
+        if (betterReference(reference, list[existingIdx]!)) list[existingIdx] = reference;
+      } else if (list.length < 4) {
+        list.push(reference);
+      } else {
+        let worstIdx = 0;
+        for (let i = 1; i < list.length; i++) {
+          if (betterReference(list[worstIdx]!, list[i]!)) worstIdx = i;
+        }
+        if (betterReference(reference, list[worstIdx]!)) list[worstIdx] = reference;
+      }
+      list.sort((a, b) => (betterReference(a, b) ? -1 : 1));
+      altBucket.set(token, list);
     }
   };
   const offerOutput = (row: EffectiveMidRow, reference: EffectiveAmountReference) => {
@@ -1063,7 +1136,13 @@ export async function buildEffectiveMids(input: {
   const rankOnly=new Map<string,RankingEntry>();
   for(const [i,entry] of rankingCandidates){
     if(bridges.has(entry.hint.edgeId))continue;
-    if(!poolClean.has(i))unavailable(i,"missing-valuation");seededClean.add(i);rankOnly.set(entry.hint.edgeId,entry);
+    if(!poolClean.has(i)){
+      const prior = canReuse ? previous.rows.get(entry.hint.edgeId) : undefined;
+      if (!reuseEmptyTombstone(i, prior, entry.hint.edgeId, entry.edge, "missing-valuation")) {
+        unavailable(i,"missing-valuation");
+      }
+    }
+    seededClean.add(i);rankOnly.set(entry.hint.edgeId,entry);
   }
   // Proposals do not enter `references`, `pending`, or verifiedExecutions. Only the normal
   // current-source funded prefix+target simulation can turn them into an observed amount.
@@ -1071,15 +1150,30 @@ export async function buildEffectiveMids(input: {
   const paidChoices=new Map<string,Map<string,EffectiveAmountReference>>();
   // Same target/source and same WETH seed, ordered edges and private encodings produce the
   // same replay. A shared downstream pool reached through another prefix is NOT the same trial.
-  const planKey=(r:EffectiveAmountReference,hops=r.path.length)=>JSON.stringify([String(r.path[0]?.amountIn??r.amountIn),
-    ...r.path.slice(0,hops).map(s=>[s.edgeId,s.executionVerification?.variantId??null])]);
+  const planKey=(r:EffectiveAmountReference,hops=r.path.length)=>{
+    let out = String(r.path[0]?.amountIn ?? r.amountIn);
+    const limit = Math.min(hops, r.path.length);
+    for (let i = 0; i < limit; i++) {
+      const s = r.path[i]!;
+      out += "\u001f" + s.edgeId + "\u001e" + (s.executionVerification?.variantId ?? "");
+    }
+    return out;
+  };
   if(poolPlan&&poolDirty.size){
     const wanted=new Set([...poolDirty].map(i=>work[i]!.edge.tokenIn.toLowerCase()));
+    const hasSimpleTokens=(path:readonly EffectiveMidRow[]):boolean=>{
+      for(let i=0;i<path.length;i++){
+        const t=path[i]!.tokenOut;
+        if(t===weth)return false;
+        for(let j=0;j<i;j++)if(path[j]!.tokenOut===t)return false;
+      }
+      return true;
+    };
     const propose=(token:string,ref:EffectiveAmountReference)=>{
       if(token===weth||!wanted.has(token)||!ref.path.length||ref.path.length>samplingDepthLimit||
-        ref.path[0]!.tokenIn!==weth||ref.path[0]!.amountIn!==referenceWethInput||ref.path.at(-1)!.tokenOut!==token||
+        ref.path[0]!.tokenIn!==weth||ref.path[0]!.amountIn!==referenceWethInput||ref.path[ref.path.length-1]!.tokenOut!==token||
         ref.path.some(s=>!edges.has(s.edgeId)||input.disabledEdgeIds?.has(s.edgeId)||edges.get(s.edgeId)!.leavesStandingPosition)||
-        new Set([weth,...ref.path.map(s=>s.tokenOut)]).size!==1+ref.path.length)return;
+        !hasSimpleTokens(ref.path))return;
       const prior=proposals.get(token);
       if(!prior||ref.path.length<prior.path.length||(ref.path.length===prior.path.length&&ref.amountIn>prior.amountIn))proposals.set(token,ref);
       const choices=paidChoices.get(token)??new Map<string,EffectiveAmountReference>();paidChoices.set(token,choices);
@@ -1087,11 +1181,21 @@ export async function buildEffectiveMids(input: {
     };
     if(!oldRanking?.restoredPoolOrigins)for(const [t,ref]of previousState!.references)propose(t,ref);
     for(const r of requestedOrigins!.values()){
-      const ref=rowAmountReferences.get(r)!;propose(r.tokenIn,ref);
+      const ref=rowAmountReferences.get(r)!;
+      if(wanted.has(r.tokenIn))propose(r.tokenIn,ref);
       if(wanted.has(r.tokenOut)&&r.amountOut!==null&&ref.path.length<samplingDepthLimit)
         propose(r.tokenOut,{amountIn:r.amountOut,path:[...ref.path,r]});
     }
-    for(const i of poolDirty){const p=proposals.get(work[i]!.edge.tokenIn.toLowerCase());if(p)proposedAt[p.path.length]!.push(i);}
+    for(const i of poolDirty){
+      const token=work[i]!.edge.tokenIn.toLowerCase();
+      let p=proposals.get(token);
+      if(p&&referenceSharesExplicitResource(p,work[i]!.edge)){
+        p=[...(paidChoices.get(token)?.values()??[])]
+          .filter(r=>!referenceSharesExplicitResource(r,work[i]!.edge))
+          .sort((a,b)=>a.path.length-b.path.length||(b.amountIn>a.amountIn?1:b.amountIn<a.amountIn?-1:0))[0];
+      }
+      if(p)proposedAt[p.path.length]!.push(i);
+    }
   }
   if (!input.cascadeAmountChanges) {
     // With cascading off, clean tuples remain historical samples. Their
@@ -1101,7 +1205,7 @@ export async function buildEffectiveMids(input: {
     // rather than the current frontier depth, determines shortest-path rank.
     for (const [index, row] of reusable) {
       const reference = rowAmountReferences.get(row);
-      if (!reference || !reference.path.every(step => {
+      if (!reference || referenceSharesExplicitResource(reference, work[index]!.edge) || !reference.path.every(step => {
         const edge = edges.get(step.edgeId);
         return edge && !edge.leavesStandingPosition && !input.disabledEdgeIds?.has(step.edgeId) &&
           step.instanceKey === edgeInstanceKey(edge) &&
@@ -1140,15 +1244,57 @@ export async function buildEffectiveMids(input: {
         for (const index of workByToken.get(token) ?? []) layer.push(index);
       }
     }
+    for (const [token, refs] of pendingAlts[depth]!) {
+      const list = altByToken.get(token) ?? [];
+      for (const r of refs) {
+        if (list.length < 8 && !list.includes(r)) list.push(r);
+      }
+      if (list.length > 0) altByToken.set(token, list);
+      const waiting = deferredSelfResource.get(token);
+      if (waiting && waiting.length > 0) {
+        const stillWaiting: number[] = [];
+        for (const idx of waiting) {
+          if (list.some(r => !referenceSharesExplicitResource(r, work[idx]!.edge))) {
+            layer.push(idx);
+          } else {
+            stillWaiting.push(idx);
+          }
+        }
+        if (stillWaiting.length > 0) deferredSelfResource.set(token, stillWaiting);
+        else deferredSelfResource.delete(token);
+      }
+    }
     if(poolPlan)layer=[...new Set([...layer,...proposedAt[depth]!])].filter(i=>!rows[i]);
     // Preserve graph order within a layer, including preparation/dispatch order.
     layer.sort((a, b) => a - b);
-    frontierDirections += layer.length;
+    const activeLayer: number[] = [];
     const fresh: number[] = [];
     for (const index of layer) {
       const item = work[index]!;
       const token=item.edge.tokenIn.toLowerCase();
-      const reference = references.get(token)??proposals.get(token)!;
+      let reference: EffectiveAmountReference | undefined = references.get(token)??proposals.get(token);
+      if (!reference || referenceSharesExplicitResource(reference, item.edge)) {
+        const alt = (altByToken.get(token) ?? []).find(r => !referenceSharesExplicitResource(r, item.edge))
+          ?? (poolPlan
+            ? [...(paidChoices.get(token)?.values() ?? [])]
+                .filter(r => !referenceSharesExplicitResource(r, item.edge))
+                .sort((a, b) => a.path.length - b.path.length || (b.amountIn > a.amountIn ? 1 : b.amountIn < a.amountIn ? -1 : 0))[0]
+            : undefined);
+        if (alt) {
+          reference = alt;
+        } else {
+          if (!poolPlan && depth < samplingDepthLimit) {
+            const waiting = deferredSelfResource.get(token);
+            if (waiting) waiting.push(index); else deferredSelfResource.set(token, [index]);
+          } else {
+            frontierDirections++;
+            unavailable(index, "missing-valuation");
+          }
+          continue;
+        }
+      }
+      frontierDirections++;
+      activeLayer.push(index);
       const bridge = bridges.has(item.edgeId) ? rankingCandidates.get(index) : undefined;
       if (bridge && !closed()) {
         // Only a market-clean ranking sample reserved for funding can use this.
@@ -1166,12 +1312,12 @@ export async function buildEffectiveMids(input: {
       item.reference = reference;
       item.amountIn = item.reference.amountIn;
       const prior = reusable.get(index);
-      if (prior && prior.amountIn !== null &&
+      if (prior && prior.amountIn !== null && !referenceSharesExplicitResource(rowAmountReferences.get(prior), item.edge) &&
           (!input.cascadeAmountChanges || prior.amountIn === item.amountIn)) storeRow(index, prior, true);
       else if (closed()) unavailable(index, "cancelled");
       else fresh.push(index);
     }
-    const wave = diagnostic ? { depth, directions: layer.length, fresh: fresh.length,
+    const wave = diagnostic ? { depth, directions: activeLayer.length, fresh: fresh.length,
       planningMs: Math.max(0, performance.now() - planningStartedAt),
       sessionPrepareMs: 0, quoteWorkMs: 0, propagationMs: 0 } : undefined;
     if (wave) diagnostic!.waves.push(wave);
@@ -1215,6 +1361,7 @@ export async function buildEffectiveMids(input: {
             if(hop<0){failed(index,error,observation.revertedResults);break;}
             (blocked??=new Set()).add(planKey(request.reference,hop+1));
             alternatives??=[...(paidChoices.get(item.edge.tokenIn.toLowerCase())?.values()??[])]
+              .filter(r=>!referenceSharesExplicitResource(r,item.edge))
               .sort((a,b)=>b.path.length-a.path.length||(a.amountIn>b.amountIn?1:a.amountIn<b.amountIn?-1:0));
             let alt:EffectiveAmountReference|undefined;
             while(alternatives.length&&!closed()){
@@ -1237,7 +1384,7 @@ export async function buildEffectiveMids(input: {
     finally { if (wave) wave.quoteWorkMs = Math.max(0, performance.now() - quoteStartedAt -
       (diagnostic!.progressCallbackMs - quoteReportMs)); }
     const propagationStartedAt = wave ? performance.now() : 0;
-    for (const index of layer) {
+    for (const index of activeLayer) {
       const row = rows[index]!;
       const reference = input.cascadeAmountChanges ? work[index]!.reference : rowAmountReferences.get(row);
       if (reference) offerOutput(row, reference);

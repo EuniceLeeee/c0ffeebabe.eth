@@ -18,6 +18,7 @@ import { GENERATED_PRODUCTION_FAMILY_ENTRIES } from "./generated/production-fami
 import { selectorExecutionResourceKey } from "./venues/selector-execution-keys.js";
 import type { CanonicalEdgeId } from "./venues/blockscan-state-capability.js";
 import { deriveEdgeTaxonomy } from "./strategy-taxonomy.js";
+import type { PoolActivityRule } from "./pool-leg-refresh.js";
 
 export const sqlSelectorModules: ReadonlyMap<string,(typeof GENERATED_PRODUCTION_FAMILY_ENTRIES)[number]["module"]["selectorFamilyModule"]> =
   new Map(GENERATED_PRODUCTION_FAMILY_ENTRIES.map(e => {
@@ -62,6 +63,8 @@ export interface SqlLiveMaterializedRoute {
   readonly programKey: string;
 }
 
+const verifiedFundingBindingCache = new WeakMap<StrictReadyFundingAsset, string>();
+
 /** Build the existing live graph/root. This producer owns neither a head loop
  * nor a price solver, and cannot submit, sign or issue a Ready checkpoint. */
 export function buildSqlEdgeLiveProducer(input: {
@@ -74,6 +77,8 @@ export function buildSqlEdgeLiveProducer(input: {
   readonly materialized: readonly SqlLiveMaterializedRoute[];
   readonly unavailable: readonly {readonly sqlEdgeKey:string; readonly reason:string}[];
   readonly trialMarkets?:ReadonlyMap<string,SqlTrialMarket>;
+  readonly retainedUnavailableMarkets?:ReadonlyMap<string,SqlTrialGraphMetadata>;
+  readonly runtimeRootOnly?: boolean;
 }) {
   const { source,edges,swapTableSha256,fundingAssets,fundingTableSha256,materialized,unavailable } = input;
   assert(Number.isSafeInteger(input.currentHead) && input.currentHead >= source.number, "SQL topology is ahead of the current source");
@@ -82,9 +87,15 @@ export function buildSqlEdgeLiveProducer(input: {
   assert(fundingAssets.length > 0, "SQL live input has no funding source");
   const fundingBindings = new Set<string>();
   for (const f of fundingAssets) {
-    assert(f.binding && f.binding.chainId === 1 && getAddress(f.asset) === getAddress(f.binding.asset), "SQL funding provider/asset binding is required");
-    assert(catalog.forStrictFamily(f.familyId).plugin.manifest.domain === "funding", "non-funding Family in SQL funding table");
-    const key = hashCanonical([f.familyId, f.binding as unknown as CanonicalValue]);
+    let key = verifiedFundingBindingCache.get(f);
+    if (key === undefined) {
+      assert(f.binding && f.binding.chainId === 1 && getAddress(f.asset) === getAddress(f.binding.asset), "SQL funding provider/asset binding is required");
+      assert(catalog.forStrictFamily(f.familyId).plugin.manifest.domain === "funding", "non-funding Family in SQL funding table");
+      key = hashCanonical([f.familyId, f.binding as unknown as CanonicalValue]);
+      if (Object.isFrozen(f) && Object.isFrozen(f.binding)) {
+        verifiedFundingBindingCache.set(f, key);
+      }
+    }
     assert(!fundingBindings.has(key), "duplicate SQL funding binding");
     fundingBindings.add(key);
   }
@@ -114,6 +125,9 @@ export function buildSqlEdgeLiveProducer(input: {
     owned.set(routeKey,{key:sqlEdgeKey,programKey});
   }
   const trials=input.trialMarkets??new Map<string,SqlTrialMarket>();
+  const retained=input.retainedUnavailableMarkets??new Map<string,SqlTrialGraphMetadata>();
+  for(const id of retained.keys())assert(unavailableKeys.has(id)&&!seenKeys.has(id)&&!trials.has(id),
+    "retained SQL nomination must have an explicit current-source refusal and no authority");
   for(const [id,entry] of trials)assert(inputEdges.has(id)&&!seenKeys.has(id)&&!unavailableKeys.has(id)&&entry.variants.size>0,
     "SQL trial price candidate is foreign, empty, duplicated or already admitted");
   assert(seenKeys.size+unavailableKeys.size+trials.size===edges.length,"SQL directions missing a binding or disposition");
@@ -147,7 +161,7 @@ export function buildSqlEdgeLiveProducer(input: {
   assert.equal(bySql.size,seenKeys.size,"SQL projection lost observed directions");
   // The graph is projected from the SQL table, never by enumerating recipes.
   const logicalRoutes=new Map<string,readonly TokenEdge[]>(), graph:TokenEdge[]=[];
-  let disabled=0,notConversion=0;
+  let disabled=0,notConversion=0,unavailableEnabledDirections=0,retainedUnavailableDirections=0;
   for(const sql of edges){
     const id=sql.candidateInstanceKey,m=sqlSelectorModules.get(sql.selector);
     if(!m||!isEnabledSqlExecutionLeg(m)){
@@ -155,11 +169,41 @@ export function buildSqlEdgeLiveProducer(input: {
       if(m&&!m.activation.enabled)disabled++;else notConversion++;
       continue;
     }
+    assert.equal(id,sqlDirectionId(sql),"SQL leg ID differs from pool, asset or direction");
+    if(unavailableKeys.has(id)){
+      unavailableEnabledDirections++;
+      if(!retained.has(id))continue;
+      retainedUnavailableDirections++;
+    }
     const recipes=Object.freeze((bySql.get(id)??[]).sort((a,b)=>a.canonicalEdgeId!<b.canonicalEdgeId!?-1:1));
-    logicalRoutes.set(id,recipes);graph.push(sqlGraphDirection(sql,recipes,trials.get(id)?.graph));
+    logicalRoutes.set(id,recipes);graph.push(sqlGraphDirection(sql,recipes,trials.get(id)?.graph??retained.get(id)));
   }
-  assert(graph.length===edges.length-disabled-notConversion,"SQL graph does not conserve enabled directions");
+  assert(graph.length===edges.length-disabled-notConversion-unavailableEnabledDirections+retainedUnavailableDirections,"SQL graph does not conserve admitted directions and exclusions");
   assert(graph.length>0,"SQL swap table has no enabled conversion direction");
+  const sqlPoolActivity=new Map<string,PoolActivityRule>();
+  for(const edge of edges){
+    if(!logicalRoutes.has(edge.candidateInstanceKey))continue;
+    const module=sqlSelectorModules.get(edge.selector);
+    if(!module||!isEnabledSqlExecutionLeg(module)||!module.definition.directState)continue;
+    const state=module.definition.directState;
+    assert(state.poolId?edge.poolId!==null&&(edge.poolNamespace===null||edge.poolNamespace===state.poolNamespace):
+      edge.poolId===null&&edge.poolNamespace===null,"source state differs from the SQL physical pool scope");
+    sqlPoolActivity.set(edge.candidateInstanceKey,Object.freeze({on:state.on,assets:Object.freeze([edge.tokenIn,edge.tokenOut])}));
+  }
+  const runtimeRoot = new StrictProductionRuntimeRoot({catalog,poolLogScopes:productionPoolLogScopes(),sqlPoolActivity,historicalAssetLogActors:settlementAssetRankingActors,
+    readySource:source,readyGraph:graph,readyInstances:[...instances.values()],readyFundingAssets:fundingAssets,logicalRoutes,paidAliases,
+    ...(trials.size?{sqlTrialMarkets:new Map([...trials].map(([id,m])=>[id,m.variants]))}:{})});
+  if (input.runtimeRootOnly) {
+    return { runtimeRoot, graph, graphViewCoordinator: undefined as unknown as StrictReadyGraphViewCoordinator,
+      fingerprint: "", inputSummary: { rows: edges.length, enabledDirections: graph.length, boundDirections: seenKeys.size,
+        issuedLegs: seenKeys.size, privateRecipes: materialized.length, trialDirections: trials.size, disabled, notConversion,
+        unavailableEnabledDirections, retainedUnavailableDirections, unboundDirections: graph.length - seenKeys.size,
+        reasons: Object.fromEntries(causes) },
+      topologyKey: "", flashTokens: Object.freeze([] as readonly string[]), selectorMode: true, instanceCount: graph.length,
+      lineage: Object.freeze({ generation: source.generation, graphHash: "", catalogHash: catalog.catalogHash, cutoffNumber: source.number,
+        appliedThroughNumber: source.number, appliedThroughHash: source.hash, sourceCount: 0 }),
+      baselineSummary: Object.freeze({ generation: source.generation, cutoffNumber: source.number, activeInstanceCount: graph.length, observationScanFrom: source.number }) };
+  }
   const graphHash = strictReadyGraphContractFingerprint(graph);
   const familyOwners = new Set(graph.map(e=>catalog.ownerOfAction(e.adapterId)));
   const sourceCoverage = [
@@ -169,14 +213,11 @@ export function buildSqlEdgeLiveProducer(input: {
   const fingerprint = hashCanonical([trials.size?"sql-edge-live/direct-trial-v1":"sql-edge-live/v3", source.number, source.hash, graphHash, catalog.catalogHash,
     swapTableSha256,fundingTableSha256,[...fundingBindings].sort(),
     [...byCanonical].sort(([a],[b]) => a.localeCompare(b))]);
-  const runtimeRoot = new StrictProductionRuntimeRoot({catalog,poolLogScopes:productionPoolLogScopes(),historicalAssetLogActors:settlementAssetRankingActors,
-    readySource:source,readyGraph:graph,readyInstances:[...instances.values()],readyFundingAssets:fundingAssets,logicalRoutes,paidAliases,
-    ...(trials.size?{sqlTrialMarkets:new Map([...trials].map(([id,m])=>[id,m.variants]))}:{})});
   const graphViewCoordinator = new StrictReadyGraphViewCoordinator({catalog,publicationKind:"sql-edges",
     ready:{generation:source.generation,graphHash,catalogHash:catalog.catalogHash,sourceCoverage},edges:graph});
   return { runtimeRoot, graph, graphViewCoordinator, fingerprint,
     inputSummary:{rows:edges.length,enabledDirections:graph.length,boundDirections:seenKeys.size,issuedLegs:seenKeys.size,
-      privateRecipes:materialized.length,trialDirections:trials.size,disabled,notConversion,unboundDirections:graph.length-seenKeys.size,reasons:Object.fromEntries(causes)},
+      privateRecipes:materialized.length,trialDirections:trials.size,disabled,notConversion,unavailableEnabledDirections,retainedUnavailableDirections,unboundDirections:graph.length-seenKeys.size,reasons:Object.fromEntries(causes)},
     topologyKey:`sql-edges:${source.generation}:${graphHash}`,
     flashTokens:Object.freeze([...new Set(fundingAssets.map(f=>getAddress(f.asset).toLowerCase()))].sort()),
     selectorMode:true,instanceCount:graph.length,

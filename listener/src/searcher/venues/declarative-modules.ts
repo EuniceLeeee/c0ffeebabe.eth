@@ -19,29 +19,36 @@ export interface ModuleCoverage {
   readonly missingDependencies: readonly string[];
 }
 const forbidden = new Set(["__proto__", "constructor", "prototype"]);
+const verifiedFrozenModuleData = new WeakSet<object>();
 export function assertModuleData(value: unknown): void {
+  if (value !== null && typeof value === "object" && verifiedFrozenModuleData.has(value)) return;
   const active = new WeakSet<object>();
-  function visit(current: unknown): void {
-    if (current === null || typeof current === "string" || typeof current === "boolean") return;
-    if (typeof current === "number" && Number.isSafeInteger(current)) return;
+  function visit(current: unknown): boolean {
+    if (current === null || typeof current === "string" || typeof current === "boolean") return true;
+    if (typeof current === "number" && Number.isSafeInteger(current)) return true;
     if (!current || typeof current !== "object" || active.has(current))
       throw new Error("module definitions must be lossless JSON data");
+    if (verifiedFrozenModuleData.has(current)) return true;
     const array = Array.isArray(current);
     if (Object.getPrototypeOf(current) !== (array ? Array.prototype : Object.prototype))
       throw new Error("module definitions must be lossless JSON data");
-    const descriptors = Object.getOwnPropertyDescriptors(current);
     const keys = Reflect.ownKeys(current);
     if (keys.some(key => typeof key !== "string") || array && keys.length !== current.length + 1)
       throw new Error("invalid module data property");
     active.add(current);
-    for (const [key, descriptor] of Object.entries(descriptors)) {
+    let deepFrozen = Object.isFrozen(current);
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i] as string;
       if (array && key === "length") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(current, key)!;
       if (forbidden.has(key) || !("value" in descriptor) || descriptor.enumerable !== true ||
           array && (!/^(0|[1-9][0-9]*)$/.test(key) || Number(key) >= current.length))
         throw new Error("invalid module data property");
-      visit(descriptor.value);
+      if (!visit(descriptor.value)) deepFrozen = false;
     }
     active.delete(current);
+    if (deepFrozen) verifiedFrozenModuleData.add(current);
+    return deepFrozen;
   }
   visit(value);
 }

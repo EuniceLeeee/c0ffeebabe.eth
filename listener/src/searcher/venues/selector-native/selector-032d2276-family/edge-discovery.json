@@ -1,0 +1,39 @@
+{
+  "type": "familyModule",
+  "source": {
+    "callSelector": "0xad967e15",
+    "eventTopic0": "0x4d93b232a24e82b284ced7461bf4deacffe66759d5c24513e6f29e571ad78d15",
+    "topicCount": 3,
+    "dataWords": 6,
+    "assetField": "topic2",
+    "bind": {
+      "topic1": "sender",
+      "topic2": "arg0",
+      "data0": "arg1",
+      "data1": "arg2",
+      "data2": "arg3",
+      "data3": "arg4"
+    },
+    "roles": [
+      {
+        "amount": "data0",
+        "zero": "data1",
+        "agreesWith": "arg1"
+      },
+      {
+        "amount": "data1",
+        "zero": "data0",
+        "agreesWith": "arg2",
+        "recipient": "data3",
+        "recipientArg": "arg3"
+      }
+    ],
+    "inputs": [
+      "0x032d2276",
+      "0xad967e15"
+    ],
+    "outputs": [
+      "0x032d2276"
+    ]
+  }
+}

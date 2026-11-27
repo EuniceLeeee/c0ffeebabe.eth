@@ -483,5 +483,9 @@
   },
   "meta": {
     "label": "custom-swap:dodo-v2/registry-member-3"
+  },
+  "directionSupport": {
+    "status": "not-applicable",
+    "reason": "sellQuote is a quote, not a pool conversion"
   }
 }

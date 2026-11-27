@@ -1,0 +1,18 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x128acb08",
+  "signature": "function swap(address, bool, int256, uint160, bytes)",
+  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_128ACB08_ENABLED" },
+  "options": [
+    {
+      "id": "token0-in-token1-out",
+      "tokenIn": "function token0() view returns (address)",
+      "tokenOut": "function token1() view returns (address)"
+    },
+    {
+      "id": "token1-in-token0-out",
+      "tokenIn": "function token1() view returns (address)",
+      "tokenOut": "function token0() view returns (address)"
+    }
+  ]
+}

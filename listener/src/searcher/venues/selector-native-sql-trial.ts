@@ -1,3 +1,4 @@
+import {selectorExecutionPrograms,selectorProgramProjection,selectSingleExecution} from "./selector-program-role.js";
 import {getAddress, ZeroAddress} from 'ethers';
 import type {RuntimeAmountLeg} from '../../adapters/runtime-amount-program.js';
 import {assertExecutionRounding,MAX_EXECUTION_ROUNDING_RAW_UNITS} from '../../shared/executor/amount-rounding.js';
@@ -7,14 +8,17 @@ import type {CanonicalSource} from './adapter-request-program.js';
 import {selectorNativeFamilyId,type SelectorNativeExecutionDefinition,type SelectorNativeProgram} from './selector-native-definition.js';
 import {createSelectorNativeRuntime,type SelectorNativeRuntime} from './selector-native-runtime.js';
 import type {SqlLiveEdgeCoordinates} from './selector-native-sql-live-binding.js';
+import {assertSelectorSourceIdentity,type SelectorSourceIdentity} from './selector-source-identity.js';
 import {validateSqlExecutionParamHints,type SqlRecipeParamHints} from './selector-native-sql-param-hints.js';
 import {contradictedCommittedRoute} from './selector-native-sql-param-guard.js';
 import type {AllowedTaxonomy} from './route-leg-adapter.js';
+import {selectorSourceParameters} from './selector-source-parameters.js';
 
 type Data=Record<string,any>;
 type Edge=SqlLiveEdgeCoordinates & {readonly executionParamEvidence?:unknown};
 type Input={readonly definition:SelectorNativeExecutionDefinition;readonly edge:Edge;readonly source:CanonicalSource;
-  readonly executor:string;readonly transactionOrigin:string;readonly executionRoundingRawUnits?:bigint};
+  readonly executor:string;readonly transactionOrigin:string;readonly executionRoundingRawUnits?:bigint;
+  readonly sourceIdentity?:SelectorSourceIdentity};
 export type SqlQuoteTrialLeg=Readonly<{kind:'sql-quote-trial';programKey:string;leg:RuntimeAmountLeg;
   tokenIn:string;tokenOut:string;poolNamespace:string|null;direction:string;taxonomy:Readonly<AllowedTaxonomy>}>;
 export type SqlQuoteTrialResult={legs:readonly SqlQuoteTrialLeg[];issues:readonly string[];complete:boolean};
@@ -53,7 +57,7 @@ function optionalGetter(x:any,ids:Set<string>):boolean {
   return x?.op==='decodeCanonical'&&data?.op==='get'&&data.args[1]==='data'&&raw?.op==='returned'&&ids.has(raw.args[0]);
 }
 function edgeAssetTerms(p:SelectorNativeProgram):ReadonlyMap<string,'tokenIn'|'tokenOut'>{
-  const flow=p.binding?.flow as Data|undefined,ref=origin(flow?.result);
+  const flow=selectorProgramProjection(p)?.flow as Data|undefined,ref=origin(flow?.result);
   const result=new Map<string,'tokenIn'|'tokenOut'>();
   if(ref?.length!==2||ref[0]!=='steps')return result;
   const step=flow?.steps?.find((s:Data)=>s.id===ref[1]),fields=members(step?.result);
@@ -104,27 +108,27 @@ function runtime(d:SelectorNativeExecutionDefinition,p:SelectorNativeProgram){
   let rs=runtimes.get(d);if(!rs){rs=new WeakMap();runtimes.set(d,rs);}
   let r=rs.get(p);if(!r){r=createSelectorNativeRuntime(d,p);rs.set(p,r);}return r;
 }
-function build(input:Input,p:SelectorNativeProgram,h:SqlRecipeParamHints):SqlQuoteTrialLeg {
+function build(input:Input,p:SelectorNativeProgram,h?:SqlRecipeParamHints,identityBinding?:Readonly<Data>):SqlQuoteTrialLeg {
   const {definition,edge,source}=input,r=runtime(definition,p),ex=addr(input.executor),target=addr(edge.poolAddress);
-  need(p.execution&&p.binding&&!p.runtimeEvidence&&!p.binding.descriptorReads&&!p.routes?.resources?.length,
+ const projection=selectorProgramProjection(p);
+  need(p.execution&&projection&&!p.runtimeEvidence&&!projection.descriptorReads&&!p.routes?.resources?.length,
     'recipe requires additional execution inputs or composite resource');
-  need(h.programKey===r.key,'recipe fingerprint differs');
-  const shape=members(p.binding.descriptor);
+  if(h)need(h.programKey===r.key,'recipe fingerprint differs');
+  const shape=members(projection.descriptor);
   need(shape,'descriptor is not a statically addressable projection');
-  const binding:Data=Object.create(null),argFields:Data=Object.create(null);
-  for(const [key,o] of h.observed){
-    if(!key.startsWith('descriptor.'))continue;
-    const path=origin(member(shape,key.split('.').slice(1)));
-    if(path?.[0]==='binding'&&path.length>1)store(binding,path.slice(1),o.value);
-    if(o.kind==='argument'&&(path?.[0]==='args'||path?.[0]==='arguments')&&
-      p.parameters?.some(v=>v.role==='bound'&&v.path.join('.')===path.slice(1).join('.')))store(argFields,path.slice(1),o.value);
-  }
+  const {binding,args:argFields}=identityBinding!==undefined
+    ?{binding:structuredClone(identityBinding) as Data,args:Object.create(null) as Data}
+    :h?selectorSourceParameters(p,h):{binding:Object.create(null) as Data,args:Object.create(null) as Data};
   for(const [key,side] of candidateAssets(p))if(!own(binding,key)&&edge[side]!==ZeroAddress)store(binding,[key],edge[side]);
+  const hookData=edge.hookData==null?'0x':(need(typeof edge.hookData==='string'&&edge.hookData.length<=8194&&/^0x(?:[0-9a-f]{2})*$/i.test(edge.hookData),'invalid SQL trial hookData'),edge.hookData.toLowerCase());
   const scope={chainId:edge.chainId,target,tokenIn:edge.tokenIn,tokenOut:edge.tokenOut,...(edge.poolId!=null?{poolId:edge.poolId}:{}),...(edge.poolNamespace!=null?{poolNamespace:edge.poolNamespace}:{})};
   const args=strictBinding(argFields,'args');
-  const seed={scope,target,args,arguments:args,source,executor:ex,transactionOrigin:addr(input.transactionOrigin),
+  // Only the SQL quote encoder receives these directed assets. An ordinary
+  // nomination scope may be partial; it is not an observed SQL execution leg.
+  const sqlEdge=Object.freeze({tokenIn:edge.tokenIn,tokenOut:edge.tokenOut,hookData});
+  const seed={scope,sqlEdge,target,args,arguments:args,source,executor:ex,transactionOrigin:addr(input.transactionOrigin),
     executionPolicy:{executionRoundingRawUnits:input.executionRoundingRawUnits??MAX_EXECUTION_ROUNDING_RAW_UNITS},binding:strictBinding(binding,'binding')};
-  const candidateAst=p.binding.stateBinding?.candidate;
+  const candidateAst=projection.stateBinding?.candidate;
   const candidate=candidateAst?r.values.evaluate(candidateAst,seed):{target,scope};
   const ctx={...seed,candidate};
   const descriptor=lazyFields(shape,x=>r.resources.evaluate(x,ctx));
@@ -166,7 +170,7 @@ function build(input:Input,p:SelectorNativeProgram,h:SqlRecipeParamHints):SqlQuo
   need(addr(resource.target)===target&&(resource.poolId??null)===(edge.poolId??null),'projected pool differs from SQL edge');
   const ns=resource.poolNamespace??null;
   need(edge.poolNamespace==null||edge.poolNamespace===ns,'projected pool namespace differs');
-  if(edge.poolId!=null)need(h.verifiedTuple.size>0&&typeof ns==='string'&&ns===p.binding.stateBinding?.poolNamespace,
+  if(edge.poolId!=null)need((identityBinding!==undefined||Boolean(h&&h.verifiedTuple.size>0))&&typeof ns==='string'&&ns===projection.stateBinding?.poolNamespace,
     'missing committed execution tuple for logical pool');
   else need(ns===null,'unexpected logical resource namespace');
   r.assertExecutionEntry(full,r.execution(),target);
@@ -186,8 +190,27 @@ export function compileSqlTrialLegs(input:Input):SqlQuoteTrialResult{
     need(addr(input.executor)!==ZeroAddress&&addr(input.transactionOrigin)!==ZeroAddress,'invalid trial actors');
     need(edge.chainId===1&&edge.selector===d.selector&&(!edge.familyIds||edge.familyIds.includes(selectorNativeFamilyId(d)))&&
       edge.tokenInId==null&&edge.tokenOutId==null&&!d.unsupportedReason,'unsupported SQL trial coordinates');
+    const isSourceOwned=Boolean(d.directState)||d.programs.some(p=>p.type!==undefined);
+    if(isSourceOwned){
+      const single=selectSingleExecution(d);
+      if(input.sourceIdentity!==undefined){
+        assertSelectorSourceIdentity(input.sourceIdentity,{definition:d,edge,source:input.source,programKey:single.programKey});
+        try{legs.push(build(input,single.program,undefined,input.sourceIdentity.binding));}
+        catch(e){complete=false;issues.push(single.programKey+': '+(e instanceof Error?e.message:'unavailable'));}
+      }else if(edge.executionParamEvidence===undefined&&!d.programs.some(p=>p.type==='independentIdentity')){
+        try{legs.push(build(input,single.program,undefined,{}));}
+        catch(e){complete=false;issues.push(single.programKey+': '+(e instanceof Error?e.message:'unavailable'));}
+      }else{
+        const h=validateSqlExecutionParamHints({definition:d,edge,evidence:edge.executionParamEvidence});need(h,'no uniform SQL parameter evidence');
+        const hr=h.recipes[0]!;
+        if(!contradictedCommittedRoute(single.program,hr.verifiedTuple)){
+          try{legs.push(build(input,single.program,hr));}catch(e){complete=false;issues.push(hr.programKey+': '+(e instanceof Error?e.message:'unavailable'));}
+        }
+      }
+      return {legs,issues,complete};
+    }
     const h=validateSqlExecutionParamHints({definition:d,edge,evidence:edge.executionParamEvidence});need(h,'no uniform SQL parameter evidence');
-    for(const [i,p] of d.programs.entries()){
+    for(const [i,p] of selectorExecutionPrograms(d).entries()){
       const hr=h.recipes[i]!;if(contradictedCommittedRoute(p,hr.verifiedTuple))continue;
       try{legs.push(build(input,p,hr));}catch(e){complete=false;issues.push(hr.programKey+': '+(e instanceof Error?e.message:'unavailable'));}
     }

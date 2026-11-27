@@ -1,3 +1,4 @@
+import {selectorExecutionPrograms,selectorProgramProjection} from "./selector-program-role.js";
 import { getAddress } from "ethers";
 import { instanceKey, lineageId, routeKey } from "./adapter-family-identifiers.js";
 import { localZeroExactMethod, type FamilyPlugin, type IdentityVariant } from "./adapter-family-plugin.js";
@@ -18,15 +19,42 @@ import { freezeSelectorNative, normalizeSelectorNativeExecutionDefinition, selec
 import { assertSelectorNativeCandidate, compileSelectorNativeDiscovery, type SelectorNativeBindingCandidate } from "./selector-native-discovery.js";
 import { createSelectorNativeRuntime, selectorNativeHasNonFungibleFlow, type SelectorNativeBindingProof, type SelectorNativeRuntime } from "./selector-native-runtime.js";
 type Data=Record<string,any>;
-const clean=(v:any):any=>Array.isArray(v)?v.map(clean):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).filter(([,x])=>x!==undefined).map(([k,x])=>[k,clean(x)])):v;
+const cleanFrozen=new WeakSet<object>();
+const clean=(v:any):any=>{
+ if(!v||typeof v!=='object')return v;
+ if(cleanFrozen.has(v))return v;
+ if(Array.isArray(v)){
+  let sameRef=Object.isFrozen(v);
+  const mapped=v.map(x=>{const c=clean(x);if(c!==x|| (c&&typeof c==='object'&&!cleanFrozen.has(c)))sameRef=false;return c;});
+  if(sameRef){cleanFrozen.add(v);return v;}
+  return mapped;
+ }
+ const keys=Object.keys(v);
+ let sameRef=Object.isFrozen(v);
+ const out:Record<string,any>={};
+ for(let i=0;i<keys.length;i++){
+  const k=keys[i]!,x=v[k];
+  if(x===undefined){sameRef=false;continue;}
+  const c=clean(x);
+  if(c!==x||(c&&typeof c==='object'&&!cleanFrozen.has(c)))sameRef=false;
+  out[k]=c;
+ }
+ if(sameRef){cleanFrozen.add(v);return v;}
+ return out;
+};
 const hash=(v:any)=>hashCanonical(clean(v));
 const frozen=<T>(v:T):T=>freezeSelectorNative(v);
 const same=(a:string,b:string)=>getAddress(a)===getAddress(b);
 const unique=<T>(items:readonly T[]):T[]=>[...new Map(items.map(item=>[hash(item),item])).values()];
 const list=(items:readonly string[])=>[...new Set(items)];
-const deeplyFrozen=(v:any,seen=new WeakSet<object>()):boolean=>{
- if(!v||typeof v!=='object')return true;if(seen.has(v))return true;seen.add(v);
- return Object.isFrozen(v)&&Object.values(Object.getOwnPropertyDescriptors(v)).every(d=>'value'in d&&deeplyFrozen(d.value,seen));
+const verifiedDeepFrozen=new WeakSet<object>();
+const deeplyFrozen=(v:any,seen?:WeakSet<object>):boolean=>{
+ if(!v||typeof v!=='object'||verifiedDeepFrozen.has(v))return true;
+ const active=seen??new WeakSet<object>();
+ if(active.has(v))return true;active.add(v);
+ const ok=Object.isFrozen(v)&&Object.values(Object.getOwnPropertyDescriptors(v)).every(d=>'value'in d&&deeplyFrozen(d.value,active));
+ if(ok)verifiedDeepFrozen.add(v);
+ return ok;
 };
 const RUNTIME_REQUIREMENTS=frozen([{kind:'source-state',freshness:'current-head'},{kind:'execution-actor',role:'executor'},
  {kind:'effect-observation',effects:['token-delta','native-delta']}]);
@@ -34,8 +62,8 @@ const RUNTIME_REQUIREMENTS=frozen([{kind:'source-state',freshness:'current-head'
  * provide several ways to invoke the same physical pool; each is independently
  * source-bound and the existing funded startup SIM decides executable prices. */
 export function compileSelectorNativeExecutionFamily<Domain extends 'swap'|'protocol'='swap'|'protocol'>(raw:unknown):FamilyPlugin<Domain>{
- const definition=normalizeSelectorNativeExecutionDefinition(raw),projection=compileSelectorNativeDiscovery(definition),family=selectorNativeFamilyId(definition),actionId=`${family}:call`;
- const runtimes=definition.programs.map(p=>createSelectorNativeRuntime(definition,p)),byKey=new Map(runtimes.map(r=>[r.key,r]));
+ const definition=normalizeSelectorNativeExecutionDefinition(raw),definitionHash=hash(definition),projection=compileSelectorNativeDiscovery(definition),family=selectorNativeFamilyId(definition),actionId=`${family}:call`;
+ const runtimes=selectorExecutionPrograms(definition).map(p=>createSelectorNativeRuntime(definition,p)),byKey=new Map(runtimes.map(r=>[r.key,r]));
  const runtimeFor=(descriptor:Data)=>byKey.get(descriptor.programKey)??(()=>{throw new Error('execution parameter program changed');})();
  function descriptorFor(runtime:SelectorNativeRuntime,candidate:SelectorNativeBindingCandidate,proof:SelectorNativeBindingProof):Data{
   assertSelectorNativeCandidate(candidate,definition);if(candidate.programKey!==runtime.key)throw new Error('execution candidate belongs to another recipe');const bound=runtime.verify(candidate,proof);
@@ -47,7 +75,9 @@ export function compileSelectorNativeExecutionFamily<Domain extends 'swap'|'prot
   const key=instanceKey(`execution-instance:${hash(bindingScope)}`);
   const data={familyId:family,lineageId:lineageId(runtime.lineage),instanceKey:key,logicalInstanceKey,target:candidate.target,programKey:runtime.key,
    candidate,proof,bound,runtimeRequirements:RUNTIME_REQUIREMENTS,provenance:[{kind:'selector-parameter-binding',subject:key,evidenceHash:hash({source:proof.source,rounds:proof.rounds,bound})}]};
-  return frozen({...data,bindingFingerprint:hash(data)});
+  const sealed=frozen({...data,bindingFingerprint:hash(data)});
+  checked.add(sealed);
+  return sealed;
  }
  const checked=new WeakSet<object>();
  function assertDescriptor(descriptor:Data):SelectorNativeRuntime{
@@ -71,14 +101,14 @@ export function compileSelectorNativeExecutionFamily<Domain extends 'swap'|'prot
     tokenIn:inner.tokenIn,tokenOut:inner.tokenOut,taxonomy:inner.taxonomy,...(inner.executionAssets?{executionAssets:inner.executionAssets}:{}),
     ...(inner.tokenInId===undefined?{}:{tokenInId:String(inner.tokenInId)}),...(inner.tokenOutId===undefined?{}:{tokenOutId:String(inner.tokenOutId)}),
     direction:inner.direction,programKey:descriptor.programKey,scope,resource,...(resourceKeys?{resources:resourceKeys.map(key=>physical!.get(key)!),resourceKeys}:{}),observationTarget:inner.target,...(resource.poolId===undefined?{}:{observationPoolId:resource.poolId}),resourceKey,pricingStateKey:`${resourceKey}:binding:${hash({logicalInstanceKey:descriptor.logicalInstanceKey,programKey:descriptor.programKey})}`,
-    bindingRef:{bindingKey:descriptor.instanceKey,fingerprint:hash({definition:hash(definition),programKey:descriptor.programKey,parameters:descriptor.bound.descriptor,scope})},runtimeRequirements:RUNTIME_REQUIREMENTS});
+    bindingRef:{bindingKey:descriptor.instanceKey,fingerprint:hash({definition:definitionHash,programKey:descriptor.programKey,parameters:descriptor.bound.descriptor,scope})},runtimeRequirements:RUNTIME_REQUIREMENTS});
   });
   if(new Set(routes.map((r:Data)=>r.routeKey)).size!==routes.length)throw new Error('duplicate native execution route');
   if(checked.has(descriptor))routeCache.set(descriptor,routes);return frozen(routes);
  }
  function invocation(input:Data):{runtime:SelectorNativeRuntime;inner:Data}{
   const runtime=assertDescriptor(input.descriptor),route=routesFor(input.descriptor).find(r=>r.routeKey===input.route.routeKey);
-  if(!route||hash(route)!==hash(input.route))throw new Error('native route binding changed');
+  if(!route||(route!==input.route&&hash(route)!==hash(input.route)))throw new Error('native route binding changed');
   const proof=input.descriptor.proof;
   if(input.executor!==undefined&&!same(input.executor,proof.executor))throw new Error('execution actor differs from Ready binding');
   if(input.executor!==undefined&&input.transactionOrigin?.toLowerCase()!==proof.transactionOrigin?.toLowerCase())throw new Error('execution origin differs from Ready binding');
@@ -119,7 +149,15 @@ export function compileSelectorNativeExecutionFamily<Domain extends 'swap'|'prot
  function pricingPools(input:Data){
   const old=physicalCache.get(input.descriptor)?.get(input.route);if(old)return old;
   const {runtime,inner}=invocation(input);
-  const result=selectorNativePricingPools(runtime.program,input.route,inner.route);
+  let result:ReturnType<typeof selectorNativePricingPools>;
+  if(definition.directState&&['selector-native-source','selector-native-source-identity'].includes(input.descriptor.candidate.candidateKind)){
+   const resource=input.route.resource,scope=input.descriptor.candidate.scope;
+   if(input.route.resources||resource.target!==scope.target||resource.poolId!==scope.poolId||
+      resource.poolNamespace!==scope.poolNamespace||selectorExecutionResourceKey(resource)!==input.route.resourceKey)
+    throw Error('source-declared physical owner differs from issued route');
+   result=frozen([{poolAddress:resource.target,resourceKey:input.route.resourceKey,
+    ...(resource.poolId===undefined?{}:{poolId:resource.poolId}),...(resource.poolNamespace===undefined?{}:{poolNamespace:resource.poolNamespace})}]);
+  }else result=selectorNativePricingPools(runtime.program,input.route,inner.route);
   if(checked.has(input.descriptor)&&deeplyFrozen(input.route)){
    let byRoute=physicalCache.get(input.descriptor);if(!byRoute){byRoute=new WeakMap();physicalCache.set(input.descriptor,byRoute);}
    byRoute.set(input.route,result);
@@ -171,9 +209,13 @@ export function compileSelectorNativeExecutionFamily<Domain extends 'swap'|'prot
   pricing:{refreshPolicy:runtimes.some(r=>r.program.refreshPolicy!=='on-touch')?'each-block':'on-touch',stateKey:(route:Data)=>route.pricingStateKey,
    // A descriptor identifies one verified recipe, not every recipe of the selector.
    // Leave homogeneous families (including the single-recipe Credit wrapper) unchanged.
-   ...(runtimes.some(r=>r.program.refreshPolicy==='on-touch')&&runtimes.some(r=>r.program.refreshPolicy!=='on-touch')?{
+   ...(definition.directState||runtimes.some(r=>r.program.refreshPolicy==='on-touch')&&runtimes.some(r=>r.program.refreshPolicy!=='on-touch')?{
     refreshPolicyForInstance({descriptor}:Data){
-     return assertDescriptor(descriptor.instance).program.refreshPolicy==='on-touch'?'on-touch':'each-block';
+     const runtime=assertDescriptor(descriptor.instance);
+     // This capability is issued only by the Family's declared discovery rule,
+     // not by sharing its entry selector or a legacy recipe's program bytes.
+     if(definition.directState&&['selector-native-source','selector-native-source-identity'].includes(descriptor.instance.candidate.candidateKind))return runtime.program.sourceRefreshPolicy??runtime.program.refreshPolicy??'each-block';
+     return runtime.program.refreshPolicy==='on-touch'?'on-touch':'each-block';
     }}:{}),
    staticBindingProjection(input:Data){assertDescriptor(input.descriptor);return [input.descriptor.bindingFingerprint];},snapshotCompatibilityProjection(input:Data){assertDescriptor(input.descriptor);return [input.descriptor.bindingFingerprint];},
    compileDraft(input:Data){input.routes.forEach((route:Data)=>{invocation({descriptor:input.descriptor,route});if(route.pricingStateKey!==input.stateKey)throw new Error('native pricing group changed');});return {instance:input.descriptor,routes:input.routes,stateKey:input.stateKey};},

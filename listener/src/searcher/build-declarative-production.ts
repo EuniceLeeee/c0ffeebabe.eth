@@ -1,5 +1,9 @@
 import { lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
+import { readSelectorDiscoveryRuleHash } from "./venues/selector-discovery-rule-hash.js";
+import { isDeepStrictEqual } from "node:util";
+import { compileSelectorExecutionSource } from "./build-selector-execution-source.js";
 import type { FamilyDomain } from "./venues/adapter-family-plugin.js";
 import { selectorNativeFamilyId } from "./venues/selector-native-definition.js";
 import { selectorNativeFundingFamilyId } from "./venues/selector-native-funding-definition.js";
@@ -93,14 +97,48 @@ export async function syncDeclarativeProductionEntries(input: {
     within(await realpath(sourceRoot), await realpath(path));
   }
   const directories = await readdir(registry, { withFileTypes: true });
+  const pendingIr=new Map<string,{bytes:string;missing:boolean}>();
+  async function regularIfPresent(path:string) {
+    try{await regular(path);return true;}
+    catch(e){if((e as NodeJS.ErrnoException).code==="ENOENT")return false;throw e;}
+  }
   for (const item of directories.sort((a,b) => a.name.localeCompare(b.name))) {
     if (!item.isDirectory() || !item.name.endsWith("-family")) continue;
     const definitionFile = resolve(registry, item.name, `${item.name.slice(0,-7)}.json`);
-    await regular(definitionFile);
+    const authorFile=resolve(dirname(definitionFile),"execution.source.json");
+    const identityFile=resolve(dirname(definitionFile),"identity.source.json");
+    const hasIdentity=await regularIfPresent(identityFile);
+    let document:unknown;
+    if(await regularIfPresent(authorFile)){
+      if(await regularIfPresent(resolve(dirname(definitionFile),"execution.binding.json")))
+        throw Error("ambiguous execution source: remove the retired sibling execution.binding.json");
+      const dir=dirname(definitionFile);
+      const ruleHash=await readSelectorDiscoveryRuleHash(pathToFileURL(dir+sep),pathToFileURL(resolve(root,"../scripts")+sep));
+      const built=compileSelectorExecutionSource(JSON.parse(await readFile(authorFile,"utf8")),ruleHash,
+        hasIdentity?JSON.parse(await readFile(identityFile,"utf8")):undefined);
+      if(item.name!=="selector-"+built.selector.slice(2)+"-family")throw Error("selector execution.source.json directory differs from selector");
+      const present=await regularIfPresent(definitionFile);
+      const existing=present?JSON.parse(await readFile(definitionFile,"utf8")):undefined;
+      if(!isDeepStrictEqual(existing,built)){
+        if(input.mode==="check")throw Error("selector generated execution IR is stale or missing: "+definitionFile);
+        pendingIr.set(definitionFile,{bytes:JSON.stringify(built,null,2)+"\n",missing:!present});
+      }else if(JSON.stringify(normalizeSelectorFamilyDefinition(existing))!==JSON.stringify(normalizeSelectorFamilyDefinition(built))){
+        // Deep equality ignores insertion order; SQL's sealed definition digest
+        // doesn't. Don't rewrite, or bless a template that regenerates a new hash.
+        throw Error("selector generated execution IR has incompatible normalized key order: "+definitionFile);
+      }
+      document=built;
+    }else{
+      if(hasIdentity)throw Error("identity.source.json requires its matching execution.source.json");
+      await regular(definitionFile);
+      document=JSON.parse(await readFile(definitionFile,"utf8"));
+      if((document as any)?.directState||(document as any)?.programs?.some((p:any)=>p.type!==undefined))
+        throw Error('source-owned generated programs cannot replace missing authored source files');
+    }
     const entry = renderDeclarativeProductionEntry({ rootDirectory: root, productionDirectory: production,
-      definitionFile, document: JSON.parse(await readFile(definitionFile, "utf8")) });
+      definitionFile, document });
     if (entries.has(entry.entryFile) || ids.has(entry.familyId)) throw new Error("duplicate selector-native family or output entry");
-    for (const path of entry.dependencyFiles) await regular(path);
+    for (const path of entry.dependencyFiles) if(!pendingIr.get(path)?.missing)await regular(path);
     entries.set(entry.entryFile, entry); ids.add(entry.familyId);
   }
   if (!entries.size) throw new Error("selector-native production catalog is empty");
@@ -110,6 +148,7 @@ export async function syncDeclarativeProductionEntries(input: {
     const path = resolve(production, file);
     if (!entries.has(path)) throw new Error(`retired/unregistered production entry must be removed: ${file}`);
   }
+  for(const [path,ir] of pendingIr)await writeFile(path,ir.bytes,{flag:ir.missing?"wx":"w"});
   for (const entry of entries.values()) {
     let previous: string | undefined;
     try { await regular(entry.entryFile); previous = await readFile(entry.entryFile, "utf8"); }

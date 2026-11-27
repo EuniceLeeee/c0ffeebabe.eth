@@ -1172,5 +1172,9 @@
   },
   "meta": {
     "label": "custom-swap:oneswap/proxy-and-bidirectional-factory-registration"
+  },
+  "directionSupport": {
+    "status": "not-applicable",
+    "reason": "addMarketOrder is an order action, not a pool conversion"
   }
 }

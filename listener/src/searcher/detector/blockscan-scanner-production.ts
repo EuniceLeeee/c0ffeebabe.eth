@@ -1,5 +1,5 @@
 import type { AdapterRuntimeSnapshot } from "../adapter-runtime-coordinator.js";
-import { buildBlockScanEthView, effectiveEthPricing } from "../blockscan-eth-view.js";
+import { createIncrementalBlockScanEthViewBuilder, effectiveEthPricing } from "../blockscan-eth-view.js";
 import { effectiveAmountReferences, effectiveEnumerationMids, effectiveHistoricalRankingHint, type EffectiveMidSnapshot } from "../blockscan-effective-mid.js";
 import type { BlockScanStateSnapshot } from "../blockscan-state-coordinator.js";
 import type { TokenEdge } from "../planner/token-graph.js";
@@ -68,6 +68,9 @@ export interface AtomicBlockScanPricingValidationTiming {
   readonly total: number;
 }
 
+const screenQuoteCache = new WeakMap<object, WeakMap<TokenEdge, ResolvedBlockScanQuote>>();
+const buildIncrementalScreenEthView = createIncrementalBlockScanEthViewBuilder();
+
 /** Private to opportunity screening: never write into the shared current quote map. */
 export function createBlockScanHistoricalScreen(effective:EffectiveMidSnapshot|undefined,
   edges:readonly TokenEdge[],current:ReadonlyMap<string,ResolvedBlockScanQuote>){
@@ -79,9 +82,23 @@ export function createBlockScanHistoricalScreen(effective:EffectiveMidSnapshot|u
     const id=blockScanEdgeKey(edge);
     if(current.has(id)||edge.executionVerification!=="startup-simulation")continue;
     const hint=effectiveHistoricalRankingHint(effective,edge);if(!hint)continue;
-    (mids??=new Map(current)).set(id,Object.freeze({kind:"external-swap",pool:hint.instanceKey,
-      edges:Object.freeze([edge]),mid:hint.effectiveMid,feeBps:0,depthProxy:0,
-      quoteAmountIn:hint.amountIn,quoteAmountOut:hint.amountOut}));
+    let quote:ResolvedBlockScanQuote|undefined;
+    if(Object.isFrozen(hint)&&Object.isFrozen(edge)){
+      let byEdge=screenQuoteCache.get(hint);
+      quote=byEdge?.get(edge);
+      if(!quote){
+        quote=Object.freeze({kind:"external-swap",pool:hint.instanceKey,
+          edges:Object.freeze([edge]),mid:hint.effectiveMid,feeBps:0,depthProxy:0,
+          quoteAmountIn:hint.amountIn,quoteAmountOut:hint.amountOut});
+        if(!byEdge){byEdge=new WeakMap();screenQuoteCache.set(hint,byEdge);}
+        byEdge.set(edge,quote);
+      }
+    } else {
+      quote=Object.freeze({kind:"external-swap",pool:hint.instanceKey,
+        edges:Object.freeze([edge]),mid:hint.effectiveMid,feeBps:0,depthProxy:0,
+        quoteAmountIn:hint.amountIn,quoteAmountOut:hint.amountOut});
+    }
+    (mids??=new Map(current)).set(id,quote);
     hinted.add(id);
     const ref=references?.get(edge.tokenIn.toLowerCase());
     if(ref && ref.amountIn>0n && (ref.path.length
@@ -118,7 +135,9 @@ export function detectProductionBlockScanOpportunities(
   const screen=input.allowHistoricalRankingHints
     ?createBlockScanHistoricalScreen(input.runtime.pricing.effectiveMids,input.runtime.graph.edges,current.mids):undefined;
   // Never publish this working view into effective pricing/valuation caches.
-  const eth=screen?{mids:screen.mids,view:buildBlockScanEthView(input.runtime.graph.edges,screen.mids,
+  const eth=screen?{mids:screen.mids,view:buildIncrementalScreenEthView(
+    {number:input.runtime.sourceBlock,hash:input.runtime.sourceBlockHash,generation:input.runtime.generation},
+    input.runtime.graph.edges,screen.mids,
     input.cfg.ethSignalPairsPerToken,input.cfg.allowRepeatedPools,current.view)}:current;
   const viewed = performance.now();
   const resolvedEdgeKeys = new Set(
@@ -294,35 +313,50 @@ export function assertAtomicBlockScanPricingView(
   const identityFinishedAtMs = Date.now();
 
   const coverage = pricing.coverage;
-  assertCoverageIntegrity(
-    "state keys",
-    coverage.expectedStateKeys,
-    coverage.resolvedStateKeys,
-    coverage.unresolvedStateKeys,
-    coverage.expectedStateKeyHash,
-    coverage.resolvedStateKeyHash,
-    coverage.unresolvedStateKeyHash,
-  );
-  const readSets = assertCoverageIntegrity(
-    "read keys",
-    coverage.expectedReadKeys,
-    coverage.resolvedReadKeys,
-    coverage.unresolvedReadKeys,
-    coverage.expectedReadKeyHash,
-    coverage.resolvedReadKeyHash,
-    coverage.unresolvedReadKeyHash,
-  );
-  const edgeSets = assertCoverageIntegrity(
-    "edge keys",
-    coverage.expectedEdgeKeys,
-    coverage.resolvedEdgeKeys,
-    coverage.unresolvedEdgeKeys,
-    coverage.expectedEdgeKeyHash,
-    coverage.resolvedEdgeKeyHash,
-    coverage.unresolvedEdgeKeyHash,
-    coverage.unavailableEdgeKeys,
-    coverage.unavailableEdgeKeyHash,
-  );
+  const cachedCoverage = getVerifiedFrozenCoverage(coverage);
+  let readSets: { resolved: Set<string> };
+  let edgeSets: { expected: Set<string>; resolved: Set<string>; unavailable: Set<string> };
+  if (cachedCoverage) {
+    readSets = { resolved: cachedCoverage.readResolved };
+    edgeSets = {
+      expected: new Set(coverage.expectedEdgeKeys),
+      resolved: cachedCoverage.edgeResolved,
+      unavailable: cachedCoverage.edgeUnavailable,
+    };
+  } else {
+    assertCoverageIntegrity(
+      "state keys",
+      coverage.expectedStateKeys,
+      coverage.resolvedStateKeys,
+      coverage.unresolvedStateKeys,
+      coverage.expectedStateKeyHash,
+      coverage.resolvedStateKeyHash,
+      coverage.unresolvedStateKeyHash,
+    );
+    const computedReads = assertCoverageIntegrity(
+      "read keys",
+      coverage.expectedReadKeys,
+      coverage.resolvedReadKeys,
+      coverage.unresolvedReadKeys,
+      coverage.expectedReadKeyHash,
+      coverage.resolvedReadKeyHash,
+      coverage.unresolvedReadKeyHash,
+    );
+    const computedEdges = assertCoverageIntegrity(
+      "edge keys",
+      coverage.expectedEdgeKeys,
+      coverage.resolvedEdgeKeys,
+      coverage.unresolvedEdgeKeys,
+      coverage.expectedEdgeKeyHash,
+      coverage.resolvedEdgeKeyHash,
+      coverage.unresolvedEdgeKeyHash,
+      coverage.unavailableEdgeKeys,
+      coverage.unavailableEdgeKeyHash,
+    );
+    rememberVerifiedFrozenCoverage(coverage, computedReads.resolved, computedEdges.resolved, computedEdges.unavailable);
+    readSets = computedReads;
+    edgeSets = computedEdges;
+  }
   const coverageFinishedAtMs = Date.now();
 
   const expectedEdgeSet = edgeSets.expected;
@@ -478,12 +512,58 @@ function assertCoverageIntegrity(
   return { expected: expectedSet, resolved: resolvedSet, unavailable: unavailableSet };
 }
 
+const frozenSetHashCache = new WeakMap<readonly string[], string>();
+const verifiedCoverageCache = new WeakMap<object, {
+  seal: string;
+  readResolved: Set<string>;
+  edgeResolved: Set<string>;
+  edgeUnavailable: Set<string>;
+}>();
+
+function coverageSeal(c: BlockScanStateSnapshot["coverage"]): string | undefined {
+  if (
+    !Object.isFrozen(c) ||
+    !Object.isFrozen(c.expectedStateKeys) || !Object.isFrozen(c.resolvedStateKeys) || !Object.isFrozen(c.unresolvedStateKeys) ||
+    !Object.isFrozen(c.expectedReadKeys) || !Object.isFrozen(c.resolvedReadKeys) || !Object.isFrozen(c.unresolvedReadKeys) ||
+    !Object.isFrozen(c.expectedEdgeKeys) || !Object.isFrozen(c.resolvedEdgeKeys) || !Object.isFrozen(c.unresolvedEdgeKeys) ||
+    !Object.isFrozen(c.unavailableEdgeKeys)
+  ) {
+    return undefined;
+  }
+  return `${c.expectedStateKeyHash}:${c.resolvedStateKeyHash}:${c.unresolvedStateKeyHash}:` +
+    `${c.expectedReadKeyHash}:${c.resolvedReadKeyHash}:${c.unresolvedReadKeyHash}:` +
+    `${c.expectedEdgeKeyHash}:${c.resolvedEdgeKeyHash}:${c.unresolvedEdgeKeyHash}:${c.unavailableEdgeKeyHash}`;
+}
+
+function getVerifiedFrozenCoverage(c: BlockScanStateSnapshot["coverage"]) {
+  const seal = coverageSeal(c);
+  if (!seal) return undefined;
+  const hit = verifiedCoverageCache.get(c);
+  return hit?.seal === seal ? hit : undefined;
+}
+
+function rememberVerifiedFrozenCoverage(
+  c: BlockScanStateSnapshot["coverage"],
+  readResolved: Set<string>,
+  edgeResolved: Set<string>,
+  edgeUnavailable: Set<string>,
+): void {
+  const seal = coverageSeal(c);
+  if (!seal) return;
+  verifiedCoverageCache.set(c, { seal, readResolved, edgeResolved, edgeUnavailable });
+}
+
 /**
  * Coordinator coverage is already frozen in canonical sort order. Hash it in
  * one pass after proving that order. Legacy/fixture inputs retain exact set
  * semantics through the original sort/dedupe hash path.
  */
 function canonicalSetHash(label: string, values: readonly string[]): string {
+  const frozen = Object.isFrozen(values);
+  if (frozen) {
+    const cached = frozenSetHashCache.get(values);
+    if (cached !== undefined) return cached;
+  }
   let canonical = true;
   for (let index = 1; index < values.length; index++) {
     const previous = values[index - 1];
@@ -493,11 +573,17 @@ function canonicalSetHash(label: string, values: readonly string[]): string {
     }
     if (previous > current) canonical = false;
   }
-  if (canonical) return deterministicHash(values);
+  if (canonical) {
+    const digest = deterministicHash(values);
+    if (frozen) frozenSetHashCache.set(values, digest);
+    return digest;
+  }
   if (values.length !== new Set(values).size) {
     throw new Error(`production scanner rejected duplicate ${label} coverage`);
   }
-  return exactSetHash(values);
+  const digest = exactSetHash(values);
+  if (frozen) frozenSetHashCache.set(values, digest);
+  return digest;
 }
 
 function assertCompleteCoverage(
