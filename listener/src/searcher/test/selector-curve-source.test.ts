@@ -18,15 +18,19 @@ const coin0 = addr(21), coin1 = addr(22), pool = addr(23), executor = addr(24), 
 const source = { number: 26500000, generation: 26500000, hash: toBeHex(26500000, 32) };
 
 const BATCH2 = [
-  { tag: "3df02124", received: false, hasReceiver: false },
-  { tag: "5b41b908", received: false, hasReceiver: false },
-  { tag: "7e3db030", received: true, hasReceiver: false },
-  { tag: "afb43012", received: true, hasReceiver: true },
-  { tag: "767691e7", received: true, hasReceiver: true },
+  { tag: "3df02124", received: false, hasReceiver: false, coinFn: "coins" },
+  { tag: "5b41b908", received: false, hasReceiver: false, coinFn: "coins" },
+  { tag: "7e3db030", received: true, hasReceiver: false, coinFn: "coins" },
+  { tag: "afb43012", received: true, hasReceiver: true, coinFn: "coins" },
+  { tag: "767691e7", received: true, hasReceiver: true, coinFn: "coins" },
+  { tag: "a6417ed6", received: false, hasReceiver: false, coinFn: "underlying_coins" },
+  { tag: "44ee1986", received: false, hasReceiver: true, coinFn: "underlying_coins" },
+  { tag: "65b2489b", received: false, hasReceiver: false, coinFn: "underlying_coins" },
+  { tag: "e2ad025a", received: false, hasReceiver: true, coinFn: "underlying_coins" },
 ] as const;
 
 for (const spec of BATCH2) {
-  test(`curve family 0x${spec.tag} compiles, binds 0-RPC & RPC coins(0/1), and executes both directions cleanly`, async () => {
+  test(`curve family 0x${spec.tag} compiles, binds 0-RPC & RPC ${spec.coinFn}(0/1), and executes both directions cleanly`, async () => {
     const dirUrl = new URL(`../venues/selector-native/selector-${spec.tag}-family/`, import.meta.url);
     const execSrc = JSON.parse(readFileSync(new URL("execution.source.json", dirUrl), "utf8"));
     const idSrc = JSON.parse(readFileSync(new URL("identity.source.json", dirUrl), "utf8"));
@@ -42,6 +46,7 @@ for (const spec of BATCH2) {
     const abi = new Interface([
       execSrc.signature,
       "function coins(uint256) view returns (address)",
+      "function underlying_coins(uint256) view returns (address)",
       "function balanceOf(address) view returns (uint256)",
       "function transfer(address, uint256) returns (bool)",
       "function approve(address, uint256) returns (bool)",
@@ -71,13 +76,14 @@ for (const spec of BATCH2) {
           assert.equal(r.kind, "eth-call");
           if (r.kind !== "eth-call") throw Error("unexpected");
           const tx = abi.parseTransaction({ data: r.data })!;
+          assert.equal(tx.name, spec.coinFn);
           const idx = Number(tx.args[0]);
           return {
             id: r.id,
             ok: true as const,
             source,
             completion: "returned" as const,
-            data: abi.encodeFunctionResult("coins", [idx === 0 ? coin0 : coin1]),
+            data: abi.encodeFunctionResult(spec.coinFn, [idx === 0 ? coin0 : coin1]),
             provenance: { kind: "local-fixture" as const, fingerprint: toBeHex(1, 32) },
           };
         }),
@@ -116,8 +122,9 @@ for (const spec of BATCH2) {
         nativeBalance: () => 0n,
         call(c) {
           const tx = abi.parseTransaction({ data: c.data })!;
-          if (tx.name === "coins") {
-            return abi.encodeFunctionResult("coins", [Number(tx.args[0]) === 0 ? coin0 : coin1]);
+          if (tx.name === "coins" || tx.name === "underlying_coins") {
+            assert.equal(tx.name, spec.coinFn);
+            return abi.encodeFunctionResult(spec.coinFn, [Number(tx.args[0]) === 0 ? coin0 : coin1]);
           }
           if (tx.name === "balanceOf") {
             const who = tx.args[0].toLowerCase();
@@ -134,7 +141,7 @@ for (const spec of BATCH2) {
             poolIn += BigInt(tx.args[1]);
             return toBeHex(1, 32);
           }
-          assert(tx.name === "exchange" || tx.name === "exchange_received");
+          assert(tx.name === "exchange" || tx.name === "exchange_received" || tx.name === "exchange_underlying");
           assert.equal(BigInt(tx.args[0]), reverse ? 1n : 0n);
           assert.equal(BigInt(tx.args[1]), reverse ? 0n : 1n);
           assert.equal(BigInt(tx.args[2]), amountIn);
