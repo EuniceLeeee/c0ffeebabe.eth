@@ -1,0 +1,22 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xa6e81533",
+  "signature": "function addMarketOrder(address, address, uint112)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_A6E81533_ENABLED"
+  },
+  "allowNativeToken": true,
+  "options": [
+    {
+      "id": "sell",
+      "tokenIn": "function stock() view returns (address)",
+      "tokenOut": "function money() view returns (address)"
+    },
+    {
+      "id": "buy",
+      "tokenIn": "function money() view returns (address)",
+      "tokenOut": "function stock() view returns (address)"
+    }
+  ]
+}

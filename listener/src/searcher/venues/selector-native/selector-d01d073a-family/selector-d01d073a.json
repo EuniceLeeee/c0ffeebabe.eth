@@ -7,99 +7,278 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_D01D073A_ENABLED"
   },
-  "binding": {
-    "descriptor": {
-      "asset": {
-        "op": "address",
-        "args": [
-          "$constants.reth"
-        ]
-      },
-      "receipt": {
-        "op": "address",
-        "args": [
-          "$target"
-        ]
-      }
-    }
-  },
-  "routes": {
-    "directions": [
-      {
-        "id": "sync-deposit",
-        "enabled": true,
-        "tokenIn": "$descriptor.asset",
-        "tokenOut": "$descriptor.receipt",
-        "taxonomy": {
-          "slotKind": "protocol",
-          "protocolAction": "wrap"
-        }
-      }
-    ]
-  },
-  "execution": {
-    "version": 1,
-    "settlement": {
-      "directOutput": false
-    },
-    "protectedAddresses": [
-      "$descriptor.target"
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
     ],
-    "approval": {
-      "token": "$route.tokenIn",
-      "spender": "$descriptor.target",
-      "mode": "ensure"
-    },
-    "call": {
-      "target": "$descriptor.target",
-      "signature": "function syncDeposit(uint256 assets,address receiver,address referral) returns (uint256 shares)",
-      "args": [
-        {
-          "runtime": "amountIn"
-        },
-        "$executor",
-        {
-          "op": "address",
-          "args": [
-            "$constants.referral"
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "ad4f6432c260dcb28306af5ddc95d462380595f5eb0d16da8462fa120e50b0d5"
+  },
+  "programs": [
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function convertToShares(uint256) view returns (uint256)"
           ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "convertToShares(uint256)",
+                      [
+                        1000000
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "endpointRead0",
+                        "convertToShares(uint256)",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity:ep0"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  }
+                },
+                {
+                  "assert": {
+                    "op": "gte",
+                    "args": [
+                      "$r.ep0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      }
+                    ]
+                  },
+                  "error": "identity min check failed: convertToShares"
+                },
+                {
+                  "return": {
+                    "direction": "sync-deposit",
+                    "tokenIn": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$scope.tokenIn"
+                          ]
+                        }
+                      ]
+                    },
+                    "tokenOut": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$target"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "sync-deposit",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
         }
       ]
     },
-    "effects": [
-      {
-        "kind": "debit",
-        "token": "$route.tokenIn",
-        "account": "$executor",
-        "equals": {
-          "runtime": "amountIn"
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
+        "directions": [
+          {
+            "id": "sync-deposit",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "wrap"
+            }
+          }
+        ],
+        "resource": {
+          "target": "$descriptor.target"
         }
       },
-      {
-        "kind": "credit",
-        "token": "$route.tokenOut",
-        "account": "$executor",
-        "minimum": "$minAmountOut"
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn"
+        ],
+        "contextChecks": [
+          {
+            "condition": {
+              "op": "not",
+              "args": [
+                "$externalRecipient"
+              ]
+            },
+            "error": "syncDeposit mints to executor"
+          }
+        ],
+        "steps": [
+          {
+            "id": "deposit",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": true,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function syncDeposit(uint256, address, address) returns (uint256)",
+              "args": [
+                {
+                  "runtime": "amountIn"
+                },
+                "$executor",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
+          }
+        }
       }
-    ]
-  },
-  "refreshPolicy": "on-touch",
-  "values": {
-    "constants": {
-      "reth": "0xae78736Cd615f374D3085123A210448E74Fc6393",
-      "referral": "0x0000000000000000000000000000000000000000"
     }
-  },
-  "resourceValues": {
-    "constants": {
-      "reth": "0xae78736Cd615f374D3085123A210448E74Fc6393"
-    }
-  },
-  "meta": {
-    "label": "protocol:rocksolid/active-sync-deposit"
-  },
-  "directionSupport": {
-    "status": "not-applicable",
-    "reason": "syncDeposit is not a pool conversion"
-  }
+  ]
 }

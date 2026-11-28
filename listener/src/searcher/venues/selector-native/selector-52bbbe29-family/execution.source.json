@@ -1,0 +1,275 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0x52bbbe29",
+  "signature": "function swap((bytes32, uint8, address, address, uint256, bytes), (address, bool, address, bool), uint256, uint256)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_52BBBE29_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "poolId": "edge.poolId",
+    "poolNamespace": "contract-pool-id",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "pool-id-event"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "managerCustody": {
+    "manager": "0xBA12222222228d8Ba445958a75a0704d566BF2C8",
+    "erc20Transfers": "settlement-only",
+    "physicalPoolEvents": [
+      {
+        "signature": "event Swap(bytes32 indexed poolId,address indexed tokenIn,address indexed tokenOut,uint256 amountIn,uint256 amountOut)",
+        "indexedPoolId": "poolId"
+      },
+      {
+        "signature": "event PoolBalanceChanged(bytes32 indexed poolId,address indexed liquidityProvider,address[] tokens,int256[] deltas,uint256[] protocolFeeAmounts)",
+        "indexedPoolId": "poolId"
+      },
+      {
+        "signature": "event PoolBalanceManaged(bytes32 indexed poolId,address indexed assetManager,address indexed token,int256 cashDelta,int256 managedDelta)",
+        "indexedPoolId": "poolId"
+      }
+    ],
+    "ledgerEvents": [
+      "event InternalBalanceChanged(address indexed user,address indexed token,int256 delta)"
+    ]
+  },
+  "template": {
+    "id": "balancer-v2-vault-swap",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "vault": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$target"
+              ]
+            }
+          ]
+        },
+        "poolId": {
+          "op": "lower",
+          "args": [
+            "$scope.poolId"
+          ]
+        },
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenIn"
+          ]
+        },
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenOut"
+          ]
+        }
+      },
+      "stateBinding": {
+        "poolNamespace": "contract-pool-id",
+        "candidate": {
+          "manager": "$target",
+          "poolId": "$scope.poolId"
+        }
+      }
+    },
+    "routes": {
+      "target": "$descriptor.vault",
+      "directions": [
+        {
+          "id": "vault-swap",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": {
+            "slotKind": "swap"
+          },
+          "fields": {
+            "poolId": "$descriptor.poolId"
+          }
+        }
+      ],
+      "venue": {
+        "kind": "vault-pool-id",
+        "vault": "0xba12222222228d8ba445958a75a0704d566bf2c8",
+        "poolId": "$descriptor.poolId"
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.vault",
+              "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+            ]
+          },
+          "error": "balancer-v2 descriptor requires canonical Vault"
+        }
+      ],
+      "resource": {
+        "target": "$descriptor.vault",
+        "poolId": "$descriptor.poolId",
+        "poolNamespace": "contract-pool-id"
+      }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "rejectRuntimeEvidence": true,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "steps": [
+        {
+          "id": "guard",
+          "math": {
+            "model": "swapAmountGuard",
+            "inputs": {
+              "amount": {
+                "runtime": "amountIn"
+              }
+            },
+            "outputs": {
+              "high": "balancerV2HighBit"
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "balancerV2HighBit"
+                },
+                "operator": "eq",
+                "right": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "swap",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$target",
+            "mode": "exact-clear",
+            "verifyAllowance": true
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function swap((bytes32,uint8,address,address,uint256,bytes),(address,bool,address,bool),uint256,uint256) payable returns (uint256)",
+            "args": [
+              [
+                "$descriptor.poolId",
+                0,
+                "$route.tokenIn",
+                "$route.tokenOut",
+                {
+                  "runtime": "amountIn"
+                },
+                "0x"
+              ],
+              [
+                "$executor",
+                false,
+                "$recipient",
+                false
+              ],
+              "$minAmountOut",
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+            ],
+            "save": {
+              "swapOut": 0
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "swapOut"
+          },
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenIn",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    },
+    "runtimeMath": {
+      "version": 1,
+      "entries": {
+        "swapAmountGuard": {
+          "model": "balancer-v2:swap-amount-guard",
+          "version": 1
+        }
+      },
+      "models": [
+        {
+          "id": "balancer-v2:swap-amount-guard",
+          "version": 1,
+          "inputs": [
+            "amount"
+          ],
+          "outputs": [
+            "high"
+          ],
+          "operations": [
+            {
+              "name": "high",
+              "op": "shr",
+              "left": {
+                "input": "amount"
+              },
+              "right": {
+                "constant": "255"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

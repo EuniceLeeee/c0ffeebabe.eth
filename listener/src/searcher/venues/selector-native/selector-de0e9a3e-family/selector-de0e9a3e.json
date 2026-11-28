@@ -157,6 +157,139 @@
       ]
     },
     {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function stETH() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "stETH()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead0",
+                                "stETH()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "unwrap-wsteth",
+                    "tokenIn": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$target"
+                          ]
+                        }
+                      ]
+                    },
+                    "tokenOut": "$r.ep0"
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "unwrap-wsteth",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
       "type": "execution",
       "resourceValues": {
         "inputs": [

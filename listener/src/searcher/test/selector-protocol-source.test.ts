@@ -40,7 +40,10 @@ for (const spec of BATCH1) {
     const single = selectSingleExecution(def);
     assert.equal(single.program.type, "execution");
     assert.equal(single.program.binding, undefined);
-    assert.equal(def.programs.filter(p => p.type === "independentIdentity").length, 1);
+    assert.equal(
+      def.programs.filter(p => p.type === "independentIdentity").length,
+      spec.tag === "de0e9a3e" || spec.tag === "ea598cb0" ? 2 : 1,
+    );
 
     const edge = {
       chainId: 1 as const,
@@ -90,14 +93,17 @@ for (const spec of BATCH1) {
       source,
       readRequests: async requests => {
         assert.equal(requests.length, 1);
-        return requests.map(r => ({
-          id: r.id,
-          ok: true as const,
-          source,
-          completion: "returned" as const,
-          data: iface.encodeFunctionResult(fn, spec.getterAns),
-          provenance: { kind: "local-fixture" as const, fingerprint: toBeHex(1, 32) },
-        }));
+        return requests.map(r => {
+          const matchesGetter = r.kind === "eth-call" && r.data.toLowerCase().startsWith(fn.selector.toLowerCase());
+          return {
+            id: r.id,
+            ok: true as const,
+            source,
+            completion: matchesGetter ? ("returned" as const) : ("reverted-as-declared" as const),
+            data: matchesGetter ? iface.encodeFunctionResult(fn, spec.getterAns) : "0x",
+            provenance: { kind: "local-fixture" as const, fingerprint: toBeHex(1, 32) },
+          };
+        });
       },
     });
     assert.equal(okRes.matches.length, 1, okRes.issues.join("; "));

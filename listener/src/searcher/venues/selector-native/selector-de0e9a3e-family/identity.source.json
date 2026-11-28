@@ -2,12 +2,20 @@
   "format": "identity-options/v1",
   "selector": "0xde0e9a3e",
   "signature": "function unwrap(uint256)",
-  "activation": { "enabled": true, "envKey": "SEARCHER_FAMILY_SELECTOR_DE0E9A3E_ENABLED" },
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_DE0E9A3E_ENABLED"
+  },
   "options": [
     {
       "id": "unwrap",
       "tokenIn": "$target",
       "tokenOut": "function token() view returns (address)"
+    },
+    {
+      "id": "unwrap-wsteth",
+      "tokenIn": "$target",
+      "tokenOut": "function stETH() view returns (address)"
     }
   ]
 }

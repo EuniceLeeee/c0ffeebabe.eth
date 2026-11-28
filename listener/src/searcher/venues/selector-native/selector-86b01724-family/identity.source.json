@@ -1,0 +1,19 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x86b01724",
+  "signature": "function swap1(uint256)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_86B01724_ENABLED"
+  },
+  "allowNativeToken": true,
+  "options": [
+    {
+      "id": "sell-token",
+      "tokenIn": {
+        "storageSlot": "0x0000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "tokenOut": "$native"
+    }
+  ]
+}

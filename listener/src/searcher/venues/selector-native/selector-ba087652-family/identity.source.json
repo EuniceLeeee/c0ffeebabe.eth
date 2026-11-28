@@ -1,0 +1,16 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xba087652",
+  "signature": "function redeem(uint256, address, address)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_BA087652_ENABLED"
+  },
+  "options": [
+    {
+      "id": "redeem",
+      "tokenIn": "$target",
+      "tokenOut": "function asset() view returns (address)"
+    }
+  ]
+}

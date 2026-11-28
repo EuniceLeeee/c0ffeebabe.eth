@@ -1,0 +1,15 @@
+{
+  "type": "familyModule",
+  "source": {
+    "eventTopic0": "0x4a9ae315b457897254ce3dff6a6eee548e004eee8b6d468ae17d13132d40a2cb",
+    "transferTopic": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+    "inputs": [
+      "0xa6e81533",
+      "0x23b872dd",
+      "0xa9059cbb"
+    ],
+    "outputs": [
+      "0xa6e81533"
+    ]
+  }
+}

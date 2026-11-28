@@ -1,0 +1,32 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xdf791e50",
+  "signature": "function swap(address, address, uint256)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_DF791E50_ENABLED"
+  },
+  "options": [
+    {
+      "id": "synth-swap",
+      "tokenIn": "$scope.tokenIn",
+      "tokenOut": "$scope.tokenOut",
+      "checks": [
+        {
+          "call": "function doesSyntheticTokenExist(address) view returns (bool)",
+          "args": [
+            "$scope.tokenIn"
+          ],
+          "equals": true
+        },
+        {
+          "call": "function doesSyntheticTokenExist(address) view returns (bool)",
+          "args": [
+            "$scope.tokenOut"
+          ],
+          "equals": true
+        }
+      ]
+    }
+  ]
+}

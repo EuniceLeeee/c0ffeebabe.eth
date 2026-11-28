@@ -1,0 +1,132 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0xad65d76d",
+  "signature": "function ethToTokenTransferInput(uint256, uint256, address)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_AD65D76D_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "univ1-ad65d76d",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "pool": "$target",
+        "tokenIn": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenOut"
+          ]
+        }
+      }
+    },
+    "routes": {
+      "target": "$descriptor.pool",
+      "directions": [
+        {
+          "id": "buy",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": {
+            "slotKind": "swap"
+          },
+          "executionAssets": {
+            "input": "native",
+            "output": "erc20"
+          },
+          "fields": {
+            "pool": "$descriptor.pool"
+          }
+        }
+      ],
+      "venue": {
+        "kind": "address-pool",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.pool"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "steps": [
+        {
+          "id": "buySwap",
+          "call": {
+            "target": "$target",
+            "signature": "function ethToTokenTransferInput(uint256, uint256, address) payable returns (uint256)",
+            "args": [
+              1,
+              "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+              "$recipient"
+            ],
+            "value": {
+              "runtime": "amountIn"
+            },
+            "save": {
+              "boughtTokens": 0
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "asset": "native",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "boughtTokens"
+          },
+          "minimum": "$minAmountOut"
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

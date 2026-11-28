@@ -1,0 +1,16 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xb460af94",
+  "signature": "function withdraw(uint256, address, address)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_B460AF94_ENABLED"
+  },
+  "options": [
+    {
+      "id": "withdraw",
+      "tokenIn": "$target",
+      "tokenOut": "function asset() view returns (address)"
+    }
+  ]
+}

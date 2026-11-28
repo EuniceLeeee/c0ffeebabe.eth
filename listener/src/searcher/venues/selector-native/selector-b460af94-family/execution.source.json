@@ -1,0 +1,167 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0xb460af94",
+  "signature": "function withdraw(uint256, address, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_B460AF94_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "erc4626-withdraw",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenIn"
+          ]
+        },
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenOut"
+          ]
+        }
+      }
+    },
+    "routes": {
+      "directions": [
+        {
+          "id": "withdraw",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": {
+            "slotKind": "protocol",
+            "protocolAction": "redeem"
+          }
+        }
+      ],
+      "resource": {
+        "target": "$descriptor.target"
+      }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenOut"
+      ],
+      "steps": [
+        {
+          "id": "preview",
+          "static": true,
+          "call": {
+            "target": "$target",
+            "signature": "function previewRedeem(uint256) view returns (uint256)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              }
+            ],
+            "save": {
+              "previewAssets": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "previewAssets"
+                },
+                "operator": "gte",
+                "right": 1
+              }
+            ]
+          }
+        },
+        {
+          "id": "withdraw",
+          "call": {
+            "target": "$target",
+            "signature": "function withdraw(uint256, address, address) returns (uint256)",
+            "args": [
+              {
+                "runtime": "previewAssets"
+              },
+              "$recipient",
+              "$executor"
+            ],
+            "save": {
+              "burnedShares": 0
+            },
+            "checks": [
+              {
+                "left": {
+                  "runtime": "burnedShares"
+                },
+                "operator": "eq",
+                "right": {
+                  "runtime": "amountIn"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "previewAssets"
+          },
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenIn",
+          "account": "$recipient",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-token",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "when": "$externalRecipient"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

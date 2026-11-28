@@ -1,0 +1,21 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x52bbbe29",
+  "signature": "function swap((bytes32, uint8, address, address, uint256, bytes), (address, bool, address, bool), uint256, uint256)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_52BBBE29_ENABLED"
+  },
+  "options": [
+    {
+      "id": "vault-swap",
+      "tokenList": {
+        "call": "function getPoolTokens(bytes32) view returns (address[], uint256[], uint256)",
+        "args": [
+          "$scope.poolId"
+        ],
+        "output": 0
+      }
+    }
+  ]
+}

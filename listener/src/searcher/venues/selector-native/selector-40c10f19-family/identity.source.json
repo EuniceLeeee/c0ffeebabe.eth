@@ -1,0 +1,22 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x40c10f19",
+  "signature": "function mint(address, uint256)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_40C10F19_ENABLED"
+  },
+  "options": [
+    {
+      "id": "goldx-mint",
+      "tokenIn": "0x45804880De22913dAFE09f4980848ECE6EcbAf78",
+      "tokenOut": "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0",
+      "checks": [
+        {
+          "call": "function unit() view returns (uint256)",
+          "min": 1
+        }
+      ]
+    }
+  ]
+}

@@ -7,1174 +7,646 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_A6E81533_ENABLED"
   },
-  "binding": {
-    "nomination": {
-      "parameterPaths": [
-        [
-          0
-        ]
-      ]
-    },
-    "flow": {
-      "version": 1,
-      "steps": [
-        {
-          "id": "factory",
-          "requirements": {
-            "transports": [
-              "eth-call"
-            ]
-          },
-          "requests": [
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "dbd522f9966391d24a261a71fe2ca4a0bb98a3a34d827e196c619cb9b3c0d675"
+  },
+  "programs": [
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function stock() view returns (address)"
+          ],
+          "endpointRead1": [
+            "function money() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
             {
-              "id": "selectorBinding:factory:stock",
-              "kind": "eth-call",
-              "to": {
-                "op": "lower",
-                "args": [
-                  {
-                    "op": "address",
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
                     "args": [
-                      "$target"
+                      "endpointRead0",
+                      "stock()",
+                      []
                     ]
-                  }
-                ]
-              },
-              "data": {
-                "op": "encode",
-                "args": [
-                  "bindingfactorystock",
-                  "stock()",
-                  []
-                ]
-              },
-              "completion": "return-data"
-            },
-            {
-              "id": "selectorBinding:factory:money",
-              "kind": "eth-call",
-              "to": {
-                "op": "lower",
-                "args": [
-                  {
-                    "op": "address",
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:ep1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
                     "args": [
-                      "$target"
+                      "endpointRead1",
+                      "money()",
+                      []
                     ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead0",
+                                "stock()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "ep1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead1",
+                                "money()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep1"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
                   }
-                ]
-              },
-              "data": {
-                "op": "encode",
-                "args": [
-                  "bindingfactorymoney",
-                  "money()",
-                  []
-                ]
-              },
-              "completion": "return-data"
+                },
+                {
+                  "return": {
+                    "direction": "sell",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": "$r.ep1"
+                  }
+                }
+              ]
             }
           ],
-          "result": {
-            "stock": {
-              "op": "lower",
-              "args": [
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "sell",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          },
+          "allowNativeToken": true
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function money() view returns (address)"
+          ],
+          "endpointRead1": [
+            "function stock() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
                 {
-                  "op": "address",
-                  "args": [
-                    {
-                      "op": "decode",
-                      "args": [
-                        "bindingfactorystock",
-                        "stock()",
-                        {
-                          "op": "get",
-                          "args": [
-                            {
-                              "op": "returned",
-                              "args": [
-                                "selectorBinding:factory:stock"
-                              ]
-                            },
-                            "data"
-                          ]
-                        },
-                        0
-                      ]
-                    }
-                  ]
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "money()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:ep1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead1",
+                      "stock()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
                 }
-              ]
-            },
-            "money": {
-              "op": "lower",
-              "args": [
+              ],
+              "decode": [
                 {
-                  "op": "address",
-                  "args": [
-                    {
-                      "op": "decode",
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
                       "args": [
-                        "bindingfactorymoney",
-                        "money()",
                         {
-                          "op": "get",
+                          "op": "address",
                           "args": [
                             {
-                              "op": "returned",
+                              "op": "decodeCanonical",
                               "args": [
-                                "selectorBinding:factory:money"
+                                "endpointRead0",
+                                "money()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
                               ]
-                            },
-                            "data"
+                            }
                           ]
-                        },
-                        0
+                        }
+                      ]
+                    },
+                    "ep1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead1",
+                                "stock()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep1"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
                       ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "buy",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": "$r.ep1"
+                  }
                 }
               ]
             }
-          }
-        }
-      ],
-      "result": {
-        "factory": {
-          "money": "$steps.factory.money",
-          "stock": "$steps.factory.stock"
-        }
-      }
-    },
-    "descriptor": {
-      "pool": {
-        "op": "lower",
-        "args": [
-          {
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "buy",
+          "tokenIn": {
             "op": "address",
             "args": [
-              "$target"
+              "$binding.tokenIn"
             ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          },
+          "allowNativeToken": true
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
+        "target": "$descriptor.pool",
+        "directions": [
+          {
+            "id": "swap",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "swap"
+            },
+            "executionAssets": {
+              "input": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.rawIn",
+                      "0x0000000000000000000000000000000000000000"
+                    ]
+                  },
+                  "native",
+                  "erc20"
+                ]
+              },
+              "output": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.rawOut",
+                      "0x0000000000000000000000000000000000000000"
+                    ]
+                  },
+                  "native",
+                  "erc20"
+                ]
+              }
+            },
+            "fields": {
+              "pool": "$descriptor.pool",
+              "rawIn": "$descriptor.rawIn"
+            }
+          }
+        ],
+        "venue": {
+          "kind": "address-pool",
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.pool"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "transferInput",
+            "when": {
+              "op": "ne",
+              "args": [
+                "$route.executionAssets.input",
+                "native"
+              ]
+            },
+            "call": {
+              "target": "$route.tokenIn",
+              "signature": "function transfer(address, uint256) returns (bool)",
+              "args": [
+                "$target",
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            }
+          },
+          {
+            "id": "marketOrderErc20",
+            "when": {
+              "op": "ne",
+              "args": [
+                "$route.executionAssets.input",
+                "native"
+              ]
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function addMarketOrder(address, address, uint112) payable returns (uint256)",
+              "args": [
+                "$route.rawIn",
+                "$recipient",
+                {
+                  "runtime": "amountIn"
+                }
+              ],
+              "save": {
+                "marketReturn": 0
+              }
+            }
+          },
+          {
+            "id": "marketOrderNative",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.executionAssets.input",
+                "native"
+              ]
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function addMarketOrder(address, address, uint112) payable returns (uint256)",
+              "args": [
+                "0x0000000000000000000000000000000000000000",
+                "$recipient",
+                {
+                  "runtime": "amountIn"
+                }
+              ],
+              "value": {
+                "runtime": "amountIn"
+              },
+              "save": {
+                "marketReturn": 0
+              }
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "asset": "native",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            },
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.executionAssets.input",
+                "native"
+              ]
+            }
+          },
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$route.executionAssets.input",
+                "native"
+              ]
+            }
+          },
+          {
+            "kind": "credit",
+            "asset": "native",
+            "account": "$recipient",
+            "minimum": "$minAmountOut",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.executionAssets.output",
+                "native"
+              ]
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "equals": {
+              "runtime": "marketReturn"
+            },
+            "minimum": "$minAmountOut",
+            "when": {
+              "op": "ne",
+              "args": [
+                "$route.executionAssets.output",
+                "native"
+              ]
+            }
           }
         ]
       },
-      "money": "$binding.factory.money",
-      "stock": "$binding.factory.stock"
-    }
-  },
-  "routes": {
-    "target": "$descriptor.pool",
-    "directions": {
-      "op": "map",
-      "args": [
-        [
-          true,
-          false
-        ],
-        "buy",
-        {
-          "op": "merge",
-          "args": [
-            {
-              "id": {
-                "op": "if",
-                "args": [
-                  "$buy",
-                  "buy",
-                  "sell"
-                ]
-              },
-              "enabled": true,
-              "tokenIn": {
-                "op": "if",
-                "args": [
-                  {
-                    "op": "sameAddress",
-                    "args": [
-                      {
-                        "op": "if",
-                        "args": [
-                          "$buy",
-                          "$descriptor.money",
-                          "$descriptor.stock"
-                        ]
-                      },
-                      "$constants.zero"
-                    ]
-                  },
-                  {
-                    "op": "lower",
-                    "args": [
-                      "$constants.weth"
-                    ]
-                  },
-                  {
-                    "op": "lower",
-                    "args": [
-                      {
-                        "op": "if",
-                        "args": [
-                          "$buy",
-                          "$descriptor.money",
-                          "$descriptor.stock"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              "tokenOut": {
-                "op": "if",
-                "args": [
-                  {
-                    "op": "sameAddress",
-                    "args": [
-                      {
-                        "op": "if",
-                        "args": [
-                          "$buy",
-                          "$descriptor.stock",
-                          "$descriptor.money"
-                        ]
-                      },
-                      "$constants.zero"
-                    ]
-                  },
-                  {
-                    "op": "lower",
-                    "args": [
-                      "$constants.weth"
-                    ]
-                  },
-                  {
-                    "op": "lower",
-                    "args": [
-                      {
-                        "op": "if",
-                        "args": [
-                          "$buy",
-                          "$descriptor.stock",
-                          "$descriptor.money"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              "adapterId": "execution:0xa6e81533:abi-75c15f8578e3bb04d30736a359dae30c8bc8da8936fbb41c113f8733ca8419a4:call",
-              "taxonomy": {
-                "slotKind": "swap"
-              },
-              "fields": {
-                "pool": "$descriptor.pool",
-                "buy": "$buy"
-              }
-            },
-            {
-              "op": "if",
-              "args": [
-                {
-                  "op": "or",
-                  "args": [
-                    {
-                      "op": "sameAddress",
-                      "args": [
-                        "$descriptor.stock",
-                        "$constants.zero"
-                      ]
-                    },
-                    {
-                      "op": "sameAddress",
-                      "args": [
-                        "$descriptor.money",
-                        "$constants.zero"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "executionAssets": {
-                    "input": {
-                      "op": "if",
-                      "args": [
-                        {
-                          "op": "sameAddress",
-                          "args": [
-                            {
-                              "op": "if",
-                              "args": [
-                                "$buy",
-                                "$descriptor.money",
-                                "$descriptor.stock"
-                              ]
-                            },
-                            "$constants.zero"
-                          ]
-                        },
-                        "native",
-                        "erc20"
-                      ]
-                    },
-                    "output": {
-                      "op": "if",
-                      "args": [
-                        {
-                          "op": "sameAddress",
-                          "args": [
-                            {
-                              "op": "if",
-                              "args": [
-                                "$buy",
-                                "$descriptor.stock",
-                                "$descriptor.money"
-                              ]
-                            },
-                            "$constants.zero"
-                          ]
-                        },
-                        "native",
-                        "erc20"
-                      ]
-                    }
-                  }
-                },
-                {}
-              ]
-            }
-          ]
-        }
-      ]
-    },
-    "venue": {
-      "kind": "address-pool",
-      "pool": "$descriptor.pool"
-    }
-  },
-  "execution": {
-    "version": 2,
-    "settlement": {
-      "directOutput": true
-    },
-    "protectedAddresses": {
-      "op": "concat",
-      "args": [
-        [
-          "$descriptor.pool",
-          {
-            "op": "get",
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "pool": "$target",
+          "rawIn": {
+            "op": "lower",
             "args": [
-              "$route",
-              "tokenIn"
+              {
+                "op": "address",
+                "args": [
+                  "$sqlEdge.tokenIn"
+                ]
+              }
             ]
           },
-          {
-            "op": "get",
+          "rawOut": {
+            "op": "lower",
             "args": [
-              "$route",
-              "tokenOut"
+              {
+                "op": "address",
+                "args": [
+                  "$sqlEdge.tokenOut"
+                ]
+              }
             ]
-          }
-        ]
-      ]
-    },
-    "steps": [
-      {
-        "id": "transferInput",
-        "when": {
-          "op": "not",
-          "args": [
-            {
-              "op": "sameAddress",
-              "args": [
-                {
-                  "op": "if",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$route",
-                        "buy"
-                      ]
-                    },
-                    "$descriptor.money",
-                    "$descriptor.stock"
-                  ]
-                },
-                "$constants.zero"
-              ]
-            }
-          ]
-        },
-        "call": {
-          "target": {
+          },
+          "tokenIn": {
             "op": "if",
             "args": [
               {
-                "op": "get",
+                "op": "sameAddress",
                 "args": [
-                  "$route",
-                  "buy"
+                  "$sqlEdge.tokenIn",
+                  "0x0000000000000000000000000000000000000000"
                 ]
               },
-              "$descriptor.money",
-              "$descriptor.stock"
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              {
+                "op": "address",
+                "args": [
+                  "$sqlEdge.tokenIn"
+                ]
+              }
             ]
           },
-          "signature": "function transfer(address,uint256) returns (bool)",
-          "args": [
-            "$descriptor.pool",
-            {
-              "runtime": "amountIn"
-            }
-          ]
-        }
-      },
-      {
-        "id": "marketOrder",
-        "when": {
-          "op": "not",
-          "args": [
-            {
-              "op": "sameAddress",
-              "args": [
-                {
-                  "op": "if",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$route",
-                        "buy"
-                      ]
-                    },
-                    "$descriptor.money",
-                    "$descriptor.stock"
-                  ]
-                },
-                "$constants.zero"
-              ]
-            }
-          ]
-        },
-        "call": {
-          "target": "$descriptor.pool",
-          "signature": "function addMarketOrder(address,address,uint112) payable returns (uint256)",
-          "args": [
-            {
-              "op": "if",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$route",
-                    "buy"
-                  ]
-                },
-                "$descriptor.money",
-                "$descriptor.stock"
-              ]
-            },
-            "$recipient",
-            {
-              "runtime": "amountIn"
-            }
-          ],
-          "save": {
-            "marketReturn": 0
-          }
-        }
-      },
-      {
-        "id": "marketOrderNative",
-        "when": {
-          "op": "sameAddress",
-          "args": [
-            {
-              "op": "if",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$route",
-                    "buy"
-                  ]
-                },
-                "$descriptor.money",
-                "$descriptor.stock"
-              ]
-            },
-            "$constants.zero"
-          ]
-        },
-        "call": {
-          "target": "$descriptor.pool",
-          "signature": "function addMarketOrder(address,address,uint112) payable returns (uint256)",
-          "args": [
-            {
-              "op": "if",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$route",
-                    "buy"
-                  ]
-                },
-                "$descriptor.money",
-                "$descriptor.stock"
-              ]
-            },
-            "$recipient",
-            {
-              "runtime": "amountIn"
-            }
-          ],
-          "save": {
-            "marketReturn": 0
-          },
-          "value": {
-            "runtime": "amountIn"
+          "tokenOut": {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$sqlEdge.tokenOut",
+                  "0x0000000000000000000000000000000000000000"
+                ]
+              },
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              {
+                "op": "address",
+                "args": [
+                  "$sqlEdge.tokenOut"
+                ]
+              }
+            ]
           }
         }
       }
-    ],
-    "effects": [
-      {
-        "op": "if",
-        "args": [
-          {
-            "op": "sameAddress",
-            "args": [
-              {
-                "op": "if",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      "$route",
-                      "buy"
-                    ]
-                  },
-                  "$descriptor.money",
-                  "$descriptor.stock"
-                ]
-              },
-              "$constants.zero"
-            ]
-          },
-          [
-            {
-              "kind": "debit",
-              "asset": "native",
-              "account": "$executor",
-              "equals": {
-                "runtime": "amountIn"
-              }
-            }
-          ],
-          [
-            {
-              "kind": "debit",
-              "token": {
-                "op": "get",
-                "args": [
-                  "$route",
-                  "tokenIn"
-                ]
-              },
-              "account": "$executor",
-              "equals": {
-                "runtime": "amountIn"
-              }
-            }
-          ]
-        ]
-      },
-      {
-        "op": "if",
-        "args": [
-          {
-            "op": "sameAddress",
-            "args": [
-              {
-                "op": "if",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      "$route",
-                      "buy"
-                    ]
-                  },
-                  "$descriptor.stock",
-                  "$descriptor.money"
-                ]
-              },
-              "$constants.zero"
-            ]
-          },
-          [
-            {
-              "kind": "credit",
-              "asset": "native",
-              "account": "$recipient",
-              "equals": {
-                "runtime": "marketReturn"
-              }
-            }
-          ],
-          [
-            {
-              "kind": "credit",
-              "token": {
-                "op": "get",
-                "args": [
-                  "$route",
-                  "tokenOut"
-                ]
-              },
-              "account": "$recipient",
-              "equals": {
-                "runtime": "marketReturn"
-              }
-            }
-          ]
-        ]
-      },
-      {
-        "op": "if",
-        "args": [
-          {
-            "op": "and",
-            "args": [
-              "$externalRecipient",
-              {
-                "op": "and",
-                "args": [
-                  {
-                    "op": "not",
-                    "args": [
-                      {
-                        "op": "sameAddress",
-                        "args": [
-                          {
-                            "op": "if",
-                            "args": [
-                              {
-                                "op": "get",
-                                "args": [
-                                  "$route",
-                                  "buy"
-                                ]
-                              },
-                              "$descriptor.money",
-                              "$descriptor.stock"
-                            ]
-                          },
-                          "$constants.zero"
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "op": "not",
-                    "args": [
-                      {
-                        "op": "sameAddress",
-                        "args": [
-                          {
-                            "op": "if",
-                            "args": [
-                              {
-                                "op": "get",
-                                "args": [
-                                  "$route",
-                                  "buy"
-                                ]
-                              },
-                              "$descriptor.stock",
-                              "$descriptor.money"
-                            ]
-                          },
-                          "$constants.zero"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          [
-            {
-              "kind": "unchanged-token",
-              "token": {
-                "op": "get",
-                "args": [
-                  "$route",
-                  "tokenIn"
-                ]
-              },
-              "account": "$recipient"
-            },
-            {
-              "kind": "unchanged-token",
-              "token": {
-                "op": "get",
-                "args": [
-                  "$route",
-                  "tokenOut"
-                ]
-              },
-              "account": "$executor"
-            }
-          ],
-          []
-        ]
-      }
-    ]
-  },
-  "observations": {
-    "version": 1,
-    "canonicalIntakeTargets": [],
-    "victimSupport": "detect-only",
-    "events": [
-      {
-        "id": "oneswap-NewMarketOrder",
-        "signature": "event NewMarketOrder(uint256 word)",
-        "pool": {
-          "op": "get",
-          "args": [
-            "$log",
-            "address"
-          ]
-        },
-        "match": true,
-        "valid": {
-          "op": "lte",
-          "args": [
-            {
-              "op": "sub",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$args",
-                    "word"
-                  ]
-                },
-                {
-                  "op": "mul",
-                  "args": [
-                    {
-                      "op": "div",
-                      "args": [
-                        {
-                          "op": "get",
-                          "args": [
-                            "$args",
-                            "word"
-                          ]
-                        },
-                        {
-                          "op": "uint",
-                          "args": [
-                            "256"
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "op": "uint",
-                      "args": [
-                        "256"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "uint",
-              "args": [
-                "1"
-              ]
-            }
-          ]
-        },
-        "payload": {
-          "name": "NewMarketOrder",
-          "buy": {
-            "op": "eq",
-            "args": [
-              {
-                "op": "sub",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      "$args",
-                      "word"
-                    ]
-                  },
-                  {
-                    "op": "mul",
-                    "args": [
-                      {
-                        "op": "div",
-                        "args": [
-                          {
-                            "op": "get",
-                            "args": [
-                              "$args",
-                              "word"
-                            ]
-                          },
-                          {
-                            "op": "uint",
-                            "args": [
-                              "256"
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "op": "uint",
-                        "args": [
-                          "256"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "op": "uint",
-                "args": [
-                  "1"
-                ]
-              }
-            ]
-          },
-          "word": {
-            "op": "get",
-            "args": [
-              "$args",
-              "word"
-            ]
-          }
-        },
-        "impact": {
-          "op": "get",
-          "args": [
-            "$missing",
-            "impact"
-          ]
-        },
-        "classification": "swap",
-        "receiptMode": "mutation-only",
-        "mutationReason": "oneswap partial fill events require chain replay; refresh the complete AMM/orderbook state"
-      },
-      {
-        "id": "oneswap-DealWithPool",
-        "signature": "event DealWithPool(uint256 word)",
-        "pool": {
-          "op": "get",
-          "args": [
-            "$log",
-            "address"
-          ]
-        },
-        "match": true,
-        "valid": {
-          "op": "lte",
-          "args": [
-            {
-              "op": "sub",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$args",
-                    "word"
-                  ]
-                },
-                {
-                  "op": "mul",
-                  "args": [
-                    {
-                      "op": "div",
-                      "args": [
-                        {
-                          "op": "get",
-                          "args": [
-                            "$args",
-                            "word"
-                          ]
-                        },
-                        {
-                          "op": "uint",
-                          "args": [
-                            "256"
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "op": "uint",
-                      "args": [
-                        "256"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "uint",
-              "args": [
-                "1"
-              ]
-            }
-          ]
-        },
-        "payload": {
-          "name": "DealWithPool",
-          "buy": {
-            "op": "eq",
-            "args": [
-              {
-                "op": "sub",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      "$args",
-                      "word"
-                    ]
-                  },
-                  {
-                    "op": "mul",
-                    "args": [
-                      {
-                        "op": "div",
-                        "args": [
-                          {
-                            "op": "get",
-                            "args": [
-                              "$args",
-                              "word"
-                            ]
-                          },
-                          {
-                            "op": "uint",
-                            "args": [
-                              "256"
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "op": "uint",
-                        "args": [
-                          "256"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "op": "uint",
-                "args": [
-                  "1"
-                ]
-              }
-            ]
-          },
-          "word": {
-            "op": "get",
-            "args": [
-              "$args",
-              "word"
-            ]
-          }
-        },
-        "impact": {
-          "op": "get",
-          "args": [
-            "$missing",
-            "impact"
-          ]
-        },
-        "classification": "swap",
-        "receiptMode": "mutation-only",
-        "mutationReason": "oneswap partial fill events require chain replay; refresh the complete AMM/orderbook state"
-      },
-      {
-        "id": "oneswap-OrderChanged",
-        "signature": "event OrderChanged(uint256 word)",
-        "pool": {
-          "op": "get",
-          "args": [
-            "$log",
-            "address"
-          ]
-        },
-        "match": true,
-        "valid": {
-          "op": "lte",
-          "args": [
-            {
-              "op": "sub",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$args",
-                    "word"
-                  ]
-                },
-                {
-                  "op": "mul",
-                  "args": [
-                    {
-                      "op": "div",
-                      "args": [
-                        {
-                          "op": "get",
-                          "args": [
-                            "$args",
-                            "word"
-                          ]
-                        },
-                        {
-                          "op": "uint",
-                          "args": [
-                            "256"
-                          ]
-                        }
-                      ]
-                    },
-                    {
-                      "op": "uint",
-                      "args": [
-                        "256"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "uint",
-              "args": [
-                "1"
-              ]
-            }
-          ]
-        },
-        "payload": {
-          "name": "OrderChanged",
-          "buy": {
-            "op": "eq",
-            "args": [
-              {
-                "op": "sub",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      "$args",
-                      "word"
-                    ]
-                  },
-                  {
-                    "op": "mul",
-                    "args": [
-                      {
-                        "op": "div",
-                        "args": [
-                          {
-                            "op": "get",
-                            "args": [
-                              "$args",
-                              "word"
-                            ]
-                          },
-                          {
-                            "op": "uint",
-                            "args": [
-                              "256"
-                            ]
-                          }
-                        ]
-                      },
-                      {
-                        "op": "uint",
-                        "args": [
-                          "256"
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "op": "uint",
-                "args": [
-                  "1"
-                ]
-              }
-            ]
-          },
-          "word": {
-            "op": "get",
-            "args": [
-              "$args",
-              "word"
-            ]
-          }
-        },
-        "impact": {
-          "op": "get",
-          "args": [
-            "$missing",
-            "impact"
-          ]
-        },
-        "classification": "swap",
-        "receiptMode": "mutation-only",
-        "mutationReason": "oneswap partial fill events require chain replay; refresh the complete AMM/orderbook state"
-      }
-    ]
-  },
-  "refreshPolicy": "on-touch",
-  "values": {
-    "abi": {
-      "bindingfactorystock": [
-        "function stock() view returns(address)"
-      ],
-      "bindingfactorymoney": [
-        "function money() view returns(address)"
-      ]
-    },
-    "constants": {
-      "zero": "0x0000000000000000000000000000000000000000",
-      "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
     }
-  },
-  "resourceValues": {
-    "constants": {
-      "zero": "0x0000000000000000000000000000000000000000",
-      "weth": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
-    }
-  },
-  "meta": {
-    "label": "custom-swap:oneswap/proxy-and-bidirectional-factory-registration"
-  },
-  "directionSupport": {
-    "status": "not-applicable",
-    "reason": "addMarketOrder is an order action, not a pool conversion"
-  }
+  ]
 }

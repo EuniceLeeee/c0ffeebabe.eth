@@ -7,30 +7,323 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_DF791E50_ENABLED"
   },
-  "parameters": [
-    {
-      "path": [
-        0
-      ],
-      "role": "tokenIn"
-    },
-    {
-      "path": [
-        1
-      ],
-      "role": "tokenOut"
-    },
-    {
-      "path": [
-        2
-      ],
-      "role": "amountIn"
-    }
-  ],
-  "payment": {
-    "kind": "approval"
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "9be5c1b9bdcba72ca178aac94cc733acd387fd82f118b7164d2b4c6f394e1bb8"
   },
-  "meta": {
-    "label": "protocol:metronome-synth/active-synth-membership"
-  }
+  "programs": [
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function doesSyntheticTokenExist(address) view returns (bool)"
+          ],
+          "endpointRead1": [
+            "function doesSyntheticTokenExist(address) view returns (bool)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "doesSyntheticTokenExist(address)",
+                      [
+                        "$scope.tokenIn"
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:ep1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead1",
+                      "doesSyntheticTokenExist(address)",
+                      [
+                        "$scope.tokenOut"
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "endpointRead0",
+                        "doesSyntheticTokenExist(address)",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity:ep0"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    },
+                    "ep1": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "endpointRead1",
+                        "doesSyntheticTokenExist(address)",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity:ep1"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  }
+                },
+                {
+                  "assert": {
+                    "op": "eq",
+                    "args": [
+                      "$r.ep0",
+                      true
+                    ]
+                  },
+                  "error": "identity check failed: doesSyntheticTokenExist"
+                },
+                {
+                  "assert": {
+                    "op": "eq",
+                    "args": [
+                      "$r.ep1",
+                      true
+                    ]
+                  },
+                  "error": "identity check failed: doesSyntheticTokenExist"
+                },
+                {
+                  "return": {
+                    "direction": "synth-swap",
+                    "tokenIn": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$scope.tokenIn"
+                          ]
+                        }
+                      ]
+                    },
+                    "tokenOut": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$scope.tokenOut"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "synth-swap",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
+        "directions": [
+          {
+            "id": "synth-swap",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "convert"
+            }
+          }
+        ],
+        "resource": {
+          "target": "$descriptor.target"
+        }
+      },
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "contextChecks": [
+          {
+            "condition": {
+              "op": "not",
+              "args": [
+                "$externalRecipient"
+              ]
+            },
+            "error": "metronome synth swap pays caller only"
+          }
+        ],
+        "steps": [
+          {
+            "id": "swap",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": true,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function swap(address, address, uint256) returns (uint256)",
+              "args": [
+                "$route.tokenIn",
+                "$route.tokenOut",
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

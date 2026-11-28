@@ -1,0 +1,129 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0x86b01724",
+  "signature": "function swap1(uint256)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_86B01724_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "ella-swap1",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "pool": "$target",
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenIn"
+          ]
+        },
+        "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+      }
+    },
+    "routes": {
+      "target": "$descriptor.pool",
+      "directions": [
+        {
+          "id": "sell-token",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": {
+            "slotKind": "swap"
+          },
+          "executionAssets": {
+            "input": "erc20",
+            "output": "native"
+          },
+          "fields": {
+            "pool": "$descriptor.pool"
+          }
+        }
+      ],
+      "venue": {
+        "kind": "address-pool",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.pool"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "steps": [
+        {
+          "id": "sellSwap",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$target",
+            "mode": "exact-clear",
+            "verifyAllowance": true
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function swap1(uint256)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              }
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "asset": "native",
+          "account": "$recipient",
+          "minimum": "$minAmountOut"
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

@@ -7,598 +7,234 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_86B01724_ENABLED"
   },
-  "binding": {
-    "flow": {
-      "version": 1,
-      "steps": [
-        {
-          "id": "pool",
-          "requirements": {
-            "transports": [
-              "get-storage"
-            ]
-          },
-          "requests": [
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "684c93b6094b08d0aa12c4be69f96ff87ba2e337e648683675fea3e026c1a538"
+  },
+  "programs": [
+    {
+      "type": "independentIdentity",
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
             {
-              "id": "selectorBinding:pool:token",
-              "kind": "get-storage",
-              "address": {
-                "op": "lower",
-                "args": [
-                  {
-                    "op": "address",
-                    "args": [
-                      "$target"
-                    ]
-                  }
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "get-storage"
                 ]
               },
-              "slot": "0x0000000000000000000000000000000000000000000000000000000000000001"
-            }
-          ],
-          "result": {
-            "token": {
-              "op": "lower",
-              "args": [
+              "requests": [
                 {
-                  "op": "address",
-                  "args": [
-                    {
-                      "op": "bytes",
+                  "id": "identity:slot0",
+                  "kind": "get-storage",
+                  "address": "$target",
+                  "slot": "0x0000000000000000000000000000000000000000000000000000000000000001"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "slot0": {
+                      "op": "lower",
                       "args": [
                         {
-                          "op": "get",
+                          "op": "address",
                           "args": [
                             {
-                              "op": "returned",
+                              "op": "bytes",
                               "args": [
-                                "selectorBinding:pool:token"
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:slot0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                12,
+                                20
                               ]
-                            },
-                            "data"
+                            }
                           ]
-                        },
-                        12,
-                        20
+                        }
                       ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "sell-token",
+                    "tokenIn": "$r.slot0",
+                    "tokenOut": "0x0000000000000000000000000000000000000000"
+                  }
                 }
               ]
             }
-          }
-        }
-      ],
-      "result": {
-        "pool": {
-          "token": "$steps.pool.token"
-        }
-      }
-    },
-    "descriptor": {
-      "pool": {
-        "op": "lower",
-        "args": [
-          {
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "sell-token",
+          "tokenIn": {
             "op": "address",
             "args": [
-              "$target"
+              "$binding.tokenIn"
             ]
-          }
-        ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          },
+          "allowNativeToken": true
+        }
       },
-      "token": "$binding.pool.token"
-    }
-  },
-  "routes": {
-    "target": {
-      "op": "get",
-      "args": [
+      "checks": [
         {
-          "op": "expression",
-          "args": [
-            "instance",
-            {
-              "d": "$descriptor"
-            }
-          ]
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
         },
-        "pool"
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
       ]
     },
-    "directions": [
-      {
-        "id": "sell-token",
-        "enabled": true,
-        "tokenIn": {
-          "op": "get",
-          "args": [
-            {
-              "op": "expression",
-              "args": [
-                "instance",
-                {
-                  "d": "$descriptor"
-                }
-              ]
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
+        "target": "$descriptor.pool",
+        "directions": [
+          {
+            "id": "sell-token",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "swap"
             },
-            "token"
-          ]
-        },
-        "tokenOut": "$constants.weth",
-        "taxonomy": {
-          "slotKind": "swap"
-        },
-        "executionAssets": {
-          "input": "erc20",
-          "output": "native"
-        },
-        "fields": {
+            "executionAssets": {
+              "input": "erc20",
+              "output": "native"
+            },
+            "fields": {
+              "pool": "$descriptor.pool"
+            }
+          }
+        ],
+        "venue": {
+          "kind": "address-pool",
           "pool": {
-            "op": "get",
+            "op": "lower",
             "args": [
               {
-                "op": "expression",
+                "op": "address",
                 "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
-              },
-              "pool"
-            ]
-          }
-        }
-      }
-    ],
-    "venue": {
-      "kind": "address-pool",
-      "pool": {
-        "op": "lower",
-        "args": [
-          {
-            "op": "address",
-            "args": [
-              {
-                "op": "get",
-                "args": [
-                  {
-                    "op": "expression",
-                    "args": [
-                      "instance",
-                      {
-                        "d": "$descriptor"
-                      }
-                    ]
-                  },
-                  "pool"
+                  "$descriptor.pool"
                 ]
               }
             ]
-          }
-        ]
-      }
-    }
-  },
-  "execution": {
-    "version": 2,
-    "settlement": {
-      "directOutput": true
-    },
-    "protectedAddresses": [
-      {
-        "op": "get",
-        "args": [
-          {
-            "op": "expression",
-            "args": [
-              "instance",
-              {
-                "d": "$descriptor"
-              }
-            ]
-          },
-          "pool"
-        ]
-      }
-    ],
-    "steps": [
-      {
-        "id": "buySwap",
-        "when": {
-          "op": "eq",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "direction"
-              ]
-            },
-            "buy-token"
-          ]
-        },
-        "call": {
-          "target": {
-            "op": "get",
-            "args": [
-              {
-                "op": "expression",
-                "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
-              },
-              "pool"
-            ]
-          },
-          "signature": "function swapBase1() payable",
-          "args": [],
-          "value": {
-            "runtime": "amountIn"
           }
         }
       },
-      {
-        "id": "sellSwap",
-        "when": {
-          "op": "eq",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "direction"
-              ]
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "sellSwap",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "verifyAllowance": true
             },
-            "sell-token"
-          ]
-        },
-        "approval": {
-          "token": {
-            "op": "get",
-            "args": [
-              "$route",
-              "tokenIn"
-            ]
-          },
-          "spender": {
-            "op": "get",
-            "args": [
-              {
-                "op": "expression",
-                "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
-              },
-              "pool"
-            ]
-          },
-          "mode": "ensure"
-        },
-        "call": {
-          "target": {
-            "op": "get",
-            "args": [
-              {
-                "op": "expression",
-                "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
-              },
-              "pool"
-            ]
-          },
-          "signature": "function swap1(uint256)",
-          "args": [
-            {
+            "call": {
+              "target": "$target",
+              "signature": "function swap1(uint256)",
+              "args": [
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
               "runtime": "amountIn"
             }
-          ]
-        }
-      }
-    ],
-    "effects": [
-      {
-        "kind": "debit",
-        "asset": "native",
-        "account": "$executor",
-        "equals": {
-          "runtime": "amountIn"
-        },
-        "when": {
-          "op": "eq",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "direction"
-              ]
-            },
-            "buy-token"
-          ]
-        }
-      },
-      {
-        "kind": "credit",
-        "asset": "erc20",
-        "token": {
-          "op": "get",
-          "args": [
-            "$route",
-            "tokenOut"
-          ]
-        },
-        "account": "$recipient",
-        "when": {
-          "op": "eq",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "direction"
-              ]
-            },
-            "buy-token"
-          ]
-        }
-      },
-      {
-        "kind": "debit",
-        "asset": "erc20",
-        "token": {
-          "op": "get",
-          "args": [
-            "$route",
-            "tokenIn"
-          ]
-        },
-        "account": "$executor",
-        "equals": {
-          "runtime": "amountIn"
-        },
-        "when": {
-          "op": "eq",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "direction"
-              ]
-            },
-            "sell-token"
-          ]
-        }
-      },
-      {
-        "kind": "credit",
-        "asset": "native",
-        "account": "$executor",
-        "when": {
-          "op": "eq",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "direction"
-              ]
-            },
-            "sell-token"
-          ]
-        }
-      }
-    ]
-  },
-  "observations": {
-    "version": 1,
-    "events": [
-      {
-        "id": "ella-bought",
-        "signature": "event Bought(uint256 price,uint256 grossOut,uint256 amountIn,address exchange,bool isBuy,uint256 timestamp)",
-        "classification": "swap",
-        "pool": {
-          "op": "lower",
-          "args": [
-            {
-              "op": "address",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$log",
-                    "address"
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "payload": "$log.data",
-        "valid": {
-          "op": "and",
-          "args": [
-            {
-              "op": "gt",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$args",
-                    "price"
-                  ]
-                },
-                {
-                  "op": "uint",
-                  "args": [
-                    "0"
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "gt",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$args",
-                    "amountIn"
-                  ]
-                },
-                {
-                  "op": "uint",
-                  "args": [
-                    "0"
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "sameAddress",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$args",
-                    "exchange"
-                  ]
-                },
-                {
-                  "op": "get",
-                  "args": [
-                    "$log",
-                    "address"
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "match": {
-          "op": "and",
-          "args": [
-            {
-              "op": "sameAddress",
-              "args": [
-                {
-                  "op": "coalesce",
-                  "args": [
-                    "$edge.observationTarget",
-                    {
-                      "op": "get",
-                      "args": [
-                        "$edge",
-                        "target"
-                      ]
-                    }
-                  ]
-                },
-                "$pool"
-              ]
-            },
-            {
-              "op": "eq",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$args",
-                    "isBuy"
-                  ]
-                },
-                {
-                  "op": "eq",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$edge",
-                        "direction"
-                      ]
-                    },
-                    "buy-token"
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "impact": {
-          "op": "program",
-          "args": [
-            "ella-unresolved-impact",
-            {}
-          ]
-        }
-      }
-    ],
-    "calls": [],
-    "canonicalIntakeTargets": [],
-    "victimSupport": "detect-only"
-  },
-  "refreshPolicy": "on-touch",
-  "values": {
-    "expressions": {
-      "instance": {
-        "op": "coalesce",
-        "args": [
+          },
           {
-            "op": "get",
+            "kind": "credit",
+            "asset": "native",
+            "account": "$recipient",
+            "minimum": "$minAmountOut"
+          }
+        ]
+      },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "pool": "$target",
+          "tokenIn": {
+            "op": "address",
             "args": [
-              "$d",
-              "instance"
+              "$sqlEdge.tokenIn"
             ]
           },
-          "$d"
-        ]
-      }
-    },
-    "constants": {
-      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
-    },
-    "programs": {
-      "ella-unresolved-impact": [
-        {
-          "assert": false,
-          "error": "ella Bought needs call context to distinguish token variant and net output"
+          "tokenOut": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
         }
-      ]
-    }
-  },
-  "resourceValues": {
-    "expressions": {
-      "instance": {
-        "op": "coalesce",
-        "args": [
-          {
-            "op": "get",
-            "args": [
-              "$d",
-              "instance"
-            ]
-          },
-          "$d"
-        ]
       }
-    },
-    "constants": {
-      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
     }
-  },
-  "meta": {
-    "label": "ella-exchange/verified-native-base-runtime"
-  }
+  ]
 }

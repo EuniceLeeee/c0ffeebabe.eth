@@ -1,0 +1,25 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xfea53be1",
+  "signature": "function redeem(address, uint256, address, address)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_FEA53BE1_ENABLED"
+  },
+  "options": [
+    {
+      "id": "silo-redeem",
+      "tokenIn": "$target",
+      "tokenOut": "$scope.tokenOut",
+      "checks": [
+        {
+          "call": "function previewRedeem(uint256) view returns (uint256)",
+          "args": [
+            1000000
+          ],
+          "min": 1
+        }
+      ]
+    }
+  ]
+}

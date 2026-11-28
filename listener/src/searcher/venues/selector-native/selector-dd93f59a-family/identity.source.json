@@ -1,0 +1,16 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xdd93f59a",
+  "signature": "function sellQuote(address)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_DD93F59A_ENABLED"
+  },
+  "options": [
+    {
+      "id": "sell-quote",
+      "tokenIn": "function _QUOTE_TOKEN_() view returns (address)",
+      "tokenOut": "function _BASE_TOKEN_() view returns (address)"
+    }
+  ]
+}

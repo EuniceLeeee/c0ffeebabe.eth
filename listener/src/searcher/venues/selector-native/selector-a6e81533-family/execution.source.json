@@ -1,0 +1,307 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0xa6e81533",
+  "signature": "function addMarketOrder(address, address, uint112)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_A6E81533_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "oneswap-market-order",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "pool": "$target",
+        "rawIn": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenIn"
+              ]
+            }
+          ]
+        },
+        "rawOut": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenOut"
+              ]
+            }
+          ]
+        },
+        "tokenIn": {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$sqlEdge.tokenIn",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenIn"
+              ]
+            }
+          ]
+        },
+        "tokenOut": {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$sqlEdge.tokenOut",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenOut"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "routes": {
+      "target": "$descriptor.pool",
+      "directions": [
+        {
+          "id": "swap",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": {
+            "slotKind": "swap"
+          },
+          "executionAssets": {
+            "input": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.rawIn",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                "native",
+                "erc20"
+              ]
+            },
+            "output": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.rawOut",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                "native",
+                "erc20"
+              ]
+            }
+          },
+          "fields": {
+            "pool": "$descriptor.pool",
+            "rawIn": "$descriptor.rawIn"
+          }
+        }
+      ],
+      "venue": {
+        "kind": "address-pool",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.pool"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "steps": [
+        {
+          "id": "transferInput",
+          "when": {
+            "op": "ne",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          },
+          "call": {
+            "target": "$route.tokenIn",
+            "signature": "function transfer(address, uint256) returns (bool)",
+            "args": [
+              "$target",
+              {
+                "runtime": "amountIn"
+              }
+            ]
+          }
+        },
+        {
+          "id": "marketOrderErc20",
+          "when": {
+            "op": "ne",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function addMarketOrder(address, address, uint112) payable returns (uint256)",
+            "args": [
+              "$route.rawIn",
+              "$recipient",
+              {
+                "runtime": "amountIn"
+              }
+            ],
+            "save": {
+              "marketReturn": 0
+            }
+          }
+        },
+        {
+          "id": "marketOrderNative",
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function addMarketOrder(address, address, uint112) payable returns (uint256)",
+            "args": [
+              "0x0000000000000000000000000000000000000000",
+              "$recipient",
+              {
+                "runtime": "amountIn"
+              }
+            ],
+            "value": {
+              "runtime": "amountIn"
+            },
+            "save": {
+              "marketReturn": 0
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "asset": "native",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          },
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          }
+        },
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          },
+          "when": {
+            "op": "ne",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          }
+        },
+        {
+          "kind": "credit",
+          "asset": "native",
+          "account": "$recipient",
+          "minimum": "$minAmountOut",
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.executionAssets.output",
+              "native"
+            ]
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "marketReturn"
+          },
+          "minimum": "$minAmountOut",
+          "when": {
+            "op": "ne",
+            "args": [
+              "$route.executionAssets.output",
+              "native"
+            ]
+          }
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

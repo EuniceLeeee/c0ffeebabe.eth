@@ -1,0 +1,16 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xd04c6983",
+  "signature": "function sell(uint256, uint256, address)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_D04C6983_ENABLED"
+  },
+  "options": [
+    {
+      "id": "sell",
+      "tokenIn": "function coin() view returns (address)",
+      "tokenOut": "function zero1() view returns (address)"
+    }
+  ]
+}

@@ -7,146 +7,516 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_A0712D68_ENABLED"
   },
-  "parameters": [
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "fbeebec1b8ba9ba7b92f69373ae26b6b1f29885d293544e74433fb74d1fd4731"
+  },
+  "programs": [
     {
-      "path": [
-        0
-      ],
-      "role": "amountIn"
-    }
-  ],
-  "payment": {
-    "kind": "approval"
-  },
-  "values": {
-    "abi": {
-      "assettokenIn": [
-        "function BTB_TOKEN() view returns(address)"
-      ]
-    }
-  },
-  "binding": {
-    "flow": {
-      "version": 1,
-      "steps": [
-        {
-          "id": "assets",
-          "requirements": {
-            "transports": [
-              "eth-call"
-            ]
-          },
-          "requests": {
-            "op": "concat",
-            "args": [
-              {
-                "op": "if",
-                "args": [
-                  {
-                    "op": "not",
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function BTB_TOKEN() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
                     "args": [
-                      {
-                        "op": "defined",
-                        "args": [
-                          "$scope.tokenIn"
-                        ]
-                      }
+                      "endpointRead0",
+                      "BTB_TOKEN()",
+                      []
                     ]
                   },
-                  [
-                    {
-                      "id": "selector-assets:tokenIn",
-                      "kind": "eth-call",
-                      "to": "$target",
-                      "data": {
-                        "op": "encode",
-                        "args": [
-                          "assettokenIn",
-                          "BTB_TOKEN()",
-                          []
-                        ]
-                      },
-                      "completion": "return-data"
-                    }
-                  ],
-                  []
-                ]
-              }
-            ]
-          },
-          "result": {
-            "tokenIn": {
-              "op": "coalesce",
-              "args": [
-                "$scope.tokenIn",
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
                 {
-                  "op": "lower",
-                  "args": [
-                    {
-                      "op": "address",
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
                       "args": [
                         {
-                          "op": "decode",
+                          "op": "address",
                           "args": [
-                            "assettokenIn",
-                            "BTB_TOKEN()",
                             {
-                              "op": "get",
+                              "op": "decodeCanonical",
                               "args": [
+                                "endpointRead0",
+                                "BTB_TOKEN()",
                                 {
-                                  "op": "returned",
+                                  "op": "get",
                                   "args": [
-                                    "selector-assets:tokenIn"
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
                                   ]
                                 },
-                                "data"
+                                0
                               ]
-                            },
-                            0
+                            }
                           ]
                         }
                       ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "btb-mint",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$target"
+                          ]
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
-            },
-            "tokenOut": {
-              "op": "coalesce",
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "btb-mint",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function underlying() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "underlying()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead0",
+                                "underlying()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "ctoken-mint",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$target"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "ctoken-mint",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function asset() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "asset()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead0",
+                                "asset()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "ousd-mint",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": "0x2a8e1e676ec238d8a992307b495b45b3feaa5e86"
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "ousd-mint",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
+        "directions": [
+          {
+            "id": "mint",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "wrap"
+            }
+          }
+        ],
+        "resource": {
+          "target": "$descriptor.target"
+        }
+      },
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "contextChecks": [
+          {
+            "condition": {
+              "op": "not",
               "args": [
-                "$scope.tokenOut",
-                "$target"
+                "$externalRecipient"
+              ]
+            },
+            "error": "mint(uint256) credits caller only"
+          }
+        ],
+        "steps": [
+          {
+            "id": "mint",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": true,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function mint(uint256)",
+              "args": [
+                {
+                  "runtime": "amountIn"
+                }
               ]
             }
           }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
+          }
         }
-      ],
-      "result": {
-        "tokenIn": "$steps.assets.tokenIn",
-        "tokenOut": "$steps.assets.tokenOut"
       }
-    },
-    "descriptor": {
-      "tokenIn": "$binding.tokenIn",
-      "tokenOut": "$binding.tokenOut"
     }
-  },
-  "meta": {
-    "label": "protocol:token-conversion/btb-bear-v1"
-  },
-  "routes": {
-    "directions": [
-      {
-        "id": "mint",
-        "enabled": true,
-        "tokenIn": "$descriptor.tokenIn",
-        "tokenOut": "$descriptor.tokenOut",
-        "taxonomy": {
-          "slotKind": "protocol",
-          "protocolAction": "wrap"
-        }
-      }
-    ]
-  },
-  "refreshPolicy": "each-block"
+  ]
 }

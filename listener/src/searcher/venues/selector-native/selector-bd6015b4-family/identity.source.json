@@ -1,0 +1,16 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xbd6015b4",
+  "signature": "function sellBase(address)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_BD6015B4_ENABLED"
+  },
+  "options": [
+    {
+      "id": "sell-base",
+      "tokenIn": "function _BASE_TOKEN_() view returns (address)",
+      "tokenOut": "function _QUOTE_TOKEN_() view returns (address)"
+    }
+  ]
+}

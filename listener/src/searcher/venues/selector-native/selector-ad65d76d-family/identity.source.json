@@ -1,0 +1,17 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xad65d76d",
+  "signature": "function ethToTokenTransferInput(uint256, uint256, address)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_AD65D76D_ENABLED"
+  },
+  "allowNativeToken": true,
+  "options": [
+    {
+      "id": "buy",
+      "tokenIn": "$native",
+      "tokenOut": "function tokenAddress() view returns (address)"
+    }
+  ]
+}

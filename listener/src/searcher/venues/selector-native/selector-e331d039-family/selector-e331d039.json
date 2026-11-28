@@ -7,1052 +7,521 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_E331D039_ENABLED"
   },
-  "binding": {
-    "nomination": {
-      "parameterPaths": [
-        [
-          0
-        ],
-        [
-          1
-        ]
-      ]
-    },
-    "flow": {
-      "version": 1,
-      "steps": [
-        {
-          "id": "pool",
-          "requirements": {
-            "transports": [
-              "eth-call"
-            ]
-          },
-          "requests": [
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "25ec5316a5f5f304e5d3144dff6a176c9e8ab88e5c83ced3de8953b57a56c80c"
+  },
+  "programs": [
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "token0Read": [
+            "function token0() view returns (address)"
+          ],
+          "token1Read": [
+            "function token1() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
             {
-              "id": "selectorBinding:pool:token0",
-              "kind": "eth-call",
-              "to": {
-                "op": "lower",
-                "args": [
-                  {
-                    "op": "address",
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:token0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
                     "args": [
-                      "$target"
+                      "token0Read",
+                      "token0()",
+                      []
                     ]
-                  }
-                ]
-              },
-              "data": {
-                "op": "encode",
-                "args": [
-                  "bindingpooltoken0",
-                  "token0()",
-                  []
-                ]
-              },
-              "completion": "return-data"
-            },
-            {
-              "id": "selectorBinding:pool:token1",
-              "kind": "eth-call",
-              "to": {
-                "op": "lower",
-                "args": [
-                  {
-                    "op": "address",
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:token1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
                     "args": [
-                      "$target"
+                      "token1Read",
+                      "token1()",
+                      []
                     ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "token0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "token0Read",
+                                "token0()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:token0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "token1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "token1Read",
+                                "token1()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:token1"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
                   }
-                ]
-              },
-              "data": {
-                "op": "encode",
-                "args": [
-                  "bindingpooltoken1",
-                  "token1()",
-                  []
-                ]
-              },
-              "completion": "return-data"
+                },
+                {
+                  "return": {
+                    "direction": "token0-to-token1",
+                    "token0": "$r.token0",
+                    "token1": "$r.token1",
+                    "tokenIn": "$r.token0",
+                    "tokenOut": "$r.token1"
+                  }
+                }
+              ]
             }
           ],
-          "result": {
-            "token0": {
-              "op": "lower",
-              "args": [
-                {
-                  "op": "address",
-                  "args": [
-                    {
-                      "op": "decode",
-                      "args": [
-                        "bindingpooltoken0",
-                        "token0()",
-                        {
-                          "op": "get",
-                          "args": [
-                            {
-                              "op": "returned",
-                              "args": [
-                                "selectorBinding:pool:token0"
-                              ]
-                            },
-                            "data"
-                          ]
-                        },
-                        0
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            "token1": {
-              "op": "lower",
-              "args": [
-                {
-                  "op": "address",
-                  "args": [
-                    {
-                      "op": "decode",
-                      "args": [
-                        "bindingpooltoken1",
-                        "token1()",
-                        {
-                          "op": "get",
-                          "args": [
-                            {
-                              "op": "returned",
-                              "args": [
-                                "selectorBinding:pool:token1"
-                              ]
-                            },
-                            "data"
-                          ]
-                        },
-                        0
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        }
-      ],
-      "result": {
-        "pool": {
-          "token0": "$steps.pool.token0",
-          "token1": "$steps.pool.token1"
-        }
-      }
-    },
-    "descriptor": {
-      "op": "merge",
-      "args": [
-        {
-          "pool": {
-            "op": "lower",
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "token0-to-token1",
+          "token0": {
+            "op": "address",
             "args": [
-              {
-                "op": "address",
-                "args": [
-                  "$target"
-                ]
-              }
+              "$binding.token0"
             ]
           },
-          "token0": "$binding.pool.token0",
-          "token1": "$binding.pool.token1"
-        }
-      ]
-    }
-  },
-  "routes": {
-    "target": {
-      "op": "get",
-      "args": [
-        "$descriptor",
-        "pool"
-      ]
-    },
-    "directions": [
-      {
-        "id": "token0-to-token1",
-        "enabled": true,
-        "tokenIn": {
-          "op": "get",
-          "args": [
-            "$descriptor",
-            "token0"
-          ]
-        },
-        "tokenOut": {
-          "op": "get",
-          "args": [
-            "$descriptor",
-            "token1"
-          ]
-        },
-        "taxonomy": {
-          "slotKind": "swap"
-        },
-        "fields": {
-          "pool": {
-            "op": "get",
+          "token1": {
+            "op": "address",
             "args": [
-              "$descriptor",
-              "pool"
+              "$binding.token1"
+            ]
+          },
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
             ]
           }
         }
       },
-      {
-        "id": "token1-to-token0",
-        "enabled": true,
-        "tokenIn": {
-          "op": "get",
-          "args": [
-            "$descriptor",
-            "token1"
-          ]
-        },
-        "tokenOut": {
-          "op": "get",
-          "args": [
-            "$descriptor",
-            "token0"
-          ]
-        },
-        "taxonomy": {
-          "slotKind": "swap"
-        },
-        "fields": {
-          "pool": {
-            "op": "get",
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
             "args": [
-              "$descriptor",
-              "pool"
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "token0Read": [
+            "function token0() view returns (address)"
+          ],
+          "token1Read": [
+            "function token1() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:token0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "token0Read",
+                      "token0()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:token1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "token1Read",
+                      "token1()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "token0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "token0Read",
+                                "token0()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:token0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "token1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "token1Read",
+                                "token1()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:token1"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "token1-to-token0",
+                    "token0": "$r.token0",
+                    "token1": "$r.token1",
+                    "tokenIn": "$r.token1",
+                    "tokenOut": "$r.token0"
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "token1-to-token0",
+          "token0": {
+            "op": "address",
+            "args": [
+              "$binding.token0"
+            ]
+          },
+          "token1": {
+            "op": "address",
+            "args": [
+              "$binding.token1"
+            ]
+          },
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
             ]
           }
         }
-      }
-    ],
-    "venue": {
-      "kind": "address-pool",
-      "pool": {
-        "op": "lower",
-        "args": [
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
+        "target": "$descriptor.pool",
+        "directions": [
           {
-            "op": "address",
-            "args": [
-              {
-                "op": "get",
-                "args": [
-                  "$descriptor",
-                  "pool"
-                ]
-              }
-            ]
+            "id": "swap",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "swap"
+            },
+            "fields": {
+              "pool": "$descriptor.pool"
+            }
           }
-        ]
-      }
-    },
-    "checks": [
-      {
-        "assert": {
-          "op": "and",
-          "args": [
-            {
-              "op": "lt",
-              "args": [
-                {
-                  "op": "uint",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$descriptor",
-                        "token0"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "uint",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$descriptor",
-                        "token1"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "not",
-              "args": [
-                {
-                  "op": "sameAddress",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$descriptor",
-                        "token0"
-                      ]
-                    },
-                    "0x0000000000000000000000000000000000000000"
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "not",
-              "args": [
-                {
-                  "op": "sameAddress",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$descriptor",
-                        "token1"
-                      ]
-                    },
-                    "0x0000000000000000000000000000000000000000"
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "error": "mooniswap descriptor binding is invalid"
-      }
-    ],
-    "assertions": [
-      {
-        "assert": {
-          "op": "or",
-          "args": [
-            {
-              "op": "and",
-              "args": [
-                {
-                  "op": "sameAddress",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$route",
-                        "tokenIn"
-                      ]
-                    },
-                    {
-                      "op": "get",
-                      "args": [
-                        "$descriptor",
-                        "token0"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "sameAddress",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$route",
-                        "tokenOut"
-                      ]
-                    },
-                    {
-                      "op": "get",
-                      "args": [
-                        "$descriptor",
-                        "token1"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "and",
-              "args": [
-                {
-                  "op": "sameAddress",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$route",
-                        "tokenIn"
-                      ]
-                    },
-                    {
-                      "op": "get",
-                      "args": [
-                        "$descriptor",
-                        "token1"
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "sameAddress",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$route",
-                        "tokenOut"
-                      ]
-                    },
-                    {
-                      "op": "get",
-                      "args": [
-                        "$descriptor",
-                        "token0"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "error": "mooniswap route tokens are not the pool pair"
-      },
-      {
-        "assert": {
-          "op": "not",
-          "args": [
-            {
-              "op": "sameAddress",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$route",
-                    "tokenIn"
-                  ]
-                },
-                {
-                  "op": "get",
-                  "args": [
-                    "$route",
-                    "tokenOut"
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "error": "mooniswap route tokens must differ"
-      },
-      {
-        "assert": {
-          "op": "eq",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route.taxonomy",
-                "slotKind"
-              ]
-            },
-            "swap"
-          ]
-        },
-        "error": "mooniswap route taxonomy is invalid"
-      }
-    ]
-  },
-  "execution": {
-    "version": 2,
-    "settlement": {
-      "directOutput": true
-    },
-    "protectedAddresses": [
-      {
-        "op": "get",
-        "args": [
-          "$descriptor",
-          "pool"
-        ]
-      },
-      {
-        "op": "get",
-        "args": [
-          "$route",
-          "tokenIn"
-        ]
-      },
-      {
-        "op": "get",
-        "args": [
-          "$route",
-          "tokenOut"
-        ]
-      }
-    ],
-    "contextChecks": [
-      {
-        "condition": {
-          "op": "not",
-          "args": [
-            {
-              "op": "sameAddress",
-              "args": [
-                "$executor",
-                "0x0000000000000000000000000000000000000000"
-              ]
-            }
-          ]
-        },
-        "error": "mooniswap runtime executor cannot be zero"
-      },
-      {
-        "condition": {
-          "op": "not",
-          "args": [
-            {
-              "op": "sameAddress",
-              "args": [
-                "$executor",
-                {
-                  "op": "get",
-                  "args": [
-                    "$descriptor",
-                    "pool"
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "error": "mooniswap runtime executor equals pool"
-      }
-    ],
-    "steps": [
-      {
-        "id": "swap",
-        "approval": {
-          "mode": "ensure",
-          "token": {
-            "op": "get",
-            "args": [
-              "$route",
-              "tokenIn"
-            ]
-          },
-          "spender": {
-            "op": "get",
-            "args": [
-              "$descriptor",
-              "pool"
-            ]
-          }
-        },
-        "call": {
-          "target": {
-            "op": "get",
-            "args": [
-              "$descriptor",
-              "pool"
-            ]
-          },
-          "signature": "function swapFor(address src,address dst,uint256 amount,uint256 minReturn,address referral,address receiver) payable returns(uint256)",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "tokenIn"
-              ]
-            },
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "tokenOut"
-              ]
-            },
-            {
-              "runtime": "amountIn"
-            },
-            "$minAmountOut",
-            "0x0000000000000000000000000000000000000000",
-            "$recipient"
-          ]
-        }
-      }
-    ],
-    "effects": [
-      {
-        "kind": "debit",
-        "token": {
-          "op": "get",
-          "args": [
-            "$route",
-            "tokenIn"
-          ]
-        },
-        "account": "$executor",
-        "equals": {
-          "runtime": "amountIn"
-        }
-      },
-      {
-        "kind": "credit",
-        "token": {
-          "op": "get",
-          "args": [
-            "$route",
-            "tokenOut"
-          ]
-        },
-        "account": "$recipient"
-      },
-      {
-        "kind": "unchanged-token",
-        "token": {
-          "op": "get",
-          "args": [
-            "$route",
-            "tokenOut"
-          ]
-        },
-        "account": "$executor",
-        "when": "$externalRecipient"
-      },
-      {
-        "kind": "unchanged-token",
-        "token": {
-          "op": "get",
-          "args": [
-            "$route",
-            "tokenIn"
-          ]
-        },
-        "account": "$recipient",
-        "when": "$externalRecipient"
-      }
-    ]
-  },
-  "observations": {
-    "version": 1,
-    "events": [
-      {
-        "id": "mooniswap-swapped",
-        "signature": "event Swapped(address indexed sender,address indexed receiver,address indexed srcToken,address dstToken,uint256 amount,uint256 result,uint256 srcAdditionBalance,uint256 dstRemovalBalance,address referral)",
-        "classification": "swap",
-        "pool": {
-          "op": "lower",
-          "args": [
-            {
-              "op": "address",
-              "args": [
-                "$log.address"
-              ]
-            }
-          ]
-        },
-        "payload": {
+        ],
+        "venue": {
+          "kind": "address-pool",
           "pool": {
             "op": "lower",
             "args": [
               {
                 "op": "address",
                 "args": [
-                  "$log.address"
-                ]
-              }
-            ]
-          },
-          "sender": {
-            "op": "address",
-            "args": [
-              {
-                "op": "get",
-                "args": [
-                  "$args",
-                  "sender"
-                ]
-              }
-            ]
-          },
-          "receiver": {
-            "op": "address",
-            "args": [
-              {
-                "op": "get",
-                "args": [
-                  "$args",
-                  "receiver"
-                ]
-              }
-            ]
-          },
-          "tokenIn": {
-            "op": "address",
-            "args": [
-              {
-                "op": "get",
-                "args": [
-                  "$args",
-                  "srcToken"
-                ]
-              }
-            ]
-          },
-          "tokenOut": {
-            "op": "address",
-            "args": [
-              {
-                "op": "get",
-                "args": [
-                  "$args",
-                  "dstToken"
-                ]
-              }
-            ]
-          },
-          "amountIn": {
-            "op": "get",
-            "args": [
-              "$args",
-              "amount"
-            ]
-          },
-          "amountOut": {
-            "op": "get",
-            "args": [
-              "$args",
-              "result"
-            ]
-          },
-          "additionBalance": {
-            "op": "get",
-            "args": [
-              "$args",
-              "srcAdditionBalance"
-            ]
-          },
-          "removalBalance": {
-            "op": "get",
-            "args": [
-              "$args",
-              "dstRemovalBalance"
-            ]
-          },
-          "referral": {
-            "op": "lower",
-            "args": [
-              {
-                "op": "address",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      "$args",
-                      "referral"
-                    ]
-                  }
+                  "$descriptor.pool"
                 ]
               }
             ]
           }
-        },
-        "valid": {
-          "op": "and",
-          "args": [
-            {
-              "op": "gt",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$args",
-                    "amount"
-                  ]
-                },
-                0
-              ]
-            },
-            {
-              "op": "gt",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$args",
-                    "result"
-                  ]
-                },
-                0
-              ]
-            },
-            {
-              "op": "not",
-              "args": [
-                {
-                  "op": "sameAddress",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$args",
-                        "srcToken"
-                      ]
-                    },
-                    {
-                      "op": "get",
-                      "args": [
-                        "$args",
-                        "dstToken"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "match": {
-          "op": "and",
-          "args": [
-            {
-              "op": "sameAddress",
-              "args": [
-                {
-                  "op": "coalesce",
-                  "args": [
-                    "$edge.observationTarget",
-                    {
-                      "op": "get",
-                      "args": [
-                        "$edge",
-                        "target"
-                      ]
-                    }
-                  ]
-                },
-                "$pool"
-              ]
-            },
-            {
-              "op": "sameAddress",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$edge",
-                    "tokenIn"
-                  ]
-                },
-                {
-                  "op": "get",
-                  "args": [
-                    "$payload",
-                    "tokenIn"
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "sameAddress",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$edge",
-                    "tokenOut"
-                  ]
-                },
-                {
-                  "op": "get",
-                  "args": [
-                    "$payload",
-                    "tokenOut"
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "impact": {
-          "pool": "$pool",
-          "tokenIn": {
-            "op": "get",
-            "args": [
-              "$payload",
-              "tokenIn"
-            ]
-          },
-          "tokenOut": {
-            "op": "get",
-            "args": [
-              "$payload",
-              "tokenOut"
-            ]
-          },
-          "amountIn": {
-            "op": "get",
-            "args": [
-              "$payload",
-              "amountIn"
-            ]
-          },
-          "amountOut": {
-            "op": "get",
-            "args": [
-              "$payload",
-              "amountOut"
-            ]
-          },
-          "matchedAdapterId": "mooniswap-swap-for"
         }
-      }
-    ],
-    "canonicalIntakeTargets": [],
-    "victimSupport": "detect-only"
-  },
-  "refreshPolicy": "each-block",
-  "quoteOutput": {
-    "version": 1,
-    "steps": [
-      {
-        "id": "quote",
-        "static": true,
-        "call": {
-          "target": {
-            "op": "get",
-            "args": [
-              "$descriptor",
-              "pool"
-            ]
-          },
-          "signature": "function getReturn(address src,address dst,uint256 amount) view returns(uint256)",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "tokenIn"
-              ]
+      },
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "swap",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "verifyAllowance": true
             },
-            {
-              "op": "get",
+            "call": {
+              "target": "$target",
+              "signature": "function swapFor(address, address, uint256, uint256, address, address) payable returns (uint256)",
               "args": [
-                "$route",
-                "tokenOut"
-              ]
-            },
-            {
+                "$route.tokenIn",
+                "$route.tokenOut",
+                {
+                  "runtime": "amountIn"
+                },
+                "$minAmountOut",
+                "0x0000000000000000000000000000000000000000",
+                "$recipient"
+              ],
+              "save": {
+                "swapOut": 0
+              }
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
               "runtime": "amountIn"
             }
-          ],
-          "save": {
-            "quotedAmountOut": 0
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "equals": {
+              "runtime": "swapOut"
+            },
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "pool": "$target",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
           }
         }
-      },
-      {
-        "id": "inputBalance",
-        "static": true,
-        "call": {
-          "target": {
-            "op": "get",
-            "args": [
-              "$route",
-              "tokenIn"
-            ]
-          },
-          "signature": "function balanceOf(address) view returns(uint256)",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$descriptor",
-                "pool"
-              ]
-            }
-          ],
-          "save": {
-            "inputBalance": 0
-          },
-          "checks": [
-            {
-              "left": {
-                "runtime": "inputBalance"
-              },
-              "operator": "gte",
-              "right": 1
-            }
-          ]
-        }
-      },
-      {
-        "id": "outputBalance",
-        "static": true,
-        "call": {
-          "target": {
-            "op": "get",
-            "args": [
-              "$route",
-              "tokenOut"
-            ]
-          },
-          "signature": "function balanceOf(address) view returns(uint256)",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$descriptor",
-                "pool"
-              ]
-            }
-          ],
-          "save": {
-            "outputBalance": 0
-          },
-          "checks": [
-            {
-              "left": {
-                "runtime": "outputBalance"
-              },
-              "operator": "gte",
-              "right": {
-                "runtime": "quotedAmountOut"
-              }
-            }
-          ]
-        }
       }
-    ],
-    "result": {
-      "runtime": "quotedAmountOut"
     }
-  },
-  "values": {
-    "abi": {
-      "bindingpooltoken0": [
-        "function token0() view returns(address)"
-      ],
-      "bindingpooltoken1": [
-        "function token1() view returns(address)"
-      ]
-    }
-  },
-  "meta": {
-    "label": "mooniswap/verified-erc20-runtime"
-  }
+  ]
 }

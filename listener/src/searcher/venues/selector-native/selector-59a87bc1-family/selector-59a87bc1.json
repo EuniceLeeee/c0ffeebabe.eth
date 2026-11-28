@@ -7,573 +7,334 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_59A87BC1_ENABLED"
   },
-  "parameters": [
-    {
-      "path": [
-        0
-      ],
-      "role": "amountIn"
-    },
-    {
-      "path": [
-        1
-      ],
-      "role": "minimumOut"
-    },
-    {
-      "path": [
-        2
-      ],
-      "role": "recipient"
-    }
-  ],
-  "payment": {
-    "kind": "approval"
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "18afbe865314c17ddf463f85a9658f2be98f20b09dd3e62c9618608255665a9a"
   },
-  "values": {
-    "abi": {
-      "assettokenIn": [
-        "function zero1() view returns(address)"
-      ],
-      "assettokenOut": [
-        "function coin() view returns(address)"
-      ]
-    }
-  },
-  "binding": {
-    "flow": {
-      "version": 1,
-      "steps": [
-        {
-          "id": "assets",
-          "requirements": {
-            "transports": [
-              "eth-call"
-            ]
-          },
-          "requests": {
-            "op": "concat",
-            "args": [
-              {
-                "op": "if",
-                "args": [
-                  {
-                    "op": "not",
-                    "args": [
-                      {
-                        "op": "defined",
-                        "args": [
-                          "$scope.tokenIn"
-                        ]
-                      }
-                    ]
-                  },
-                  [
-                    {
-                      "id": "selector-assets:tokenIn",
-                      "kind": "eth-call",
-                      "to": "$target",
-                      "data": {
-                        "op": "encode",
-                        "args": [
-                          "assettokenIn",
-                          "zero1()",
-                          []
-                        ]
-                      },
-                      "completion": "return-data"
-                    }
-                  ],
-                  []
+  "programs": [
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "coinRead": [
+            "function coin() view returns (address)"
+          ],
+          "zero1Read": [
+            "function zero1() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
                 ]
               },
-              {
-                "op": "if",
-                "args": [
-                  {
-                    "op": "not",
+              "requests": [
+                {
+                  "id": "identity:coin",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
                     "args": [
-                      {
-                        "op": "defined",
-                        "args": [
-                          "$scope.tokenOut"
-                        ]
-                      }
+                      "coinRead",
+                      "coin()",
+                      []
                     ]
                   },
-                  [
-                    {
-                      "id": "selector-assets:tokenOut",
-                      "kind": "eth-call",
-                      "to": "$target",
-                      "data": {
-                        "op": "encode",
-                        "args": [
-                          "assettokenOut",
-                          "coin()",
-                          []
-                        ]
-                      },
-                      "completion": "return-data"
-                    }
-                  ],
-                  []
-                ]
-              }
-            ]
-          },
-          "result": {
-            "tokenIn": {
-              "op": "coalesce",
-              "args": [
-                "$scope.tokenIn",
+                  "completion": "return-data"
+                },
                 {
-                  "op": "lower",
-                  "args": [
-                    {
-                      "op": "address",
-                      "args": [
-                        {
-                          "op": "decode",
-                          "args": [
-                            "assettokenIn",
-                            "zero1()",
-                            {
-                              "op": "get",
-                              "args": [
-                                {
-                                  "op": "returned",
-                                  "args": [
-                                    "selector-assets:tokenIn"
-                                  ]
-                                },
-                                "data"
-                              ]
-                            },
-                            0
-                          ]
-                        }
-                      ]
-                    }
-                  ]
+                  "id": "identity:zero1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "zero1Read",
+                      "zero1()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
                 }
-              ]
-            },
-            "tokenOut": {
-              "op": "coalesce",
-              "args": [
-                "$scope.tokenOut",
+              ],
+              "decode": [
                 {
-                  "op": "lower",
-                  "args": [
-                    {
-                      "op": "address",
+                  "let": "r",
+                  "value": {
+                    "coin": {
+                      "op": "lower",
                       "args": [
                         {
-                          "op": "decode",
+                          "op": "address",
                           "args": [
-                            "assettokenOut",
-                            "coin()",
                             {
-                              "op": "get",
+                              "op": "decodeCanonical",
                               "args": [
+                                "coinRead",
+                                "coin()",
                                 {
-                                  "op": "returned",
+                                  "op": "get",
                                   "args": [
-                                    "selector-assets:tokenOut"
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:coin"
+                                      ]
+                                    },
+                                    "data"
                                   ]
                                 },
-                                "data"
+                                0
                               ]
-                            },
-                            0
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "zero1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "zero1Read",
+                                "zero1()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:zero1"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
                           ]
                         }
                       ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "buy",
+                    "coin": "$r.coin",
+                    "zero1": "$r.zero1",
+                    "tokenIn": "$r.zero1",
+                    "tokenOut": "$r.coin"
+                  }
                 }
               ]
             }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "buy",
+          "coin": {
+            "op": "address",
+            "args": [
+              "$binding.coin"
+            ]
+          },
+          "zero1": {
+            "op": "address",
+            "args": [
+              "$binding.zero1"
+            ]
+          },
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
           }
         }
-      ],
-      "result": {
-        "tokenIn": "$steps.assets.tokenIn",
-        "tokenOut": "$steps.assets.tokenOut"
-      }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
     },
-    "descriptor": {
-      "tokenIn": "$binding.tokenIn",
-      "tokenOut": "$binding.tokenOut"
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
+        "target": "$descriptor.pool",
+        "directions": [
+          {
+            "id": "buy",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "swap"
+            },
+            "fields": {
+              "pool": "$descriptor.pool"
+            }
+          }
+        ],
+        "venue": {
+          "kind": "address-pool",
+          "pool": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$descriptor.pool"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "buy",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function buy(uint256, uint256, address) returns (uint256)",
+              "args": [
+                {
+                  "runtime": "amountIn"
+                },
+                "$minAmountOut",
+                "$recipient"
+              ],
+              "save": {
+                "swapOut": 0
+              }
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "equals": {
+              "runtime": "swapOut"
+            },
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "pool": "$target",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
+          }
+        }
+      }
     }
-  },
-  "meta": {
-    "label": "custom-swap:zero1-curve/bonding-sale"
-  },
-  "routes": {
-    "directions": [
-      {
-        "id": "buy",
-        "enabled": true,
-        "tokenIn": "$descriptor.tokenIn",
-        "tokenOut": "$descriptor.tokenOut",
-        "taxonomy": {
-          "slotKind": "swap"
-        }
-      }
-    ]
-  },
-  "observations": {
-    "version": 1,
-    "events": [
-      {
-        "id": "zero1-curve-sell-log",
-        "signature": "event Sell(address indexed from,uint256 coinIn,uint256 usdsOut,uint256 burned,uint256 minted)",
-        "classification": "swap",
-        "pool": {
-          "op": "lower",
-          "args": [
-            {
-              "op": "address",
-              "args": [
-                "$log.address"
-              ]
-            }
-          ]
-        },
-        "payload": {
-          "curve": {
-            "op": "lower",
-            "args": [
-              {
-                "op": "address",
-                "args": [
-                  "$log.address"
-                ]
-              }
-            ]
-          },
-          "seller": {
-            "op": "address",
-            "args": [
-              "$args.from"
-            ]
-          },
-          "coinIn": "$args.coinIn",
-          "zero1Out": "$args.usdsOut",
-          "burned": "$args.burned",
-          "minted": "$args.minted"
-        },
-        "valid": {
-          "op": "and",
-          "args": [
-            {
-              "op": "gt",
-              "args": [
-                "$args.coinIn",
-                {
-                  "op": "uint",
-                  "args": [
-                    0
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "gt",
-              "args": [
-                "$args.usdsOut",
-                {
-                  "op": "uint",
-                  "args": [
-                    0
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "match": {
-          "op": "and",
-          "args": [
-            {
-              "op": "sameAddress",
-              "args": [
-                {
-                  "op": "coalesce",
-                  "args": [
-                    "$edge.observationTarget",
-                    {
-                      "op": "get",
-                      "args": [
-                        "$edge",
-                        "target"
-                      ]
-                    }
-                  ]
-                },
-                "$pool"
-              ]
-            },
-            {
-              "op": "eq",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$edge",
-                    "direction"
-                  ]
-                },
-                "sell"
-              ]
-            }
-          ]
-        },
-        "impact": {
-          "pool": {
-            "op": "coalesce",
-            "args": [
-              "$edge.observationTarget",
-              {
-                "op": "get",
-                "args": [
-                  "$edge",
-                  "target"
-                ]
-              }
-            ]
-          },
-          "tokenIn": {
-            "op": "get",
-            "args": [
-              "$edge",
-              "tokenIn"
-            ]
-          },
-          "tokenOut": {
-            "op": "get",
-            "args": [
-              "$edge",
-              "tokenOut"
-            ]
-          },
-          "matchedAdapterId": {
-            "op": "get",
-            "args": [
-              "$edge",
-              "adapterId"
-            ]
-          },
-          "amountIn": "$args.coinIn",
-          "amountOut": "$args.usdsOut"
-        }
-      },
-      {
-        "id": "zero1-curve-buy-log",
-        "signature": "event Buy(address indexed to,uint256 zero1Used,uint256 coinOut,uint256 burned,uint256 minted)",
-        "classification": "swap",
-        "pool": {
-          "op": "lower",
-          "args": [
-            {
-              "op": "address",
-              "args": [
-                "$log.address"
-              ]
-            }
-          ]
-        },
-        "payload": {
-          "curve": {
-            "op": "lower",
-            "args": [
-              {
-                "op": "address",
-                "args": [
-                  "$log.address"
-                ]
-              }
-            ]
-          },
-          "buyer": {
-            "op": "address",
-            "args": [
-              "$args.to"
-            ]
-          },
-          "zero1Used": "$args.zero1Used",
-          "coinOut": "$args.coinOut",
-          "burned": "$args.burned",
-          "minted": "$args.minted"
-        },
-        "valid": {
-          "op": "and",
-          "args": [
-            {
-              "op": "gt",
-              "args": [
-                "$args.zero1Used",
-                {
-                  "op": "uint",
-                  "args": [
-                    0
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "gt",
-              "args": [
-                "$args.coinOut",
-                {
-                  "op": "uint",
-                  "args": [
-                    0
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "match": {
-          "op": "and",
-          "args": [
-            {
-              "op": "sameAddress",
-              "args": [
-                {
-                  "op": "coalesce",
-                  "args": [
-                    "$edge.observationTarget",
-                    {
-                      "op": "get",
-                      "args": [
-                        "$edge",
-                        "target"
-                      ]
-                    }
-                  ]
-                },
-                "$pool"
-              ]
-            },
-            {
-              "op": "eq",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$edge",
-                    "direction"
-                  ]
-                },
-                "buy"
-              ]
-            }
-          ]
-        },
-        "impact": {
-          "pool": {
-            "op": "coalesce",
-            "args": [
-              "$edge.observationTarget",
-              {
-                "op": "get",
-                "args": [
-                  "$edge",
-                  "target"
-                ]
-              }
-            ]
-          },
-          "tokenIn": {
-            "op": "get",
-            "args": [
-              "$edge",
-              "tokenIn"
-            ]
-          },
-          "tokenOut": {
-            "op": "get",
-            "args": [
-              "$edge",
-              "tokenOut"
-            ]
-          },
-          "matchedAdapterId": {
-            "op": "get",
-            "args": [
-              "$edge",
-              "adapterId"
-            ]
-          },
-          "amountIn": "$args.zero1Used",
-          "amountOut": "$args.coinOut"
-        }
-      }
-    ],
-    "calls": [
-      {
-        "id": "zero1-curve-sell-call",
-        "signature": "function sell(uint256 coinIn,uint256 minOut,address to) returns (uint256 zero1Out)",
-        "classification": "swap",
-        "payload": {
-          "curve": {
-            "op": "lower",
-            "args": [
-              {
-                "op": "address",
-                "args": [
-                  "$observation.target"
-                ]
-              }
-            ]
-          },
-          "coinIn": "$args.coinIn",
-          "minOut": "$args.minOut",
-          "recipient": {
-            "op": "address",
-            "args": [
-              "$args.to"
-            ]
-          }
-        }
-      },
-      {
-        "id": "zero1-curve-buy-call",
-        "signature": "function buy(uint256 zero1In,uint256 minOut,address to) returns (uint256 coinOut)",
-        "classification": "swap",
-        "payload": {
-          "curve": {
-            "op": "lower",
-            "args": [
-              {
-                "op": "address",
-                "args": [
-                  "$observation.target"
-                ]
-              }
-            ]
-          },
-          "zero1In": "$args.zero1In",
-          "minOut": "$args.minOut",
-          "recipient": {
-            "op": "address",
-            "args": [
-              "$args.to"
-            ]
-          }
-        }
-      }
-    ],
-    "canonicalIntakeTargets": [],
-    "victimSupport": "detect-only"
-  },
-  "refreshPolicy": "each-block",
-  "directionSupport": {
-    "status": "not-applicable",
-    "reason": "buy(uint256,uint256,address) is an order action, not a pool conversion"
-  }
+  ]
 }

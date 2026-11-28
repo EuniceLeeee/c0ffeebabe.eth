@@ -7,1446 +7,1182 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_2668DFAA_ENABLED"
   },
-  "binding": {
-    "nomination": {
-      "parameterPaths": [
-        [
-          0
-        ]
-      ]
-    },
-    "flow": {
-      "version": 1,
-      "steps": [
-        {
-          "id": "pool",
-          "requirements": {
-            "transports": [
-              "eth-call"
-            ]
-          },
-          "requests": [
-            {
-              "id": "selectorBinding:pool:view",
-              "kind": "eth-call",
-              "to": {
-                "op": "lower",
-                "args": [
-                  {
-                    "op": "address",
-                    "args": [
-                      "$target"
-                    ]
-                  }
-                ]
-              },
-              "data": {
-                "op": "encode",
-                "args": [
-                  "bindingpoolview",
-                  "constantsView()",
-                  []
-                ]
-              },
-              "completion": "return-data"
-            }
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "17888777ccf85e8c0e07318f1e68b72b9d49749cffef5ab7fe17d77580eb2867"
+  },
+  "programs": [
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function constantsView() view returns ((uint256 dexId, address liquidity, address factory, (address shift, address admin, address colOperations, address debtOperations, address perfectOperationsAndSwapOut) implementations, address deployerContract, address token0, address token1, bytes32 supplyToken0Slot, bytes32 borrowToken0Slot, bytes32 supplyToken1Slot, bytes32 borrowToken1Slot, bytes32 exchangePriceToken0Slot, bytes32 exchangePriceToken1Slot, uint256 oracleMapping))"
           ],
-          "result": {
-            "view": {
-              "op": "decode",
-              "args": [
-                "bindingpoolview",
-                "constantsView()",
+          "endpointRead1": [
+            "function constantsView() view returns ((uint256 dexId, address liquidity, address factory, (address shift, address admin, address colOperations, address debtOperations, address perfectOperationsAndSwapOut) implementations, address deployerContract, address token0, address token1, bytes32 supplyToken0Slot, bytes32 borrowToken0Slot, bytes32 supplyToken1Slot, bytes32 borrowToken1Slot, bytes32 exchangePriceToken0Slot, bytes32 exchangePriceToken1Slot, uint256 oracleMapping))"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
                 {
-                  "op": "get",
-                  "args": [
-                    {
-                      "op": "returned",
-                      "args": [
-                        "selectorBinding:pool:view"
-                      ]
-                    },
-                    "data"
-                  ]
-                },
-                0
-              ]
-            }
-          }
-        },
-        {
-          "id": "decimals",
-          "requirements": {
-            "transports": [
-              "eth-call"
-            ]
-          },
-          "requests": {
-            "op": "flatMap",
-            "args": [
-              [
-                {
-                  "op": "if",
-                  "args": [
-                    {
-                      "op": "sameAddress",
-                      "args": [
-                        {
-                          "op": "at",
-                          "args": [
-                            "$steps.pool.view",
-                            5
-                          ]
-                        },
-                        "$constants.native"
-                      ]
-                    },
-                    "$constants.weth",
-                    {
-                      "op": "lower",
-                      "args": [
-                        {
-                          "op": "address",
-                          "args": [
-                            {
-                              "op": "at",
-                              "args": [
-                                "$steps.pool.view",
-                                5
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "if",
-                  "args": [
-                    {
-                      "op": "sameAddress",
-                      "args": [
-                        {
-                          "op": "at",
-                          "args": [
-                            "$steps.pool.view",
-                            6
-                          ]
-                        },
-                        "$constants.native"
-                      ]
-                    },
-                    "$constants.weth",
-                    {
-                      "op": "lower",
-                      "args": [
-                        {
-                          "op": "address",
-                          "args": [
-                            {
-                              "op": "at",
-                              "args": [
-                                "$steps.pool.view",
-                                6
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
-              ],
-              "item",
-              [
-                {
-                  "id": {
-                    "op": "join",
-                    "args": [
-                      [
-                        "selectorBinding:decimals:decimals:",
-                        {
-                          "op": "string",
-                          "args": [
-                            "$item"
-                          ]
-                        }
-                      ],
-                      ""
-                    ]
-                  },
+                  "id": "identity:ep0",
                   "kind": "eth-call",
-                  "to": {
-                    "op": "lower",
-                    "args": [
-                      {
-                        "op": "address",
-                        "args": [
-                          "$item"
-                        ]
-                      }
-                    ]
-                  },
+                  "to": "$target",
                   "data": {
                     "op": "encode",
                     "args": [
-                      "bindingdecimalsdecimals",
-                      "decimals()",
+                      "endpointRead0",
+                      "constantsView()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:ep1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead1",
+                      "constantsView()",
                       []
                     ]
                   },
                   "completion": "return-data"
                 }
-              ]
-            ]
-          },
-          "result": {
-            "op": "map",
-            "args": [
-              [
-                {
-                  "op": "if",
-                  "args": [
-                    {
-                      "op": "sameAddress",
-                      "args": [
-                        {
-                          "op": "at",
-                          "args": [
-                            "$steps.pool.view",
-                            5
-                          ]
-                        },
-                        "$constants.native"
-                      ]
-                    },
-                    "$constants.weth",
-                    {
-                      "op": "lower",
-                      "args": [
-                        {
-                          "op": "address",
-                          "args": [
-                            {
-                              "op": "at",
-                              "args": [
-                                "$steps.pool.view",
-                                5
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                },
-                {
-                  "op": "if",
-                  "args": [
-                    {
-                      "op": "sameAddress",
-                      "args": [
-                        {
-                          "op": "at",
-                          "args": [
-                            "$steps.pool.view",
-                            6
-                          ]
-                        },
-                        "$constants.native"
-                      ]
-                    },
-                    "$constants.weth",
-                    {
-                      "op": "lower",
-                      "args": [
-                        {
-                          "op": "address",
-                          "args": [
-                            {
-                              "op": "at",
-                              "args": [
-                                "$steps.pool.view",
-                                6
-                              ]
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
               ],
-              "item",
-              {
-                "item": "$item",
-                "decimals": {
-                  "op": "number",
-                  "args": [
-                    {
-                      "op": "decode",
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "if",
                       "args": [
-                        "bindingdecimalsdecimals",
-                        "decimals()",
                         {
-                          "op": "get",
+                          "op": "sameAddress",
                           "args": [
                             {
-                              "op": "returned",
+                              "op": "lower",
                               "args": [
                                 {
-                                  "op": "join",
+                                  "op": "address",
                                   "args": [
-                                    [
-                                      "selectorBinding:decimals:decimals:",
-                                      {
-                                        "op": "string",
-                                        "args": [
-                                          "$item"
-                                        ]
-                                      }
-                                    ],
-                                    ""
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "endpointRead0",
+                                            "constantsView()",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "identity:ep0"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        5
+                                      ]
+                                    }
                                   ]
                                 }
                               ]
                             },
-                            "data"
+                            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
                           ]
                         },
-                        0
+                        "0x0000000000000000000000000000000000000000",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "endpointRead0",
+                                        "constantsView()",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "identity:ep0"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "ep1": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "endpointRead1",
+                                            "constantsView()",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "identity:ep1"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        6
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                          ]
+                        },
+                        "0x0000000000000000000000000000000000000000",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "endpointRead1",
+                                        "constantsView()",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "identity:ep1"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    6
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
                       ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "swap0-to-1",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": "$r.ep1"
+                  }
                 }
-              }
-            ]
-          }
-        }
-      ],
-      "result": {
-        "pool": {
-          "view": "$steps.pool.view"
+              ]
+            }
+          ],
+          "result": "$steps.identity"
         },
-        "decimals": "$steps.decimals"
-      }
-    },
-    "descriptor": {
-      "op": "merge",
-      "args": [
-        {},
+        "descriptor": {
+          "direction": "swap0-to-1",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          },
+          "allowNativeToken": true
+        }
+      },
+      "checks": [
         {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function constantsView() view returns ((uint256 dexId, address liquidity, address factory, (address shift, address admin, address colOperations, address debtOperations, address perfectOperationsAndSwapOut) implementations, address deployerContract, address token0, address token1, bytes32 supplyToken0Slot, bytes32 borrowToken0Slot, bytes32 supplyToken1Slot, bytes32 borrowToken1Slot, bytes32 exchangePriceToken0Slot, bytes32 exchangePriceToken1Slot, uint256 oracleMapping))"
+          ],
+          "endpointRead1": [
+            "function constantsView() view returns ((uint256 dexId, address liquidity, address factory, (address shift, address admin, address colOperations, address debtOperations, address perfectOperationsAndSwapOut) implementations, address deployerContract, address token0, address token1, bytes32 supplyToken0Slot, bytes32 borrowToken0Slot, bytes32 supplyToken1Slot, bytes32 borrowToken1Slot, bytes32 exchangePriceToken0Slot, bytes32 exchangePriceToken1Slot, uint256 oracleMapping))"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "constantsView()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:ep1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead1",
+                      "constantsView()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "endpointRead0",
+                                            "constantsView()",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "identity:ep0"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        6
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                          ]
+                        },
+                        "0x0000000000000000000000000000000000000000",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "endpointRead0",
+                                        "constantsView()",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "identity:ep0"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    6
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "ep1": {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            {
+                              "op": "lower",
+                              "args": [
+                                {
+                                  "op": "address",
+                                  "args": [
+                                    {
+                                      "op": "at",
+                                      "args": [
+                                        {
+                                          "op": "decodeCanonical",
+                                          "args": [
+                                            "endpointRead1",
+                                            "constantsView()",
+                                            {
+                                              "op": "get",
+                                              "args": [
+                                                {
+                                                  "op": "returned",
+                                                  "args": [
+                                                    "identity:ep1"
+                                                  ]
+                                                },
+                                                "data"
+                                              ]
+                                            },
+                                            0
+                                          ]
+                                        },
+                                        5
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+                          ]
+                        },
+                        "0x0000000000000000000000000000000000000000",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                {
+                                  "op": "at",
+                                  "args": [
+                                    {
+                                      "op": "decodeCanonical",
+                                      "args": [
+                                        "endpointRead1",
+                                        "constantsView()",
+                                        {
+                                          "op": "get",
+                                          "args": [
+                                            {
+                                              "op": "returned",
+                                              "args": [
+                                                "identity:ep1"
+                                              ]
+                                            },
+                                            "data"
+                                          ]
+                                        },
+                                        0
+                                      ]
+                                    },
+                                    5
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "swap1-to-0",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": "$r.ep1"
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "swap1-to-0",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          },
+          "allowNativeToken": true
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
+        "target": "$descriptor.pool",
+        "directions": [
+          {
+            "id": "swap",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "swap"
+            },
+            "executionAssets": {
+              "input": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.rawIn",
+                      "0x0000000000000000000000000000000000000000"
+                    ]
+                  },
+                  "native",
+                  "erc20"
+                ]
+              },
+              "output": {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$descriptor.rawOut",
+                      "0x0000000000000000000000000000000000000000"
+                    ]
+                  },
+                  "native",
+                  "erc20"
+                ]
+              }
+            },
+            "fields": {
+              "pool": "$descriptor.pool",
+              "swap0To1": "$descriptor.swap0To1"
+            }
+          }
+        ],
+        "venue": {
+          "kind": "address-pool",
           "pool": {
             "op": "lower",
             "args": [
               {
                 "op": "address",
                 "args": [
-                  "$target"
+                  "$descriptor.pool"
                 ]
               }
-            ]
-          },
-          "rawToken0": {
-            "op": "at",
-            "args": [
-              "$binding.pool.view",
-              5
-            ]
-          },
-          "rawToken1": {
-            "op": "at",
-            "args": [
-              "$binding.pool.view",
-              6
-            ]
-          },
-          "token0": {
-            "op": "if",
-            "args": [
-              {
-                "op": "sameAddress",
-                "args": [
-                  {
-                    "op": "at",
-                    "args": [
-                      "$binding.pool.view",
-                      5
-                    ]
-                  },
-                  "$constants.native"
-                ]
-              },
-              "$constants.weth",
-              {
-                "op": "lower",
-                "args": [
-                  {
-                    "op": "address",
-                    "args": [
-                      {
-                        "op": "at",
-                        "args": [
-                          "$binding.pool.view",
-                          5
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "token1": {
-            "op": "if",
-            "args": [
-              {
-                "op": "sameAddress",
-                "args": [
-                  {
-                    "op": "at",
-                    "args": [
-                      "$binding.pool.view",
-                      6
-                    ]
-                  },
-                  "$constants.native"
-                ]
-              },
-              "$constants.weth",
-              {
-                "op": "lower",
-                "args": [
-                  {
-                    "op": "address",
-                    "args": [
-                      {
-                        "op": "at",
-                        "args": [
-                          "$binding.pool.view",
-                          6
-                        ]
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          },
-          "token0Decimals": {
-            "op": "get",
-            "args": [
-              {
-                "op": "at",
-                "args": [
-                  "$binding.decimals",
-                  0
-                ]
-              },
-              "decimals"
-            ]
-          },
-          "token1Decimals": {
-            "op": "get",
-            "args": [
-              {
-                "op": "at",
-                "args": [
-                  "$binding.decimals",
-                  1
-                ]
-              },
-              "decimals"
-            ]
-          },
-          "quoteBinding": {
-            "target": {
-              "op": "lower",
-              "args": [
-                {
-                  "op": "address",
-                  "args": [
-                    "$target"
-                  ]
-                }
-              ]
-            },
-            "recipient": "$constants.dead",
-            "completion": "return-or-revert-data",
-            "successEncoding": "FluidDexSwapResult(uint256)-revert"
-          }
-        }
-      ]
-    }
-  },
-  "routes": {
-    "target": {
-      "op": "get",
-      "args": [
-        {
-          "op": "expression",
-          "args": [
-            "instance",
-            {
-              "d": "$descriptor"
-            }
-          ]
-        },
-        "pool"
-      ]
-    },
-    "directions": [
-      {
-        "id": "swap0-to-1",
-        "enabled": true,
-        "tokenIn": {
-          "op": "get",
-          "args": [
-            {
-              "op": "expression",
-              "args": [
-                "instance",
-                {
-                  "d": "$descriptor"
-                }
-              ]
-            },
-            "token0"
-          ]
-        },
-        "tokenOut": {
-          "op": "get",
-          "args": [
-            {
-              "op": "expression",
-              "args": [
-                "instance",
-                {
-                  "d": "$descriptor"
-                }
-              ]
-            },
-            "token1"
-          ]
-        },
-        "taxonomy": {
-          "slotKind": "swap"
-        },
-        "executionAssets": {
-          "input": {
-            "op": "if",
-            "args": [
-              {
-                "op": "sameAddress",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      {
-                        "op": "expression",
-                        "args": [
-                          "instance",
-                          {
-                            "d": "$descriptor"
-                          }
-                        ]
-                      },
-                      "rawToken0"
-                    ]
-                  },
-                  "$constants.native"
-                ]
-              },
-              "native",
-              "erc20"
-            ]
-          },
-          "output": {
-            "op": "if",
-            "args": [
-              {
-                "op": "sameAddress",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      {
-                        "op": "expression",
-                        "args": [
-                          "instance",
-                          {
-                            "d": "$descriptor"
-                          }
-                        ]
-                      },
-                      "rawToken1"
-                    ]
-                  },
-                  "$constants.native"
-                ]
-              },
-              "native",
-              "erc20"
             ]
           }
-        },
-        "fields": {
-          "pool": {
-            "op": "get",
-            "args": [
-              {
-                "op": "expression",
-                "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
-              },
-              "pool"
-            ]
-          },
-          "swap0To1": true
         }
       },
-      {
-        "id": "swap1-to-0",
-        "enabled": true,
-        "tokenIn": {
-          "op": "get",
-          "args": [
-            {
-              "op": "expression",
-              "args": [
-                "instance",
-                {
-                  "d": "$descriptor"
-                }
-              ]
-            },
-            "token1"
-          ]
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": true
         },
-        "tokenOut": {
-          "op": "get",
-          "args": [
-            {
-              "op": "expression",
-              "args": [
-                "instance",
-                {
-                  "d": "$descriptor"
-                }
-              ]
-            },
-            "token0"
-          ]
-        },
-        "taxonomy": {
-          "slotKind": "swap"
-        },
-        "executionAssets": {
-          "input": {
-            "op": "if",
-            "args": [
-              {
-                "op": "sameAddress",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      {
-                        "op": "expression",
-                        "args": [
-                          "instance",
-                          {
-                            "d": "$descriptor"
-                          }
-                        ]
-                      },
-                      "rawToken1"
-                    ]
-                  },
-                  "$constants.native"
-                ]
-              },
-              "native",
-              "erc20"
-            ]
-          },
-          "output": {
-            "op": "if",
-            "args": [
-              {
-                "op": "sameAddress",
-                "args": [
-                  {
-                    "op": "get",
-                    "args": [
-                      {
-                        "op": "expression",
-                        "args": [
-                          "instance",
-                          {
-                            "d": "$descriptor"
-                          }
-                        ]
-                      },
-                      "rawToken0"
-                    ]
-                  },
-                  "$constants.native"
-                ]
-              },
-              "native",
-              "erc20"
-            ]
-          }
-        },
-        "fields": {
-          "pool": {
-            "op": "get",
-            "args": [
-              {
-                "op": "expression",
-                "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
-              },
-              "pool"
-            ]
-          },
-          "swap0To1": false
-        }
-      }
-    ],
-    "venue": {
-      "kind": "address-pool",
-      "pool": {
-        "op": "lower",
-        "args": [
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "preflight": [
           {
-            "op": "address",
-            "args": [
+            "target": "$target",
+            "signature": "function constantsView() view returns ((uint256 dexId,address liquidity,address factory,(address shift,address admin,address colOperations,address debtOperations,address perfectOperationsAndSwapOut) implementations,address deployerContract,address token0,address token1,bytes32 supplyToken0Slot,bytes32 borrowToken0Slot,bytes32 supplyToken1Slot,bytes32 borrowToken1Slot,bytes32 exchangePriceToken0Slot,bytes32 exchangePriceToken1Slot,uint256 oracleMapping))",
+            "args": [],
+            "save": {
+              "constToken0": 9,
+              "constToken1": 10
+            },
+            "checks": [
               {
-                "op": "get",
-                "args": [
-                  {
-                    "op": "expression",
-                    "args": [
-                      "instance",
-                      {
-                        "d": "$descriptor"
-                      }
-                    ]
-                  },
-                  "pool"
-                ]
+                "left": {
+                  "runtime": "constToken0"
+                },
+                "operator": "eq",
+                "right": {
+                  "op": "uint",
+                  "args": [
+                    "$descriptor.expectedToken0"
+                  ]
+                }
+              },
+              {
+                "left": {
+                  "runtime": "constToken1"
+                },
+                "operator": "eq",
+                "right": {
+                  "op": "uint",
+                  "args": [
+                    "$descriptor.expectedToken1"
+                  ]
+                }
               }
             ]
           }
-        ]
-      }
-    },
-    "checks": [
-      {
-        "assert": {
-          "op": "and",
-          "args": [
-            {
-              "op": "not",
-              "args": [
-                {
-                  "op": "sameAddress",
-                  "args": [
-                    "$descriptor.token0",
-                    "$descriptor.token1"
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "sameAddress",
-              "args": [
-                "$descriptor.token0",
-                {
-                  "op": "if",
-                  "args": [
-                    {
-                      "op": "sameAddress",
-                      "args": [
-                        "$descriptor.rawToken0",
-                        "$constants.native"
-                      ]
-                    },
-                    "$constants.weth",
-                    "$descriptor.rawToken0"
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "sameAddress",
-              "args": [
-                "$descriptor.token1",
-                {
-                  "op": "if",
-                  "args": [
-                    {
-                      "op": "sameAddress",
-                      "args": [
-                        "$descriptor.rawToken1",
-                        "$constants.native"
-                      ]
-                    },
-                    "$constants.weth",
-                    "$descriptor.rawToken1"
-                  ]
-                }
-              ]
-            }
-          ]
-        },
-        "error": "fluid-dex asset graph mapping conflict"
-      }
-    ]
-  },
-  "execution": {
-    "version": 2,
-    "settlement": {
-      "directOutput": true
-    },
-    "protectedAddresses": [
-      {
-        "op": "get",
-        "args": [
+        ],
+        "steps": [
           {
-            "op": "expression",
-            "args": [
-              "instance",
-              {
-                "d": "$descriptor"
-              }
-            ]
-          },
-          "pool"
-        ]
-      },
-      {
-        "op": "get",
-        "args": [
-          "$route",
-          "tokenIn"
-        ]
-      },
-      {
-        "op": "get",
-        "args": [
-          "$route",
-          "tokenOut"
-        ]
-      },
-      "$constants.dead"
-    ],
-    "steps": [
-      {
-        "id": "swapNativeInput",
-        "when": {
-          "op": "and",
-          "args": [
-            {
+            "id": "swapNative",
+            "when": {
               "op": "eq",
               "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$route",
-                        "executionAssets"
-                      ]
-                    },
-                    "input"
-                  ]
-                },
+                "$route.executionAssets.input",
                 "native"
               ]
             },
-            {
-              "op": "not",
+            "call": {
+              "target": "$target",
+              "signature": "function swapIn(bool, uint256, uint256, address) payable returns (uint256)",
               "args": [
-                "$directSettlement"
-              ]
-            }
-          ]
-        },
-        "call": {
-          "target": {
-            "op": "get",
-            "args": [
-              {
-                "op": "expression",
-                "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
+                "$route.swap0To1",
+                {
+                  "runtime": "amountIn"
+                },
+                "$minAmountOut",
+                "$recipient"
+              ],
+              "value": {
+                "runtime": "amountIn"
               },
-              "pool"
-            ]
+              "save": {
+                "swapOut": 0
+              }
+            }
           },
-          "signature": "function swapIn(bool swap0to1_,uint256 amountIn_,uint256 amountOutMin_,address to_) payable returns(uint256 amountOut_)",
-          "args": [
-            {
-              "op": "get",
+          {
+            "id": "swapErc20",
+            "when": {
+              "op": "ne",
               "args": [
-                "$route",
-                "swap0To1"
+                "$route.executionAssets.input",
+                "native"
               ]
             },
-            {
-              "runtime": "amountIn"
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "verifyAllowance": true
             },
-            "$minAmountOut",
-            "$recipient"
-          ],
-          "value": {
-            "runtime": "amountIn"
+            "call": {
+              "target": "$target",
+              "signature": "function swapIn(bool, uint256, uint256, address) payable returns (uint256)",
+              "args": [
+                "$route.swap0To1",
+                {
+                  "runtime": "amountIn"
+                },
+                "$minAmountOut",
+                "$recipient"
+              ],
+              "save": {
+                "swapOut": 0
+              }
+            }
           }
-        }
-      },
-      {
-        "id": "swapNativeInputDirect",
-        "when": {
-          "op": "and",
-          "args": [
-            {
-              "op": "eq",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$route",
-                        "executionAssets"
-                      ]
-                    },
-                    "input"
-                  ]
-                },
-                "native"
-              ]
-            },
-            "$directSettlement"
-          ]
-        },
-        "call": {
-          "target": {
-            "op": "get",
-            "args": [
-              {
-                "op": "expression",
-                "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
-              },
-              "pool"
-            ]
-          },
-          "signature": "function swapIn(bool swap0to1_,uint256 amountIn_,uint256 amountOutMin_,address to_) payable returns(uint256 amountOut_)",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "swap0To1"
-              ]
-            },
-            {
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "asset": "native",
+            "account": "$executor",
+            "equals": {
               "runtime": "amountIn"
             },
-            "$minAmountOut",
-            "$recipient"
-          ],
-          "value": {
-            "runtime": "amountIn"
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.executionAssets.input",
+                "native"
+              ]
+            }
           },
-          "save": {
-            "swapNativeInputDirectOutput": 0
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            },
+            "when": {
+              "op": "ne",
+              "args": [
+                "$route.executionAssets.input",
+                "native"
+              ]
+            }
           },
-          "checks": [
-            {
-              "left": {
-                "runtime": "swapNativeInputDirectOutput"
-              },
-              "operator": "eq",
-              "right": {
-                "quoteOutput": "expectedReceipt"
+          {
+            "kind": "credit",
+            "asset": "native",
+            "account": "$recipient",
+            "minimum": "$minAmountOut",
+            "when": {
+              "op": "eq",
+              "args": [
+                "$route.executionAssets.output",
+                "native"
+              ]
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "equals": {
+              "runtime": "swapOut"
+            },
+            "minimum": "$minAmountOut",
+            "when": {
+              "op": "ne",
+              "args": [
+                "$route.executionAssets.output",
+                "native"
+              ]
+            }
+          }
+        ]
+      },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "pool": "$target",
+          "rawIn": {
+            "op": "lower",
+            "args": [
+              {
+                "op": "address",
+                "args": [
+                  "$sqlEdge.tokenIn"
+                ]
               }
-            }
-          ]
-        }
-      },
-      {
-        "id": "swapTokenInput",
-        "when": {
-          "op": "and",
-          "args": [
-            {
-              "op": "not",
-              "args": [
-                {
-                  "op": "eq",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        {
-                          "op": "get",
-                          "args": [
-                            "$route",
-                            "executionAssets"
-                          ]
-                        },
-                        "input"
-                      ]
-                    },
-                    "native"
-                  ]
-                }
-              ]
-            },
-            {
-              "op": "not",
-              "args": [
-                "$directSettlement"
-              ]
-            }
-          ]
-        },
-        "approval": {
-          "token": {
-            "op": "get",
-            "args": [
-              "$route",
-              "tokenIn"
             ]
           },
-          "spender": {
-            "op": "get",
+          "rawOut": {
+            "op": "lower",
             "args": [
               {
-                "op": "expression",
+                "op": "address",
                 "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
+                  "$sqlEdge.tokenOut"
                 ]
-              },
-              "pool"
-            ]
-          },
-          "mode": "exact-clear"
-        },
-        "call": {
-          "target": {
-            "op": "get",
-            "args": [
-              {
-                "op": "expression",
-                "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
-              },
-              "pool"
-            ]
-          },
-          "signature": "function swapIn(bool swap0to1_,uint256 amountIn_,uint256 amountOutMin_,address to_) payable returns(uint256 amountOut_)",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "swap0To1"
-              ]
-            },
-            {
-              "runtime": "amountIn"
-            },
-            "$minAmountOut",
-            "$recipient"
-          ]
-        }
-      },
-      {
-        "id": "swapTokenInputDirect",
-        "when": {
-          "op": "and",
-          "args": [
-            {
-              "op": "not",
-              "args": [
-                {
-                  "op": "eq",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        {
-                          "op": "get",
-                          "args": [
-                            "$route",
-                            "executionAssets"
-                          ]
-                        },
-                        "input"
-                      ]
-                    },
-                    "native"
-                  ]
-                }
-              ]
-            },
-            "$directSettlement"
-          ]
-        },
-        "approval": {
-          "token": {
-            "op": "get",
-            "args": [
-              "$route",
-              "tokenIn"
-            ]
-          },
-          "spender": {
-            "op": "get",
-            "args": [
-              {
-                "op": "expression",
-                "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
-              },
-              "pool"
-            ]
-          },
-          "mode": "exact-clear"
-        },
-        "call": {
-          "target": {
-            "op": "get",
-            "args": [
-              {
-                "op": "expression",
-                "args": [
-                  "instance",
-                  {
-                    "d": "$descriptor"
-                  }
-                ]
-              },
-              "pool"
-            ]
-          },
-          "signature": "function swapIn(bool swap0to1_,uint256 amountIn_,uint256 amountOutMin_,address to_) payable returns(uint256 amountOut_)",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                "$route",
-                "swap0To1"
-              ]
-            },
-            {
-              "runtime": "amountIn"
-            },
-            "$minAmountOut",
-            "$recipient"
-          ],
-          "save": {
-            "swapTokenInputDirectOutput": 0
-          },
-          "checks": [
-            {
-              "left": {
-                "runtime": "swapTokenInputDirectOutput"
-              },
-              "operator": "eq",
-              "right": {
-                "quoteOutput": "expectedReceipt"
               }
-            }
-          ]
-        }
-      }
-    ],
-    "effects": [
-      {
-        "kind": "debit",
-        "asset": "native",
-        "account": "$executor",
-        "equals": {
-          "runtime": "amountIn"
-        },
-        "when": {
-          "op": "eq",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$route",
-                    "executionAssets"
-                  ]
-                },
-                "input"
-              ]
-            },
-            "native"
-          ]
-        }
-      },
-      {
-        "kind": "debit",
-        "asset": "erc20",
-        "token": {
-          "op": "get",
-          "args": [
-            "$route",
-            "tokenIn"
-          ]
-        },
-        "account": "$executor",
-        "equals": {
-          "runtime": "amountIn"
-        },
-        "when": {
-          "op": "not",
-          "args": [
-            {
-              "op": "eq",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$route",
-                        "executionAssets"
-                      ]
-                    },
-                    "input"
-                  ]
-                },
-                "native"
-              ]
-            }
-          ]
-        }
-      },
-      {
-        "kind": "credit",
-        "asset": "native",
-        "account": "$executor",
-        "when": {
-          "op": "eq",
-          "args": [
-            {
-              "op": "get",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    "$route",
-                    "executionAssets"
-                  ]
-                },
-                "output"
-              ]
-            },
-            "native"
-          ]
-        }
-      },
-      {
-        "kind": "credit",
-        "asset": "erc20",
-        "token": {
-          "op": "get",
-          "args": [
-            "$route",
-            "tokenOut"
-          ]
-        },
-        "account": "$recipient",
-        "when": {
-          "op": "not",
-          "args": [
-            {
-              "op": "eq",
-              "args": [
-                {
-                  "op": "get",
-                  "args": [
-                    {
-                      "op": "get",
-                      "args": [
-                        "$route",
-                        "executionAssets"
-                      ]
-                    },
-                    "output"
-                  ]
-                },
-                "native"
-              ]
-            }
-          ]
-        }
-      }
-    ],
-    "allowZeroMinimum": true
-  },
-  "observations": {
-    "version": 1,
-    "events": [
-      {
-        "id": "fluid-dex-swap-log",
-        "topic": "0xdc004dbca4ef9c966218431ee5d9133d337ad018dd5b5c5493722803f75c64f7",
-        "classification": "swap",
-        "receiptMode": "unresolved"
-      }
-    ],
-    "canonicalIntakeTargets": [],
-    "victimSupport": "detect-only"
-  },
-  "refreshPolicy": "each-block",
-  "quoteOutput": {
-    "version": 1,
-    "nativeBoundary": true,
-    "steps": [
-      {
-        "id": "quote",
-        "errorSignature": "error FluidDexSwapResult(uint256 amountOut)",
-        "call": {
-          "target": "$descriptor.pool",
-          "signature": "function swapIn(bool swap0to1_,uint256 amountIn_,uint256 amountOutMin_,address to_) payable returns(uint256 amountOut_)",
-          "args": [
-            "$route.swap0To1",
-            {
-              "runtime": "amountIn"
-            },
-            {
-              "op": "uint",
-              "args": [
-                0
-              ]
-            },
-            "$constants.dead"
-          ],
-          "save": {
-            "quoted": 0
+            ]
           },
-          "checks": [
-            {
-              "left": {
-                "runtime": "quoted"
-              },
-              "operator": "gte",
-              "right": {
+          "swap0To1": {
+            "op": "lt",
+            "args": [
+              {
                 "op": "uint",
                 "args": [
-                  1
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$sqlEdge.tokenIn",
+                          "0x0000000000000000000000000000000000000000"
+                        ]
+                      },
+                      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$sqlEdge.tokenIn"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "uint",
+                "args": [
+                  {
+                    "op": "if",
+                    "args": [
+                      {
+                        "op": "sameAddress",
+                        "args": [
+                          "$sqlEdge.tokenOut",
+                          "0x0000000000000000000000000000000000000000"
+                        ]
+                      },
+                      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                      {
+                        "op": "lower",
+                        "args": [
+                          {
+                            "op": "address",
+                            "args": [
+                              "$sqlEdge.tokenOut"
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
                 ]
               }
-            }
-          ]
+            ]
+          },
+          "expectedToken0": {
+            "op": "if",
+            "args": [
+              {
+                "op": "lt",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$sqlEdge.tokenIn",
+                              "0x0000000000000000000000000000000000000000"
+                            ]
+                          },
+                          "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$sqlEdge.tokenIn"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$sqlEdge.tokenOut",
+                              "0x0000000000000000000000000000000000000000"
+                            ]
+                          },
+                          "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$sqlEdge.tokenOut"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$sqlEdge.tokenIn",
+                      "0x0000000000000000000000000000000000000000"
+                    ]
+                  },
+                  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$sqlEdge.tokenIn"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$sqlEdge.tokenOut",
+                      "0x0000000000000000000000000000000000000000"
+                    ]
+                  },
+                  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$sqlEdge.tokenOut"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "expectedToken1": {
+            "op": "if",
+            "args": [
+              {
+                "op": "lt",
+                "args": [
+                  {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$sqlEdge.tokenIn",
+                              "0x0000000000000000000000000000000000000000"
+                            ]
+                          },
+                          "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$sqlEdge.tokenIn"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "op": "uint",
+                    "args": [
+                      {
+                        "op": "if",
+                        "args": [
+                          {
+                            "op": "sameAddress",
+                            "args": [
+                              "$sqlEdge.tokenOut",
+                              "0x0000000000000000000000000000000000000000"
+                            ]
+                          },
+                          "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                          {
+                            "op": "lower",
+                            "args": [
+                              {
+                                "op": "address",
+                                "args": [
+                                  "$sqlEdge.tokenOut"
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$sqlEdge.tokenOut",
+                      "0x0000000000000000000000000000000000000000"
+                    ]
+                  },
+                  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$sqlEdge.tokenOut"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "op": "if",
+                "args": [
+                  {
+                    "op": "sameAddress",
+                    "args": [
+                      "$sqlEdge.tokenIn",
+                      "0x0000000000000000000000000000000000000000"
+                    ]
+                  },
+                  "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  {
+                    "op": "lower",
+                    "args": [
+                      {
+                        "op": "address",
+                        "args": [
+                          "$sqlEdge.tokenIn"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "tokenIn": {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$sqlEdge.tokenIn",
+                  "0x0000000000000000000000000000000000000000"
+                ]
+              },
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              {
+                "op": "address",
+                "args": [
+                  "$sqlEdge.tokenIn"
+                ]
+              }
+            ]
+          },
+          "tokenOut": {
+            "op": "if",
+            "args": [
+              {
+                "op": "sameAddress",
+                "args": [
+                  "$sqlEdge.tokenOut",
+                  "0x0000000000000000000000000000000000000000"
+                ]
+              },
+              "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+              {
+                "op": "address",
+                "args": [
+                  "$sqlEdge.tokenOut"
+                ]
+              }
+            ]
+          }
         }
       }
-    ],
-    "result": {
-      "runtime": "quoted"
-    },
-    "exports": {
-      "expectedReceipt": {
-        "runtime": "quoted"
-      }
     }
-  },
-  "values": {
-    "abi": {
-      "bindingpoolview": [
-        "function constantsView() view returns ((uint256 dexId,address liquidity,address factory,(address shift,address admin,address colOperations,address debtOperations,address perfectOperationsAndSwapOut) implementations,address deployerContract,address token0,address token1,bytes32 supplyToken0Slot,bytes32 borrowToken0Slot,bytes32 supplyToken1Slot,bytes32 borrowToken1Slot,bytes32 exchangePriceToken0Slot,bytes32 exchangePriceToken1Slot,uint256 oracleMapping) constantsView_)"
-      ],
-      "bindingdecimalsdecimals": [
-        "function decimals() view returns(uint8)"
-      ]
-    },
-    "constants": {
-      "native": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-      "dead": "0x000000000000000000000000000000000000dEaD"
-    },
-    "expressions": {
-      "instance": {
-        "op": "coalesce",
-        "args": [
-          {
-            "op": "get",
-            "args": [
-              "$d",
-              "instance"
-            ]
-          },
-          "$d"
-        ]
-      }
-    }
-  },
-  "resourceValues": {
-    "constants": {
-      "native": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-      "weth": "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-      "dead": "0x000000000000000000000000000000000000dEaD"
-    },
-    "expressions": {
-      "instance": {
-        "op": "coalesce",
-        "args": [
-          {
-            "op": "get",
-            "args": [
-              "$d",
-              "instance"
-            ]
-          },
-          "$d"
-        ]
-      }
-    }
-  },
-  "meta": {
-    "label": "fluid-dex/factory-child-active-quote"
-  }
+  ]
 }

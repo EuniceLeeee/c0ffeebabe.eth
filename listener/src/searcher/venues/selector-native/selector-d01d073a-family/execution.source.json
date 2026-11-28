@@ -1,0 +1,131 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0xd01d073a",
+  "signature": "function syncDeposit(uint256, address, address)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_D01D073A_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "sync-deposit",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenIn"
+          ]
+        },
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenOut"
+          ]
+        }
+      }
+    },
+    "routes": {
+      "directions": [
+        {
+          "id": "sync-deposit",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": {
+            "slotKind": "protocol",
+            "protocolAction": "wrap"
+          }
+        }
+      ],
+      "resource": {
+        "target": "$descriptor.target"
+      }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenIn"
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "not",
+            "args": [
+              "$externalRecipient"
+            ]
+          },
+          "error": "syncDeposit mints to executor"
+        }
+      ],
+      "steps": [
+        {
+          "id": "deposit",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$target",
+            "mode": "exact-clear",
+            "requireBool": true,
+            "verifyAllowance": true
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function syncDeposit(uint256, address, address) returns (uint256)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              },
+              "$executor",
+              "0x0000000000000000000000000000000000000000"
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

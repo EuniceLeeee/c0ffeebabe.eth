@@ -1,0 +1,331 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0xa6220b66",
+  "signature": "function swapExactIn(address, uint256, uint256, address)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_A6220B66_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "precision-pool-swap-exact-in",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "pool": "$target",
+        "rawIn": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenIn"
+              ]
+            }
+          ]
+        },
+        "rawOut": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenOut"
+              ]
+            }
+          ]
+        },
+        "tokenIn": {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$sqlEdge.tokenIn",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenIn"
+              ]
+            }
+          ]
+        },
+        "tokenOut": {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$sqlEdge.tokenOut",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenOut"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "routes": {
+      "target": "$descriptor.pool",
+      "directions": [
+        {
+          "id": "swap",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": {
+            "slotKind": "swap"
+          },
+          "executionAssets": {
+            "input": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.rawIn",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                "native",
+                "erc20"
+              ]
+            },
+            "output": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.rawOut",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                "native",
+                "erc20"
+              ]
+            }
+          },
+          "fields": {
+            "pool": "$descriptor.pool",
+            "rawIn": "$descriptor.rawIn"
+          }
+        }
+      ],
+      "venue": {
+        "kind": "address-pool",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.pool"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "preflight": [
+        {
+          "target": "$target",
+          "signature": "function hook() view returns (address)",
+          "args": [],
+          "save": {
+            "hookAddr": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "hookAddr"
+              },
+              "operator": "eq",
+              "right": 0
+            }
+          ]
+        },
+        {
+          "target": "$target",
+          "signature": "function creatorFeeBps() view returns (uint256)",
+          "args": [],
+          "save": {
+            "creatorFee": 0
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "creatorFee"
+              },
+              "operator": "eq",
+              "right": 0
+            }
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "swapNative",
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function swapExactIn(address, uint256, uint256, address) payable returns (uint256)",
+            "args": [
+              "$route.rawIn",
+              {
+                "runtime": "amountIn"
+              },
+              "$minAmountOut",
+              "$recipient"
+            ],
+            "value": {
+              "runtime": "amountIn"
+            },
+            "save": {
+              "reportedOut": 0
+            }
+          }
+        },
+        {
+          "id": "swapErc20",
+          "when": {
+            "op": "ne",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          },
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$target",
+            "mode": "exact-clear",
+            "verifyAllowance": true
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function swapExactIn(address, uint256, uint256, address) payable returns (uint256)",
+            "args": [
+              "$route.rawIn",
+              {
+                "runtime": "amountIn"
+              },
+              "$minAmountOut",
+              "$recipient"
+            ],
+            "save": {
+              "reportedOut": 0
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "asset": "native",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          },
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          }
+        },
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          },
+          "when": {
+            "op": "ne",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          }
+        },
+        {
+          "kind": "credit",
+          "asset": "native",
+          "account": "$recipient",
+          "minimum": "$minAmountOut",
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.executionAssets.output",
+              "native"
+            ]
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "reportedOut"
+          },
+          "minimum": "$minAmountOut",
+          "when": {
+            "op": "ne",
+            "args": [
+              "$route.executionAssets.output",
+              "native"
+            ]
+          }
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

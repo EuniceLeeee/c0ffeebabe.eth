@@ -7,200 +7,297 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_F5720C4A_ENABLED"
   },
-  "parameters": [
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "aa3b95e3f0c729e93ee4ef80103818317ac28d4162f1b42f6da61fb05c4599e9"
+  },
+  "programs": [
     {
-      "path": [
-        0
-      ],
-      "role": "amountIn"
-    }
-  ],
-  "payment": {
-    "kind": "approval"
-  },
-  "values": {
-    "abi": {
-      "assettokenIn": [
-        "function BIT_TOKEN_ADDRESS() view returns(address)"
-      ],
-      "assettokenOut": [
-        "function MNT_TOKEN_ADDRESS() view returns(address)"
-      ]
-    }
-  },
-  "binding": {
-    "flow": {
-      "version": 1,
-      "steps": [
-        {
-          "id": "assets",
-          "requirements": {
-            "transports": [
-              "eth-call"
-            ]
-          },
-          "requests": {
-            "op": "concat",
-            "args": [
-              {
-                "op": "if",
-                "args": [
-                  {
-                    "op": "not",
-                    "args": [
-                      {
-                        "op": "defined",
-                        "args": [
-                          "$scope.tokenIn"
-                        ]
-                      }
-                    ]
-                  },
-                  [
-                    {
-                      "id": "selector-assets:tokenIn",
-                      "kind": "eth-call",
-                      "to": "$target",
-                      "data": {
-                        "op": "encode",
-                        "args": [
-                          "assettokenIn",
-                          "BIT_TOKEN_ADDRESS()",
-                          []
-                        ]
-                      },
-                      "completion": "return-data"
-                    }
-                  ],
-                  []
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function BIT_TOKEN_ADDRESS() view returns (address)"
+          ],
+          "endpointRead1": [
+            "function MNT_TOKEN_ADDRESS() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
                 ]
               },
-              {
-                "op": "if",
-                "args": [
-                  {
-                    "op": "not",
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
                     "args": [
-                      {
-                        "op": "defined",
-                        "args": [
-                          "$scope.tokenOut"
-                        ]
-                      }
+                      "endpointRead0",
+                      "BIT_TOKEN_ADDRESS()",
+                      []
                     ]
                   },
-                  [
-                    {
-                      "id": "selector-assets:tokenOut",
-                      "kind": "eth-call",
-                      "to": "$target",
-                      "data": {
-                        "op": "encode",
-                        "args": [
-                          "assettokenOut",
-                          "MNT_TOKEN_ADDRESS()",
-                          []
-                        ]
-                      },
-                      "completion": "return-data"
-                    }
-                  ],
-                  []
-                ]
-              }
-            ]
-          },
-          "result": {
-            "tokenIn": {
-              "op": "coalesce",
-              "args": [
-                "$scope.tokenIn",
+                  "completion": "return-data"
+                },
                 {
-                  "op": "lower",
-                  "args": [
-                    {
-                      "op": "address",
+                  "id": "identity:ep1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead1",
+                      "MNT_TOKEN_ADDRESS()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
                       "args": [
                         {
-                          "op": "decode",
+                          "op": "address",
                           "args": [
-                            "assettokenIn",
-                            "BIT_TOKEN_ADDRESS()",
                             {
-                              "op": "get",
+                              "op": "decodeCanonical",
                               "args": [
+                                "endpointRead0",
+                                "BIT_TOKEN_ADDRESS()",
                                 {
-                                  "op": "returned",
+                                  "op": "get",
                                   "args": [
-                                    "selector-assets:tokenIn"
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
                                   ]
                                 },
-                                "data"
+                                0
                               ]
-                            },
-                            0
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "ep1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead1",
+                                "MNT_TOKEN_ADDRESS()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep1"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
                           ]
                         }
                       ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "migrate-bit",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": "$r.ep1"
+                  }
                 }
               ]
-            },
-            "tokenOut": {
-              "op": "coalesce",
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "migrate-bit",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "routes": {
+        "directions": [
+          {
+            "id": "migrate-bit",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "convert"
+            }
+          }
+        ],
+        "resource": {
+          "target": "$descriptor.target"
+        }
+      },
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "contextChecks": [
+          {
+            "condition": {
+              "op": "not",
               "args": [
-                "$scope.tokenOut",
+                "$externalRecipient"
+              ]
+            },
+            "error": "migrateBIT pays caller only"
+          }
+        ],
+        "steps": [
+          {
+            "id": "migrate",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": true,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function migrateBIT(uint256)",
+              "args": [
                 {
-                  "op": "lower",
-                  "args": [
-                    {
-                      "op": "address",
-                      "args": [
-                        {
-                          "op": "decode",
-                          "args": [
-                            "assettokenOut",
-                            "MNT_TOKEN_ADDRESS()",
-                            {
-                              "op": "get",
-                              "args": [
-                                {
-                                  "op": "returned",
-                                  "args": [
-                                    "selector-assets:tokenOut"
-                                  ]
-                                },
-                                "data"
-                              ]
-                            },
-                            0
-                          ]
-                        }
-                      ]
-                    }
-                  ]
+                  "runtime": "amountIn"
                 }
               ]
             }
           }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
+      },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
+          }
         }
-      ],
-      "result": {
-        "tokenIn": "$steps.assets.tokenIn",
-        "tokenOut": "$steps.assets.tokenOut"
       }
-    },
-    "descriptor": {
-      "tokenIn": "$binding.tokenIn",
-      "tokenOut": "$binding.tokenOut"
     }
-  },
-  "meta": {
-    "label": "protocol:token-migration/mantle-immutable-runtime"
-  },
-  "directionSupport": {
-    "status": "not-applicable",
-    "reason": "migrateBIT is not a pool conversion"
-  }
+  ]
 }

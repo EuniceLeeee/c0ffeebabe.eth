@@ -1,0 +1,25 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xd01d073a",
+  "signature": "function syncDeposit(uint256, address, address)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_D01D073A_ENABLED"
+  },
+  "options": [
+    {
+      "id": "sync-deposit",
+      "tokenIn": "$scope.tokenIn",
+      "tokenOut": "$target",
+      "checks": [
+        {
+          "call": "function convertToShares(uint256) view returns (uint256)",
+          "args": [
+            1000000
+          ],
+          "min": 1
+        }
+      ]
+    }
+  ]
+}

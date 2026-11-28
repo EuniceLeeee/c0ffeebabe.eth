@@ -60,5 +60,5 @@ test("every swap/protocol selector family with discover.mjs + edge-discovery.jso
   }
 
   assert.deepEqual(discoveredCredit, ["032d2276"]);
-  assert.equal(discoveredSwapProtocol.length, 24);
+  assert.equal(discoveredSwapProtocol.length, 51);
 });

@@ -1,0 +1,130 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0x2b2dfd2c",
+  "signature": "function deposit(uint256, uint32)",
+  "domain": "protocol",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_2B2DFD2C_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "xwin-deposit",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "tokenIn": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenIn"
+          ]
+        },
+        "tokenOut": {
+          "op": "address",
+          "args": [
+            "$sqlEdge.tokenOut"
+          ]
+        }
+      }
+    },
+    "routes": {
+      "directions": [
+        {
+          "id": "mint",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": {
+            "slotKind": "protocol",
+            "protocolAction": "wrap"
+          }
+        }
+      ],
+      "resource": {
+        "target": "$descriptor.target"
+      }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": {
+        "directOutput": false
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenIn"
+      ],
+      "contextChecks": [
+        {
+          "condition": {
+            "op": "not",
+            "args": [
+              "$externalRecipient"
+            ]
+          },
+          "error": "xWIN deposit mints to caller"
+        }
+      ],
+      "steps": [
+        {
+          "id": "deposit",
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$target",
+            "mode": "exact-clear",
+            "requireBool": true,
+            "verifyAllowance": true
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function deposit(uint256, uint32) returns (uint256)",
+            "args": [
+              {
+                "runtime": "amountIn"
+              },
+              0
+            ]
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$executor",
+          "minimum": "$minAmountOut"
+        },
+        {
+          "kind": "unchanged-native"
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

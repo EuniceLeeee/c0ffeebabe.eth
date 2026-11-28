@@ -1,0 +1,42 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xa6220b66",
+  "signature": "function swapExactIn(address, uint256, uint256, address)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_A6220B66_ENABLED"
+  },
+  "allowNativeToken": true,
+  "options": [
+    {
+      "id": "zero-for-one",
+      "tokenIn": "function token0() view returns (address)",
+      "tokenOut": "function token1() view returns (address)",
+      "checks": [
+        {
+          "call": "function hook() view returns (address)",
+          "equals": "0x0000000000000000000000000000000000000000"
+        },
+        {
+          "call": "function creatorFeeBps() view returns (uint256)",
+          "equals": 0
+        }
+      ]
+    },
+    {
+      "id": "one-for-zero",
+      "tokenIn": "function token1() view returns (address)",
+      "tokenOut": "function token0() view returns (address)",
+      "checks": [
+        {
+          "call": "function hook() view returns (address)",
+          "equals": "0x0000000000000000000000000000000000000000"
+        },
+        {
+          "call": "function creatorFeeBps() view returns (uint256)",
+          "equals": 0
+        }
+      ]
+    }
+  ]
+}

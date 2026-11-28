@@ -1,0 +1,16 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0x6145d1b7",
+  "signature": "function withdraw(uint256, uint32)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_6145D1B7_ENABLED"
+  },
+  "options": [
+    {
+      "id": "xwin-withdraw",
+      "tokenIn": "$target",
+      "tokenOut": "function baseToken() view returns (address)"
+    }
+  ]
+}

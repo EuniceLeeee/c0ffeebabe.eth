@@ -23,11 +23,12 @@ export function selectorSourceGraphNomination(definition: SelectorNativeExecutio
   if (!taxonomy || taxonomies.some(t => JSON.stringify(t) !== JSON.stringify(taxonomy))) {
     throw Error('source graph taxonomy cannot be projected without identity');
   }
+  const allowsNativeAssets = Boolean(definition.managerCustody) || directions.some((d: any) => d?.executionAssets !== undefined);
   const weth = ADDR.WETH.toLowerCase();
   const asset = (value: string) => {
     const normalized = getAddress(value).toLowerCase();
     if (normalized === ZeroAddress) {
-      if (!definition.managerCustody) throw Error('zero token address requires manager-custody native support');
+      if (!allowsNativeAssets) throw Error('zero token address requires declared native execution support');
       return weth;
     }
     return normalized;

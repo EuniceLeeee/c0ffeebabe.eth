@@ -1,0 +1,627 @@
+{
+  "format": "selector-execution-template/v1",
+  "selector": "0x2668dfaa",
+  "signature": "function swapIn(bool, uint256, uint256, address)",
+  "domain": "swap",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_2668DFAA_ENABLED"
+  },
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  },
+  "template": {
+    "id": "fluid-dex-swap-in",
+    "resourceValues": {
+      "inputs": [
+        "sqlEdge"
+      ]
+    },
+    "projection": {
+      "descriptor": {
+        "pool": "$target",
+        "rawIn": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenIn"
+              ]
+            }
+          ]
+        },
+        "rawOut": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenOut"
+              ]
+            }
+          ]
+        },
+        "swap0To1": {
+          "op": "lt",
+          "args": [
+            {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$sqlEdge.tokenIn",
+                        "0x0000000000000000000000000000000000000000"
+                      ]
+                    },
+                    "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$sqlEdge.tokenIn"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "uint",
+              "args": [
+                {
+                  "op": "if",
+                  "args": [
+                    {
+                      "op": "sameAddress",
+                      "args": [
+                        "$sqlEdge.tokenOut",
+                        "0x0000000000000000000000000000000000000000"
+                      ]
+                    },
+                    "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                    {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$sqlEdge.tokenOut"
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "expectedToken0": {
+          "op": "if",
+          "args": [
+            {
+              "op": "lt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$sqlEdge.tokenIn",
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        },
+                        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$sqlEdge.tokenIn"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$sqlEdge.tokenOut",
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        },
+                        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$sqlEdge.tokenOut"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$sqlEdge.tokenIn",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$sqlEdge.tokenIn"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$sqlEdge.tokenOut",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$sqlEdge.tokenOut"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "expectedToken1": {
+          "op": "if",
+          "args": [
+            {
+              "op": "lt",
+              "args": [
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$sqlEdge.tokenIn",
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        },
+                        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$sqlEdge.tokenIn"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "uint",
+                  "args": [
+                    {
+                      "op": "if",
+                      "args": [
+                        {
+                          "op": "sameAddress",
+                          "args": [
+                            "$sqlEdge.tokenOut",
+                            "0x0000000000000000000000000000000000000000"
+                          ]
+                        },
+                        "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                        {
+                          "op": "lower",
+                          "args": [
+                            {
+                              "op": "address",
+                              "args": [
+                                "$sqlEdge.tokenOut"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$sqlEdge.tokenOut",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$sqlEdge.tokenOut"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$sqlEdge.tokenIn",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                {
+                  "op": "lower",
+                  "args": [
+                    {
+                      "op": "address",
+                      "args": [
+                        "$sqlEdge.tokenIn"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "tokenIn": {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$sqlEdge.tokenIn",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenIn"
+              ]
+            }
+          ]
+        },
+        "tokenOut": {
+          "op": "if",
+          "args": [
+            {
+              "op": "sameAddress",
+              "args": [
+                "$sqlEdge.tokenOut",
+                "0x0000000000000000000000000000000000000000"
+              ]
+            },
+            "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            {
+              "op": "address",
+              "args": [
+                "$sqlEdge.tokenOut"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "routes": {
+      "target": "$descriptor.pool",
+      "directions": [
+        {
+          "id": "swap",
+          "enabled": true,
+          "tokenIn": "$descriptor.tokenIn",
+          "tokenOut": "$descriptor.tokenOut",
+          "taxonomy": {
+            "slotKind": "swap"
+          },
+          "executionAssets": {
+            "input": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.rawIn",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                "native",
+                "erc20"
+              ]
+            },
+            "output": {
+              "op": "if",
+              "args": [
+                {
+                  "op": "sameAddress",
+                  "args": [
+                    "$descriptor.rawOut",
+                    "0x0000000000000000000000000000000000000000"
+                  ]
+                },
+                "native",
+                "erc20"
+              ]
+            }
+          },
+          "fields": {
+            "pool": "$descriptor.pool",
+            "swap0To1": "$descriptor.swap0To1"
+          }
+        }
+      ],
+      "venue": {
+        "kind": "address-pool",
+        "pool": {
+          "op": "lower",
+          "args": [
+            {
+              "op": "address",
+              "args": [
+                "$descriptor.pool"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "execution": {
+      "version": 2,
+      "requireCanonicalSource": true,
+      "settlement": {
+        "directOutput": true
+      },
+      "protectedAddresses": [
+        "$target",
+        "$route.tokenIn",
+        "$route.tokenOut"
+      ],
+      "preflight": [
+        {
+          "target": "$target",
+          "signature": "function constantsView() view returns ((uint256 dexId,address liquidity,address factory,(address shift,address admin,address colOperations,address debtOperations,address perfectOperationsAndSwapOut) implementations,address deployerContract,address token0,address token1,bytes32 supplyToken0Slot,bytes32 borrowToken0Slot,bytes32 supplyToken1Slot,bytes32 borrowToken1Slot,bytes32 exchangePriceToken0Slot,bytes32 exchangePriceToken1Slot,uint256 oracleMapping))",
+          "args": [],
+          "save": {
+            "constToken0": 9,
+            "constToken1": 10
+          },
+          "checks": [
+            {
+              "left": {
+                "runtime": "constToken0"
+              },
+              "operator": "eq",
+              "right": {
+                "op": "uint",
+                "args": [
+                  "$descriptor.expectedToken0"
+                ]
+              }
+            },
+            {
+              "left": {
+                "runtime": "constToken1"
+              },
+              "operator": "eq",
+              "right": {
+                "op": "uint",
+                "args": [
+                  "$descriptor.expectedToken1"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "steps": [
+        {
+          "id": "swapNative",
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function swapIn(bool, uint256, uint256, address) payable returns (uint256)",
+            "args": [
+              "$route.swap0To1",
+              {
+                "runtime": "amountIn"
+              },
+              "$minAmountOut",
+              "$recipient"
+            ],
+            "value": {
+              "runtime": "amountIn"
+            },
+            "save": {
+              "swapOut": 0
+            }
+          }
+        },
+        {
+          "id": "swapErc20",
+          "when": {
+            "op": "ne",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          },
+          "approval": {
+            "token": "$route.tokenIn",
+            "spender": "$target",
+            "mode": "exact-clear",
+            "verifyAllowance": true
+          },
+          "call": {
+            "target": "$target",
+            "signature": "function swapIn(bool, uint256, uint256, address) payable returns (uint256)",
+            "args": [
+              "$route.swap0To1",
+              {
+                "runtime": "amountIn"
+              },
+              "$minAmountOut",
+              "$recipient"
+            ],
+            "save": {
+              "swapOut": 0
+            }
+          }
+        }
+      ],
+      "effects": [
+        {
+          "kind": "debit",
+          "asset": "native",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          },
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          }
+        },
+        {
+          "kind": "debit",
+          "token": "$route.tokenIn",
+          "account": "$executor",
+          "equals": {
+            "runtime": "amountIn"
+          },
+          "when": {
+            "op": "ne",
+            "args": [
+              "$route.executionAssets.input",
+              "native"
+            ]
+          }
+        },
+        {
+          "kind": "credit",
+          "asset": "native",
+          "account": "$recipient",
+          "minimum": "$minAmountOut",
+          "when": {
+            "op": "eq",
+            "args": [
+              "$route.executionAssets.output",
+              "native"
+            ]
+          }
+        },
+        {
+          "kind": "credit",
+          "token": "$route.tokenOut",
+          "account": "$recipient",
+          "equals": {
+            "runtime": "swapOut"
+          },
+          "minimum": "$minAmountOut",
+          "when": {
+            "op": "ne",
+            "args": [
+              "$route.executionAssets.output",
+              "native"
+            ]
+          }
+        }
+      ]
+    },
+    "refreshPolicy": "on-touch",
+    "sourceRefreshPolicy": "on-touch"
+  }
+}

@@ -7,42 +7,255 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_40C10F19_ENABLED"
   },
-  "parameters": [
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "ce8e1829955c16d166d098cd339a1da798c35a4d2f0d3632c0108849f6610718"
+  },
+  "programs": [
     {
-      "path": [
-        0
-      ],
-      "role": "executor"
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function unit() view returns (uint256)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "unit()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "decodeCanonical",
+                      "args": [
+                        "endpointRead0",
+                        "unit()",
+                        {
+                          "op": "get",
+                          "args": [
+                            {
+                              "op": "returned",
+                              "args": [
+                                "identity:ep0"
+                              ]
+                            },
+                            "data"
+                          ]
+                        },
+                        0
+                      ]
+                    }
+                  }
+                },
+                {
+                  "assert": {
+                    "op": "gte",
+                    "args": [
+                      "$r.ep0",
+                      {
+                        "op": "uint",
+                        "args": [
+                          "1"
+                        ]
+                      }
+                    ]
+                  },
+                  "error": "identity min check failed: unit"
+                },
+                {
+                  "return": {
+                    "direction": "goldx-mint",
+                    "tokenIn": "0x45804880de22913dafe09f4980848ece6ecbaf78",
+                    "tokenOut": "0x355c665e101b9da58704a8fddb5feef210ef20c0"
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "goldx-mint",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
     },
     {
-      "path": [
-        1
-      ],
-      "role": "amountIn"
-    }
-  ],
-  "payment": {
-    "kind": "approval"
-  },
-  "binding": {
-    "descriptor": {
-      "tokenIn": {
-        "op": "coalesce",
-        "args": [
-          "$scope.tokenIn",
-          "0x45804880De22913dAFE09f4980848ECE6EcbAf78"
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
         ]
       },
-      "tokenOut": {
-        "op": "coalesce",
-        "args": [
-          "$scope.tokenOut",
-          "0x355C665e101B9DA58704A8fDDb5FeeF210eF20c0"
+      "routes": {
+        "directions": [
+          {
+            "id": "mint",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "convert"
+            }
+          }
+        ],
+        "resource": {
+          "target": "$descriptor.target"
+        }
+      },
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": false
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn"
+        ],
+        "contextChecks": [
+          {
+            "condition": {
+              "op": "not",
+              "args": [
+                "$externalRecipient"
+              ]
+            },
+            "error": "goldx mints to executor"
+          }
+        ],
+        "steps": [
+          {
+            "id": "mint",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": true,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function mint(address, uint256)",
+              "args": [
+                "$executor",
+                {
+                  "runtime": "amountIn"
+                }
+              ]
+            }
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
+            }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-native"
+          }
         ]
+      },
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch",
+      "projection": {
+        "descriptor": {
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
+          }
+        }
       }
     }
-  },
-  "meta": {
-    "label": "protocol:goldx/active-unit-mint"
-  }
+  ]
 }

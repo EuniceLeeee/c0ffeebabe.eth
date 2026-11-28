@@ -1,0 +1,16 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xf5720c4a",
+  "signature": "function migrateBIT(uint256)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_F5720C4A_ENABLED"
+  },
+  "options": [
+    {
+      "id": "migrate-bit",
+      "tokenIn": "function BIT_TOKEN_ADDRESS() view returns (address)",
+      "tokenOut": "function MNT_TOKEN_ADDRESS() view returns (address)"
+    }
+  ]
+}

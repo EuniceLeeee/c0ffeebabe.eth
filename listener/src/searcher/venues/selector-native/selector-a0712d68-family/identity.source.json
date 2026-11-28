@@ -1,0 +1,26 @@
+{
+  "format": "identity-options/v1",
+  "selector": "0xa0712d68",
+  "signature": "function mint(uint256)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_A0712D68_ENABLED"
+  },
+  "options": [
+    {
+      "id": "btb-mint",
+      "tokenIn": "function BTB_TOKEN() view returns (address)",
+      "tokenOut": "$target"
+    },
+    {
+      "id": "ctoken-mint",
+      "tokenIn": "function underlying() view returns (address)",
+      "tokenOut": "$target"
+    },
+    {
+      "id": "ousd-mint",
+      "tokenIn": "function asset() view returns (address)",
+      "tokenOut": "0x2A8e1E676Ec238d8A992307B495b45B3fEAa5e86"
+    }
+  ]
+}

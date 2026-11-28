@@ -1,0 +1,29 @@
+{
+  "format": "simulated-erc20-conversion/v2",
+  "id": "wrap-to",
+  "selector": "0x26599850",
+  "signature": "function wrapTo(uint256, address)",
+  "activation": {
+    "enabled": true,
+    "envKey": "SEARCHER_FAMILY_SELECTOR_26599850_ENABLED"
+  },
+  "args": [
+    "amountIn",
+    "recipient"
+  ],
+  "approval": "exact-clear",
+  "state": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block"
+  }
+}

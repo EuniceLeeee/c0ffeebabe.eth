@@ -7,245 +7,262 @@
     "enabled": true,
     "envKey": "SEARCHER_FAMILY_SELECTOR_26599850_ENABLED"
   },
-  "binding": {
-    "flow": {
-      "version": 1,
-      "steps": [
-        {
-          "id": "wrapper",
-          "requirements": {
-            "transports": [
-              "eth-call"
-            ]
-          },
-          "requests": [
+  "directState": {
+    "pool": "edge.poolAddress",
+    "assets": [
+      "edge.tokenIn",
+      "edge.tokenOut"
+    ],
+    "watch": "pool-touch",
+    "on": [
+      "call-target",
+      "log-emitter",
+      "asset-transfer-endpoint"
+    ],
+    "unclassifiedWatch": "each-block",
+    "discoveryRuleHash": "b4e7323a3a57954d0fa4a19342c4c89c5ef20f539f7c7c1f383ffbe1073c61e6"
+  },
+  "programs": [
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function token() view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
             {
-              "id": "selectorBinding:wrapper:asset",
-              "kind": "eth-call",
-              "to": {
-                "op": "lower",
-                "args": [
-                  {
-                    "op": "address",
-                    "args": [
-                      "$target"
-                    ]
-                  }
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
                 ]
               },
-              "data": {
-                "op": "encode",
-                "args": [
-                  "bindingwrapperasset",
-                  "token()",
-                  []
-                ]
-              },
-              "completion": "return-data"
-            }
-          ],
-          "result": {
-            "asset": {
-              "op": "lower",
-              "args": [
+              "requests": [
                 {
-                  "op": "address",
-                  "args": [
-                    {
-                      "op": "decode",
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "token()",
+                      []
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
                       "args": [
-                        "bindingwrapperasset",
-                        "token()",
                         {
-                          "op": "get",
+                          "op": "address",
                           "args": [
                             {
-                              "op": "returned",
+                              "op": "decodeCanonical",
                               "args": [
-                                "selectorBinding:wrapper:asset"
+                                "endpointRead0",
+                                "token()",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
                               ]
-                            },
-                            "data"
+                            }
                           ]
-                        },
-                        0
+                        }
                       ]
                     }
-                  ]
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "wrap-to",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            "$target"
+                          ]
+                        }
+                      ]
+                    }
+                  }
                 }
               ]
             }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "wrap-to",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
           }
         }
-      ],
-      "result": {
-        "wrapper": {
-          "asset": "$steps.wrapper.asset"
-        }
-      }
-    },
-    "descriptor": {
-      "asset": {
-        "op": "address",
-        "args": [
-          "$binding.wrapper.asset"
-        ]
-      }
-    }
-  },
-  "routes": {
-    "directions": [
-      {
-        "id": "wrap",
-        "enabled": true,
-        "tokenIn": "$descriptor.asset",
-        "tokenOut": "$descriptor.target",
-        "taxonomy": {
-          "slotKind": "protocol",
-          "protocolAction": "wrap"
-        }
-      }
-    ]
-  },
-  "execution": {
-    "version": 2,
-    "settlement": {
-      "directOutput": true
-    },
-    "protectedAddresses": [
-      {
-        "op": "address",
-        "args": [
-          "$descriptor.target"
-        ]
       },
-      {
-        "op": "address",
-        "args": [
-          "$descriptor.asset"
-        ]
-      }
-    ],
-    "steps": [
-      {
-        "id": "convertTo",
-        "approval": {
-          "token": "$route.tokenIn",
-          "spender": {
-            "op": "address",
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
             "args": [
-              "$descriptor.target"
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
             ]
           },
-          "mode": "exact-clear"
+          "error": "identity input differs from edge"
         },
-        "call": {
-          "target": {
-            "op": "address",
+        {
+          "assert": {
+            "op": "sameAddress",
             "args": [
-              "$descriptor.target"
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
             ]
           },
-          "signature": "function wrapTo(uint256,address) returns(uint256)",
-          "args": [
-            {
-              "runtime": "amountIn"
-            },
-            "$recipient"
-          ],
-          "save": {
-            "converted": 0
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "execution",
+      "resourceValues": {
+        "inputs": [
+          "sqlEdge"
+        ]
+      },
+      "projection": {
+        "descriptor": {
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenIn"
+            ]
           },
-          "checks": [
-            {
-              "left": {
-                "runtime": "converted"
-              },
-              "operator": "eq",
-              "right": {
-                "runtime": "amountIn"
-              }
-            }
-          ]
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$sqlEdge.tokenOut"
+            ]
+          }
         }
       },
-      {
-        "id": "allowance",
-        "static": true,
-        "call": {
-          "target": "$route.tokenIn",
-          "signature": "function allowance(address,address) view returns (uint256)",
-          "args": [
-            "$executor",
-            {
-              "op": "address",
+      "routes": {
+        "directions": [
+          {
+            "id": "wrap-to",
+            "enabled": true,
+            "tokenIn": "$descriptor.tokenIn",
+            "tokenOut": "$descriptor.tokenOut",
+            "taxonomy": {
+              "slotKind": "protocol",
+              "protocolAction": "convert"
+            }
+          }
+        ],
+        "resource": {
+          "target": "$descriptor.target"
+        }
+      },
+      "execution": {
+        "version": 2,
+        "requireCanonicalSource": true,
+        "settlement": {
+          "directOutput": true
+        },
+        "protectedAddresses": [
+          "$target",
+          "$route.tokenIn",
+          "$route.tokenOut"
+        ],
+        "steps": [
+          {
+            "id": "convert",
+            "approval": {
+              "token": "$route.tokenIn",
+              "spender": "$target",
+              "mode": "exact-clear",
+              "requireBool": true,
+              "verifyAllowance": true
+            },
+            "call": {
+              "target": "$target",
+              "signature": "function wrapTo(uint256, address)",
               "args": [
-                "$descriptor.target"
+                {
+                  "runtime": "amountIn"
+                },
+                "$recipient"
               ]
             }
-          ],
-          "save": {
-            "residual": 0
-          },
-          "checks": [
-            {
-              "left": {
-                "runtime": "residual"
-              },
-              "operator": "eq",
-              "right": 0
+          }
+        ],
+        "effects": [
+          {
+            "kind": "debit",
+            "token": "$route.tokenIn",
+            "account": "$executor",
+            "equals": {
+              "runtime": "amountIn"
             }
-          ]
-        }
-      }
-    ],
-    "effects": [
-      {
-        "kind": "debit",
-        "token": "$route.tokenIn",
-        "account": "$executor",
-        "equals": {
-          "runtime": "amountIn"
-        }
+          },
+          {
+            "kind": "credit",
+            "token": "$route.tokenOut",
+            "account": "$recipient",
+            "minimum": "$minAmountOut"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenIn",
+            "account": "$recipient",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-token",
+            "token": "$route.tokenOut",
+            "account": "$executor",
+            "when": "$externalRecipient"
+          },
+          {
+            "kind": "unchanged-native"
+          }
+        ]
       },
-      {
-        "kind": "credit",
-        "token": "$route.tokenOut",
-        "account": "$recipient",
-        "equals": {
-          "runtime": "amountIn"
-        }
-      },
-      {
-        "kind": "unchanged-token",
-        "token": "$route.tokenOut",
-        "account": "$executor",
-        "when": "$externalRecipient"
-      },
-      {
-        "kind": "unchanged-token",
-        "token": "$route.tokenIn",
-        "account": "$recipient",
-        "when": "$externalRecipient"
-      },
-      {
-        "kind": "unchanged-native"
-      }
-    ]
-  },
-  "refreshPolicy": "each-block",
-  "values": {
-    "abi": {
-      "bindingwrapperasset": [
-        "function token() view returns(address)"
-      ]
+      "refreshPolicy": "on-touch",
+      "sourceRefreshPolicy": "on-touch"
     }
-  },
-  "meta": {
-    "label": "protocol:few-wrapped/factory-wrapper-effects"
-  },
-  "directionSupport": {
-    "status": "not-applicable",
-    "reason": "CoW settlement wrapTo is not a pool conversion"
-  }
+  ]
 }

@@ -127,13 +127,15 @@ export async function readSelectorSourceIdentity(input:{
 }):Promise<{readonly matches:readonly SelectorSourceIdentity[];readonly issues:readonly string[]}>{
  const {definition,edge,signal}=input,source=Object.freeze({...input.source});
  if(!definition.directState||edge.chainId!==1||edge.selector!==definition.selector)throw Error('source identity requires matching source-owned definition');
- selectSingleExecution(definition);
+ const single=selectSingleExecution(definition);
  const dh=definitionHashOf(definition),eh=edgeHash(edge),matches:SelectorSourceIdentity[]=[],issues:string[]=[];
  const identities=definition.programs.filter(p=>p.type==='independentIdentity');
  if(!identities.length)return freeze({matches:[],issues:[]});
 
  let target:string,edgeIn:string,edgeOut:string;
- const allowNativeByDef=Boolean(definition.managerCustody);
+ const hasNativeExecAssets=Array.isArray(single.program.routes?.directions)&&
+  single.program.routes.directions.some((d:any)=>d?.executionAssets!==undefined);
+ const allowNativeByDef=Boolean(definition.managerCustody)||hasNativeExecAssets;
  try{
   target=checkCanonicalAddress(edge.poolAddress,'edge.poolAddress',false);
   edgeIn=checkCanonicalAddress(edge.tokenIn,'edge.tokenIn',allowNativeByDef);
@@ -242,7 +244,9 @@ export function issueDirectSelectorSourceIdentity(input:{
  const single=selectSingleExecution(definition);
  const dh=definitionHashOf(definition),eh=edgeHash(edge);
  let target:string,edgeIn:string,edgeOut:string;
- const allowNativeByDef=Boolean(definition.managerCustody);
+ const hasNativeExecAssets=Array.isArray(single.program.routes?.directions)&&
+  single.program.routes.directions.some((d:any)=>d?.executionAssets!==undefined);
+ const allowNativeByDef=Boolean(definition.managerCustody)||hasNativeExecAssets;
  try{
   target=checkCanonicalAddress(edge.poolAddress,'edge.poolAddress',false);
   edgeIn=checkCanonicalAddress(edge.tokenIn,'edge.tokenIn',allowNativeByDef);
@@ -304,8 +308,9 @@ export function issueDirectSelectorSourceIdentity(input:{
   tokenIn:edgeIn,
   tokenOut:edgeOut,
   ...(allowNative?{allowNativeToken:true}:{}),
+  ...(edge.poolId==null?{}:{poolId:edge.poolId}),
   ...(binding.token0!==undefined&&binding.token1!==undefined?{token0:binding.token0,token1:binding.token1}:{}),
-  ...(record(binding.poolKey)?{...(edge.poolId==null?{}:{poolId:edge.poolId}),poolKey:{...binding.poolKey}}:{}),
+  ...(record(binding.poolKey)?{poolKey:{...binding.poolKey}}:{}),
  };
  try{
   validateIdentityDescriptor(descriptor,scope,allowNative);
