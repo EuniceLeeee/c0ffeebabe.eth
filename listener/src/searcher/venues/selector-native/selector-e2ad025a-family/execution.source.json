@@ -93,7 +93,7 @@
           "static": true,
           "call": {
             "target": "$target",
-            "signature": "function underlying_coins(uint256) view returns (address)",
+            "signature": "function coins(uint256) view returns (address)",
             "args": [
               0
             ],
@@ -107,7 +107,7 @@
           "static": true,
           "call": {
             "target": "$target",
-            "signature": "function underlying_coins(uint256) view returns (address)",
+            "signature": "function coins(uint256) view returns (address)",
             "args": [
               1
             ],
@@ -119,8 +119,11 @@
         {
           "id": "indices",
           "math": {
-            "model": "pairIndices",
+            "model": "coinIndices",
             "inputs": {
+              "coin0": {
+                "runtime": "coin0"
+              },
               "coin1": {
                 "runtime": "coin1"
               },
@@ -206,16 +209,17 @@
     "runtimeMath": {
       "version": 1,
       "entries": {
-        "pairIndices": {
-          "model": "curve:pair-indices",
+        "coinIndices": {
+          "model": "curve:coin-indices",
           "version": 1
         }
       },
       "models": [
         {
-          "id": "curve:pair-indices",
+          "id": "curve:coin-indices",
           "version": 1,
           "inputs": [
+            "coin0",
             "coin1",
             "tokenIn",
             "tokenOut"
@@ -226,7 +230,17 @@
           ],
           "operations": [
             {
-              "name": "indexIn",
+              "name": "inIs0",
+              "op": "eq",
+              "left": {
+                "input": "coin0"
+              },
+              "right": {
+                "input": "tokenIn"
+              }
+            },
+            {
+              "name": "inIs1",
               "op": "eq",
               "left": {
                 "input": "coin1"
@@ -236,13 +250,83 @@
               }
             },
             {
-              "name": "indexOut",
+              "name": "twoInIs0",
+              "op": "mul",
+              "left": {
+                "constant": "2"
+              },
+              "right": {
+                "local": "inIs0"
+              }
+            },
+            {
+              "name": "inSub0",
+              "op": "sub",
+              "left": {
+                "constant": "2"
+              },
+              "right": {
+                "local": "twoInIs0"
+              }
+            },
+            {
+              "name": "indexIn",
+              "op": "sub",
+              "left": {
+                "local": "inSub0"
+              },
+              "right": {
+                "local": "inIs1"
+              }
+            },
+            {
+              "name": "outIs0",
+              "op": "eq",
+              "left": {
+                "input": "coin0"
+              },
+              "right": {
+                "input": "tokenOut"
+              }
+            },
+            {
+              "name": "outIs1",
               "op": "eq",
               "left": {
                 "input": "coin1"
               },
               "right": {
                 "input": "tokenOut"
+              }
+            },
+            {
+              "name": "twoOutIs0",
+              "op": "mul",
+              "left": {
+                "constant": "2"
+              },
+              "right": {
+                "local": "outIs0"
+              }
+            },
+            {
+              "name": "outSub0",
+              "op": "sub",
+              "left": {
+                "constant": "2"
+              },
+              "right": {
+                "local": "twoOutIs0"
+              }
+            },
+            {
+              "name": "indexOut",
+              "op": "sub",
+              "left": {
+                "local": "outSub0"
+              },
+              "right": {
+                "local": "outIs1"
               }
             }
           ]

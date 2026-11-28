@@ -20,7 +20,7 @@
       "asset-transfer-endpoint"
     ],
     "unclassifiedWatch": "each-block",
-    "discoveryRuleHash": "455a7f234343918e5e0156cb133b15972c6f08079dc5407c128b56dbd75ac789"
+    "discoveryRuleHash": "4cfb9c5e872412162994c1d7e58c9b197208ab8082e5071cf21773f5e7524135"
   },
   "programs": [
     {
@@ -28,10 +28,10 @@
       "values": {
         "abi": {
           "endpointRead0": [
-            "function underlying_coins(uint256) view returns (address)"
+            "function coins(uint256) view returns (address)"
           ],
           "endpointRead1": [
-            "function underlying_coins(uint256) view returns (address)"
+            "function coins(uint256) view returns (address)"
           ]
         }
       },
@@ -55,7 +55,7 @@
                     "op": "encode",
                     "args": [
                       "endpointRead0",
-                      "underlying_coins(uint256)",
+                      "coins(uint256)",
                       [
                         0
                       ]
@@ -71,7 +71,7 @@
                     "op": "encode",
                     "args": [
                       "endpointRead1",
-                      "underlying_coins(uint256)",
+                      "coins(uint256)",
                       [
                         1
                       ]
@@ -94,7 +94,7 @@
                               "op": "decodeCanonical",
                               "args": [
                                 "endpointRead0",
-                                "underlying_coins(uint256)",
+                                "coins(uint256)",
                                 {
                                   "op": "get",
                                   "args": [
@@ -124,7 +124,7 @@
                               "op": "decodeCanonical",
                               "args": [
                                 "endpointRead1",
-                                "underlying_coins(uint256)",
+                                "coins(uint256)",
                                 {
                                   "op": "get",
                                   "args": [
@@ -202,10 +202,10 @@
       "values": {
         "abi": {
           "endpointRead0": [
-            "function underlying_coins(uint256) view returns (address)"
+            "function coins(uint256) view returns (address)"
           ],
           "endpointRead1": [
-            "function underlying_coins(uint256) view returns (address)"
+            "function coins(uint256) view returns (address)"
           ]
         }
       },
@@ -229,7 +229,7 @@
                     "op": "encode",
                     "args": [
                       "endpointRead0",
-                      "underlying_coins(uint256)",
+                      "coins(uint256)",
                       [
                         1
                       ]
@@ -245,7 +245,7 @@
                     "op": "encode",
                     "args": [
                       "endpointRead1",
-                      "underlying_coins(uint256)",
+                      "coins(uint256)",
                       [
                         0
                       ]
@@ -268,7 +268,7 @@
                               "op": "decodeCanonical",
                               "args": [
                                 "endpointRead0",
-                                "underlying_coins(uint256)",
+                                "coins(uint256)",
                                 {
                                   "op": "get",
                                   "args": [
@@ -298,7 +298,7 @@
                               "op": "decodeCanonical",
                               "args": [
                                 "endpointRead1",
-                                "underlying_coins(uint256)",
+                                "coins(uint256)",
                                 {
                                   "op": "get",
                                   "args": [
@@ -334,6 +334,702 @@
         },
         "descriptor": {
           "direction": "coin1-to-coin0",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function coins(uint256) view returns (address)"
+          ],
+          "endpointRead1": [
+            "function coins(uint256) view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "coins(uint256)",
+                      [
+                        0
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:ep1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead1",
+                      "coins(uint256)",
+                      [
+                        2
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead0",
+                                "coins(uint256)",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "ep1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead1",
+                                "coins(uint256)",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep1"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "coin0-to-coin2",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": "$r.ep1"
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "coin0-to-coin2",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function coins(uint256) view returns (address)"
+          ],
+          "endpointRead1": [
+            "function coins(uint256) view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "coins(uint256)",
+                      [
+                        2
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:ep1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead1",
+                      "coins(uint256)",
+                      [
+                        0
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead0",
+                                "coins(uint256)",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "ep1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead1",
+                                "coins(uint256)",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep1"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "coin2-to-coin0",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": "$r.ep1"
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "coin2-to-coin0",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function coins(uint256) view returns (address)"
+          ],
+          "endpointRead1": [
+            "function coins(uint256) view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "coins(uint256)",
+                      [
+                        1
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:ep1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead1",
+                      "coins(uint256)",
+                      [
+                        2
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead0",
+                                "coins(uint256)",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "ep1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead1",
+                                "coins(uint256)",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep1"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "coin1-to-coin2",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": "$r.ep1"
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "coin1-to-coin2",
+          "tokenIn": {
+            "op": "address",
+            "args": [
+              "$binding.tokenIn"
+            ]
+          },
+          "tokenOut": {
+            "op": "address",
+            "args": [
+              "$binding.tokenOut"
+            ]
+          }
+        }
+      },
+      "checks": [
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenIn",
+              "$scope.tokenIn"
+            ]
+          },
+          "error": "identity input differs from edge"
+        },
+        {
+          "assert": {
+            "op": "sameAddress",
+            "args": [
+              "$descriptor.tokenOut",
+              "$scope.tokenOut"
+            ]
+          },
+          "error": "identity output differs from edge"
+        }
+      ]
+    },
+    {
+      "type": "independentIdentity",
+      "values": {
+        "abi": {
+          "endpointRead0": [
+            "function coins(uint256) view returns (address)"
+          ],
+          "endpointRead1": [
+            "function coins(uint256) view returns (address)"
+          ]
+        }
+      },
+      "binding": {
+        "flow": {
+          "version": 1,
+          "steps": [
+            {
+              "id": "identity",
+              "requirements": {
+                "transports": [
+                  "eth-call"
+                ]
+              },
+              "requests": [
+                {
+                  "id": "identity:ep0",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead0",
+                      "coins(uint256)",
+                      [
+                        2
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                },
+                {
+                  "id": "identity:ep1",
+                  "kind": "eth-call",
+                  "to": "$target",
+                  "data": {
+                    "op": "encode",
+                    "args": [
+                      "endpointRead1",
+                      "coins(uint256)",
+                      [
+                        1
+                      ]
+                    ]
+                  },
+                  "completion": "return-data"
+                }
+              ],
+              "decode": [
+                {
+                  "let": "r",
+                  "value": {
+                    "ep0": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead0",
+                                "coins(uint256)",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep0"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    "ep1": {
+                      "op": "lower",
+                      "args": [
+                        {
+                          "op": "address",
+                          "args": [
+                            {
+                              "op": "decodeCanonical",
+                              "args": [
+                                "endpointRead1",
+                                "coins(uint256)",
+                                {
+                                  "op": "get",
+                                  "args": [
+                                    {
+                                      "op": "returned",
+                                      "args": [
+                                        "identity:ep1"
+                                      ]
+                                    },
+                                    "data"
+                                  ]
+                                },
+                                0
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "return": {
+                    "direction": "coin2-to-coin1",
+                    "tokenIn": "$r.ep0",
+                    "tokenOut": "$r.ep1"
+                  }
+                }
+              ]
+            }
+          ],
+          "result": "$steps.identity"
+        },
+        "descriptor": {
+          "direction": "coin2-to-coin1",
           "tokenIn": {
             "op": "address",
             "args": [
@@ -437,7 +1133,7 @@
             "static": true,
             "call": {
               "target": "$target",
-              "signature": "function underlying_coins(uint256) view returns (address)",
+              "signature": "function coins(uint256) view returns (address)",
               "args": [
                 0
               ],
@@ -451,7 +1147,7 @@
             "static": true,
             "call": {
               "target": "$target",
-              "signature": "function underlying_coins(uint256) view returns (address)",
+              "signature": "function coins(uint256) view returns (address)",
               "args": [
                 1
               ],
@@ -463,8 +1159,11 @@
           {
             "id": "indices",
             "math": {
-              "model": "pairIndices",
+              "model": "coinIndices",
               "inputs": {
+                "coin0": {
+                  "runtime": "coin0"
+                },
                 "coin1": {
                   "runtime": "coin1"
                 },
@@ -537,16 +1236,17 @@
       "runtimeMath": {
         "version": 1,
         "entries": {
-          "pairIndices": {
-            "model": "curve:pair-indices",
+          "coinIndices": {
+            "model": "curve:coin-indices",
             "version": 1
           }
         },
         "models": [
           {
-            "id": "curve:pair-indices",
+            "id": "curve:coin-indices",
             "version": 1,
             "inputs": [
+              "coin0",
               "coin1",
               "tokenIn",
               "tokenOut"
@@ -557,7 +1257,17 @@
             ],
             "operations": [
               {
-                "name": "indexIn",
+                "name": "inIs0",
+                "op": "eq",
+                "left": {
+                  "input": "coin0"
+                },
+                "right": {
+                  "input": "tokenIn"
+                }
+              },
+              {
+                "name": "inIs1",
                 "op": "eq",
                 "left": {
                   "input": "coin1"
@@ -567,13 +1277,83 @@
                 }
               },
               {
-                "name": "indexOut",
+                "name": "twoInIs0",
+                "op": "mul",
+                "left": {
+                  "constant": "2"
+                },
+                "right": {
+                  "local": "inIs0"
+                }
+              },
+              {
+                "name": "inSub0",
+                "op": "sub",
+                "left": {
+                  "constant": "2"
+                },
+                "right": {
+                  "local": "twoInIs0"
+                }
+              },
+              {
+                "name": "indexIn",
+                "op": "sub",
+                "left": {
+                  "local": "inSub0"
+                },
+                "right": {
+                  "local": "inIs1"
+                }
+              },
+              {
+                "name": "outIs0",
+                "op": "eq",
+                "left": {
+                  "input": "coin0"
+                },
+                "right": {
+                  "input": "tokenOut"
+                }
+              },
+              {
+                "name": "outIs1",
                 "op": "eq",
                 "left": {
                   "input": "coin1"
                 },
                 "right": {
                   "input": "tokenOut"
+                }
+              },
+              {
+                "name": "twoOutIs0",
+                "op": "mul",
+                "left": {
+                  "constant": "2"
+                },
+                "right": {
+                  "local": "outIs0"
+                }
+              },
+              {
+                "name": "outSub0",
+                "op": "sub",
+                "left": {
+                  "constant": "2"
+                },
+                "right": {
+                  "local": "twoOutIs0"
+                }
+              },
+              {
+                "name": "indexOut",
+                "op": "sub",
+                "left": {
+                  "local": "outSub0"
+                },
+                "right": {
+                  "local": "outIs1"
                 }
               }
             ]

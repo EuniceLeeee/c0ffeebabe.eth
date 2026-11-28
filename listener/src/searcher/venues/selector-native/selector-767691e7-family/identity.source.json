@@ -36,6 +36,66 @@
           0
         ]
       }
+    },
+    {
+      "id": "coin0-to-coin2",
+      "tokenIn": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          0
+        ]
+      },
+      "tokenOut": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          2
+        ]
+      }
+    },
+    {
+      "id": "coin2-to-coin0",
+      "tokenIn": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          2
+        ]
+      },
+      "tokenOut": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          0
+        ]
+      }
+    },
+    {
+      "id": "coin1-to-coin2",
+      "tokenIn": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          1
+        ]
+      },
+      "tokenOut": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          2
+        ]
+      }
+    },
+    {
+      "id": "coin2-to-coin1",
+      "tokenIn": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          2
+        ]
+      },
+      "tokenOut": {
+        "call": "function coins(uint256) view returns (address)",
+        "args": [
+          1
+        ]
+      }
     }
   ]
 }
