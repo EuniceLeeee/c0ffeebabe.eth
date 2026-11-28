@@ -1085,6 +1085,16 @@ export class BlockScanRuntimeLoop {
             ? Math.min(head, prior.sourceBlock + MAX_ACTIVITY_TRANSITIONS) : head;
           await this.runHead(target, { ...(this.ordinaryPriceRecovery ? {} : observation),
             sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+          if (this.reorgCatchupPending) {
+            this.dropReorgExecutionRefreshes();
+            if (this.reorgRecoveryPending) {
+              await this.runHead(prior.sourceBlock + 1, {
+                sourceHeadSeenAtMs: Date.now(), sourceHeadSeenAtMonotonicMs: performance.now() });
+            }
+            if (!this.reorgRecoveryPending) {
+              this.reorgCatchupPending = false;
+            }
+          }
           const next = this.deps.currentRuntimeCoordinator()?.latestPricingSnapshot();
           if (!next?.effectiveMids?.complete || next.sourceBlock <= prior.sourceBlock) {
             throw new Error("live continuation made no pricing progress; trading remains disabled");

@@ -42,6 +42,16 @@ type PoolSpan={readonly resolver:BlockTouchedStateKeyResolver;readonly base:Heig
 // Only the original, fully covered RPC range below can issue an atomic fragment.
 const atomicPoolSpans=new WeakMap<ReadonlySet<string>,PoolSpan&{readonly observed:readonly string[]}>();
 const stitchedPoolSpans=new WeakMap<ReadonlySet<string>,PoolSpan>();
+const retainedPoolBlocks=new WeakMap<ReadonlySet<string>,{
+  readonly resolver:BlockTouchedStateKeyResolver;
+  readonly number:number;
+  readonly hash:string;
+  readonly parentHash:string;
+  readonly interpretation:object;
+  readonly current:()=>boolean;
+  readonly facts:PoolFacts;
+  readonly observed:readonly string[];
+}>();
 const sameHeight=(a:Height,b:Height)=>a.number===b.number&&a.hash===b.hash;
 /** SQL enumeration-price scheduling only: never extend the general historical-ranking
  * or execution authority to a stitched, recovered, or indexed key set. */
@@ -50,6 +60,58 @@ export function sqlPoolPriceActivityScope(keys:ReadonlySet<string>,resolver:Bloc
   if(!p)return physicalRankingScope(keys,resolver,base,target);
   if(!p.current()||p.resolver!==resolver||!sameHeight(p.base,base)||!sameHeight(p.target,target))return;
   return {poolDirty:(id:string)=>p.facts.blocked.has(id),touchedPoolKey:(k:string)=>p.facts.poolKeys.has(k)};
+}
+/** Bind a verified two-branch reorg union (oldBranch rolled back to commonAncestor,
+ * then newBranch applied to target) as an incremental SQL pool-price span from
+ * previousSource to target, avoiding a full-graph price table rebuild on reorgs. */
+export function registerReorgPoolPriceSpan(input:{
+  readonly previousSource:Height;
+  readonly commonAncestor:Height;
+  readonly oldBranch:readonly (Height&{readonly parentHash:string})[];
+  readonly newBranch:readonly (Height&{readonly parentHash:string})[];
+  readonly blockSets:readonly ReadonlySet<string>[];
+  readonly targetKeys:ReadonlySet<string>;
+}):void{
+  const {previousSource,commonAncestor,oldBranch,newBranch,blockSets,targetKeys}=input;
+  const allBlocks=[...oldBranch,...newBranch];
+  if(!targetKeys||allBlocks.length===0||allBlocks.length!==blockSets.length||newBranch.length===0)return;
+  const target=newBranch[newBranch.length-1]!;
+  if(target.number<=previousSource.number)return;
+  let expectedOldHash=previousSource.hash.toLowerCase(),expectedOldNum=previousSource.number;
+  for(const b of oldBranch){
+    if(b.number!==expectedOldNum||b.hash.toLowerCase()!==expectedOldHash)return;
+    expectedOldHash=b.parentHash.toLowerCase();
+    expectedOldNum=b.number-1;
+  }
+  if(commonAncestor.number!==expectedOldNum||commonAncestor.hash.toLowerCase()!==expectedOldHash)return;
+  let expectedParent=commonAncestor.hash.toLowerCase(),expectedNewNum=commonAncestor.number+1;
+  for(const b of newBranch){
+    if(b.number!==expectedNewNum||b.parentHash.toLowerCase()!==expectedParent)return;
+    expectedParent=b.hash.toLowerCase();
+    expectedNewNum=b.number+1;
+  }
+  let owner:NonNullable<ReturnType<typeof retainedPoolBlocks.get>>|undefined;
+  const observed=new Set<string>(),poolKeys=new Set<string>(),blocked=new Set<string>();
+  for(let i=0;i<allBlocks.length;i++){
+    const b=allBlocks[i]!,s=blockSets[i]!,p=retainedPoolBlocks.get(s);
+    if(!p||!p.current()||p.number!==b.number||p.hash!==b.hash.toLowerCase()||
+       p.parentHash!==b.parentHash.toLowerCase()||
+       (owner&&(owner.resolver!==p.resolver||owner.interpretation!==p.interpretation))||
+       s.size!==p.observed.length||p.observed.some(k=>!s.has(k)))return;
+    owner=p;
+    for(const k of p.observed)observed.add(k);
+    for(const k of p.facts.poolKeys)poolKeys.add(k);
+    for(const k of p.facts.blocked)blocked.add(k);
+  }
+  if(!owner||targetKeys.size!==observed.size||[...observed].some(k=>!targetKeys.has(k)))return;
+  stitchedPoolSpans.set(targetKeys,{
+    base:{number:previousSource.number,hash:previousSource.hash.toLowerCase()},
+    target:{number:target.number,hash:target.hash.toLowerCase()},
+    resolver:owner.resolver,
+    interpretation:owner.interpretation,
+    current:owner.current,
+    facts:{poolKeys,blocked},
+  });
 }
 export function sqlPoolPriceSpanUnion(start:Height){
   const base={...start},observed=new Set<string>(),poolKeys=new Set<string>(),blocked=new Set<string>();
@@ -180,7 +242,24 @@ export async function readRetainedBlockTouchedStateKeys(
   if (found !== undefined) {
     if (found.number !== blockNumber || !sameAnchor(found.anchor, pinned))
       throw new BlockActivityRangeInvalidatedError("retained activity anchor mismatch");
-    return new Set(found.touchedKeys);
+    const out = new Set(found.touchedKeys);
+    if (found.rank && resolver && memo) {
+      rankedInputs.set(out, {
+        resolver,
+        base: { number: blockNumber - 1, hash: pinned.parentHash },
+        target: { number: blockNumber, hash: pinned.hash },
+        data: found.rank,
+      });
+      if (resolver.supportsSqlPoolPriceScope?.() === true) {
+        retainedPoolBlocks.set(out, {
+          resolver, number: blockNumber, hash: pinned.hash, parentHash: pinned.parentHash,
+          interpretation: memo, current: () => retainedByProvider.get(provider) === memo,
+          facts: { poolKeys: found.rank.poolKeys, blocked: found.rank.blocked },
+          observed: found.touchedKeys,
+        });
+      }
+    }
+    return out;
   }
   return readTouchedBlock(provider, blockNumber, poolManager, pinned, assertOpen, resolver, options);
 }
@@ -481,8 +560,18 @@ async function readTouchedBlockActivity(
     rankedInputs.set(touched,{resolver,base:{number:blockNumber-1,hash:pinned.parentHash},target:{number:blockNumber,hash:pinned.hash},data:rank});
   }
   if (pinned !== undefined && retained !== undefined && retainedByProvider.get(provider) === retained) {
+    const observedKeys = Object.freeze([...touched]);
     retained.blocks.set(pinned.hash, Object.freeze({ number: blockNumber, anchor: pinned,
-      touchedKeys: Object.freeze([...touched]) }));
+      touchedKeys: observedKeys, rank }));
+    if (rank && resolver?.supportsSqlPoolPriceScope?.() === true) {
+      const currentRetained = retained;
+      retainedPoolBlocks.set(touched, {
+        resolver, number: blockNumber, hash: pinned.hash, parentHash: pinned.parentHash,
+        interpretation: currentRetained, current: () => retainedByProvider.get(provider) === currentRetained,
+        facts: { poolKeys: rank.poolKeys, blocked: rank.blocked },
+        observed: observedKeys,
+      });
+    }
     while (retained.blocks.size > MAX_ACTIVITY_TRANSITIONS)
       retained.blocks.delete(retained.blocks.keys().next().value!);
   }

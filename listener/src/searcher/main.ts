@@ -1176,12 +1176,20 @@ export function createBlockScanPriceRuntime(input: {
           ...(() => {
             const observed = reuse?.actualTouchedBeforeForcedRefresh;
             if (!observed || !previous || previous !== reuse.previous || touchedStateKeys !== reuse.touchedStateKeys) return {};
-            // Only a complete, source-bound SQL activity interval can supply the
-            // shared economic refresh decision. Never turn absent activity into
-            // an empty set. Exact execution keeps its own current-source checks.
+            // Only a complete, source-bound SQL activity interval (including a
+            // verified two-branch reorg span) can supply the shared economic
+            // refresh decision. Never turn absent activity into an empty set.
             const plan = previous.complete && !cascadeAmountChanges
               ? strictRuntimeRoot.sqlPoolPriceRefreshPlan(observed, previous.source, source) : undefined;
-            if (plan) return { poolPriceRefreshPlan: plan };
+            if (plan) {
+              return {
+                poolPriceRefreshPlan: plan,
+                ...(reuse.reorgCommonAncestorNumber === undefined
+                  ? {}
+                  : { reorgCommonAncestorNumber: reuse.reorgCommonAncestorNumber }),
+              };
+            }
+            if (reuse.reorgCommonAncestorNumber !== undefined) return {};
             return { historicalRankingPolicy: strictRuntimeRoot.historicalRankingPolicy(observed, previous.source, source),
               forcedRefresh: { actualTouched: observed, isOnTouchVariant: (edge: TokenEdge, key: string, variantId: string) =>
                 strictRuntimeRoot.isOnTouchReceiptVariant(edge, key, variantId) } };

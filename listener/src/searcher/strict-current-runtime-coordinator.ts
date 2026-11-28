@@ -241,8 +241,9 @@ export class StrictCurrentRuntimeCoordinator
       backend?: Pick<StateBackend, "call">,
       reuse?: { readonly previous?: EffectiveMidSnapshot;
         readonly touchedStateKeys?: ReadonlySet<string>;
-        /** Available only for a complete forward range from the published effective base. */
+        /** Available only for a complete forward or verified two-branch reorg range from the published effective base. */
         readonly actualTouchedBeforeForcedRefresh?: ReadonlySet<string>;
+        readonly reorgCommonAncestorNumber?: number;
         readonly disabledEdgeIds?: ReadonlySet<string>;
         /** Explicit quote target; snapshot remains the unmodified sizing reference. */
         readonly quoteGraph?: VerifiedGraphView },
@@ -655,9 +656,15 @@ export class StrictCurrentRuntimeCoordinator
         disabledEdgeIds: this.disabledEffectiveEdges(sizing),
         quoteGraph: rawBasis === null ? undefined : graph,
         touchedStateKeys: resume !== undefined ? new Set<string>() : carryActivity?.touchedStateKeys,
-        ...(carryActivity && carryActivity.reorg === undefined && previous?.effectiveMids?.complete &&
+        ...(carryActivity && previous?.effectiveMids?.complete &&
             graph.sourceBlock > previous.sourceBlock
-          ? { actualTouchedBeforeForcedRefresh } : {}),
+          ? {
+              actualTouchedBeforeForcedRefresh,
+              ...(carryActivity.reorg === undefined
+                ? {}
+                : { reorgCommonAncestorNumber: carryActivity.reorg.commonAncestor.number }),
+            }
+          : {}),
       }, simulationTransport);
     })();
     // A rejection cannot leave the sibling pricing work detached from the

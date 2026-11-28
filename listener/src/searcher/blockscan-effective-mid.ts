@@ -752,6 +752,7 @@ export async function buildEffectiveMids(input: {
     readonly isCleanOnTouchReceipt:(edge:TokenEdge,stateKey:string,variantId:string)=>boolean;
   };
   readonly poolPriceRefreshPlan?: {readonly shouldRefresh:(edge:TokenEdge,priorVerifiedVariantId?:string)=>boolean};
+  readonly reorgCommonAncestorNumber?: number;
   /** Quote these exact public directions using the ordinary funded execution
    * path even when otherwise reusable. Does not touch their pool or siblings. */
   readonly requireFreshEdgeIds?:ReadonlySet<string>;
@@ -1064,7 +1065,10 @@ export async function buildEffectiveMids(input: {
           typeof sourceRow.amountOut==="bigint"&&sourceRow.effectiveMid!==null&&(issuedRankingReceipts.has(proof)||
             oldRanking!.restoredPoolOrigins?.get(edgeId)?.executionVerification===proof)&&
           previousState!.verifiedExecutions.has(proof.receiptHash)&&rowAmountReferences.has(sourceRow);
-        if(verified && requestedOrigins!.get(edgeId) !== sourceRow) {
+        const fromOrphanedBranch = input.reorgCommonAncestorNumber !== undefined &&
+          sourceRow?.quotedAt !== undefined &&
+          sourceRow.quotedAt.number > input.reorgCommonAncestorNumber;
+        if(verified && !fromOrphanedBranch && requestedOrigins!.get(edgeId) !== sourceRow) {
           if (!requestedOriginsCloned) {
             requestedOrigins = new Map(oldRanking?.requestedOrigins);
             requestedOriginsCloned = true;
@@ -1532,10 +1536,19 @@ export async function buildEffectiveMids(input: {
     if (verified) for (const step of [...reference!.path, row]) verifiedExecutions.add(step.executionVerification!.receiptHash);
   }
   amountReferenceState.set(snapshot, { source, weth, references, verifiedExecutions });
+  const dirtyUnfunded = canReuse && immutableRows && poolPlan
+    ? [...poolDirty].filter(i => rows[i]?.status === "missing-valuation").map(i => work[i]!.edgeId)
+    : [];
+  if (dirtyUnfunded.length && requestedOrigins) {
+    if (!requestedOriginsCloned) {
+      requestedOrigins = new Map(requestedOrigins);
+      requestedOriginsCloned = true;
+    }
+    for (const key of dirtyUnfunded) requestedOrigins.delete(key);
+  }
   if(snapshot.complete && graphEdgeIndexes.has(graphEdges))rankingState.set(snapshot,{edges:graphEdges,byId:rankOnly,
     ...(requestedOrigins?{requestedOrigins}:{})});
   if (canReuse && immutableRows) {
-    const dirtyUnfunded = poolPlan ? [...poolDirty].filter(i => rows[i]?.status === "missing-valuation").map(i => work[i]!.edgeId) : [];
     nativeChanges.set(snapshot, Object.freeze({
       previous: new WeakRef(previous), edges: (input.quoteGraph ?? pricing.graph).edges,
       updates: Object.freeze(updates), removals: Object.freeze(removals),

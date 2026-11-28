@@ -1,4 +1,4 @@
-import { BlockActivityRangeInvalidatedError, MAX_ACTIVITY_TRANSITIONS, type BlockTouchedCanonicalAnchor } from "./blockscan-touched-state.js";
+import { BlockActivityRangeInvalidatedError, MAX_ACTIVITY_TRANSITIONS, registerReorgPoolPriceSpan, type BlockTouchedCanonicalAnchor } from "./blockscan-touched-state.js";
 
 export interface ReorgActivitySource {
   readonly number: number;
@@ -161,8 +161,11 @@ export async function collectReorgActivity(input: {
     parent = next;
   }
   const touched = new Set<string>();
+  const blockSets: ReadonlySet<string>[] = [];
   for (const block of [...oldBranch, ...newBranch]) {
-    for (const key of await read(() => readTouched(block.number, block, control))) {
+    const blockSet = await read(() => readTouched(block.number, block, control));
+    blockSets.push(blockSet);
+    for (const key of blockSet) {
       if (typeof key !== "string" || key.length === 0) invalid("invalid touched state key");
       touched.add(key.toLowerCase());
     }
@@ -173,9 +176,18 @@ export async function collectReorgActivity(input: {
     if (current.hash !== target.hash) invalid("target changed during recovery");
   };
   await revalidate();
+  const touchedStateKeys = immutableKeys(touched);
+  registerReorgPoolPriceSpan({
+    previousSource,
+    commonAncestor,
+    oldBranch,
+    newBranch,
+    blockSets,
+    targetKeys: touchedStateKeys,
+  });
   const proof = Object.freeze({ previousSource, target: newBranch[newBranch.length - 1]!, commonAncestor,
     oldDepth: oldBranch.length, oldBranch: Object.freeze(oldBranch), newBranch: Object.freeze(newBranch),
-    touchedStateKeys: immutableKeys(touched),
+    touchedStateKeys,
   });
   verified.set(proof, revalidate);
   return proof;
